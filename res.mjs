@@ -46,3 +46,11 @@ export function invalidInput(res, message = 'Invalid request', others = {}) {
         others: { ...others }
     })
 }
+
+export const sentData = (res, data = []) => {
+    if (data.length > 0) {
+        dataFound(res, data);
+    } else {
+        noData(res);
+    }
+} 

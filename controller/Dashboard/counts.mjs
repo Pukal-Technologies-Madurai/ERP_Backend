@@ -1,8 +1,11 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, invalidInput } from '../../res.mjs';
-import { ISOString } from '../../helper_functions.mjs';
+import { checkIsNumber, ISOString } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
+import dotenv from 'dotenv';
 
+dotenv.config();
+const Company = process.env.COMPANY;
 
 const DashboardController = () => {
 
@@ -398,7 +401,7 @@ const DashboardController = () => {
     const getERPDashboardData = async (req, res) => {
         const { Fromdate, Company_Id } = req.query;
 
-        if (!Fromdate || (isNaN(Company_Id) && !Company_Id)) {
+        if (!Fromdate || !checkIsNumber(Company_Id)) {
             return invalidInput(res, 'Fromdate, Company_Id is required')
         }
 
@@ -441,9 +444,22 @@ const DashboardController = () => {
         }
     }
 
+    const getPurchaseInfo = async (req, res) => {
+        const Fromdate = ISOString(req.query.Fromdate);
+        const Todate = ISOString(req.query.Todate);
 
-
-
+        try {
+            const result = await SPCall({
+                SPName: 'Day_List_Purchase', spParamerters: {
+                    Fromdate, Todate, Company_Id: Company ?? 1, 
+                }, spTransaction: req.db
+            });
+            
+            dataFound(res, result.recordsets);
+        } catch (e) {
+            console.error(e);
+        }
+    }
 
     const getnewEmployeeAbstract = async (req, res) => {
         const { UserId } = req.query;
@@ -608,140 +624,135 @@ LEFT JOIN
         }
     }
 
-
     const usergetnewEmployeeAbstract = async (req, res) => {
         const { UserId } = req.query;
-    
+
         // Validate the UserId
         if (isNaN(UserId)) {
             return invalidInput(res, 'UserId is required');
         }
-    
+
         try {
             const query = `
                SELECT 
-    p.Project_Id,
-    p.Project_Name,
-    p.Project_Desc,
-    p.Project_Head,
-    CONVERT(DATE, p.Est_Start_Dt) AS ProjectStartDate,
-    CONVERT(DATE, p.Est_End_Dt) AS ProjectEndDate,
-    s.Status AS ProjectStatus,
-    u.Name AS HeadName,
+                p.Project_Id,
+                p.Project_Name,
+                p.Project_Desc,
+                p.Project_Head,
+                CONVERT(DATE, p.Est_Start_Dt) AS ProjectStartDate,
+                CONVERT(DATE, p.Est_End_Dt) AS ProjectEndDate,
+                s.Status AS ProjectStatus,
+                u.Name AS HeadName,
+                -- Employee involvement from Project_Employee table
+                (
+                    SELECT 
+                        pe.User_Id,
+                        e.Name AS EmployeeName,
+                        e.UserTypeId,
+                        ut.UserType
+                    FROM 
+                        tbl_Project_Employee AS pe
+                    LEFT JOIN 
+                        tbl_Users AS e ON e.UserId = pe.User_Id
+                    LEFT JOIN 
+                        tbl_User_Type AS ut ON ut.Id = e.UserTypeId
+                    WHERE 
+                        pe.Project_Id = p.Project_Id
+                    FOR JSON PATH
+                ) AS EmployeeInvolvement,
+                -- Task count for the employee in the project
+                (SELECT COUNT(*)
+                    FROM tbl_Task_Details AS td
+                    LEFT JOIN tbl_Task AS t ON td.Task_Id = t.Task_Id
+                    WHERE td.Emp_Id = @user
+                    AND td.Project_Id = p.Project_Id
+                ) AS TaskCount,
+                -- Task details assigned to the employee
+                COALESCE(( 
+                    SELECT 
+                        td.Task_Id,
+                        t.Task_Name,
+                        t.Task_Desc,
+                        td.AN_No,
+                        CONVERT(DATE, td.Est_Start_Dt) AS Est_Start_Dt,
+                        CONVERT(DATE, td.Est_End_Dt) AS Est_End_Dt,
+                        td.Sch_Time,
+                        td.EN_Time,
+                        td.Sch_Period,
+                        td.Timer_Based,
+                        COALESCE((
+                            SELECT 
+                                tpd.*,
+                                tpdtpm.Paramet_Name,
+                                tpdtpm.Paramet_Data_Type
+                            FROM
+                                tbl_Task_Paramet_DT AS tpd
+                            LEFT JOIN 
+                                tbl_Paramet_Master AS tpdtpm ON tpdtpm.Paramet_Id = tpd.Param_Id
+                            WHERE
+                                tpd.Task_Id = td.Task_Id
+                            FOR JSON PATH
+                        ), '[]') AS Task_Param,
+                        COALESCE((
+                            SELECT
+                                wk.Work_Id,
+                                wk.Work_Dt,
+                                wk.Work_Done,
+                                wk.Start_Time,
+                                wk.End_Time,
+                                wk.Tot_Minutes,
+                                wk.Work_Status,
+                                s.Status AS StatusGet,
+                                COALESCE((
+                                    SELECT 
+                                        wp.Current_Value,
+                                        wp.Default_Value,
+                                        wp.Param_Id,
+                                        pm.Paramet_Name,
+                                        pm.Paramet_Data_Type
+                                    FROM
+                                        tbl_Work_Paramet_DT AS wp
+                                    LEFT JOIN 
+                                        tbl_Paramet_Master AS pm ON pm.Paramet_Id = wp.Param_Id
+                                    WHERE 
+                                        wp.Work_Id = wk.Work_Id
+                                    FOR JSON PATH
+                                ), '[]') AS Parameter_Details
+                            FROM
+                                tbl_Work_Master AS wk
+                            LEFT JOIN 
+                                tbl_Status AS s ON s.Status_Id = wk.Work_Status
+                            WHERE
+                                wk.AN_No = td.AN_No AND wk.Emp_Id = @user -- Work details for the employee with UserId 85
+                            FOR JSON PATH
+                        ), '[]') AS Work_Details
+                    FROM
+                        tbl_Task_Details AS td
+                    LEFT JOIN 
+                        tbl_Task AS t ON td.Task_Id = t.Task_Id
+                    WHERE
+                        td.Emp_Id = @user -- Employee ID (replace 85 with the actual employee ID)
+                        AND td.Project_Id = p.Project_Id
+                    FOR JSON PATH
+                ), '[]') AS Tasks  -- Tasks assigned to the employee
+            FROM
+                tbl_Project_Master AS p
+            LEFT JOIN 
+                tbl_Status AS s ON s.Status_Id = p.Project_Status
+            LEFT JOIN 
+                tbl_Users AS u ON u.UserId = p.Project_Head
+            WHERE
+                p.Project_Id IN (
+                    SELECT td.Project_Id
+                    FROM tbl_Project_Employee td
+                    WHERE td.User_Id = @user -- Replace with the actual employee ID
+                )`;
 
-    -- Employee involvement from Project_Employee table
-    (
-        SELECT 
-            pe.User_Id,
-            e.Name AS EmployeeName,
-            e.UserTypeId,
-            ut.UserType
-        FROM 
-            tbl_Project_Employee AS pe
-        LEFT JOIN 
-            tbl_Users AS e ON e.UserId = pe.User_Id
-        LEFT JOIN 
-            tbl_User_Type AS ut ON ut.Id = e.UserTypeId
-        WHERE 
-            pe.Project_Id = p.Project_Id
-        FOR JSON PATH
-    ) AS EmployeeInvolvement,
-
-    -- Task count for the employee in the project
-    (SELECT COUNT(*)
-        FROM tbl_Task_Details AS td
-        LEFT JOIN tbl_Task AS t ON td.Task_Id = t.Task_Id
-        WHERE td.Emp_Id = @user
-        AND td.Project_Id = p.Project_Id
-    ) AS TaskCount,
-
-    -- Task details assigned to the employee
-    COALESCE(( 
-        SELECT 
-            td.Task_Id,
-            t.Task_Name,
-            t.Task_Desc,
-            td.AN_No,
-            CONVERT(DATE, td.Est_Start_Dt) AS Est_Start_Dt,
-            CONVERT(DATE, td.Est_End_Dt) AS Est_End_Dt,
-            td.Sch_Time,
-            td.EN_Time,
-            td.Sch_Period,
-            td.Timer_Based,
-            COALESCE((
-                SELECT 
-                    tpd.*,
-                    tpdtpm.Paramet_Name,
-                    tpdtpm.Paramet_Data_Type
-                FROM
-                    tbl_Task_Paramet_DT AS tpd
-                LEFT JOIN 
-                    tbl_Paramet_Master AS tpdtpm ON tpdtpm.Paramet_Id = tpd.Param_Id
-                WHERE
-                    tpd.Task_Id = td.Task_Id
-                FOR JSON PATH
-            ), '[]') AS Task_Param,
-            COALESCE((
-                SELECT
-                    wk.Work_Id,
-                    wk.Work_Dt,
-                    wk.Work_Done,
-                    wk.Start_Time,
-                    wk.End_Time,
-                    wk.Tot_Minutes,
-                    wk.Work_Status,
-                    s.Status AS StatusGet,
-                    COALESCE((
-                        SELECT 
-                            wp.Current_Value,
-                            wp.Default_Value,
-                            wp.Param_Id,
-                            pm.Paramet_Name,
-                            pm.Paramet_Data_Type
-                        FROM
-                            tbl_Work_Paramet_DT AS wp
-                        LEFT JOIN 
-                            tbl_Paramet_Master AS pm ON pm.Paramet_Id = wp.Param_Id
-                        WHERE 
-                            wp.Work_Id = wk.Work_Id
-                        FOR JSON PATH
-                    ), '[]') AS Parameter_Details
-                FROM
-                    tbl_Work_Master AS wk
-                LEFT JOIN 
-                    tbl_Status AS s ON s.Status_Id = wk.Work_Status
-                WHERE
-                    wk.AN_No = td.AN_No AND wk.Emp_Id = @user -- Work details for the employee with UserId 85
-                FOR JSON PATH
-            ), '[]') AS Work_Details
-        FROM
-            tbl_Task_Details AS td
-        LEFT JOIN 
-            tbl_Task AS t ON td.Task_Id = t.Task_Id
-        WHERE
-            td.Emp_Id = @user -- Employee ID (replace 85 with the actual employee ID)
-            AND td.Project_Id = p.Project_Id
-        FOR JSON PATH
-    ), '[]') AS Tasks  -- Tasks assigned to the employee
-
-FROM
-    tbl_Project_Master AS p
-LEFT JOIN 
-    tbl_Status AS s ON s.Status_Id = p.Project_Status
-LEFT JOIN 
-    tbl_Users AS u ON u.UserId = p.Project_Head
-WHERE
-    p.Project_Id IN (
-        SELECT td.Project_Id
-        FROM tbl_Project_Employee td
-        WHERE td.User_Id = @user -- Replace with the actual employee ID
-    )`;
-    
             const request = new sql.Request();
             request.input('user', UserId);
-    
+
             const result = await request.query(query);
-    
+
             if (result.recordset.length > 0) {
                 // Function to safely parse JSON if exists
                 const safeParse = (data) => {
@@ -751,7 +762,7 @@ WHERE
                         return [];
                     }
                 };
-    
+
                 // Level 1 parsing
                 const levelOneParsed = result.recordset.map(o => ({
                     ...o,
@@ -759,7 +770,7 @@ WHERE
                     AssignedTasks: safeParse(o.AssignedTasks),
                     WorkDetails: safeParse(o.WorkDetails)
                 }));
-    
+
                 // Level 2 parsing
                 const levelTwoParsed = levelOneParsed.map(o => ({
                     ...o,
@@ -773,7 +784,7 @@ WHERE
                         Parameter_Details: safeParse(wo?.Parameter_Details)
                     })) : []
                 }));
-    
+
                 // Level 3 parsing
                 const levelThreeParsed = levelTwoParsed.map(o => ({
                     ...o,
@@ -785,7 +796,7 @@ WHERE
                         }))
                     }))
                 }));
-    
+
                 dataFound(res, levelThreeParsed);
             } else {
                 noData(res);
@@ -794,7 +805,7 @@ WHERE
             servError(e, res);
         }
     };
-    
+
 
     return {
         getDashboardData,
@@ -802,6 +813,7 @@ WHERE
         getEmployeeAbstract,
         getERPDashboardData,
         getSalesInfo,
+        getPurchaseInfo,
         getnewEmployeeAbstract,
         usergetnewEmployeeAbstract
     }
