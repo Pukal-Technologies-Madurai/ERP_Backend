@@ -31,6 +31,7 @@ projectRoute.delete('/project/schedule', projectSchedule.deleteSchedule);
 projectRoute.post('/project/schedule/scheduleTask', projectSchedule.assignTaskInSchedule);
 projectRoute.put('/project/schedule/scheduleTask', projectSchedule.modifyTaskInSchedule);
 projectRoute.delete('/project/schedule/scheduleTask', projectSchedule.deleteTaskInSchedule);
+projectRoute.get('/project/schedule/projectDetailsforReport', projectSchedule.projectDetailsforReport   );
 
 
 projectRoute.get('/project/schedule/projectScheduleTaskdetails',projectSchedule.projectScheduleTaskdetails)

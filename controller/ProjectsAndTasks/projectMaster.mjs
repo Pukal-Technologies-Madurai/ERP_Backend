@@ -521,11 +521,12 @@ const projectController = () => {
         AND s.Sch_Del_Flag = 0
         AND t.Task_Sch_Del_Flag = 0
     ), 0) AS TodayTaskcounts,
+    
     COALESCE(( 
     SELECT 
     COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
 FROM 
-    dbo.Task_Details_Today_Fn() t
+    dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
         WHERE t.Project_Id =  p.Project_Id
     ), 0) AS TasksScheduled,
     
@@ -533,7 +534,7 @@ FROM
 COALESCE(
     (
         SELECT COUNT(DISTINCT t.Task_Id) 
-        FROM [dbo].[Work_Details_Today_Fn]() t
+            FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
         WHERE t.Project_Id = p.Project_Id
     ), 0
 ) AS CompletedTasks,

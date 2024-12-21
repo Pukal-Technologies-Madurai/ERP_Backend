@@ -3,6 +3,7 @@ import { dataFound, noData, servError, invalidInput, failed, success } from '../
 import { encryptPasswordFun } from '../../helper_functions.mjs';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 const domain = process.env.domain;
@@ -85,7 +86,7 @@ const EmployeeController = () => {
             branch, mobile, empname, designation, dob, doj,
             address1, address2, city, pincode, education,
             father, mother, spouse, gender, religion, salary, total_loan,
-            salary_advance, due_loan, enter_by, fingerPrintEmpId, Department_ID, createAsUser,department,location
+            salary_advance, due_loan, enter_by, fingerPrintEmpId, Department_ID, createAsUser, department, location
         } = req.body.data;
         let userId = '';
         let empcode = '';
@@ -171,8 +172,8 @@ const EmployeeController = () => {
                 .input('Due_Loan', due_loan)
                 .input('User_Mgt_Id', userId)
                 .input('Entry_By', enter_by)
-                .input('Department',department)
-                .input('Location',location)
+                .input('Department', department)
+                .input('Location', location)
                 .query(`
                     INSERT INTO tbl_Employee_Master (
                         Emp_Id, fingerPrintEmpId, Branch, Emp_Code, Emp_Name, Designation, DOB, DOJ, Department_ID, Address_1, Address_2, City,
@@ -202,7 +203,7 @@ const EmployeeController = () => {
             branch, mobile, empname, designation,
             address1, address2, city, pincode, education,
             father, mother, spouse, gender, religion, salary, total_loan,
-            salary_advance, due_loan, enter_by, fingerPrintEmpId, user_manage_id, Department_ID, createAsUser,department,location
+            salary_advance, due_loan, enter_by, fingerPrintEmpId, user_manage_id, Department_ID, createAsUser, department, location
         } = data;
         const dob = data.dob ? data.dob : null;
         const doj = data.doj ? data.doj : null;
@@ -324,12 +325,210 @@ const EmployeeController = () => {
         }
     }
 
+
+    const employeeActivity = async (req, res) => {
+        const { UserId, UserTypeId, Timing, Work_Date, Latitude, Longitude, Company_id } = req.body;
+
+        if (!UserId || !UserTypeId || !Timing || !Work_Date || !Latitude || !Longitude || !Company_id) {
+            return res.status(400).json({ success: false, message: 'Missing required fields' });
+        }
+
+        try {
+
+            const result = await new sql.Request()
+                .input('UserId', sql.Int, UserId)
+                .input('UserTypeId', sql.Int, UserTypeId)
+                .input('Timing', sql.DateTime, Timing)
+                .input('Work_Date', sql.DateTime, Work_Date)
+                .input('Latitude', sql.Float, Latitude)
+                .input('Longitude', sql.Float, Longitude)
+                .input('Company_id', sql.Int, Company_id)
+
+                .query(`
+        INSERT INTO tbl_Sales_Person_Movement (UserId, UserTypeId, Timing, Work_Date, Latitude, Longitude,Company_id)
+        VALUES (@UserId, @UserTypeId, @Timing, @Work_Date, @Latitude, @Longitude,@Company_id)
+      `);
+
+            if (result.rowsAffected[0] > 0) {
+                return res.status(200).json({ success: true, message: 'Location data received successfully' });
+            } else {
+                return res.status(400).json({ success: false, message: 'Failed to insert location data' });
+            }
+        } catch (error) {
+            console.error('Error processing data:', error);
+            return res.status(500).json({ success: false, message: 'Server Error' });
+        }
+    };
+
+
+
+    const employeeGetActivity = async (req, res) => {
+        const { Company_id } = req.query;
+
+        if (!Company_id) {
+            return res.status(400).json({ success: false, message: 'Company ID is required' });
+        }
+
+        try {
+            const getEmp = `
+                SELECT 
+                    * 
+                FROM 
+                    [tbl_Sales_Person_Movement] spm
+                WHERE 
+                    company_id = @company_id 
+                ORDER BY 
+                    spm.Id DESC
+            `;
+
+            const request = new sql.Request();
+            request.input('company_id', sql.Int, Company_id);
+
+            const result = await request.query(getEmp);
+
+            if (result.recordset.length > 0) {
+                return res.status(200).json({ success: true, data: result.recordset });
+            } else {
+                return res.status(404).json({ success: false, message: 'No data found for the given company_id' });
+            }
+
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            return res.status(500).json({ success: false, message: 'Server error' });
+        }
+    };
+
+
+
+
+    const employeeGetActivityLogin = async (req, res) => {
+
+
+        try {
+            const getEmp = `
+                WITH LastLogin AS (
+                    SELECT 
+                        ul.UserId,
+                        ul.APP_Type,
+                        ul.InTime,
+                        ul.OutTime,
+                        ROW_NUMBER() OVER (PARTITION BY ul.UserId, ul.APP_Type ORDER BY ul.InTime DESC) AS rn
+                    FROM 
+                        dbo.UserLog AS ul
+                ),
+                RankedLogs AS (
+                    SELECT 
+                        em.User_Mgt_Id,          
+                        u.Name,                  
+                        pd.EmployeeCode,        
+                        pd.LogDateTime,           
+                        CAST(pd.LogDateTime AS DATE) AS LogDate, 
+                        ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId ORDER BY pd.LogDateTime DESC) AS rn,  -- Rank by LogDateTime for each user
+                        COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE)) AS record_count  -- Count of records per user per date
+                    FROM 
+                        tbl_Employee_Master em
+                    LEFT JOIN 
+                        tbl_Users u ON u.UserId = em.User_Mgt_Id
+                    LEFT JOIN 
+                        [ESSl_Attendance].dbo.Paralleldatabase pd 
+                        ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+                )
+                SELECT 
+                    e.Designation,
+                    e.User_Mgt_Id, 
+                    COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+                    COALESCE(b.BranchName, 'NOT FOUND') AS BranchName, 
+                    COALESCE(u.Name, 'NOT FOUND') AS username,
+
+                    MAX(CASE WHEN ll.APP_Type = 1 THEN ll.InTime ELSE NULL END) AS WebLogin_InTime,
+                    MAX(CASE WHEN ll.APP_Type = 1 THEN ll.OutTime ELSE NULL END) AS WebLogin_OutTime,
+
+                    MAX(CASE WHEN ll.APP_Type = 2 THEN ll.InTime ELSE NULL END) AS MobileLogin_InTime,
+                    MAX(CASE WHEN ll.APP_Type = 2 THEN ll.OutTime ELSE NULL END) AS MobileLogin_OutTime,
+
+                    -- Attendance information from RankedLogs (only the most recent record for each user)
+                    rl.LogDate,
+                    rl.LogDateTime,
+
+                    -- Calculating the Attendance Status based on record_count and rn
+                    CASE 
+                        WHEN rl.record_count = 1 THEN 'In'   
+                        WHEN rl.record_count = 2 THEN 
+                            CASE 
+                                WHEN rl.rn = 1 THEN 'Out'  
+                                ELSE 'In'
+                            END
+                        WHEN rl.record_count = 3 THEN 
+                            CASE 
+                                WHEN rl.rn = 1 THEN 'In' 
+                                WHEN rl.rn = 2 THEN 'Out'
+                                ELSE 'In'
+                            END
+                        WHEN rl.record_count = 4 THEN 
+                            CASE 
+                                WHEN rl.rn = 1 THEN 'Out'  
+                                WHEN rl.rn = 2 THEN 'In'
+                                WHEN rl.rn = 3 THEN 'Out'
+                                ELSE 'In'
+                            END
+                        ELSE '-' 
+                    END AS AttendanceStatus
+
+                FROM 
+                    tbl_Employee_Master AS e
+                LEFT JOIN 
+                    tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
+                LEFT JOIN 
+                    tbl_Users AS u ON e.User_Mgt_Id = u.UserId
+                LEFT JOIN 
+                    tbl_Branch_Master AS b ON e.Branch = b.BranchId
+                LEFT JOIN 
+                    LastLogin AS ll ON u.UserId = ll.UserId 
+                                      AND ll.rn = 1  -- Latest login for each user
+                LEFT JOIN 
+                    RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id 
+                                     AND rl.rn = 1  -- Only the latest attendance record for each user
+
+                GROUP BY
+                    e.Designation,
+                    e.User_Mgt_Id,
+                    d.Designation,
+                    b.BranchName,
+                    u.Name,
+                    rl.LogDate,
+                    rl.LogDateTime,
+                    rl.record_count,
+                    rl.rn
+
+                ORDER BY 
+                    e.User_Mgt_Id DESC`;
+
+
+            const result = await sql.query(getEmp);
+
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset)
+            } else {
+                noData(res)
+            }
+
+        } catch (e) {
+            servError(e, res)
+        }
+    };
+
+
+
+
     return {
         emp_designation,
         employeeDepartmentGet,
         employeeGet,
         employeePost,
         employeePut,
+        employeeActivity,
+        employeeGetActivity,
+        employeeGetActivityLogin
     }
 }
 

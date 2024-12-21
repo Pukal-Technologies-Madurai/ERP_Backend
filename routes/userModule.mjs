@@ -29,4 +29,9 @@ UserModule.get('/employee', employeeMaster.employeeGet);
 UserModule.post('/employee', employeeMaster.employeePost);
 UserModule.put('/employee', employeeMaster.employeePut);
 
+
+UserModule.post('/employeeActivity/tracking', employeeMaster.employeeActivity);
+UserModule.get('/employeeActivity/trackinglist', employeeMaster.employeeGetActivity);
+UserModule.get('/employeeActivity/trackinglistlogin', employeeMaster.employeeGetActivityLogin);
+
 export default UserModule;

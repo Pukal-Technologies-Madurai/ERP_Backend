@@ -10,6 +10,7 @@ AuthorizationRouter.post('/login', LoginController.login);
 AuthorizationRouter.get('/userAuth', LoginController.getUserByAuth);
 AuthorizationRouter.post('/userPortal/login', LoginController.globalLogin);
 AuthorizationRouter.get('/userPortal/accounts', LoginController.getAccountsInUserPortal);
+AuthorizationRouter.get('/userAuthmobile', LoginController.mobileApplogin);
 
 
 AuthorizationRouter.get('/appMenu', authenticateToken, appMenu.newAppMenu);
