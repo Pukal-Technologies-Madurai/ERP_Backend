@@ -461,6 +461,23 @@ const DashboardController = () => {
         }
     }
 
+    // const getPurchaseMoreInfo = async (req, res) => {
+    //     const Fromdate = ISOString(req.query.Fromdate);
+    //     const Todate = ISOString(req.query.Todate);
+
+    //     try {
+    //         const result = await SPCall({
+    //             SPName: 'Day_List_Purchase', spParamerters: {
+    //                 Fromdate, Todate, Company_Id: Company ?? 1, 
+    //             }, spTransaction: req.db
+    //         });
+            
+    //         dataFound(res, result.recordsets);
+    //     } catch (e) {
+    //         console.error(e);
+    //     }
+    // }
+
     const getnewEmployeeAbstract = async (req, res) => {
         const { UserId } = req.query;
 
@@ -814,6 +831,7 @@ LEFT JOIN
         getERPDashboardData,
         getSalesInfo,
         getPurchaseInfo,
+        // getPurchaseMoreInfo,
         getnewEmployeeAbstract,
         usergetnewEmployeeAbstract
     }
