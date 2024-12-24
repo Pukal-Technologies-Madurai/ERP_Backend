@@ -357,6 +357,24 @@ export const checkIsNumber = (num) => {
     return (num !== '' && num !== null && num !== undefined) ? isNaN(num) ? false : true : false
 }
 
+export const isValidJSON = (str) => {
+    try {
+        JSON.parse(str);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+export const parseJSON = (str) => {
+    try {
+        const value = JSON.parse(str);
+        return { isJSON: true, data: value };
+    } catch (e) {
+        return { isJSON: false, };
+    }
+}
+
 export const isNumber = value => !isNaN(parseInt(value, 10)) && isFinite(value);
 
 export const isObject = (val) => {

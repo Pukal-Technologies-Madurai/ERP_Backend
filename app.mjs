@@ -2,7 +2,7 @@ import express from 'express'
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import cors from 'cors'
+import cors from 'cors';
 import indexRouter from './routes/index.mjs';
 import morgan from 'morgan';
 import fs from 'fs';

@@ -455,28 +455,28 @@ const DashboardController = () => {
                 }, spTransaction: req.db
             });
             
-            dataFound(res, result.recordsets);
+            dataFound(res, result?.recordsets ?? []);
         } catch (e) {
-            console.error(e);
+            servError(e, res);
         }
     }
 
-    // const getPurchaseMoreInfo = async (req, res) => {
-    //     const Fromdate = ISOString(req.query.Fromdate);
-    //     const Todate = ISOString(req.query.Todate);
+    const getPurchaseMoreInfo = async (req, res) => {
+        const Fromdate = ISOString(req.query.Fromdate);
+        const Todate = ISOString(req.query.Todate);
 
-    //     try {
-    //         const result = await SPCall({
-    //             SPName: 'Day_List_Purchase', spParamerters: {
-    //                 Fromdate, Todate, Company_Id: Company ?? 1, 
-    //             }, spTransaction: req.db
-    //         });
+        try {
+            const result = await SPCall({
+                SPName: 'Day_List_Purchase_List', spParamerters: {
+                    Fromdate, Todate, Company_Id: Company ?? 1, 
+                }, spTransaction: req.db
+            });
             
-    //         dataFound(res, result.recordsets);
-    //     } catch (e) {
-    //         console.error(e);
-    //     }
-    // }
+            dataFound(res, result?.recordset || []);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
 
     const getnewEmployeeAbstract = async (req, res) => {
         const { UserId } = req.query;
@@ -831,7 +831,7 @@ LEFT JOIN
         getERPDashboardData,
         getSalesInfo,
         getPurchaseInfo,
-        // getPurchaseMoreInfo,
+        getPurchaseMoreInfo,
         getnewEmployeeAbstract,
         usergetnewEmployeeAbstract
     }

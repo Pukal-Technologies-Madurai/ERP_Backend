@@ -9,6 +9,7 @@ DashboardRouter.get('/employeeAbstract', DashboardController.getEmployeeAbstract
 DashboardRouter.get('/erp/dashboardData', DashboardController.getERPDashboardData);
 DashboardRouter.get('/salesInfo', dbconnect, DashboardController.getSalesInfo);
 DashboardRouter.get('/purchaseInfo', DashboardController.getPurchaseInfo);
+DashboardRouter.get('/purchaseInfo/moreInfo', DashboardController.getPurchaseMoreInfo);
 DashboardRouter.get('/newEmployeeAbstract', DashboardController.getnewEmployeeAbstract);
 DashboardRouter.get('/usernewEmployeeAbstract', DashboardController.usergetnewEmployeeAbstract);
 

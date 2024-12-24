@@ -201,7 +201,7 @@ const PurchaseOrder = () => {
                     .input('Item_Id', product.Item_Id)
 
                     .input('Bill_Qty', Bill_Qty)
-                    .input('Act_Qty', Bill_Qty)
+                    .input('Act_Qty', Number(product?.Act_Qty))
                     .input('Bill_Alt_Qty', Number(product?.Bill_Alt_Qty))
                     .input('Alt_Act_Qty', Number(product?.Bill_Alt_Qty))
 
@@ -305,7 +305,7 @@ const PurchaseOrder = () => {
         } = req.body;
 
         const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
-        const Po_Entry_Date = ISOString(req?.body?.Po_Inv_Date);
+        const Po_Entry_Date = ISOString(req?.body?.Po_Entry_Date);
         const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
         const isInclusive = isEqualNumber(GST_Inclusive, 1);
         const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
@@ -470,7 +470,7 @@ const PurchaseOrder = () => {
                     .input('Item_Id', product.Item_Id)
 
                     .input('Bill_Qty', Bill_Qty)
-                    .input('Act_Qty', Bill_Qty)
+                    .input('Act_Qty', Number(product?.Act_Qty))
                     .input('Bill_Alt_Qty', Number(product?.Bill_Alt_Qty))
                     .input('Alt_Act_Qty', Number(product?.Bill_Alt_Qty))
 
