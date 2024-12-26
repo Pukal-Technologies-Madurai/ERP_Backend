@@ -469,7 +469,7 @@ const user = () => {
                          FROM 
                           tbl_Users 
                       WHERE 
-                          UserTypeId IN (1, 2, 0)
+                          UserTypeId IN (1, 2, 0, 3)
                       	AND UDel_Flag=0;
 
                         `)

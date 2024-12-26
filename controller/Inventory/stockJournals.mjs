@@ -6,7 +6,7 @@ const StockJournal = () => {
 
     const createStockJournal = async (req, res) => {
         try {
-            const { }
+            const { val } = req.query;
         } catch (e) {
             servError(e, res);
         }
