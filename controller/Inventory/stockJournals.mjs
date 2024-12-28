@@ -1,30 +1,35 @@
 import sql from 'mssql';
 import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
 import { checkIsNumber, createPadString, ISOString } from '../../helper_functions.mjs';
-import { getNextId } from '../../middleware/miniAPIs.mjs';
+import { parseJSON } from '../../helper_functions.mjs';
 const StockJournal = () => {
 
     const createStockJournal = async (req, res) => {
-        const stockdetails = req.body.stockdetails ?? {};
         const {
-            Branch_Id = '',
-            StockJournalDate = '',
-            StockJournalBill = 0,
-            StockJournalVouchertype = '',
+            Branch_Id,
+            Stock_Journal_date = '',
+            Stock_Journal_Bill_type = 0,
+            Stock_Journal_Voucher_type = '',
             Invoice_no = 0,
             Narration = '',
             Start_Time = '',
             End_Time = '',
-            VehicleStart = '',
-            VehicleEnd = '',
+            Vehicle_Start_KM = '',
+            Vehicle_End_KM = '',
             Trip_No = '',
-            CreatedBy = '',
-            createDate = '',
-            created_time = '',
-        } = stockdetails;
+            Created_by = ''
+        } = req.body;
+
 
         if (!checkIsNumber(Branch_Id)) {
             return invalidInput(res, 'Select Branch');
+        }
+        if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
+            return invalidInput(res, 'Start Time cannot be greater than End Time');
+        }
+
+        if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
+            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
         }
 
         const Source = Array.isArray(req.body.Source) ? req.body.Source : [];
@@ -52,42 +57,49 @@ const StockJournal = () => {
             `))?.recordset[0]?.MaxId) + 1;
 
             if (!checkIsNumber(stjid)) throw new Error('Failed to get Stock Journal ID');
-            const stj_Id = stjid;
+            const STJ_Id = stjid;
 
-            const J_No = 'JN_' + Branch_Id + '_' + createPadString(newOrderId, 4);
+            const Journal_no = 'JN_' + Branch_Id + '_' + createPadString(newOrderId, 4);
 
-            const stInv = await getNextId({ table: 'tbl_Stock_Journal_Gen_Info', column: 'ST_Inv_Id' });
+            const stInv = await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
+                .query(`
+                SELECT COALESCE(MAX(ST_Inv_Id), 0) AS MaxId
+                FROM tbl_Stock_Journal_Gen_Info
+                WHERE Branch_Id = @Branch_Id AND Stock_Journal_Bill_type = @Stock_Journal_Bill_type
+            `);
 
-            if (!stInv.status || !checkIsNumber(stInv.MaxId)) throw new Error('Failed to get Stock Invoice ID');
-            const Sno = stInv.MaxId;
+            if (!stInv || !stInv.recordset || !checkIsNumber(stInv.recordset[0]?.MaxId)) {
+                throw new Error('Failed to get Stock Invoice ID');
+            }
+            const ST_Inv_Id = stInv.recordset[0].MaxId + 1;
 
             const OrderDetailsInsert = await new sql.Request(transaction)
-                .input('STJ_Id', stj_Id)
-                .input('ST_Inv_Id', Sno)
-                .input('Branch_Id', BranchId)
-                .input('Journal_no', J_No)
-                .input('Stock_Journal_date', StockJournalDate)
-                .input('Stock_Journal_Bill_type', StockJournalBill)
-                .input('Stock_Journal_Voucher_type', StockJournalVouchertype)
+                .input('STJ_Id', STJ_Id)
+                .input('ST_Inv_Id', ST_Inv_Id)
+                .input('Branch_Id', Branch_Id)
+                .input('Journal_no', Journal_no)
+                .input('Stock_Journal_date', Stock_Journal_date)
+                .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
+                .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
                 .input('Invoice_no', Invoice_no)
                 .input('Narration', Narration)
                 .input('Start_Time', Start_Time)
                 .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', VehicleStart)
-                .input('Vehicle_End_KM', VehicleEnd)
+                .input('Vehicle_Start_KM', Vehicle_Start_KM)
+                .input('Vehicle_End_KM', Vehicle_End_KM)
                 .input('Trip_No', Trip_No)
-                .input('Created_by', CreatedBy)
-                .input('created_on_Date', createDate)
-                .input('created_time', created_time)
+                .input('Created_by', Created_by)
                 .query(`
                     INSERT INTO tbl_Stock_Journal_Gen_Info (
                         STJ_Id, ST_Inv_Id, Branch_Id, Journal_no, Stock_Journal_date,
                         Stock_Journal_Bill_type, Stock_Journal_Voucher_type, Invoice_no, Narration, Start_Time, End_Time, Vehicle_Start_KM, Vehicle_End_KM, 
-                        Trip_No, Created_by, created_on_Date, created_time
+                        Trip_No, Created_by
                     ) VALUES (
                         @STJ_Id, @ST_Inv_Id, @Branch_Id, @Journal_no, @Stock_Journal_date,
                         @Stock_Journal_Bill_type, @Stock_Journal_Voucher_type, @Invoice_no, @Narration, @Start_Time, @End_Time, @Vehicle_Start_KM, @Vehicle_End_KM, 
-                        @Trip_No, @Created_by, @created_on_Date, @created_time
+                        @Trip_No, @Created_by
                     );
                 `);
 
@@ -95,20 +107,19 @@ const StockJournal = () => {
                 throw new Error('Failed to insert Journal details');
             }
 
-
             for (let i = 0; i < Source.length; i++) {
                 const item = Source[i];
                 const result = await new sql.Request(transaction)
 
-                    .input('STJ_Id', stj_Id)
+                    .input('STJ_Id', STJ_Id)
                     .input('Sour_Item_Id', Number(item.Sour_Item_Id))
                     .input('Sour_Goodown_Id', item.Sour_Goodown_Id)
-                    .input('Sour_Batch_Lot_No', Number(item.Sour_Batch_Lot_No))
+                    .input('Sour_Batch_Lot_No', item.Sour_Batch_Lot_No)
                     .input('Sour_Qty', item.Sour_Qty)
                     .input('Sour_Unit_Id', Number(item.Sour_Unit_Id))
                     .input('Sour_Unit', item.Sour_Unit)
                     .input('Sour_Rate', Number(item.Sour_Rate))
-                    .input('Sour_Amt', item.Sour_Amt)
+                    .input('Sour_Amt', Number(item.Sour_Amt))
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Sour_Details (
                             STJ_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
@@ -122,12 +133,14 @@ const StockJournal = () => {
                 }
             }
 
+
+
             for (let i = 0; i < StaffInvolve.length; i++) {
                 const delivery = StaffInvolve[i];
                 const result = await new sql.Request(transaction)
-                    .input('STJ_Id', stj_Id)
-                    .input('Staff_Type_Id', delivery.Staff_Type_Id)
-                    .input('Staff_Id', delivery.Staff_Id)
+                    .input('STJ_Id', STJ_Id)
+                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id))
+                    .input('Staff_Id', Number(delivery.Staff_Id))
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Staff_Involved (STJ_Id, Staff_Type_Id, Staff_Id) 
                         VALUES (@STJ_Id, @Staff_Type_Id, @Staff_Id);
@@ -138,11 +151,13 @@ const StockJournal = () => {
                 }
             }
 
+
+
             for (let i = 0; i < Destination.length; i++) {
                 const final = Destination[i];
                 const result = await new sql.Request(transaction)
 
-                    .input('STJ_Id', stj_Id)
+                    .input('STJ_Id', STJ_Id)
                     .input('Dest_Item_Id', Number(final.Dest_Item_Id))
                     .input('Dest_Goodown_Id', final.Dest_Goodown_Id)
                     .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
@@ -168,10 +183,13 @@ const StockJournal = () => {
 
             return success(res, 'Stock Journal created successfully');
         } catch (e) {
-            await transaction.rollback();
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
             servError(e, res);
         }
     }
+
 
     const updateStockJournal = async (req, res) => {
         const {
@@ -182,49 +200,54 @@ const StockJournal = () => {
         } = req.body;
 
         const {
-            stj_Id,
-            StockJournalDate = '',
-            StockJournalBill = 0,
-            StockJournalVouchertype = '',
+            STJ_Id,
+            Stock_Journal_date = '',
+            Stock_Journal_Bill_type = 0,
+            Stock_Journal_Voucher_type = '',
             Invoice_no = 0,
             Narration = '',
             Start_Time = '',
             End_Time = '',
-            VehicleStart = '',
-            VehicleEnd = '',
+            Vehicle_Start_KM = '',
+            Vehicle_End_KM = '',
             Trip_No = '',
-            Alterby = '',
-            AlteredDate = '',
-            AlteredTime = ''
+            altered_by = ''
         } = stockdetails;
+
 
         const transaction = new sql.Transaction();
 
+
+        if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
+            return invalidInput(res, 'Start Time cannot be greater than End Time');
+        }
+
+        if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
+            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
+        }
         try {
             await transaction.begin();
 
             const updateOrderDetails = await new sql.Request(transaction)
-                .input('STJ_Id', stj_Id)
-                .input('Stock_Journal_date', StockJournalDate)
-                .input('Stock_Journal_Bill_type', StockJournalBill)
-                .input('Stock_Journal_Voucher_type', StockJournalVouchertype)
+                .input('STJ_Id', STJ_Id)
+                .input('Stock_Journal_date', Stock_Journal_date)
+                .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
+                .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
                 .input('Invoice_no', Invoice_no)
                 .input('Narration', Narration)
                 .input('Start_Time', Start_Time)
                 .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', VehicleStart)
-                .input('Vehicle_End_KM', VehicleEnd)
+                .input('Vehicle_Start_KM', Vehicle_Start_KM)
+                .input('Vehicle_End_KM', Vehicle_End_KM)
                 .input('Trip_No', Trip_No)
-                .input('altered_by', Alterby)
-                .input('alterd_date', AlteredDate)
-                .input('alterd_time', AlteredTime)
+                .input('altered_by', altered_by)
                 .query(`
                     UPDATE tbl_Stock_Journal_Gen_Info
                     SET Stock_Journal_date = @Stock_Journal_date, Stock_Journal_Bill_type = @Stock_Journal_Bill_type,
                         Stock_Journal_Voucher_type = @Stock_Journal_Voucher_type, Invoice_no = @Invoice_no, 
                         Narration = @Narration, Start_Time = @Start_Time, End_Time = @End_Time, Vehicle_Start_KM = @Vehicle_Start_KM,
                         Vehicle_End_KM = @Vehicle_End_KM, Trip_No = @Trip_No, 
-                        altered_by = @altered_by, alterd_date = @alterd_date, alterd_time = @alterd_time
+                        altered_by = @altered_by
                     WHERE STJ_Id = @STJ_Id
                 `);
 
@@ -233,9 +256,8 @@ const StockJournal = () => {
             }
 
             await new sql.Request(transaction)
-                .input('STJ_Id', stj_Id)
+                .input('STJ_Id', STJ_Id)
                 .query(`
-       
                     DELETE FROM tbl_Stock_Journal_Sour_Details WHERE STJ_Id = @STJ_Id;
                     DELETE FROM tbl_Stock_Journal_Dest_Details WHERE STJ_Id = @STJ_Id;
                     DELETE FROM tbl_Stock_Journal_Staff_Involved WHERE STJ_Id = @STJ_Id;
@@ -245,8 +267,7 @@ const StockJournal = () => {
             for (let i = 0; i < Source.length; i++) {
                 const item = Source[i];
                 const result = await new sql.Request(transaction)
-
-                    .input('STJ_Id', stj_Id)
+                    .input('STJ_Id', STJ_Id)
                     .input('Sour_Item_Id', Number(item.Sour_Item_Id))
                     .input('Sour_Goodown_Id', item.Sour_Goodown_Id)
                     .input('Sour_Batch_Lot_No', Number(item.Sour_Batch_Lot_No))
@@ -259,7 +280,7 @@ const StockJournal = () => {
                             INSERT INTO tbl_Stock_Journal_Sour_Details (
                                 STJ_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
                             ) VALUES (
-                          @STJ_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
+                                @STJ_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
                             );
                         `);
 
@@ -268,11 +289,10 @@ const StockJournal = () => {
                 }
             }
 
-
             for (let i = 0; i < StaffInvolve.length; i++) {
                 const delivery = StaffInvolve[i];
                 const result = await new sql.Request(transaction)
-                    .input('STJ_Id', stj_Id)
+                    .input('STJ_Id', STJ_Id)
                     .input('Staff_Type_Id', delivery.Staff_Type_Id)
                     .input('Staff_Id', delivery.Staff_Id)
                     .query(`
@@ -289,7 +309,7 @@ const StockJournal = () => {
             for (let i = 0; i < Destination.length; i++) {
                 const final = Destination[i];
                 const result = await new sql.Request(transaction)
-                    .input('STJ_Id', stj_Id)
+                    .input('STJ_Id', STJ_Id)
                     .input('Dest_Item_Id', Number(final.Dest_Item_Id))
                     .input('Dest_Goodown_Id', final.Dest_Goodown_Id)
                     .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
@@ -314,7 +334,6 @@ const StockJournal = () => {
             await transaction.commit();
             return success(res, 'Journal Updated Successfully');
         } catch (e) {
-
             if (transaction._aborted === false) {
                 await transaction.rollback();
             }
@@ -336,10 +355,10 @@ const StockJournal = () => {
             const request = new sql.Request(transaction)
                 .input('STJ_Id', stj_Id)
                 .query(`
-                            DELETE FROM tbl_Stock_Journal_Gen_Info WHERE STJ_Id = @STJ_Id;
-                            DELETE FROM tbl_Stock_Journal_Sour_Details WHERE STJ_Id = @STJ_Id;
-                            DELETE FROM tbl_Stock_Journal_Dest_Details WHERE STJ_Id = @STJ_Id;
-                            DELETE FROM tbl_Stock_Journal_Staff_Involved WHERE STJ_Id = @STJ_Id;`
+                    DELETE FROM tbl_Stock_Journal_Gen_Info WHERE STJ_Id = @STJ_Id;
+                    DELETE FROM tbl_Stock_Journal_Sour_Details WHERE STJ_Id = @STJ_Id;
+                    DELETE FROM tbl_Stock_Journal_Dest_Details WHERE STJ_Id = @STJ_Id;
+                    DELETE FROM tbl_Stock_Journal_Staff_Involved WHERE STJ_Id = @STJ_Id;`
                 );
 
             const result = await request;
@@ -351,49 +370,80 @@ const StockJournal = () => {
             return success(res, 'Journal Deleted!')
 
         } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
             servError(e, res);
         }
     }
 
     const getJournalDetails = async (req, res) => {
         try {
+            const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
             const request = new sql.Request();
 
-            const result = await request.query(`
-                WITH JournalSourceDetails AS (
-                    SELECT jn.*
-                    FROM tbl_Stock_Journal_Gen_Info AS jn
-                    WHERE jn.STJ_Id IN (
-                        SELECT sjs.STJ_Id
-                        FROM tbl_Stock_Journal_Sour_Details AS sjs
-                    )
-                ), Destination AS (
-                    SELECT d.*
-                    FROM tbl_Stock_Journal_Dest_Details AS d
-                    WHERE d.STJ_Id IN (
-                        SELECT pgi.STJ_Id
-                        FROM tbl_Stock_Journal_Dest_Details AS pgi
-                    )
-                ), Employee_Involed AS (
-                    SELECT emp.*, cc.Cost_Center_Name
-                    FROM tbl_Stock_Journal_Staff_Involved AS emp
-                    LEFT JOIN tbl_ERP_Cost_Center AS cc 
-                    ON emp.Staff_Id = cc.User_Id
-                )
-                SELECT 
-                    COALESCE((SELECT jn.* FROM JournalSourceDetails AS jn FOR JSON PATH), '[]') AS Source,
-                    (SELECT d.* FROM Destination AS d FOR JSON PATH) AS Destination,
-                    (SELECT emp.STJ_Id, emp.S_Id, emp.Staff_Type_Id, emp.Staff_Id, emp.Cost_Center_Name
-                     FROM Employee_Involed AS emp FOR JSON PATH) AS EmployeeInvoled
-            `);
+            const result = await request
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    WITH SJ_Main AS (
+                      SELECT * 
+                      FROM tbl_Stock_Journal_Gen_Info
+                      WHERE CONVERT(DATE, Stock_Journal_date) >= CONVERT(DATE, @Fromdate) 
+                      AND CONVERT(DATE, Stock_Journal_date) <= CONVERT(DATE, @Todate)
+                    ), Source AS (
+                      SELECT s.* 
+                      FROM tbl_Stock_Journal_Sour_Details AS s
+                      WHERE s.STJ_Id IN (
+                        SELECT STJ_Id 
+                        FROM SJ_Main
+                    	)
+                    ), Destination AS (
+                      SELECT d.* 
+                      FROM tbl_Stock_Journal_Dest_Details AS d
+                      WHERE d.STJ_Id IN (
+                        SELECT STJ_Id 
+                        FROM SJ_Main
+                    	)
+                    ), Staffs AS (
+                      SELECT st.*
+                      FROM tbl_Stock_Journal_Staff_Involved AS st
+                      WHERE st.STJ_Id IN (
+                        SELECT STJ_Id 
+                        FROM SJ_Main
+                    	)
+                    ) 
+                    SELECT 
+                        main.*,
+                        COALESCE(( 
+                            SELECT source.*
+                            FROM Source AS source
+                            WHERE source.STJ_Id = main.STJ_Id
+                            FOR JSON PATH
+                        ), '[]') AS SourceDetails,
+                        COALESCE((
+                            SELECT destination.*
+                            FROM Source AS destination
+                            WHERE destination.STJ_Id = main.STJ_Id
+                            FOR JSON PATH
+                        ), '[]') AS DestinationDetails,
+                        COALESCE((
+                            SELECT staff.*
+                            FROM Source AS staff
+                            WHERE staff.STJ_Id = main.STJ_Id
+                            FOR JSON PATH
+                        ), '[]') AS StaffsDetails
+                    FROM SJ_Main AS main
+                    ORDER BY main.STJ_Id;
+                `);
 
             if (result.recordset.length > 0) {
                 const extractedData = result.recordset.map(o => {
                     return {
                         ...o,
-                        Source: parseJson(o?.Source),
-                        Destination: parseJson(o?.Destination),
-                        EmployeeInvoled: parseJson(o?.EmployeeInvoled)
+                        SourceDetails: JSON.parse(o?.SourceDetails),
+                        DestinationDetails: JSON.parse(o?.DestinationDetails),
+                        StaffsDetails: JSON.parse(o?.StaffsDetails)
                     };
                 });
 
@@ -406,17 +456,6 @@ const StockJournal = () => {
             servError(e, res);
         }
     };
-
-    function parseJson(jsonString) {
-        try {
-            return jsonString ? JSON.parse(jsonString) : null;
-        } catch (e) {
-            console.error("Error parsing JSON:", e);
-            return null;
-        }
-    }
-
-
 
     return {
         createStockJournal,
