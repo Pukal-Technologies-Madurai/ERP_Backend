@@ -3,7 +3,7 @@ import { dataFound, noData, servError, invalidInput, failed, success } from '../
 import { encryptPasswordFun } from '../../helper_functions.mjs';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
-
+import {getUserIdByAuth,getUserType,getUserTypeByAuth} from '../../middleware/miniAPIs.mjs'
 dotenv.config();
 
 const domain = process.env.domain;
@@ -584,104 +584,116 @@ const EmployeeController = () => {
     };
 
 
-
     const employeeAttendanceModule = async (req, res) => {
         const { FromDate, ToDate, UserId } = req.query;
     
         try {
-            let query = `
-            WITH RankedLogs AS (
-                SELECT 
-                    em.User_Mgt_Id,          
-                    u.Name AS username,  
-                    pd.EmployeeCode,        
-                    pd.LogDateTime,           
-                    CAST(pd.LogDateTime AS DATE) AS LogDate,  -- LogDate (Date-only version)
-                    ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE) ORDER BY pd.LogDateTime) AS rn, 
-                    COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE)) AS record_count  
-                FROM 
-                    tbl_Employee_Master em
-                LEFT JOIN 
-                    tbl_Users u ON u.UserId = em.User_Mgt_Id
-                LEFT JOIN 
-                    [ESSl_Attendance].dbo.Paralleldatabase pd 
-                    ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
-                WHERE 
-                    pd.LogDate >= CAST(@FromDate AS DATETIME) AND 
-                    pd.LogDate <= CAST(@ToDate AS DATETIME)
-            )
-            SELECT 
-                e.User_Mgt_Id, 
-                COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
-                rl.username,  
-                rl.LogDate,
-              
-                STRING_AGG(
-                    FORMAT(rl.LogDateTime, 'yyyy-MM-dd HH:mm:ss') + ' (' +
-                    CAST(rl.rn AS VARCHAR(10)) + ')',  
-                    ', ') AS AttendanceDetails,
-                
-                CASE 
-                    WHEN rl.record_count >= 1  THEN 'Present'  
-                    ELSE 'Absent'  
-                END AS AttendanceStatus,
-                
-                rl.record_count  -- Total count of attendance records for each LogDate
-            FROM 
-                tbl_Employee_Master AS e
-            LEFT JOIN 
-                tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
-            LEFT JOIN 
-                tbl_Users AS u ON e.User_Mgt_Id = u.UserId
-            LEFT JOIN 
-                RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
-            WHERE 
-                rl.LogDate >= CAST(@FromDate AS DATETIME) AND rl.LogDate <= CAST(@ToDate AS DATETIME)
-                AND rl.LogDateTime IS NOT NULL 
-            `;
-    
-            if (UserId) {
-                query += ` AND e.User_Mgt_Id = @UserId `;
+         
+            const userTypeId = await getUserType(UserId);
+   
+            if (!userTypeId) {
+                return res.status(400).json({ data: [], success: false, message: 'userTypeId is required and must be a valid number' });
             }
     
-            query += `
-            GROUP BY 
-                e.User_Mgt_Id, 
-                e.Designation, 
-                d.Designation, 
-                rl.username,  
-                rl.LogDate, 
-                rl.record_count  -- Grouping by record_count to aggregate correctly
-            `;
+            let condition = '';
+            
+     
+            if (UserId === "" || UserId === "0") {
+                condition = '';
+            } else {
+                condition = ' AND rl.User_Mgt_Id = @UserId'; 
+            }
     
-            query += `
-            ORDER BY 
-                rl.LogDate DESC
+       
+            let query = `
+                WITH RankedLogs AS (
+                    SELECT 
+                        em.User_Mgt_Id,          
+                        u.Name AS username,  
+                        pd.EmployeeCode,        
+                        pd.LogDateTime,           
+                        CAST(pd.LogDateTime AS DATE) AS LogDate,  
+                        ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE) ORDER BY pd.LogDateTime) AS rn, 
+                        COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE)) AS record_count  
+                    FROM 
+                        tbl_Employee_Master em
+                    LEFT JOIN 
+                        tbl_Users u ON u.UserId = em.User_Mgt_Id
+                    LEFT JOIN 
+                        [ESSl_Attendance].dbo.Paralleldatabase pd 
+                        ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+                    WHERE 
+                        pd.LogDate >= CAST(@FromDate AS DATETIME) AND 
+                        pd.LogDate <= CAST(@ToDate AS DATETIME)
+                )
+            
+                SELECT 
+                    e.User_Mgt_Id, 
+                    COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+                    rl.username,  
+                    rl.LogDate,
+                    STRING_AGG(
+                        FORMAT(rl.LogDateTime, ' HH:mm') + ' (' +
+                        CAST(rl.rn AS VARCHAR(10)) + ')',  
+                        ', ') AS AttendanceDetails,
+                    CASE 
+                        WHEN rl.record_count >= 1 THEN 'Present'  
+                        ELSE 'Absent'  
+                    END AS AttendanceStatus,
+                    rl.record_count
+                FROM 
+                    tbl_Employee_Master AS e
+                LEFT JOIN 
+                    tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
+                LEFT JOIN 
+                    tbl_Users AS u ON e.User_Mgt_Id = u.UserId
+                LEFT JOIN 
+                    RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
+                WHERE 
+                    rl.LogDate >= CAST(@FromDate AS DATETIME) AND 
+                    rl.LogDate <= CAST(@ToDate AS DATETIME)
+                    ${condition}  -- Dynamically insert the condition here
+                GROUP BY 
+                    e.User_Mgt_Id, 
+                    e.Designation, 
+                    d.Designation, 
+                    rl.username,  
+                    rl.LogDate, 
+                    rl.record_count  
+                ORDER BY 
+                    rl.LogDate DESC
             `;
     
             const request = new sql.Request();
+            request.input('FromDate', sql.DateTime, FromDate || '1900-01-01');
+            request.input('ToDate', sql.DateTime, ToDate || '2100-01-01');
+            
+            if (UserId === "" || UserId === "0") {
+                request.input('UserId', sql.Int, null); 
+            } else {
+                request.input('UserId', sql.Int, UserId); 
+            }
     
-            request.input('FromDate', sql.DateTime, FromDate || '1900-01-01'); 
-            request.input('ToDate', sql.DateTime, ToDate || '2100-01-01'); 
-            if (UserId) request.input('UserId', sql.Int, UserId); 
-    
+          
             const result = await request.query(query);
     
             if (result.recordset.length > 0) {
                 dataFound(res, result.recordset); 
             } else {
-                noData(res);
+                noData(res); 
             }
-    
         } catch (e) {
-            servError(e, res);
+            console.error(e); 
+            servError(e, res); 
         }
     };
     
+    
+    
 
 
 
-    return {
+return {
         emp_designation,
         employeeDepartmentGet,
         employeeGet,

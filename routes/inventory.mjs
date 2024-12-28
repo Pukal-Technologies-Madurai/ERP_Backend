@@ -1,5 +1,6 @@
 import express from 'express';
 import tallyStockBased from '../controller/Inventory/tallyStockBased.mjs';
+import stockJournals from '../controller/Inventory/stockJournals.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 
 const inventoryRouter = express.Router();
@@ -11,5 +12,10 @@ inventoryRouter.get(
     dbconnect, 
     tallyStockBased.getTallyStockJournalDataExtended
 );
+
+inventoryRouter.get('/stockJournal', stockJournals.getJournalDetails);
+inventoryRouter.post('/stockJournal', stockJournals.createStockJournal);
+inventoryRouter.put('/stockJournal', stockJournals.updateStockJournal);
+inventoryRouter.delete('/stockJournal', stockJournals.deleteJournalInfo);
 
 export default inventoryRouter;
