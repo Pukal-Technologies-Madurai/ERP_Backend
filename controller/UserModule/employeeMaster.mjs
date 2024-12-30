@@ -355,7 +355,7 @@ const EmployeeController = () => {
                 return res.status(400).json({ success: false, message: 'Failed to insert location data' });
             }
         } catch (error) {
-            console.error('Error processing data:', error);
+  
             return res.status(500).json({ success: false, message: 'Server Error' });
         }
     };
@@ -393,7 +393,7 @@ const EmployeeController = () => {
             }
 
         } catch (error) {
-            console.error('Error fetching data:', error);
+      
             return res.status(500).json({ success: false, message: 'Server error' });
         }
     };
@@ -522,13 +522,13 @@ const EmployeeController = () => {
     const employeeGetActivityLoginMobile = async (req, res) => {
         const { UserId } = req.query;
     
-        // Check if UserId is valid
+
         try {
             if (!checkIsNumber(UserId)) {
                 return res.status(400).json({ data: [], success: false, message: 'UserId is required and must be a valid number', isCustomer: false });
             }
     
-            // Define the SQL query
+         
             const getEmp = `
                 WITH RankedLogs AS (
                     SELECT 
@@ -578,103 +578,113 @@ const EmployeeController = () => {
             }
     
         } catch (error) {
-            console.error('Error fetching data:', error);
+        
             return res.status(500).json({ success: false, message: 'Server error' });
         }
     };
 
 
     const employeeAttendanceModule = async (req, res) => {
-        const { FromDate, ToDate, UserId } = req.query;
+        const { FromDate, UserId } = req.query;
     
         try {
-         
             const userTypeId = await getUserType(UserId);
-   
+    
             if (!userTypeId) {
                 return res.status(400).json({ data: [], success: false, message: 'userTypeId is required and must be a valid number' });
             }
     
+          
+            const fromDateObj = new Date(FromDate); 
+            const year = fromDateObj.getFullYear();
+            const month = fromDateObj.getMonth();
+    
+        
+            const lastDayOfMonth = new Date(year, month + 1, 0); 
+            const ToDate = lastDayOfMonth.toISOString().split('T')[0];
+    
             let condition = '';
-            
-     
-            if (UserId === "" || UserId === "0") {
-                condition = '';
+    
+            if (UserId == "" || UserId == "0") {
+                condition = ``;  
             } else {
-                condition = ' AND rl.User_Mgt_Id = @UserId'; 
+                condition = `AND rl.User_Mgt_Id = @UserId`; 
             }
     
-       
             let query = `
-                WITH RankedLogs AS (
-                    SELECT 
-                        em.User_Mgt_Id,          
-                        u.Name AS username,  
-                        pd.EmployeeCode,        
-                        pd.LogDateTime,           
-                        CAST(pd.LogDateTime AS DATE) AS LogDate,  
-                        ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE) ORDER BY pd.LogDateTime) AS rn, 
-                        COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE)) AS record_count  
-                    FROM 
-                        tbl_Employee_Master em
-                    LEFT JOIN 
-                        tbl_Users u ON u.UserId = em.User_Mgt_Id
-                    LEFT JOIN 
-                        [ESSl_Attendance].dbo.Paralleldatabase pd 
-                        ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
-                    WHERE 
-                        pd.LogDate >= CAST(@FromDate AS DATETIME) AND 
-                        pd.LogDate <= CAST(@ToDate AS DATETIME)
-                )
-            
+            WITH RankedLogs AS (
                 SELECT 
-                    e.User_Mgt_Id, 
-                    COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
-                    rl.username,  
-                    rl.LogDate,
-                    STRING_AGG(
-                        FORMAT(rl.LogDateTime, ' HH:mm') + ' (' +
-                        CAST(rl.rn AS VARCHAR(10)) + ')',  
-                        ', ') AS AttendanceDetails,
-                    CASE 
-                        WHEN rl.record_count >= 1 THEN 'Present'  
-                        ELSE 'Absent'  
-                    END AS AttendanceStatus,
-                    rl.record_count
+                    em.User_Mgt_Id,          
+                    u.Name AS username,  
+                    pd.EmployeeCode,        
+                    pd.LogDateTime,           
+                    CAST(pd.LogDateTime AS DATE) AS LogDate,  
+                    ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE) ORDER BY pd.LogDateTime) AS rn, 
+                    COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(pd.LogDateTime AS DATE)) AS record_count  
                 FROM 
-                    tbl_Employee_Master AS e
+                    tbl_Employee_Master em
                 LEFT JOIN 
-                    tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
+                    tbl_Users u ON u.UserId = em.User_Mgt_Id
                 LEFT JOIN 
-                    tbl_Users AS u ON e.User_Mgt_Id = u.UserId
-                LEFT JOIN 
-                    RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
+                    [ESSl_Attendance].dbo.Paralleldatabase pd 
+                    ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
                 WHERE 
-                    rl.LogDate >= CAST(@FromDate AS DATETIME) AND 
-                    rl.LogDate <= CAST(@ToDate AS DATETIME)
-                    ${condition}  -- Dynamically insert the condition here
+                    pd.LogDateTime >= CAST(@FromDate AS DATETIME) AND 
+                    pd.LogDateTime <= CAST(@ToDate AS DATETIME)
+            )
+    
+            SELECT 
+                e.User_Mgt_Id, 
+                COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+                rl.username,  
+                rl.LogDate,
+                COALESCE(ag.LogDateTimes, '[]') AS AttendanceDetails, 
+                MAX(rl.record_count) AS TotalRecords
+            FROM 
+                tbl_Employee_Master AS e
+            LEFT JOIN 
+                tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
+            LEFT JOIN 
+                tbl_Users AS u ON e.User_Mgt_Id = u.UserId
+            LEFT JOIN 
+                RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
+            LEFT JOIN 
+                (SELECT 
+                    pd.EmployeeCode, 
+                    CAST(pd.LogDateTime AS DATE) AS LogDate,
+                    STRING_AGG(CONVERT(VARCHAR, pd.LogDateTime, 120), ', ') AS LogDateTimes
+                FROM 
+                    [ESSl_Attendance].dbo.Paralleldatabase pd 
+                WHERE 
+                    pd.LogDateTime >= CAST(@FromDate AS DATETIME) AND 
+                    pd.LogDateTime <= CAST(@ToDate AS DATETIME)
                 GROUP BY 
-                    e.User_Mgt_Id, 
-                    e.Designation, 
-                    d.Designation, 
-                    rl.username,  
-                    rl.LogDate, 
-                    rl.record_count  
-                ORDER BY 
-                    rl.LogDate DESC
+                    pd.EmployeeCode, CAST(pd.LogDateTime AS DATE)) AS ag 
+                ON ag.EmployeeCode = rl.EmployeeCode AND ag.LogDate = rl.LogDate
+            WHERE 
+                rl.LogDate >= CAST(@FromDate AS DATETIME) AND 
+                rl.LogDate <= CAST(@ToDate AS DATETIME)
+                ${condition}
+            GROUP BY 
+                e.User_Mgt_Id, 
+                d.Designation, 
+                rl.username,  
+                rl.LogDate, 
+                ag.LogDateTimes
+            ORDER BY 
+                rl.LogDate DESC
             `;
     
             const request = new sql.Request();
             request.input('FromDate', sql.DateTime, FromDate || '1900-01-01');
             request.input('ToDate', sql.DateTime, ToDate || '2100-01-01');
-            
-            if (UserId === "" || UserId === "0") {
+    
+            if (UserId == "" || UserId == "0") {
                 request.input('UserId', sql.Int, null); 
             } else {
                 request.input('UserId', sql.Int, UserId); 
             }
     
-          
             const result = await request.query(query);
     
             if (result.recordset.length > 0) {
@@ -683,14 +693,121 @@ const EmployeeController = () => {
                 noData(res); 
             }
         } catch (e) {
-            console.error(e); 
+      
             servError(e, res); 
         }
     };
     
     
+    const employeeOverallAttendance = async (req, res) => {
+        const { FromDate } = req.query;
+    
+        try {
+            const fromDateObj = new Date(FromDate);
+
+       
+            const year = fromDateObj.getFullYear();
+            const month = fromDateObj.getMonth(); 
+          
+            const firstDayOfMonth = new Date(`${year}-${month + 1}-01`);  
+            
+     
+            const nextMonthFirstDay = new Date(year, month + 1, 1); 
+            const lastDayOfMonth = new Date(nextMonthFirstDay - 1);  
+    
+            const formattedFirstDayOfMonth = firstDayOfMonth.toISOString().split('T')[0]; 
+            const formattedLastDayOfMonth = lastDayOfMonth.toISOString().split('T')[0]; 
+        
+            
+            
+       
+            const query = `
+            WITH WorkingDays AS (
+                SELECT 
+                    CAST(pd.LogDate AS DATE) AS WorkDate
+                FROM 
+                    [ESSl_Attendance].dbo.Paralleldatabase pd
+                WHERE 
+                    pd.LogDate >= CAST(@FromDate AS DATETIME)  
+                    AND pd.LogDate <= CAST(@ToDate AS DATETIME)  
+                    AND DATENAME(WEEKDAY, pd.LogDate) NOT IN ('Sunday') 
+                GROUP BY 
+                    CAST(pd.LogDate AS DATE)
+            ),
+            EmployeeAttendance AS (
+                SELECT
+                    em.User_Mgt_Id,
+                    u.Name AS username,
+                    CAST(pd.LogDateTime AS DATE) AS LogDate,
+                    CASE 
+                        WHEN COUNT(pd.EmployeeCode) > 0 THEN 'P'
+                        ELSE 'A'
+                    END AS AttendanceStatus
+                FROM 
+                    tbl_Employee_Master em
+                LEFT JOIN 
+                    tbl_Users u ON u.UserId = em.User_Mgt_Id
+                LEFT JOIN 
+                    [ESSl_Attendance].dbo.Paralleldatabase pd 
+                    ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+                WHERE 
+                    pd.LogDate >= CAST(@FromDate AS DATETIME) 
+                    AND pd.LogDate <= CAST(@ToDate AS DATETIME)
+                GROUP BY 
+                    em.User_Mgt_Id, u.Name, CAST(pd.LogDateTime AS DATE)
+            ),
+            AttendanceSummary AS (
+                SELECT 
+                    ea.username,
+                    ea.User_Mgt_Id,
+                    wd.WorkDate,
+                    ISNULL(ea.AttendanceStatus, 'A') AS AttendanceStatus
+                FROM 
+                    WorkingDays wd
+                LEFT JOIN 
+                    EmployeeAttendance ea ON wd.WorkDate = ea.LogDate
+            )
+            SELECT 
+                username AS Name,
+                COUNT(CASE WHEN AttendanceStatus = 'P' THEN 1 END) AS TotalPresent,
+                (
+                    SELECT 
+                        sub.WorkDate AS Date,
+                        sub.AttendanceStatus
+                    FROM 
+                        AttendanceSummary AS sub
+                    WHERE 
+                        sub.username = outerEA.username
+                    FOR JSON PATH
+                ) AS AttendanceDetails
+            FROM 
+                AttendanceSummary AS outerEA
+            GROUP BY 
+                username
+            ORDER BY 
+                username`;
+    
+                const request = new sql.Request();
+                request.input('FromDate', sql.DateTime, formattedFirstDayOfMonth || '1900-01-01');
+                request.input('ToDate', sql.DateTime, formattedLastDayOfMonth || '2100-01-01'); 
+    
+      
+            const result = await request.query(query);
+    
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset); 
+            } else {
+                noData(res); 
+            }
+        } catch (error) {
+          
+            res.status(500).json({ message: 'Server Error', error: error.message });
+        }
+    };
     
 
+    
+    
 
 
 return {
@@ -703,7 +820,8 @@ return {
         employeeGetActivity,
         employeeGetActivityLogin,
         employeeGetActivityLoginMobile,
-        employeeAttendanceModule
+        employeeAttendanceModule,
+        employeeOverallAttendance
     }
 }
 

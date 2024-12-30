@@ -39,8 +39,6 @@ const StockJournal = () => {
         const transaction = new sql.Transaction();
 
         try {
-            await transaction.begin();
-
             const newOrderId = Number((await new sql.Request()
                 .input('Branch_Id', Branch_Id)
                 .query(`
@@ -74,6 +72,8 @@ const StockJournal = () => {
                 throw new Error('Failed to get Stock Invoice ID');
             }
             const ST_Inv_Id = stInv.recordset[0].MaxId + 1;
+            
+            await transaction.begin();
 
             const OrderDetailsInsert = await new sql.Request(transaction)
                 .input('STJ_Id', STJ_Id)
@@ -94,11 +94,13 @@ const StockJournal = () => {
                 .query(`
                     INSERT INTO tbl_Stock_Journal_Gen_Info (
                         STJ_Id, ST_Inv_Id, Branch_Id, Journal_no, Stock_Journal_date,
-                        Stock_Journal_Bill_type, Stock_Journal_Voucher_type, Invoice_no, Narration, Start_Time, End_Time, Vehicle_Start_KM, Vehicle_End_KM, 
+                        Stock_Journal_Bill_type, Stock_Journal_Voucher_type, Invoice_no, Narration, 
+                        Start_Time, End_Time, Vehicle_Start_KM, Vehicle_End_KM, 
                         Trip_No, Created_by
                     ) VALUES (
                         @STJ_Id, @ST_Inv_Id, @Branch_Id, @Journal_no, @Stock_Journal_date,
-                        @Stock_Journal_Bill_type, @Stock_Journal_Voucher_type, @Invoice_no, @Narration, @Start_Time, @End_Time, @Vehicle_Start_KM, @Vehicle_End_KM, 
+                        @Stock_Journal_Bill_type, @Stock_Journal_Voucher_type, @Invoice_no, @Narration, 
+                        @Start_Time, @End_Time, @Vehicle_Start_KM, @Vehicle_End_KM, 
                         @Trip_No, @Created_by
                     );
                 `);
@@ -122,9 +124,11 @@ const StockJournal = () => {
                     .input('Sour_Amt', Number(item.Sour_Amt))
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Sour_Details (
-                            STJ_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
+                            STJ_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, 
+                            Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
                         ) VALUES (
-                      @STJ_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
+                            @STJ_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, 
+                            @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
                         );
                     `);
 
@@ -133,8 +137,6 @@ const StockJournal = () => {
                 }
             }
 
-
-
             for (let i = 0; i < StaffInvolve.length; i++) {
                 const delivery = StaffInvolve[i];
                 const result = await new sql.Request(transaction)
@@ -142,16 +144,17 @@ const StockJournal = () => {
                     .input('Staff_Type_Id', Number(delivery.Staff_Type_Id))
                     .input('Staff_Id', Number(delivery.Staff_Id))
                     .query(`
-                        INSERT INTO tbl_Stock_Journal_Staff_Involved (STJ_Id, Staff_Type_Id, Staff_Id) 
-                        VALUES (@STJ_Id, @Staff_Type_Id, @Staff_Id);
+                        INSERT INTO tbl_Stock_Journal_Staff_Involved (
+                            STJ_Id, Staff_Type_Id, Staff_Id
+                        ) VALUES (
+                            @STJ_Id, @Staff_Type_Id, @Staff_Id
+                        );
                     `);
 
                 if (result.rowsAffected[0] == 0) {
                     throw new Error('Failed to insert Staff Involved details');
                 }
             }
-
-
 
             for (let i = 0; i < Destination.length; i++) {
                 const final = Destination[i];
@@ -168,9 +171,11 @@ const StockJournal = () => {
                     .input('Dest_Amt', final.Dest_Amt)
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Dest_Details (
-                            STJ_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
+                            STJ_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, 
+                            Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
                         ) VALUES (
-                            @STJ_Id, @Dest_Item_Id, @Dest_Goodown_Id, @Dest_Batch_Lot_No, @Dest_Qty, @Dest_Unit_Id, @Dest_Unit, @Dest_Rate, @Dest_Amt
+                            @STJ_Id, @Dest_Item_Id, @Dest_Goodown_Id, @Dest_Batch_Lot_No, @Dest_Qty, 
+                            @Dest_Unit_Id, @Dest_Unit, @Dest_Rate, @Dest_Amt
                         );
                     `);
 
@@ -189,7 +194,6 @@ const StockJournal = () => {
             servError(e, res);
         }
     }
-
 
     const updateStockJournal = async (req, res) => {
         const {
@@ -386,33 +390,70 @@ const StockJournal = () => {
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
-                    WITH SJ_Main AS (
-                      SELECT * 
-                      FROM tbl_Stock_Journal_Gen_Info
-                      WHERE CONVERT(DATE, Stock_Journal_date) >= CONVERT(DATE, @Fromdate) 
-                      AND CONVERT(DATE, Stock_Journal_date) <= CONVERT(DATE, @Todate)
+                    WITH UserTypes AS (
+                        SELECT Id, UserType
+                        FROM tbl_User_Type
+                    ), Godown AS (
+                        SELECT Godown_Id, Godown_Name
+                        FROM tbl_Godown_Master
+                    ), Product AS (
+                        SELECT Product_Id, Product_Name
+                        FROM tbl_Product_Master
+                    ), Branch AS (
+                        SELECT BranchId, BranchName
+                        FROM tbl_Branch_Master
+                    ), CostCenter AS (
+                        SELECT c.Cost_Center_Id, c.Cost_Center_Name, c.User_Type, 
+                            COALESCE(ut.UserType, 'Not Found') AS UserTypeGet 
+                        FROM tbl_ERP_Cost_Center AS c
+                        LEFT JOIN UserTypes AS ut
+                            ON c.User_Type = ut.Id
+                    ), SJ_Main AS (
+                        SELECT sj.*,
+                        b.BranchName
+                        FROM tbl_Stock_Journal_Gen_Info AS sj
+                        LEFT JOIN Branch AS b
+                        ON sj.Branch_Id = b.BranchId
+                        WHERE CONVERT(DATE, sj.Stock_Journal_date) >= CONVERT(DATE, @Fromdate) 
+                            AND CONVERT(DATE, sj.Stock_Journal_date) <= CONVERT(DATE, @Todate)
                     ), Source AS (
-                      SELECT s.* 
-                      FROM tbl_Stock_Journal_Sour_Details AS s
-                      WHERE s.STJ_Id IN (
-                        SELECT STJ_Id 
-                        FROM SJ_Main
+                      SELECT s.*,
+                        p.Product_Name,
+                        g.Godown_Name
+                        FROM tbl_Stock_Journal_Sour_Details AS s
+                        LEFT JOIN Product AS p
+                        ON s.Sour_Item_Id = p.Product_Id
+                        LEFT JOIN Godown AS g
+                        ON s.Sour_Goodown_Id = g.Godown_Id
+                        WHERE s.STJ_Id IN (
+                            SELECT STJ_Id 
+                            FROM SJ_Main
                     	)
                     ), Destination AS (
-                      SELECT d.* 
-                      FROM tbl_Stock_Journal_Dest_Details AS d
-                      WHERE d.STJ_Id IN (
-                        SELECT STJ_Id 
-                        FROM SJ_Main
+                        SELECT d.*,
+                        p.Product_Name,
+                        g.Godown_Name
+                        FROM tbl_Stock_Journal_Dest_Details AS d
+                        LEFT JOIN Product AS p
+                        ON d.Dest_Item_Id = p.Product_Id
+                        LEFT JOIN Godown AS g
+                        ON d.Dest_Goodown_Id = g.Godown_Id
+                        WHERE d.STJ_Id IN (
+                            SELECT STJ_Id 
+                            FROM SJ_Main
                     	)
                     ), Staffs AS (
-                      SELECT st.*
-                      FROM tbl_Stock_Journal_Staff_Involved AS st
-                      WHERE st.STJ_Id IN (
-                        SELECT STJ_Id 
-                        FROM SJ_Main
+                        SELECT st.*,
+                            cc.Cost_Center_Name,
+                            cc.UserTypeGet
+                        FROM tbl_Stock_Journal_Staff_Involved AS st
+                        LEFT JOIN CostCenter AS cc
+                        ON cc.Cost_Center_Id = st.Staff_Id
+                        WHERE st.STJ_Id IN (
+                            SELECT STJ_Id 
+                            FROM SJ_Main
                     	)
-                    ) 
+                    )
                     SELECT 
                         main.*,
                         COALESCE(( 
@@ -423,13 +464,13 @@ const StockJournal = () => {
                         ), '[]') AS SourceDetails,
                         COALESCE((
                             SELECT destination.*
-                            FROM Source AS destination
+                            FROM Destination AS destination
                             WHERE destination.STJ_Id = main.STJ_Id
                             FOR JSON PATH
                         ), '[]') AS DestinationDetails,
                         COALESCE((
                             SELECT staff.*
-                            FROM Source AS staff
+                            FROM Staffs AS staff
                             WHERE staff.STJ_Id = main.STJ_Id
                             FOR JSON PATH
                         ), '[]') AS StaffsDetails

@@ -36,6 +36,7 @@ UserModule.get('/employeeActivity/trackinglistlogin', employeeMaster.employeeGet
 UserModule.get('/employeActivity/trackActivityloginMobile',employeeMaster.employeeGetActivityLoginMobile);
 
 UserModule.get('/employeActivity/trackActivitylogAttendance',employeeMaster.employeeAttendanceModule);
+UserModule.get('/employeActivity/employeeAttendanceModuledownload',employeeMaster.employeeOverallAttendance);
 
 
 
