@@ -47,10 +47,8 @@ const LoginController = () => {
 
     const globalLogin = async (req, res) => {
         const { Global_User_ID, Password } = req.body;
-        // console.log(req.body);
 
         try {
-            console.log("rwrqw",req.body)
             const decryptedPassword = decryptPasswordFun(Password);
             const result = await new sql.Request()
                 .input('Global_User_ID', Global_User_ID)
@@ -117,7 +115,6 @@ const LoginController = () => {
             if (loginResult.recordset.length > 0) {
                 const userInfo = loginResult.recordset[0];
                 const ssid = `${Math.floor(100000 + Math.random() * 900000)}${LocalDateTime().trim()}`;
-                console.log("useridnog",userInfo)
                 try {
                     const sessionSP = new sql.Request()
                         .input('Id', 0)

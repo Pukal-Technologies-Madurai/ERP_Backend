@@ -1,7 +1,6 @@
 import sql from 'mssql';
 import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
 import { checkIsNumber, createPadString, ISOString } from '../../helper_functions.mjs';
-import { parseJSON } from '../../helper_functions.mjs';
 const StockJournal = () => {
 
     const createStockJournal = async (req, res) => {
@@ -10,7 +9,7 @@ const StockJournal = () => {
             Stock_Journal_date = '',
             Stock_Journal_Bill_type = 0,
             Stock_Journal_Voucher_type = '',
-            Invoice_no = 0,
+            Invoice_no = '',
             Narration = '',
             Start_Time = '',
             End_Time = '',
@@ -39,39 +38,26 @@ const StockJournal = () => {
         const transaction = new sql.Transaction();
 
         try {
-            const newOrderId = Number((await new sql.Request()
+            const ST_Inv_Id = Number((await new sql.Request()
                 .input('Branch_Id', Branch_Id)
+                .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
                 .query(`
-                    SELECT COALESCE(MAX(STJ_Id), 0) AS MaxId
+                    SELECT COALESCE(MAX(ST_Inv_Id), 0) AS MaxId
                     FROM tbl_Stock_Journal_Gen_Info
                     WHERE Branch_Id = @Branch_Id
+                    AND Stock_Journal_Bill_type = @Stock_Journal_Bill_type
                 `))?.recordset[0]?.MaxId) + 1;
 
-            if (!checkIsNumber(newOrderId)) throw new Error('Failed to get Branch Id');
+            if (!checkIsNumber(ST_Inv_Id)) throw new Error('Failed to get Branch Id');
 
-            const stjid = Number((await new sql.Request().query(`
+            const STJ_Id = Number((await new sql.Request().query(`
                 SELECT COALESCE(MAX(STJ_Id), 0) AS MaxId
                 FROM tbl_Stock_Journal_Gen_Info
             `))?.recordset[0]?.MaxId) + 1;
 
-            if (!checkIsNumber(stjid)) throw new Error('Failed to get Stock Journal ID');
-            const STJ_Id = stjid;
+            if (!checkIsNumber(STJ_Id)) throw new Error('Failed to get Stock Journal ID');
 
-            const Journal_no = 'JN_' + Branch_Id + '_' + createPadString(newOrderId, 4);
-
-            const stInv = await new sql.Request()
-                .input('Branch_Id', Branch_Id)
-                .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
-                .query(`
-                SELECT COALESCE(MAX(ST_Inv_Id), 0) AS MaxId
-                FROM tbl_Stock_Journal_Gen_Info
-                WHERE Branch_Id = @Branch_Id AND Stock_Journal_Bill_type = @Stock_Journal_Bill_type
-            `);
-
-            if (!stInv || !stInv.recordset || !checkIsNumber(stInv.recordset[0]?.MaxId)) {
-                throw new Error('Failed to get Stock Invoice ID');
-            }
-            const ST_Inv_Id = stInv.recordset[0].MaxId + 1;
+            const Journal_no = 'JN_' + Branch_Id + '_' + createPadString(ST_Inv_Id, 4);
             
             await transaction.begin();
 
@@ -87,8 +73,8 @@ const StockJournal = () => {
                 .input('Narration', Narration)
                 .input('Start_Time', Start_Time)
                 .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', Vehicle_Start_KM)
-                .input('Vehicle_End_KM', Vehicle_End_KM)
+                .input('Vehicle_Start_KM', Number(Vehicle_Start_KM))
+                .input('Vehicle_End_KM', Number(Vehicle_End_KM))
                 .input('Trip_No', Trip_No)
                 .input('Created_by', Created_by)
                 .query(`
@@ -114,14 +100,14 @@ const StockJournal = () => {
                 const result = await new sql.Request(transaction)
 
                     .input('STJ_Id', STJ_Id)
-                    .input('Sour_Item_Id', Number(item.Sour_Item_Id))
+                    .input('Sour_Item_Id', item.Sour_Item_Id)
                     .input('Sour_Goodown_Id', item.Sour_Goodown_Id)
                     .input('Sour_Batch_Lot_No', item.Sour_Batch_Lot_No)
-                    .input('Sour_Qty', item.Sour_Qty)
-                    .input('Sour_Unit_Id', Number(item.Sour_Unit_Id))
+                    .input('Sour_Qty', Number(item.Sour_Qty) || null)
+                    .input('Sour_Unit_Id', item.Sour_Unit_Id)
                     .input('Sour_Unit', item.Sour_Unit)
-                    .input('Sour_Rate', Number(item.Sour_Rate))
-                    .input('Sour_Amt', Number(item.Sour_Amt))
+                    .input('Sour_Rate', Number(item.Sour_Rate) || null)
+                    .input('Sour_Amt', Number(item.Sour_Amt) || null)
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Sour_Details (
                             STJ_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, 
@@ -141,8 +127,8 @@ const StockJournal = () => {
                 const delivery = StaffInvolve[i];
                 const result = await new sql.Request(transaction)
                     .input('STJ_Id', STJ_Id)
-                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id))
-                    .input('Staff_Id', Number(delivery.Staff_Id))
+                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id) || null)
+                    .input('Staff_Id', Number(delivery.Staff_Id) || null)
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Staff_Involved (
                             STJ_Id, Staff_Type_Id, Staff_Id
@@ -160,15 +146,15 @@ const StockJournal = () => {
                 const final = Destination[i];
                 const result = await new sql.Request(transaction)
 
-                    .input('STJ_Id', STJ_Id)
-                    .input('Dest_Item_Id', Number(final.Dest_Item_Id))
-                    .input('Dest_Goodown_Id', final.Dest_Goodown_Id)
+                    .input('STJ_Id', Number(STJ_Id) || null)
+                    .input('Dest_Item_Id', Number(final.Dest_Item_Id) || null)
+                    .input('Dest_Goodown_Id', Number(final.Dest_Goodown_Id) || null)
                     .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
-                    .input('Dest_Qty', final.Dest_Qty)
-                    .input('Dest_Unit_Id', final.Dest_Unit_Id)
+                    .input('Dest_Qty', Number(final.Dest_Qty) || null)
+                    .input('Dest_Unit_Id', Number(final.Dest_Unit_Id) || null)
                     .input('Dest_Unit', final.Dest_Unit)
-                    .input('Dest_Rate', final.Dest_Rate)
-                    .input('Dest_Amt', final.Dest_Amt)
+                    .input('Dest_Rate', Number(final.Dest_Rate) || null)
+                    .input('Dest_Amt', Number(final.Dest_Amt) || null)
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Dest_Details (
                             STJ_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, 
@@ -204,16 +190,16 @@ const StockJournal = () => {
         } = req.body;
 
         const {
-            STJ_Id,
+            STJ_Id = '',
             Stock_Journal_date = '',
-            Stock_Journal_Bill_type = 0,
+            Stock_Journal_Bill_type = '',
             Stock_Journal_Voucher_type = '',
-            Invoice_no = 0,
+            Invoice_no = '',
             Narration = '',
             Start_Time = '',
             End_Time = '',
-            Vehicle_Start_KM = '',
-            Vehicle_End_KM = '',
+            Vehicle_Start_KM = 0,
+            Vehicle_End_KM = 0,
             Trip_No = '',
             altered_by = ''
         } = stockdetails;
@@ -229,6 +215,7 @@ const StockJournal = () => {
         if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
             return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
         }
+
         try {
             await transaction.begin();
 
@@ -271,22 +258,25 @@ const StockJournal = () => {
             for (let i = 0; i < Source.length; i++) {
                 const item = Source[i];
                 const result = await new sql.Request(transaction)
+
                     .input('STJ_Id', STJ_Id)
-                    .input('Sour_Item_Id', Number(item.Sour_Item_Id))
+                    .input('Sour_Item_Id', item.Sour_Item_Id)
                     .input('Sour_Goodown_Id', item.Sour_Goodown_Id)
-                    .input('Sour_Batch_Lot_No', Number(item.Sour_Batch_Lot_No))
-                    .input('Sour_Qty', item.Sour_Qty)
-                    .input('Sour_Unit_Id', Number(item.Sour_Unit_Id))
+                    .input('Sour_Batch_Lot_No', item.Sour_Batch_Lot_No)
+                    .input('Sour_Qty', Number(item.Sour_Qty) || null)
+                    .input('Sour_Unit_Id', item.Sour_Unit_Id)
                     .input('Sour_Unit', item.Sour_Unit)
-                    .input('Sour_Rate', Number(item.Sour_Rate))
-                    .input('Sour_Amt', item.Sour_Amt)
+                    .input('Sour_Rate', Number(item.Sour_Rate) || null)
+                    .input('Sour_Amt', Number(item.Sour_Amt) || null)
                     .query(`
-                            INSERT INTO tbl_Stock_Journal_Sour_Details (
-                                STJ_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
-                            ) VALUES (
-                                @STJ_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
-                            );
-                        `);
+                        INSERT INTO tbl_Stock_Journal_Sour_Details (
+                            STJ_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, 
+                            Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
+                        ) VALUES (
+                            @STJ_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, 
+                            @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
+                        );
+                    `);
 
                 if (result.rowsAffected[0] == 0) {
                     throw new Error('Failed to insert Source details');
@@ -297,40 +287,45 @@ const StockJournal = () => {
                 const delivery = StaffInvolve[i];
                 const result = await new sql.Request(transaction)
                     .input('STJ_Id', STJ_Id)
-                    .input('Staff_Type_Id', delivery.Staff_Type_Id)
-                    .input('Staff_Id', delivery.Staff_Id)
+                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id) || null)
+                    .input('Staff_Id', Number(delivery.Staff_Id) || null)
                     .query(`
-                        INSERT INTO tbl_Stock_Journal_Staff_Involved (STJ_Id, Staff_Type_Id, Staff_Id) 
-                        VALUES (@STJ_Id, @Staff_Type_Id, @Staff_Id);
+                        INSERT INTO tbl_Stock_Journal_Staff_Involved (
+                            STJ_Id, Staff_Type_Id, Staff_Id
+                        ) VALUES (
+                            @STJ_Id, @Staff_Type_Id, @Staff_Id
+                        );
                     `);
 
-                if (result.rowsAffected[0] === 0) {
+                if (result.rowsAffected[0] == 0) {
                     throw new Error('Failed to insert Staff Involved details');
                 }
             }
 
-
             for (let i = 0; i < Destination.length; i++) {
                 const final = Destination[i];
                 const result = await new sql.Request(transaction)
-                    .input('STJ_Id', STJ_Id)
-                    .input('Dest_Item_Id', Number(final.Dest_Item_Id))
-                    .input('Dest_Goodown_Id', final.Dest_Goodown_Id)
+
+                    .input('STJ_Id', Number(STJ_Id) || null)
+                    .input('Dest_Item_Id', Number(final.Dest_Item_Id) || null)
+                    .input('Dest_Goodown_Id', Number(final.Dest_Goodown_Id) || null)
                     .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
-                    .input('Dest_Qty', final.Dest_Qty)
-                    .input('Dest_Unit_Id', final.Dest_Unit_Id)
+                    .input('Dest_Qty', Number(final.Dest_Qty) || null)
+                    .input('Dest_Unit_Id', Number(final.Dest_Unit_Id) || null)
                     .input('Dest_Unit', final.Dest_Unit)
-                    .input('Dest_Rate', final.Dest_Rate)
-                    .input('Dest_Amt', final.Dest_Amt)
+                    .input('Dest_Rate', Number(final.Dest_Rate) || null)
+                    .input('Dest_Amt', Number(final.Dest_Amt) || null)
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Dest_Details (
-                            STJ_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
+                            STJ_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, 
+                            Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
                         ) VALUES (
-                            @STJ_Id, @Dest_Item_Id, @Dest_Goodown_Id, @Dest_Batch_Lot_No, @Dest_Qty, @Dest_Unit_Id, @Dest_Unit, @Dest_Rate, @Dest_Amt
+                            @STJ_Id, @Dest_Item_Id, @Dest_Goodown_Id, @Dest_Batch_Lot_No, @Dest_Qty, 
+                            @Dest_Unit_Id, @Dest_Unit, @Dest_Rate, @Dest_Amt
                         );
                     `);
 
-                if (result.rowsAffected[0] === 0) {
+                if (result.rowsAffected[0] == 0) {
                     throw new Error('Failed to insert Destination details');
                 }
             }
@@ -479,14 +474,12 @@ const StockJournal = () => {
                 `);
 
             if (result.recordset.length > 0) {
-                const extractedData = result.recordset.map(o => {
-                    return {
-                        ...o,
-                        SourceDetails: JSON.parse(o?.SourceDetails),
-                        DestinationDetails: JSON.parse(o?.DestinationDetails),
-                        StaffsDetails: JSON.parse(o?.StaffsDetails)
-                    };
-                });
+                const extractedData = result.recordset.map(o => ({
+                    ...o,
+                    SourceDetails: JSON.parse(o.SourceDetails),
+                    DestinationDetails: JSON.parse(o.DestinationDetails),
+                    StaffsDetails: JSON.parse(o.StaffsDetails)
+                }));
 
                 dataFound(res, extractedData);
             } else {
