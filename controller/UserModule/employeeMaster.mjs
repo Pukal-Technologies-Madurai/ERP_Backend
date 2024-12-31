@@ -330,7 +330,8 @@ const EmployeeController = () => {
         const { UserId, UserTypeId, Timing, Work_Date, Latitude, Longitude, Company_id } = req.body;
 
         if (!UserId || !UserTypeId || !Timing || !Work_Date || !Latitude || !Longitude || !Company_id) {
-            return res.status(400).json({ success: false, message: 'Missing required fields' });
+
+            return invalidInput(res, 'Missing required fields');
         }
 
         try {
@@ -349,14 +350,16 @@ const EmployeeController = () => {
         VALUES (@UserId, @UserTypeId, @Timing, @Work_Date, @Latitude, @Longitude,@Company_id)
       `);
 
+         
+
+            
             if (result.rowsAffected[0] > 0) {
-                return res.status(200).json({ success: true, message: 'Location data received successfully' });
+                return success(res, 'Location data received successfully')
             } else {
-                return res.status(400).json({ success: false, message: 'Failed to insert location data' });
+                return failed(res, 'Failed to insert location data')
             }
-        } catch (error) {
-  
-            return res.status(500).json({ success: false, message: 'Server Error' });
+        } catch (e) {
+            servError(e, res)
         }
     };
 
@@ -366,7 +369,7 @@ const EmployeeController = () => {
         const { Company_id } = req.query;
 
         if (!Company_id) {
-            return res.status(400).json({ success: false, message: 'Company ID is required' });
+            return invalidInput(res, 'Company ID is required');
         }
 
         try {
@@ -386,17 +389,19 @@ const EmployeeController = () => {
 
             const result = await request.query(getEmp);
 
+   
             if (result.recordset.length > 0) {
-                return res.status(200).json({ success: true, data: result.recordset });
+                dataFound(res, result.recordset)
             } else {
-                return res.status(404).json({ success: false, message: 'No data found for the given company_id' });
+                noData(res)
             }
 
-        } catch (error) {
-      
-            return res.status(500).json({ success: false, message: 'Server error' });
+        } catch (e) {
+            servError(e, res)
         }
-    };
+    }
+
+
 
 
 
@@ -525,7 +530,7 @@ const EmployeeController = () => {
 
         try {
             if (!checkIsNumber(UserId)) {
-                return res.status(400).json({ data: [], success: false, message: 'UserId is required and must be a valid number', isCustomer: false });
+                return invalidInput(res, 'UserId is required');
             }
     
          
@@ -572,41 +577,43 @@ const EmployeeController = () => {
             const result = await request.query(getEmp);
     
             if (result.recordset.length > 0) {
-                return res.status(200).json({ success: true, data: result.recordset });
+                dataFound(res, result.recordset)
             } else {
-                return res.status(404).json({ success: false, message: 'No data found for the given company_id' });
+                noData(res)
             }
-    
-        } catch (error) {
-        
-            return res.status(500).json({ success: false, message: 'Server error' });
+
+        } catch (e) {
+            servError(e, res)
         }
     };
 
 
     const employeeAttendanceModule = async (req, res) => {
-        const { FromDate, UserId } = req.query;
+        const { FromDate, ToDate, UserId } = req.query;
     
         try {
+            if (!FromDate || !ToDate) {
+                return invalidInput(res,'FromDate is required and must be a valid number');
+            }
+              const adjustedToDate = new Date(ToDate);
+             adjustedToDate.setDate(adjustedToDate.getDate() + 1);
+             const adjustedToDateStr = adjustedToDate.toISOString(); 
+             
+
             const userTypeId = await getUserType(UserId);
     
             if (!userTypeId) {
-                return res.status(400).json({ data: [], success: false, message: 'userTypeId is required and must be a valid number' });
-            }
-    
-          
-            const fromDateObj = new Date(FromDate); 
-            const year = fromDateObj.getFullYear();
-            const month = fromDateObj.getMonth();
-    
-        
-            const lastDayOfMonth = new Date(year, month + 1, 0); 
-            const ToDate = lastDayOfMonth.toISOString().split('T')[0];
-    
+               
+                    return invalidInput(res,'userTypeId is required and must be a valid number');
+                }
+            
+            
+            
+       
+            
             let condition = '';
-    
             if (UserId == "" || UserId == "0") {
-                condition = ``;  
+                condition = ``;
             } else {
                 condition = `AND rl.User_Mgt_Id = @UserId`; 
             }
@@ -630,7 +637,7 @@ const EmployeeController = () => {
                     ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
                 WHERE 
                     pd.LogDateTime >= CAST(@FromDate AS DATETIME) AND 
-                    pd.LogDateTime <= CAST(@ToDate AS DATETIME)
+                    pd.LogDateTime < CAST(@ToDate AS DATETIME)
             )
     
             SELECT 
@@ -657,10 +664,10 @@ const EmployeeController = () => {
                     [ESSl_Attendance].dbo.Paralleldatabase pd 
                 WHERE 
                     pd.LogDateTime >= CAST(@FromDate AS DATETIME) AND 
-                    pd.LogDateTime <= CAST(@ToDate AS DATETIME)
+                    pd.LogDateTime < CAST(@ToDate AS DATETIME)
                 GROUP BY 
                     pd.EmployeeCode, CAST(pd.LogDateTime AS DATE)) AS ag 
-                ON ag.EmployeeCode = rl.EmployeeCode AND ag.LogDate = rl.LogDate
+            ON ag.EmployeeCode = rl.EmployeeCode AND ag.LogDate = rl.LogDate
             WHERE 
                 rl.LogDate >= CAST(@FromDate AS DATETIME) AND 
                 rl.LogDate <= CAST(@ToDate AS DATETIME)
@@ -677,7 +684,8 @@ const EmployeeController = () => {
     
             const request = new sql.Request();
             request.input('FromDate', sql.DateTime, FromDate || '1900-01-01');
-            request.input('ToDate', sql.DateTime, ToDate || '2100-01-01');
+            request.input('ToDate', sql.DateTime, adjustedToDateStr);
+
     
             if (UserId == "" || UserId == "0") {
                 request.input('UserId', sql.Int, null); 
@@ -693,34 +701,24 @@ const EmployeeController = () => {
                 noData(res); 
             }
         } catch (e) {
-      
             servError(e, res); 
         }
     };
     
     
+    
+    
     const employeeOverallAttendance = async (req, res) => {
-        const { FromDate } = req.query;
+        const { FromDate,ToDate } = req.query;
     
         try {
-            const fromDateObj = new Date(FromDate);
 
-       
-            const year = fromDateObj.getFullYear();
-            const month = fromDateObj.getMonth(); 
-          
-            const firstDayOfMonth = new Date(`${year}-${month + 1}-01`);  
-            
-     
-            const nextMonthFirstDay = new Date(year, month + 1, 1); 
-            const lastDayOfMonth = new Date(nextMonthFirstDay - 1);  
+            if (!FromDate|| !ToDate) {
+                return invalidInput(res,'FromDate is required and must be a valid number');
+            }
     
-            const formattedFirstDayOfMonth = firstDayOfMonth.toISOString().split('T')[0]; 
-            const formattedLastDayOfMonth = lastDayOfMonth.toISOString().split('T')[0]; 
-        
-            
-            
-       
+   
+    
             const query = `
             WITH WorkingDays AS (
                 SELECT 
@@ -787,11 +785,10 @@ const EmployeeController = () => {
             ORDER BY 
                 username`;
     
-                const request = new sql.Request();
-                request.input('FromDate', sql.DateTime, formattedFirstDayOfMonth || '1900-01-01');
-                request.input('ToDate', sql.DateTime, formattedLastDayOfMonth || '2100-01-01'); 
+            const request = new sql.Request();
+            request.input('FromDate', sql.DateTime, FromDate || '1900-01-01');
+            request.input('ToDate', sql.DateTime, ToDate || '2100-01-01'); 
     
-      
             const result = await request.query(query);
     
             if (result.recordset.length > 0) {
@@ -800,8 +797,7 @@ const EmployeeController = () => {
                 noData(res); 
             }
         } catch (error) {
-          
-            res.status(500).json({ message: 'Server Error', error: error.message });
+          servError(e, res); 
         }
     };
     
