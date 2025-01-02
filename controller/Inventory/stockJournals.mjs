@@ -64,8 +64,8 @@ const StockJournal = () => {
             const OrderDetailsInsert = await new sql.Request(transaction)
                 .input('STJ_Id', STJ_Id)
                 .input('ST_Inv_Id', ST_Inv_Id)
-                .input('Branch_Id', Branch_Id)
-                .input('Journal_no', Journal_no)
+                .input('Branch_Id', Number(Branch_Id))
+                .input('Journal_no', Journal_no || null)
                 .input('Stock_Journal_date', Stock_Journal_date)
                 .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
                 .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
@@ -183,13 +183,6 @@ const StockJournal = () => {
 
     const updateStockJournal = async (req, res) => {
         const {
-            stockdetails = {},
-            Source = [],
-            StaffInvolve = [],
-            Destination = []
-        } = req.body;
-
-        const {
             STJ_Id = '',
             Stock_Journal_date = '',
             Stock_Journal_Bill_type = '',
@@ -201,9 +194,11 @@ const StockJournal = () => {
             Vehicle_Start_KM = 0,
             Vehicle_End_KM = 0,
             Trip_No = '',
-            altered_by = ''
-        } = stockdetails;
-
+            altered_by = '',
+            Source = [],
+            StaffInvolve = [],
+            Destination = []
+        } = req.body;
 
         const transaction = new sql.Transaction();
 
@@ -220,7 +215,7 @@ const StockJournal = () => {
             await transaction.begin();
 
             const updateOrderDetails = await new sql.Request(transaction)
-                .input('STJ_Id', STJ_Id)
+                .input('STJ_Id', Number(STJ_Id))
                 .input('Stock_Journal_date', Stock_Journal_date)
                 .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
                 .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
@@ -228,22 +223,29 @@ const StockJournal = () => {
                 .input('Narration', Narration)
                 .input('Start_Time', Start_Time)
                 .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', Vehicle_Start_KM)
-                .input('Vehicle_End_KM', Vehicle_End_KM)
+                .input('Vehicle_Start_KM', Number(Vehicle_Start_KM) || 0)
+                .input('Vehicle_End_KM', Number(Vehicle_End_KM) || 0)
                 .input('Trip_No', Trip_No)
                 .input('altered_by', altered_by)
                 .query(`
                     UPDATE tbl_Stock_Journal_Gen_Info
-                    SET Stock_Journal_date = @Stock_Journal_date, Stock_Journal_Bill_type = @Stock_Journal_Bill_type,
-                        Stock_Journal_Voucher_type = @Stock_Journal_Voucher_type, Invoice_no = @Invoice_no, 
-                        Narration = @Narration, Start_Time = @Start_Time, End_Time = @End_Time, Vehicle_Start_KM = @Vehicle_Start_KM,
-                        Vehicle_End_KM = @Vehicle_End_KM, Trip_No = @Trip_No, 
+                    SET 
+                        Stock_Journal_date = @Stock_Journal_date, 
+                        Stock_Journal_Bill_type = @Stock_Journal_Bill_type,
+                        Stock_Journal_Voucher_type = @Stock_Journal_Voucher_type,
+                        Invoice_no = @Invoice_no,
+                        Narration = @Narration,
+                        Start_Time = @Start_Time,
+                        End_Time = @End_Time,
+                        Vehicle_Start_KM = @Vehicle_Start_KM,
+                        Vehicle_End_KM = @Vehicle_End_KM,
+                        Trip_No = @Trip_No,
                         altered_by = @altered_by
                     WHERE STJ_Id = @STJ_Id
                 `);
 
             if (updateOrderDetails.rowsAffected[0] === 0) {
-                throw new Error('Failed to update order details');
+                throw new Error('Failed to update General Info');
             }
 
             await new sql.Request(transaction)
@@ -283,38 +285,19 @@ const StockJournal = () => {
                 }
             }
 
-            for (let i = 0; i < StaffInvolve.length; i++) {
-                const delivery = StaffInvolve[i];
-                const result = await new sql.Request(transaction)
-                    .input('STJ_Id', STJ_Id)
-                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id) || null)
-                    .input('Staff_Id', Number(delivery.Staff_Id) || null)
-                    .query(`
-                        INSERT INTO tbl_Stock_Journal_Staff_Involved (
-                            STJ_Id, Staff_Type_Id, Staff_Id
-                        ) VALUES (
-                            @STJ_Id, @Staff_Type_Id, @Staff_Id
-                        );
-                    `);
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Staff Involved details');
-                }
-            }
-
             for (let i = 0; i < Destination.length; i++) {
-                const final = Destination[i];
+                const item = Destination[i];
                 const result = await new sql.Request(transaction)
 
                     .input('STJ_Id', Number(STJ_Id) || null)
-                    .input('Dest_Item_Id', Number(final.Dest_Item_Id) || null)
-                    .input('Dest_Goodown_Id', Number(final.Dest_Goodown_Id) || null)
-                    .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
-                    .input('Dest_Qty', Number(final.Dest_Qty) || null)
-                    .input('Dest_Unit_Id', Number(final.Dest_Unit_Id) || null)
-                    .input('Dest_Unit', final.Dest_Unit)
-                    .input('Dest_Rate', Number(final.Dest_Rate) || null)
-                    .input('Dest_Amt', Number(final.Dest_Amt) || null)
+                    .input('Dest_Item_Id', Number(item.Dest_Item_Id) || null)
+                    .input('Dest_Goodown_Id', Number(item.Dest_Goodown_Id) || null)
+                    .input('Dest_Batch_Lot_No', item.Dest_Batch_Lot_No || null)
+                    .input('Dest_Qty', Number(item.Dest_Qty) || null)
+                    .input('Dest_Unit_Id', Number(item.Dest_Unit_Id) || null)
+                    .input('Dest_Unit', item.Dest_Unit || null)
+                    .input('Dest_Rate', Number(item.Dest_Rate) || null)
+                    .input('Dest_Amt', Number(item.Dest_Amt) || null)
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Dest_Details (
                             STJ_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, 
@@ -330,6 +313,25 @@ const StockJournal = () => {
                 }
             }
 
+            for (let i = 0; i < StaffInvolve.length; i++) {
+                const staff = StaffInvolve[i];
+                const result = await new sql.Request(transaction)
+                    .input('STJ_Id', STJ_Id)
+                    .input('Staff_Type_Id', Number(staff.Staff_Type_Id) || null)
+                    .input('Staff_Id', Number(staff.Staff_Id) || null)
+                    .query(`
+                        INSERT INTO tbl_Stock_Journal_Staff_Involved (
+                            STJ_Id, Staff_Type_Id, Staff_Id
+                        ) VALUES (
+                            @STJ_Id, @Staff_Type_Id, @Staff_Id
+                        );
+                    `);
+
+                if (result.rowsAffected[0] == 0) {
+                    throw new Error('Failed to insert Staff Involved details');
+                }
+            }
+
             await transaction.commit();
             return success(res, 'Journal Updated Successfully');
         } catch (e) {
@@ -342,9 +344,9 @@ const StockJournal = () => {
 
     const deleteJournalInfo = async (req, res) => {
 
-        const { stj_Id } = req.body;
+        const { STJ_Id } = req.body;
 
-        if (!checkIsNumber(stj_Id)) return invalidInput(res, 'OrderId is required');
+        if (!checkIsNumber(STJ_Id)) return invalidInput(res, 'OrderId is required');
 
         const transaction = new sql.Transaction();
 
@@ -352,7 +354,7 @@ const StockJournal = () => {
             await transaction.begin();
 
             const request = new sql.Request(transaction)
-                .input('STJ_Id', stj_Id)
+                .input('STJ_Id', STJ_Id)
                 .query(`
                     DELETE FROM tbl_Stock_Journal_Gen_Info WHERE STJ_Id = @STJ_Id;
                     DELETE FROM tbl_Stock_Journal_Sour_Details WHERE STJ_Id = @STJ_Id;
