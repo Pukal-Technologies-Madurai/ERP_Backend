@@ -27,7 +27,7 @@ const user = () => {
 
         try {
             const query = `
-            SELECT
+             SELECT
                 u.UserTypeId,
                 u.UserId,
                 u.UserName,
@@ -38,7 +38,11 @@ const user = () => {
                 ut.UserType,
                 u.Autheticate_Id,
                 u.Company_Id AS Company_id,
-                c.Company_Name
+                c.Company_Name,
+				ec.Cost_Center_Id,
+				ec.Cost_Center_Name,
+				 uct.UserType AS costcentertype,
+				   ec.User_Type AS CostCenterTypeId 
             FROM 
                 tbl_Users AS u
                 LEFT JOIN tbl_Branch_Master AS b
@@ -47,6 +51,11 @@ const user = () => {
                 ON ut.Id = u.UserTypeId
                 LEFT JOIN tbl_Company_Master AS c
                 ON c.Company_id = u.Company_Id
+			    LEFT JOIN tbl_ERP_Cost_Center AS ec 
+				ON ec.User_Id=u.UserId
+				LEFT JOIN tbl_User_Type AS uct
+			
+				 ON uct.Id = ec.User_Type
             WHERE  
                 u.UDel_Flag = 0`;
                 // u.Company_Id = @comp AND
@@ -135,7 +144,6 @@ const user = () => {
                 return invalidInput(res, 'User already exists');
             }
     
-            // Global User Creation
             const AuthString = randomString(50);
             const getMaxUserIdResult = await new sql.Request()
                 .query(`
@@ -143,11 +151,19 @@ const user = () => {
                     FROM [${DB_Name}].[dbo].[tbl_Users];
                 `);
             const UserMaxId = Number(getMaxUserIdResult.recordset[0].MaxUserId) + 1;
+            const getGlobalId = await new sql.Request()
+            .query(`
+                SELECT CASE WHEN COUNT(*) > 0 THEN MAX(Global_User_id) ELSE 0 END AS MaxUserId 
+                FROM  [${userPortalDB}].[dbo].[tbl_Users];
+            `);
+
+        const globalIdMax = Number(getGlobalId.recordset[0].MaxUserId) + 1;
 
             await transaction.begin();
     
             const GlobalInsertionResult = await new sql.Request(transaction)
                 .input('Company_id', COM_ID)
+                .input('Global_User_ID',globalIdMax)
                 .input('Local_User_ID', UserMaxId)
                 .input('UserName', UserName)
                 .input('Name', Name)
@@ -157,9 +173,9 @@ const user = () => {
                 .input('Autheticate_Id', AuthString)
                 .query(`
                     INSERT INTO [${userPortalDB}].[dbo].[tbl_Users] (
-                        Local_User_ID, Company_Id, Name, Password, UserTypeId, UserName, UDel_Flag, Autheticate_Id
+                       Global_User_ID,Local_User_ID, Company_Id, Name, Password, UserTypeId, UserName, UDel_Flag, Autheticate_Id
                     ) VALUES (
-                        @Local_User_ID, @Company_Id, @Name, @Password, @UserTypeId, @UserName, @UDel_Flag, @Autheticate_Id
+                        @Global_User_ID,@Local_User_ID, @Company_Id, @Name, @Password, @UserTypeId, @UserName, @UDel_Flag, @Autheticate_Id
                     );
                     SELECT SCOPE_IDENTITY() AS GlobalId;
                 `);
@@ -169,11 +185,11 @@ const user = () => {
             }
             const GlobalUserId = GlobalInsertionResult.recordset[0].GlobalId;
     
-            // Local User Creation
+           
             const LocalInsertionResult = await new sql.Request(transaction)
                 .input('COMPANY_DB', DB_Name)
                 .input('UserId', UserMaxId)
-                .input('Global_User_ID', GlobalUserId)
+                .input('Global_User_ID', globalIdMax)
                 .input('UserTypeId', UserTypeId)
                 .input('Name', Name)
                 .input('UserName', UserName)
@@ -469,7 +485,7 @@ const user = () => {
                          FROM 
                           tbl_Users 
                       WHERE 
-                          UserTypeId IN (1, 2, 0, 3)
+                          UserTypeId IN (1, 2,3, 0)
                       	AND UDel_Flag=0;
 
                         `)
@@ -485,8 +501,6 @@ const user = () => {
             servError(e, res);
         }
     }
-
-
 
     const employeeAllDropDown = async (req, res) => {
         const { Company_id } = req.query;
@@ -517,8 +531,6 @@ const user = () => {
             servError(e, res);
         }
     }
-
-
 
     const getSalesPersonDropdown = async (req, res) => {
         const { Company_id } = req.query;
@@ -659,6 +671,141 @@ const user = () => {
         }
     }
 
+    const createUserForCostcenter = async (req, res) => {
+        const { Name, UserName, UserTypeId, Password, BranchId, Cost_Center_Id } = req.body;
+    
+        if (!Name || !UserName || !checkIsNumber(UserTypeId) || !Password || !checkIsNumber(BranchId)) {
+            return invalidInput(res, 'Name, UserName, UserTypeId, Password, and BranchId are required and must be valid.');
+        }
+        if (!checkIsNumber(Cost_Center_Id)) {
+            return invalidInput(res, 'Cost_Center_Id must be valid.');
+        }
+    
+        const transaction = new sql.Transaction();
+    
+        try {
+
+            const checkCostCenterResult = await new sql.Request()
+            .input('Cost_Center_Id', Cost_Center_Id)
+            .query(`
+                SELECT Is_Converted_To_User 
+                FROM tbl_ERP_Cost_Center 
+                WHERE Cost_Center_Id = @Cost_Center_Id;
+            `);
+
+        if (checkCostCenterResult.recordset.length > 0 && checkCostCenterResult.recordset[0].Is_Converted_To_User === 1) {
+            return invalidInput(res, 'The cost center is already converted to a user.');
+        }
+            const checkUserExistsResult = await new sql.Request()
+                .input('UserName', UserName)
+                .input('Company_id', COM_ID)
+                .query(`
+                    SELECT COUNT(*) AS userCount 
+                    FROM [${userPortalDB}].[dbo].[tbl_Users] 
+                    WHERE UserName = @UserName AND Company_Id = @Company_id;
+                `);
+    
+            if (checkUserExistsResult.recordset[0].userCount > 0) {
+                return invalidInput(res, 'User already exists');
+            }
+    
+        
+            const getMaxUserIdResult = await new sql.Request()
+                .query(`
+                    SELECT CASE WHEN COUNT(*) > 0 THEN MAX(UserId) ELSE 0 END AS MaxUserId 
+                    FROM [${DB_Name}].[dbo].[tbl_Users];
+                `);
+            const UserMaxId = Number(getMaxUserIdResult.recordset[0].MaxUserId) + 1;
+    
+          
+            const getGlobalId = await new sql.Request()
+                .query(`
+                    SELECT CASE WHEN COUNT(*) > 0 THEN MAX(Global_User_id) ELSE 0 END AS MaxUserId 
+                    FROM  [${userPortalDB}].[dbo].[tbl_Users];
+                `);
+    
+            const globalIdMax = Number(getGlobalId.recordset[0].MaxUserId) + 1;
+    
+            await transaction.begin();
+    
+            const AuthString = randomString(50);
+            const GlobalInsertionResult = await new sql.Request(transaction)
+            .input('Global_User_Id',globalIdMax)
+                .input('Company_id', COM_ID)
+                .input('Local_User_ID', UserMaxId)
+                .input('UserName', UserName)
+                .input('Name', Name)
+                .input('UserTypeId', UserTypeId)
+                .input('Password', decryptPasswordFun(Password))
+                .input('UDel_Flag', 0)
+                .input('Autheticate_Id', AuthString)
+                .query(`
+                    INSERT INTO [${userPortalDB}].[dbo].[tbl_Users] (
+                        Global_User_Id,Local_User_ID, Company_Id, Name, Password, UserTypeId, UserName, UDel_Flag, Autheticate_Id
+                    ) VALUES (
+                       @Global_User_Id, @Local_User_ID, @Company_Id, @Name, @Password, @UserTypeId, @UserName, @UDel_Flag, @Autheticate_Id
+                    );
+                    SELECT SCOPE_IDENTITY() AS GlobalId;
+                `);
+    
+            if (GlobalInsertionResult.rowsAffected[0] === 0) {
+                throw new Error('Global insertion failed');
+            }
+            const GlobalUserId = GlobalInsertionResult.recordset[0].GlobalId;
+    
+          
+            const LocalInsertionResult = await new sql.Request(transaction)
+                .input('COMPANY_DB', DB_Name)
+                .input('UserId', UserMaxId)
+                .input('Global_User_ID', globalIdMax)
+                .input('UserTypeId', UserTypeId)
+                .input('Name', Name)
+                .input('UserName', UserName)
+                .input('Password', decryptPasswordFun(Password))
+                .input('Company_id', COM_ID)
+                .input('BranchId', BranchId)
+                .input('UDel_Flag', 0)
+                .input('Autheticate_Id', AuthString)
+                .query(`
+                    INSERT INTO [${DB_Name}].[dbo].[tbl_Users] (
+                        UserId, Global_User_ID, UserTypeId, Name, UserName, Password, Company_id, BranchId, UDel_Flag, Autheticate_Id
+                    ) VALUES (
+                        @UserId, @Global_User_ID, @UserTypeId, @Name, @UserName, @Password, @Company_id, @BranchId, @UDel_Flag, @Autheticate_Id
+                    );
+                `);
+    
+            if (LocalInsertionResult.rowsAffected[0] === 0) {
+                throw new Error('Local insertion failed');
+            }
+    
+          
+            const updateCostCenterResult = await new sql.Request(transaction)
+                .input('Cost_Center_Id', Cost_Center_Id)
+                .input('UserId', UserMaxId) 
+                .query(`
+                    UPDATE tbl_ERP_Cost_Center
+                    SET Is_Converted_To_User = 1, User_Id = @UserId
+                    WHERE Cost_Center_Id = @Cost_Center_Id;
+                `);
+    
+            if (updateCostCenterResult.rowsAffected[0] === 0) {
+                throw new Error('Cost Center update failed');
+            }
+    
+            // Commit Transaction
+            await transaction.commit();
+            success(res, 'User created successfully', [], {
+                UserId: UserMaxId
+            });
+    
+        } catch (e) {
+            // Rollback Transaction in case of error
+            await transaction.rollback();
+            servError(e, res);
+        }
+    };
+    
+
     return {
         getUsers,
         // postUser,
@@ -673,7 +820,8 @@ const user = () => {
         getSalesPersonAndEmployeeDropdown,
         customUserGet,
         changePassword,
-        employeeAllDropDown
+        employeeAllDropDown,
+        createUserForCostcenter
     }
 }
 

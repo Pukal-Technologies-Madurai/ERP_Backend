@@ -117,5 +117,7 @@ MastersRouter.get('/areas/dropdown', salesAppMasters.getareaRoutes);
 MastersRouter.delete('/employeedetails/deleteTask',employeesTasks.deleteAssignedTaskDetails)
 MastersRouter.get('/employeedetails/selectedTaskDetails',employeesTasks.selectedTaskDetails)
 
+MastersRouter.post('/users/costcenter', user.createUserForCostcenter);
+MastersRouter.get('/userTypecostcenter', userType.userTypeforcostcenter);
 
 export default MastersRouter;

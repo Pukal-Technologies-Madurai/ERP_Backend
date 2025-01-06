@@ -29,37 +29,64 @@ const CostCenter = () => {
     }
 
     const createCostCenter = async (req, res) => {
-        const { Cost_Center_Name, User_Type } = req.body;
-
+        const { Cost_Center_Name, User_Type, Is_Converted_To_User, User_Id } = req.body;
+    
         if (!Cost_Center_Name || !User_Type) {
-            return invalidInput(res, 'Cost_Center_Name, User_Type is required');
+            return invalidInput(res, 'Cost_Center_Name, User_Type are required');
         }
-
+    
         try {
+            const getMaxIdResult = await new sql.Request()
+                .query(`
+                    SELECT CASE WHEN COUNT(*) > 0 THEN MAX(Cost_Center_Id) ELSE 0 END AS MaxUserId 
+                    FROM tbl_ERP_Cost_Center;
+                `);
+    
+            const newCostCenterId = Number(getMaxIdResult.recordset[0].MaxUserId) + 1;
+    
+            
+            let finalIsConvertedToUser = (Is_Converted_To_User == '' || Is_Converted_To_User == null) ? 0 : 1;
+            
+         
+            let finalUserId = (User_Id == '' || User_Id == null) ? 0 : User_Id;
+            if(finalUserId !=='' || finalUserId !==null){
+                const request = new sql.Request()
+               
+                .input('User_Type', User_Type)
+                .input('User_Id',finalUserId)
+    
+                .query(`
+                    UPDATE tbl_Users SET UserTypeId=@User_Type WHERE UserId=@User_Id
+                `);
+               
+            }
             const request = new sql.Request()
+                .input('Cost_Center_Id', newCostCenterId) 
                 .input('Cost_Center_Name', Cost_Center_Name)
                 .input('User_Type', User_Type)
-                .input('Is_Converted_To_User', 0)
+                .input('Is_Converted_To_User', finalIsConvertedToUser)
+                .input('User_Id', finalUserId) 
+    
                 .query(`
                     INSERT INTO tbl_ERP_Cost_Center (
-                        Cost_Center_Name, User_Type, Is_Converted_To_User
+                        Cost_Center_Id, Cost_Center_Name, User_Type, Is_Converted_To_User, User_Id
                     ) VALUES (
-                        @Cost_Center_Name, @User_Type, @Is_Converted_To_User
-                    )
-                    `);
-
+                        @Cost_Center_Id, @Cost_Center_Name, @User_Type, @Is_Converted_To_User, @User_Id
+                    );
+                `);
+    
             const result = await request;
-
+    
             if (result.rowsAffected[0] > 0) {
-                success(res, 'New Record Created');
+                success(res, 'New Cost Center Created Successfully');
             } else {
-                failed(res, 'Failed to create')
+                failed(res, 'Failed to create Cost Center');
             }
         } catch (e) {
             servError(e, res);
         }
-    }
-
+    };
+    
     const updateCostCenter = async (req, res) => {
         const { Cost_Center_Id,  Cost_Center_Name, User_Type } = req.body;
 
@@ -93,7 +120,7 @@ const CostCenter = () => {
             servError(e, res);
         }
     }
-
+    
     return {
         getCostCenter,
         createCostCenter,
