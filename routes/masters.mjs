@@ -79,6 +79,7 @@ MastersRouter.post('/retailers/lolSync', retailers.syncTallyLOL);
 
 
 MastersRouter.get('/products', products.getProducts);
+MastersRouter.get('/products/dropDown', products.productDropDown);
 MastersRouter.post('/products', products.postProductsWithoutImage);
 MastersRouter.put('/products', products.updateProduct);
 MastersRouter.post('/products/withImage', products.postProductsWithImage);

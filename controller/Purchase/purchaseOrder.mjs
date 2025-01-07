@@ -682,12 +682,13 @@ const PurchaseOrder = () => {
     }
 
     const getVoucherType = async (req, res) => {
-        const { Type = 'PURCHASE' } = req.query;
+        // const { Type = 'PURCHASE' } = req.query;
 
         try {
             const request = new sql.Request()
-                .input('Type', Type)
-                .query(`SELECT * FROM tbl_Voucher_Type WHERE Type = @Type`)
+                // .input('Type', Type)
+                .query(`SELECT * FROM tbl_Voucher_Type`)
+                // WHERE Type = @Type
 
             const result = await request;
 

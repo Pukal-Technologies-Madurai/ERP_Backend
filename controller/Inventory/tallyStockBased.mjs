@@ -242,7 +242,7 @@ const TallyStockBasedControll = () => {
 
     return {
         getTallyStockJournalData,
-        getTallyStockJournalDataExtended,
+        getTallyStockJournalDataExtended
     }
 }
 
