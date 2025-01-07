@@ -91,12 +91,16 @@ const sfProductController = () => {
             const request = new sql.Request()
                 .query(`
                     SELECT 
-                    	Product_Id,
-                        Product_Name,
-                        ERP_Id,
-                        Product_Image_Name
+                    	p.Product_Id,
+                        p.Product_Name,
+                        p.ERP_Id,
+                        p.Product_Image_Name,
+                        p.UOM_Id,
+                        u.Units
                     FROM 
-                    	tbl_Product_Master`
+                    	tbl_Product_Master AS p
+                        LEFT JOIN tbl_UOM AS u
+                        ON u.Unit_Id = p.UOM_Id`
                 )
 
             const result = await request;
