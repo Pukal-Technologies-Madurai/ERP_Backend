@@ -493,11 +493,72 @@ const StockJournal = () => {
         }
     };
 
+    const godownActivity = async (req, res) => {
+        const { fromGodown, toGodown } = req.query;    
+
+        const FromDate = ISOString(req.query.FromDate), ToDate = ISOString(req.query.ToDate);
+
+        if (!checkIsNumber(fromGodown) || !checkIsNumber(toGodown)) {
+            return invalidInput(res, 'Source and Destination Godowns are required');
+        }
+    
+        try {
+    
+            const request = new sql.Request()
+                .input('fromDate', sql.Date, FromDate)
+                .input('toDate', sql.Date, ToDate)
+                .input('fromGodown', sql.Int, fromGodown)
+                .input('toGodown', sql.Int, toGodown)
+                .query(`
+
+                    SELECT 
+                        s.*,
+                    	p.Product_Name AS Sour_Item_Name,
+                        g.Godown_Name AS Source_Godown_Name
+                    FROM 
+                    	tbl_Stock_Journal_Sour_Details AS s 
+                    	    Left Join tbl_Trip_Details td 
+                    	    ON s.STJ_Id = td.STJ_Id 
+                    	    AND s.Sour_Item_Id = td.Product_Id 
+                    	    AND s.Sour_Goodown_Id = td.From_Location , 
+                    	tbl_Stock_Journal_Dest_Details AS d,
+                    	tbl_Godown_Master AS g,
+                    	tbl_Stock_Journal_Gen_Info AS sjg,
+                    	tbl_Product_Master AS p
+                    WHERE 
+                    	sjg.Stock_Journal_date BETWEEN @fromDate AND @toDate
+                        AND sjg.Stock_Journal_Bill_type <> 'PROCESSING'
+                    	AND sjg.STJ_Id = s.STJ_Id 
+                    	AND sjg.STJ_Id = d.STJ_Id 
+                    	and p.Product_Id= S.Sour_Item_Id
+                    	AND s.Sour_Goodown_Id = g.Godown_Id
+                    	and td.STJ_Id is null and td.Product_Id is Null and td.From_Location is null
+                    	AND s.Sour_Goodown_Id = @fromGodown
+                    	AND d.Dest_Goodown_Id = @toGodown`
+                )
+    
+          
+            const result = await request;
+    
+      
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset); 
+            } else {
+                noData(res); 
+            }
+    
+        } catch (e) {
+            console.error('Error fetching journal list:', e);
+            servError(e, res);
+        }
+    };
+
     return {
         createStockJournal,
         updateStockJournal,
         deleteJournalInfo,
-        getJournalDetails
+        getJournalDetails,
+        godownActivity
     }
 }
 
