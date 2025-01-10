@@ -1,6 +1,8 @@
 import sql from 'mssql';
 import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
 import { checkIsNumber, createPadString, ISOString } from '../../helper_functions.mjs';
+import SPCall from '../../middleware/SPcall.mjs';
+
 const StockJournal = () => {
 
     const createStockJournal = async (req, res) => {
@@ -11,11 +13,11 @@ const StockJournal = () => {
             Stock_Journal_Voucher_type = '',
             Invoice_no = '',
             Narration = '',
-            Start_Time = '',
-            End_Time = '',
-            Vehicle_Start_KM = '',
-            Vehicle_End_KM = '',
-            Trip_No = '',
+            // Start_Time = '',
+            // End_Time = '',
+            // Vehicle_Start_KM = '',
+            // Vehicle_End_KM = '',
+            // Trip_No = '',
             Created_by = ''
         } = req.body;
 
@@ -23,13 +25,13 @@ const StockJournal = () => {
         if (!checkIsNumber(Branch_Id)) {
             return invalidInput(res, 'Select Branch');
         }
-        if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
-            return invalidInput(res, 'Start Time cannot be greater than End Time');
-        }
+        // if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
+        //     return invalidInput(res, 'Start Time cannot be greater than End Time');
+        // }
 
-        if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
-            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
-        }
+        // if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
+        //     return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
+        // }
 
         const Source = Array.isArray(req.body.Source) ? req.body.Source : [];
         const StaffInvolve = Array.isArray(req.body.StaffInvolve) ? req.body.StaffInvolve : [];
@@ -71,22 +73,20 @@ const StockJournal = () => {
                 .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
                 .input('Invoice_no', Invoice_no)
                 .input('Narration', Narration)
-                .input('Start_Time', Start_Time)
-                .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', Number(Vehicle_Start_KM))
-                .input('Vehicle_End_KM', Number(Vehicle_End_KM))
-                .input('Trip_No', Trip_No)
+                // .input('Start_Time', Start_Time)
+                // .input('End_Time', End_Time)
+                // .input('Vehicle_Start_KM', Number(Vehicle_Start_KM))
+                // .input('Vehicle_End_KM', Number(Vehicle_End_KM))
+                // .input('Trip_No', Trip_No)
                 .input('Created_by', Created_by)
                 .query(`
                     INSERT INTO tbl_Stock_Journal_Gen_Info (
                         STJ_Id, ST_Inv_Id, Branch_Id, Journal_no, Stock_Journal_date,
                         Stock_Journal_Bill_type, Stock_Journal_Voucher_type, Invoice_no, Narration, 
-                        Start_Time, End_Time, Vehicle_Start_KM, Vehicle_End_KM, 
                         Trip_No, Created_by
                     ) VALUES (
                         @STJ_Id, @ST_Inv_Id, @Branch_Id, @Journal_no, @Stock_Journal_date,
-                        @Stock_Journal_Bill_type, @Stock_Journal_Voucher_type, @Invoice_no, @Narration, 
-                        @Start_Time, @End_Time, @Vehicle_Start_KM, @Vehicle_End_KM, 
+                        @Stock_Journal_Bill_type, @Stock_Journal_Voucher_type, @Invoice_no, @Narration,
                         @Trip_No, @Created_by
                     );
                 `);
@@ -189,11 +189,11 @@ const StockJournal = () => {
             Stock_Journal_Voucher_type = '',
             Invoice_no = '',
             Narration = '',
-            Start_Time = '',
-            End_Time = '',
-            Vehicle_Start_KM = 0,
-            Vehicle_End_KM = 0,
-            Trip_No = '',
+            // Start_Time = '',
+            // End_Time = '',
+            // Vehicle_Start_KM = 0,
+            // Vehicle_End_KM = 0,
+            // Trip_No = '',
             altered_by = '',
             Source = [],
             StaffInvolve = [],
@@ -203,13 +203,13 @@ const StockJournal = () => {
         const transaction = new sql.Transaction();
 
 
-        if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
-            return invalidInput(res, 'Start Time cannot be greater than End Time');
-        }
+        // if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
+        //     return invalidInput(res, 'Start Time cannot be greater than End Time');
+        // }
 
-        if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
-            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
-        }
+        // if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
+        //     return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
+        // }
 
         try {
             await transaction.begin();
@@ -221,11 +221,11 @@ const StockJournal = () => {
                 .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
                 .input('Invoice_no', Invoice_no)
                 .input('Narration', Narration)
-                .input('Start_Time', Start_Time)
-                .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', Number(Vehicle_Start_KM) || 0)
-                .input('Vehicle_End_KM', Number(Vehicle_End_KM) || 0)
-                .input('Trip_No', Trip_No)
+                // .input('Start_Time', Start_Time)
+                // .input('End_Time', End_Time)
+                // .input('Vehicle_Start_KM', Number(Vehicle_Start_KM) || 0)
+                // .input('Vehicle_End_KM', Number(Vehicle_End_KM) || 0)
+                // .input('Trip_No', Trip_No)
                 .input('altered_by', altered_by)
                 .query(`
                     UPDATE tbl_Stock_Journal_Gen_Info
@@ -235,11 +235,6 @@ const StockJournal = () => {
                         Stock_Journal_Voucher_type = @Stock_Journal_Voucher_type,
                         Invoice_no = @Invoice_no,
                         Narration = @Narration,
-                        Start_Time = @Start_Time,
-                        End_Time = @End_Time,
-                        Vehicle_Start_KM = @Vehicle_Start_KM,
-                        Vehicle_End_KM = @Vehicle_End_KM,
-                        Trip_No = @Trip_No,
                         altered_by = @altered_by
                     WHERE STJ_Id = @STJ_Id
                 `);
@@ -513,6 +508,7 @@ const StockJournal = () => {
 
                     SELECT 
                         s.*,
+                        d.Dest_Goodown_Id,
                     	p.Product_Name AS Sour_Item_Name,
                         g.Godown_Name AS Source_Godown_Name
                     FROM 
@@ -553,12 +549,29 @@ const StockJournal = () => {
         }
     };
 
+    const syncTallyStockJournal = async (req, res) => {
+        try {
+            const result = await SPCall({
+                SPName: 'Stock_Journal_Sync',
+            })
+
+            if (result) {
+                success(res, 'Sync Success')
+            } else {
+                failed(res, 'Failed to sync')
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createStockJournal,
         updateStockJournal,
         deleteJournalInfo,
         getJournalDetails,
-        godownActivity
+        godownActivity,
+        syncTallyStockJournal
     }
 }
 

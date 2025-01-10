@@ -18,5 +18,6 @@ inventoryRouter.post('/stockJournal', stockJournals.createStockJournal);
 inventoryRouter.put('/stockJournal', stockJournals.updateStockJournal);
 inventoryRouter.delete('/stockJournal', stockJournals.deleteJournalInfo);
 inventoryRouter.get('/stockJournal/godownActivity', stockJournals.godownActivity);
+inventoryRouter.get('/stockJournal/tallySync', stockJournals.syncTallyStockJournal);
 
 export default inventoryRouter;
