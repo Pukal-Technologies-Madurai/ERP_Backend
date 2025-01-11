@@ -79,6 +79,7 @@ dataEntryRouter.put('/purchaseOrderEntry/ArrivalUpdate', purchaseOrder.updateArr
 
 
 dataEntryRouter.get('/costCenter', costCenter.getCostCenter);
+dataEntryRouter.get('/costCenter/category', costCenter.getCostCenterCategory);
 dataEntryRouter.post('/costCenter', costCenter.createCostCenter);
 dataEntryRouter.put('/costCenter', costCenter.updateCostCenter);
 

@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
+import { servError, dataFound, noData, success, failed, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber } from '../../helper_functions.mjs';
 
 const CostCenter = () => {
@@ -120,11 +120,25 @@ const CostCenter = () => {
             servError(e, res);
         }
     }
+
+    const getCostCenterCategory = async (req, res) => {
+        try {
+            const result = await sql.query(`
+                SELECT *
+                FROM tbl_ERP_Cost_Category
+            `);
+
+            sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
     
     return {
         getCostCenter,
         createCostCenter,
         updateCostCenter,
+        getCostCenterCategory
     }
 }
 

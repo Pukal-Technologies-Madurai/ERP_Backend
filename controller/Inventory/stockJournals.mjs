@@ -505,32 +505,50 @@ const StockJournal = () => {
                 .input('fromGodown', sql.Int, fromGodown)
                 .input('toGodown', sql.Int, toGodown)
                 .query(`
-
+                    WITH SJ_IDs AS (
+                    	SELECT 
+                    		DISTINCT sjg.STJ_Id
+                    	FROM
+                    		tbl_Stock_Journal_Sour_Details AS s,
+                    		tbl_Stock_Journal_Dest_Details AS d,
+                    		tbl_Stock_Journal_Gen_Info AS sjg
+                    		LEFT JOIN tbl_Trip_Details td 
+                    	    ON td.STJ_Id = sjg.STJ_Id
+                    	WHERE
+                    		sjg.Stock_Journal_date BETWEEN @fromDate AND @toDate
+                    	    AND sjg.Stock_Journal_Bill_type <> 'PROCESSING'
+                    		AND sjg.STJ_Id = s.STJ_Id 
+                    		AND sjg.STJ_Id = d.STJ_Id 
+                    		AND s.Sour_Goodown_Id = @fromGodown
+                    		AND d.Dest_Goodown_Id = @toGodown
+                    		AND td.STJ_Id IS NULL 
+                    ), SOURCE AS (
+                    	SELECT * 
+                    	FROM tbl_Stock_Journal_Sour_Details
+                    	WHERE STJ_Id IN (
+                    		SELECT STJ_Id FROM SJ_IDs
+                    	)
+                    )
                     SELECT 
-                        s.*,
-                        d.Dest_Goodown_Id,
+                    	s.*,
+                    	d.Dest_Goodown_Id,
                     	p.Product_Name AS Sour_Item_Name,
-                        g.Godown_Name AS Source_Godown_Name
-                    FROM 
-                    	tbl_Stock_Journal_Sour_Details AS s 
-                    	    Left Join tbl_Trip_Details td 
-                    	    ON s.STJ_Id = td.STJ_Id 
-                    	    AND s.Sour_Item_Id = td.Product_Id 
-                    	    AND s.Sour_Goodown_Id = td.From_Location , 
+                        g.Godown_Name AS Source_Godown_Name,
+                        sjg.Stock_Journal_Bill_type,
+                        sjg.Stock_Journal_Voucher_type
+                    FROM
+                    	SOURCE AS s,
                     	tbl_Stock_Journal_Dest_Details AS d,
                     	tbl_Godown_Master AS g,
-                    	tbl_Stock_Journal_Gen_Info AS sjg,
-                    	tbl_Product_Master AS p
-                    WHERE 
-                    	sjg.Stock_Journal_date BETWEEN @fromDate AND @toDate
-                        AND sjg.Stock_Journal_Bill_type <> 'PROCESSING'
-                    	AND sjg.STJ_Id = s.STJ_Id 
-                    	AND sjg.STJ_Id = d.STJ_Id 
-                    	and p.Product_Id= S.Sour_Item_Id
+                    	tbl_Product_Master AS p,
+                        tbl_Stock_Journal_Gen_Info AS sjg
+                    WHERE
+                    	s.STJ_Id = d.STJ_Id
+                        AND s.STJ_Id = sjg.STJ_Id
+                    	AND s.Sour_Item_Id = d.Dest_Item_Id
+                    	AND p.Product_Id = s.Sour_Item_Id
                     	AND s.Sour_Goodown_Id = g.Godown_Id
-                    	and td.STJ_Id is null and td.Product_Id is Null and td.From_Location is null
-                    	AND s.Sour_Goodown_Id = @fromGodown
-                    	AND d.Dest_Goodown_Id = @toGodown`
+                    ORDER BY s.STJ_Id`
                 )
     
           
