@@ -535,7 +535,8 @@ const StockJournal = () => {
                     	p.Product_Name AS Sour_Item_Name,
                         g.Godown_Name AS Source_Godown_Name,
                         sjg.Stock_Journal_Bill_type,
-                        sjg.Stock_Journal_Voucher_type
+                        sjg.Stock_Journal_Voucher_type,
+                        sjg.Journal_no
                     FROM
                     	SOURCE AS s,
                     	tbl_Stock_Journal_Dest_Details AS d,

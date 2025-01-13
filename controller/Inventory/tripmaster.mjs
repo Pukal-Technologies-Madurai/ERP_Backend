@@ -400,8 +400,6 @@ const tripActivities = () => {
                     Products_List: JSON.parse(o?.Products_List)
                 }));
 
-
-
                 dataFound(res, parsed);
             } else {
                 noData(res);

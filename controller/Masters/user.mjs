@@ -672,116 +672,21 @@ const user = () => {
     }
 
     const createUserForCostcenter = async (req, res) => {
-        const { Name, UserName, UserTypeId, Password, BranchId, Cost_Center_Id } = req.body;
+        const { UserId, Cost_Center_Id } = req.body;
     
-        if (!Name || !UserName || !checkIsNumber(UserTypeId) || !Password || !checkIsNumber(BranchId)) {
-            return invalidInput(res, 'Name, UserName, UserTypeId, Password, and BranchId are required and must be valid.');
-        }
-        if (!checkIsNumber(Cost_Center_Id)) {
-            return invalidInput(res, 'Cost_Center_Id must be valid.');
+        if (!UserId || !Cost_Center_Id) {
+            return invalidInput(res, 'Cost_Center_Id and UserId are required and must be valid.');
         }
     
         const transaction = new sql.Transaction();
+        console.log("Request Body:", req.body);
     
         try {
-
-            const checkCostCenterResult = await new sql.Request()
-            .input('Cost_Center_Id', Cost_Center_Id)
-            .query(`
-                SELECT Is_Converted_To_User 
-                FROM tbl_ERP_Cost_Center 
-                WHERE Cost_Center_Id = @Cost_Center_Id;
-            `);
-
-        if (checkCostCenterResult.recordset.length > 0 && checkCostCenterResult.recordset[0].Is_Converted_To_User === 1) {
-            return invalidInput(res, 'The cost center is already converted to a user.');
-        }
-            const checkUserExistsResult = await new sql.Request()
-                .input('UserName', UserName)
-                .input('Company_id', COM_ID)
-                .query(`
-                    SELECT COUNT(*) AS userCount 
-                    FROM [${userPortalDB}].[dbo].[tbl_Users] 
-                    WHERE UserName = @UserName AND Company_Id = @Company_id;
-                `);
-    
-            if (checkUserExistsResult.recordset[0].userCount > 0) {
-                return invalidInput(res, 'User already exists');
-            }
-    
-        
-            const getMaxUserIdResult = await new sql.Request()
-                .query(`
-                    SELECT CASE WHEN COUNT(*) > 0 THEN MAX(UserId) ELSE 0 END AS MaxUserId 
-                    FROM [${DB_Name}].[dbo].[tbl_Users];
-                `);
-            const UserMaxId = Number(getMaxUserIdResult.recordset[0].MaxUserId) + 1;
-    
-          
-            const getGlobalId = await new sql.Request()
-                .query(`
-                    SELECT CASE WHEN COUNT(*) > 0 THEN MAX(Global_User_id) ELSE 0 END AS MaxUserId 
-                    FROM  [${userPortalDB}].[dbo].[tbl_Users];
-                `);
-    
-            const globalIdMax = Number(getGlobalId.recordset[0].MaxUserId) + 1;
-    
             await transaction.begin();
     
-            const AuthString = randomString(50);
-            const GlobalInsertionResult = await new sql.Request(transaction)
-            .input('Global_User_Id',globalIdMax)
-                .input('Company_id', COM_ID)
-                .input('Local_User_ID', UserMaxId)
-                .input('UserName', UserName)
-                .input('Name', Name)
-                .input('UserTypeId', UserTypeId)
-                .input('Password', decryptPasswordFun(Password))
-                .input('UDel_Flag', 0)
-                .input('Autheticate_Id', AuthString)
-                .query(`
-                    INSERT INTO [${userPortalDB}].[dbo].[tbl_Users] (
-                        Global_User_Id,Local_User_ID, Company_Id, Name, Password, UserTypeId, UserName, UDel_Flag, Autheticate_Id
-                    ) VALUES (
-                       @Global_User_Id, @Local_User_ID, @Company_Id, @Name, @Password, @UserTypeId, @UserName, @UDel_Flag, @Autheticate_Id
-                    );
-                    SELECT SCOPE_IDENTITY() AS GlobalId;
-                `);
-    
-            if (GlobalInsertionResult.rowsAffected[0] === 0) {
-                throw new Error('Global insertion failed');
-            }
-            const GlobalUserId = GlobalInsertionResult.recordset[0].GlobalId;
-    
-          
-            const LocalInsertionResult = await new sql.Request(transaction)
-                .input('COMPANY_DB', DB_Name)
-                .input('UserId', UserMaxId)
-                .input('Global_User_ID', globalIdMax)
-                .input('UserTypeId', UserTypeId)
-                .input('Name', Name)
-                .input('UserName', UserName)
-                .input('Password', decryptPasswordFun(Password))
-                .input('Company_id', COM_ID)
-                .input('BranchId', BranchId)
-                .input('UDel_Flag', 0)
-                .input('Autheticate_Id', AuthString)
-                .query(`
-                    INSERT INTO [${DB_Name}].[dbo].[tbl_Users] (
-                        UserId, Global_User_ID, UserTypeId, Name, UserName, Password, Company_id, BranchId, UDel_Flag, Autheticate_Id
-                    ) VALUES (
-                        @UserId, @Global_User_ID, @UserTypeId, @Name, @UserName, @Password, @Company_id, @BranchId, @UDel_Flag, @Autheticate_Id
-                    );
-                `);
-    
-            if (LocalInsertionResult.rowsAffected[0] === 0) {
-                throw new Error('Local insertion failed');
-            }
-    
-          
-            const updateCostCenterResult = await new sql.Request(transaction)
-                .input('Cost_Center_Id', Cost_Center_Id)
-                .input('UserId', UserMaxId) 
+            const updateCostCenterResult = await new sql.Request()
+                .input('Cost_Center_Id', sql.Int, Cost_Center_Id)
+                .input('UserId', sql.Int, UserId)
                 .query(`
                     UPDATE tbl_ERP_Cost_Center
                     SET Is_Converted_To_User = 1, User_Id = @UserId
@@ -792,20 +697,18 @@ const user = () => {
                 throw new Error('Cost Center update failed');
             }
     
-            // Commit Transaction
             await transaction.commit();
-            success(res, 'User created successfully', [], {
-                UserId: UserMaxId
-            });
     
+            return success(res, 'User created successfully', [], {
+                UserId: UserId,
+            });
         } catch (e) {
-            // Rollback Transaction in case of error
-            await transaction.rollback();
-            servError(e, res);
+    
+            console.error("Error in createUserForCostcenter:", e);
+            return servError(e, res);
         }
     };
     
-
     return {
         getUsers,
         // postUser,
