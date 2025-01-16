@@ -9,13 +9,14 @@ const CostCenter = () => {
             const result = await sql.query(`
                 SELECT 
                     c.*,
-                    COALESCE((
-                        SELECT UserType FROM tbl_User_Type WHERE Id = c.User_Type
-                    ), 'Not found') AS UserTypeGet,
-                    COALESCE((
-                        SELECT Name FROM tbl_Users WHERE UserId = c.User_Id 
-                    ), 'Not found') AS UserGet
+                    COALESCE(cc.Cost_Category, 'Not found') AS UserTypeGet,
+                    COALESCE(u.Name, 'Not found') AS UserGet
                 FROM tbl_ERP_Cost_Center AS c
+                LEFT JOIN tbl_ERP_Cost_Category AS cc
+                    ON cc.Cost_Category_Id = c.User_Type
+                LEFT JOIN tbl_Users AS u
+                    ON u.UserId = c.User_Id;
+
             `);
 
             if (result.recordset.length > 0) {

@@ -27,8 +27,6 @@ const tripActivities = () => {
             Branch_Id,
             Trip_Date,
             Vehicle_No,
-            StartTime = '',
-            EndTime = '',
             Trip_No = '',
             Trip_ST_KM = '',
             Trip_EN_KM = '',
@@ -36,6 +34,9 @@ const tripActivities = () => {
             Product_Array = [],
             EmployeesInvolved = [],
         } = req.body;
+
+        const StartTime = req.query.StartTime ? ISOString(req.query.StartTime) : null, 
+        EndTime = req.query.EndTime ? ISOString(req.query.EndTime) : null;
 
         if (!checkIsNumber(Branch_Id) || Trip_Date === '' || Vehicle_No === '') {
             return invalidInput(res, 'Select Branch');
@@ -165,8 +166,6 @@ const tripActivities = () => {
             Branch_Id,
             Trip_Date,
             Vehicle_No,
-            StartTime = '',
-            EndTime = '',
             Trip_No = '',
             Trip_ST_KM = '',
             Trip_EN_KM = '',
@@ -174,6 +173,9 @@ const tripActivities = () => {
             Product_Array = [],
             EmployeesInvolved = []
         } = req.body;
+
+        const StartTime = req.query.StartTime ? ISOString(req.query.StartTime) : null, 
+        EndTime = req.query.EndTime ? ISOString(req.query.EndTime) : null;
 
         if (!checkIsNumber(Branch_Id) || Trip_Date === '' || Vehicle_No === '' || Trip_Id == '' || Trip_Id == null) {
             return invalidInput(res, 'Check values ');
@@ -333,7 +335,7 @@ const tripActivities = () => {
 
     const getTripDetails = async (req, res) => {
         try {
-            const FromDate = ISOString(req.query.FromDate), ToDate = ISOString(req.query.ToDate);
+            const FromDate = ISOString(req.query.Fromdate), ToDate = ISOString(req.query.Todate);
 
             if (!FromDate && !ToDate) {
                 return invalidInput(res, 'Select StartDate & EndDate')
@@ -343,61 +345,83 @@ const tripActivities = () => {
             request.input('FromDate', sql.Date, FromDate);
             request.input('ToDate', sql.Date, ToDate);
             const result = await request.query(
-                `WITH TRIP_DETAILS AS (
+                `WITH TRIP_MASTER AS (
+                    SELECT tm.*,
+                		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                		COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
+                		COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User
+                    FROM tbl_Trip_Master AS tm
+                	LEFT JOIN tbl_Branch_Master AS bm
+                	ON bm.BranchId = tm.Branch_Id
+                	LEFT JOIN tbl_Users AS cb_created
+                	ON cb_created.UserId = tm.Created_By
+                	LEFT JOIN tbl_Users AS cb_updated
+                	ON cb_updated.UserId = tm.Updated_By
+                    WHERE 
+                		tm.Trip_Date BETWEEN @FromDate AND @ToDate	
+                ), TRIP_DETAILS AS (
                     SELECT
                         td.*,
                         COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
                         COALESCE(gm_from.Godown_Name, 'Unknown') AS FromLocation,
-                        COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation
+                        COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation,
+                        COALESCE(sjs.Journal_no, 'Unknown') AS Journal_no
                     FROM
                         tbl_Trip_Details AS td
                     LEFT JOIN tbl_Product_Master AS pm
                         ON pm.Product_Id = td.Product_Id
-                    LEFT JOIN tbl_Users AS us
-                        ON us.UserId = td.Created_By
                     LEFT JOIN tbl_Godown_Master AS gm_from
                         ON gm_from.Godown_Id = td.From_Location
                     LEFT JOIN tbl_Godown_Master AS gm_to
                         ON gm_to.Godown_Id = td.To_Location
+                    LEFT JOIN tbl_Stock_Journal_Gen_Info AS sjs
+		                ON sjs.STJ_Id = td.STJ_Id
+                    WHERE 
+                        td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+                ), TRIP_EMPLOYEES AS (
+                    SELECT 
+                        te.*,
+                        e.User_Type AS Emp_Name,
+                        cc.Cost_Category
+                    FROM 
+                        tbl_Trip_Employees AS te
+                    LEFT JOIN tbl_ERP_Cost_Center AS e
+                        ON e.Cost_Center_Id = te.Involved_Emp_Id
+                    LEFT JOIN tbl_ERP_Cost_Category AS cc
+                        ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+                	WHERE 
+                        te.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
                 )
-                SELECT
+                SELECT 
                     tm.*,
-                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                    COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
-                    COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User,
                     COALESCE((
-                        SELECT
-                            td.*,
-                			  COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
-                    COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User
-                        FROM
+                        SELECT 
+                            td.* 
+                        FROM 
                             TRIP_DETAILS AS td
-                			LEFT JOIN tbl_Users AS cb_created
-                    ON cb_created.UserId = tm.Created_By
-                LEFT JOIN tbl_Users AS cb_updated
-                    ON cb_updated.UserId = tm.Updated_By
-                        WHERE
+                        WHERE 
                             td.Trip_Id = tm.Trip_Id
                         FOR JSON PATH
-                    ), '[]') AS Products_List
-                FROM
-                    tbl_Trip_Master AS tm
-                LEFT JOIN tbl_Branch_Master AS bm
-                    ON bm.BranchId = tm.Branch_Id
-                LEFT JOIN tbl_Users AS cb_created
-                    ON cb_created.UserId = tm.Created_By
-                LEFT JOIN tbl_Users AS cb_updated
-                    ON cb_updated.UserId = tm.Updated_By
-                WHERE
-                  CONVERT(DATE, tm.Trip_Date) >= CONVERT(DATE, @FromDate)
-                    AND CONVERT(DATE, tm.Trip_Date) <= CONVERT(DATE, @ToDate)`
+                    ), '[]') AS Products_List,
+                    COALESCE((
+                        SELECT 
+                            te.* 
+                        FROM 
+                            TRIP_EMPLOYEES AS te
+                        WHERE 
+                            te.Trip_Id = tm.Trip_Id
+                        FOR JSON PATH
+                    ), '[]') AS Employees_Involved
+                FROM 
+                    TRIP_MASTER AS tm`
             );
 
             if (result.recordset.length > 0) {
 
                 const parsed = result.recordset.map(o => ({
                     ...o,
-                    Products_List: JSON.parse(o?.Products_List)
+                    Products_List: JSON.parse(o?.Products_List),
+                    Employees_Involved: JSON.parse(o?.Employees_Involved)
                 }));
 
                 dataFound(res, parsed);
