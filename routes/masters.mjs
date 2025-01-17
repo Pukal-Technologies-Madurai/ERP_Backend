@@ -79,6 +79,7 @@ MastersRouter.post('/retailers/lolSync', retailers.syncTallyLOL);
 
 
 MastersRouter.get('/products', products.getProducts);
+MastersRouter.get('/products/dropDown', products.productDropDown);
 MastersRouter.post('/products', products.postProductsWithoutImage);
 MastersRouter.put('/products', products.updateProduct);
 MastersRouter.post('/products/withImage', products.postProductsWithImage);
@@ -117,5 +118,7 @@ MastersRouter.get('/areas/dropdown', salesAppMasters.getareaRoutes);
 MastersRouter.delete('/employeedetails/deleteTask',employeesTasks.deleteAssignedTaskDetails)
 MastersRouter.get('/employeedetails/selectedTaskDetails',employeesTasks.selectedTaskDetails)
 
+MastersRouter.post('/users/costcenter', user.createUserForCostcenter);
+MastersRouter.get('/userTypecostcenter', userType.userTypeforcostcenter);
 
 export default MastersRouter;

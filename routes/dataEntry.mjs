@@ -82,5 +82,11 @@ dataEntryRouter.get('/costCenter', costCenter.getCostCenter);
 dataEntryRouter.post('/costCenter', costCenter.createCostCenter);
 dataEntryRouter.put('/costCenter', costCenter.updateCostCenter);
 
+dataEntryRouter.get('/costCenter/category',costCenter.getCostCenterCategory)
+dataEntryRouter.post('/costCategory',costCenter.createCostCategory)
+dataEntryRouter.put('/costCategory',costCenter.updateCostCategory)
+dataEntryRouter.delete('/costCategory',costCenter.deleteCostCategory)
+dataEntryRouter.get('/costCategory/DropDown',costCenter.costCategoryDropDown)
+
 
 export default dataEntryRouter;

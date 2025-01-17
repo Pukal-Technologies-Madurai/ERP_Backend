@@ -66,7 +66,42 @@ const sfProductController = () => {
                         ON u.Unit_Id = p.UOM_Id
                     WHERE
                         IS_Sold = @IS_Sold`
-                    )
+                )
+
+            const result = await request;
+
+            if (result.recordset.length) {
+                const withPic = result.recordset.map(o => ({
+                    ...o,
+                    productImageUrl: getImage('products', o?.Product_Image_Name)
+                }));
+                dataFound(res, withPic);
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
+    const productDropDown = async (req, res) => {
+
+        try {
+
+            const request = new sql.Request()
+                .query(`
+                    SELECT 
+                    	p.Product_Id,
+                        p.Product_Name,
+                        p.ERP_Id,
+                        p.Product_Image_Name,
+                        p.UOM_Id,
+                        u.Units
+                    FROM 
+                    	tbl_Product_Master AS p
+                        LEFT JOIN tbl_UOM AS u
+                        ON u.Unit_Id = p.UOM_Id`
+                )
 
             const result = await request;
 
@@ -457,6 +492,7 @@ const sfProductController = () => {
 
     return {
         getProducts,
+        productDropDown,
         getGroupedProducts,
         getProductGroups,
         getProductPacks,

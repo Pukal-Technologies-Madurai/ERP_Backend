@@ -90,11 +90,38 @@ const userTypeMaster = () => {
         }
     }
 
+    const userTypeforcostcenter = async (req, res) => {
+
+        try {
+            const result = await sql.query(`
+                SELECT 
+                    Id AS UserTypeId, 
+                    UserType, 
+                    Alias 
+                FROM tbl_User_Type 
+                WHERE 
+                    IsActive = 1 
+                    AND Id NOT IN (0,1,4,6,7,8)
+                `)
+
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset)
+            } else {
+                noData(res)
+            }
+
+        } catch (e) {
+            servError(e, res)
+        }
+
+    }
+
     return {
         getUserType,
         postUserType,
         editUserType,
-        deleteUserType
+        deleteUserType,
+        userTypeforcostcenter
     }
 }
 

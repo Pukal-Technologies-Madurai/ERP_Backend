@@ -518,7 +518,7 @@ const PurchaseOrderDataEntry = () => {
 
     const godownLocation = async (req, res) => {
         try {
-            const result = await sql.query('SELECT Godown_Id, Godown_Name FROM tbl_Godown_Master');
+            const result = await sql.query('SELECT Godown_Id, Godown_Name, Godown_Tally_Id FROM tbl_Godown_Master');
 
             if (result.recordset.length > 0) {
                 dataFound(res, result.recordset);

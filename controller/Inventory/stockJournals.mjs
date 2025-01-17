@@ -1,6 +1,8 @@
 import sql from 'mssql';
 import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
 import { checkIsNumber, createPadString, ISOString } from '../../helper_functions.mjs';
+import SPCall from '../../middleware/SPcall.mjs';
+
 const StockJournal = () => {
 
     const createStockJournal = async (req, res) => {
@@ -11,11 +13,11 @@ const StockJournal = () => {
             Stock_Journal_Voucher_type = '',
             Invoice_no = '',
             Narration = '',
-            Start_Time = '',
-            End_Time = '',
-            Vehicle_Start_KM = '',
-            Vehicle_End_KM = '',
-            Trip_No = '',
+            // Start_Time = '',
+            // End_Time = '',
+            // Vehicle_Start_KM = '',
+            // Vehicle_End_KM = '',
+            // Trip_No = '',
             Created_by = ''
         } = req.body;
 
@@ -23,13 +25,13 @@ const StockJournal = () => {
         if (!checkIsNumber(Branch_Id)) {
             return invalidInput(res, 'Select Branch');
         }
-        if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
-            return invalidInput(res, 'Start Time cannot be greater than End Time');
-        }
+        // if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
+        //     return invalidInput(res, 'Start Time cannot be greater than End Time');
+        // }
 
-        if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
-            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
-        }
+        // if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
+        //     return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
+        // }
 
         const Source = Array.isArray(req.body.Source) ? req.body.Source : [];
         const StaffInvolve = Array.isArray(req.body.StaffInvolve) ? req.body.StaffInvolve : [];
@@ -64,29 +66,27 @@ const StockJournal = () => {
             const OrderDetailsInsert = await new sql.Request(transaction)
                 .input('STJ_Id', STJ_Id)
                 .input('ST_Inv_Id', ST_Inv_Id)
-                .input('Branch_Id', Branch_Id)
-                .input('Journal_no', Journal_no)
+                .input('Branch_Id', Number(Branch_Id))
+                .input('Journal_no', Journal_no || null)
                 .input('Stock_Journal_date', Stock_Journal_date)
                 .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
                 .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
                 .input('Invoice_no', Invoice_no)
                 .input('Narration', Narration)
-                .input('Start_Time', Start_Time)
-                .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', Number(Vehicle_Start_KM))
-                .input('Vehicle_End_KM', Number(Vehicle_End_KM))
-                .input('Trip_No', Trip_No)
+                // .input('Start_Time', Start_Time)
+                // .input('End_Time', End_Time)
+                // .input('Vehicle_Start_KM', Number(Vehicle_Start_KM))
+                // .input('Vehicle_End_KM', Number(Vehicle_End_KM))
+                // .input('Trip_No', Trip_No)
                 .input('Created_by', Created_by)
                 .query(`
                     INSERT INTO tbl_Stock_Journal_Gen_Info (
                         STJ_Id, ST_Inv_Id, Branch_Id, Journal_no, Stock_Journal_date,
                         Stock_Journal_Bill_type, Stock_Journal_Voucher_type, Invoice_no, Narration, 
-                        Start_Time, End_Time, Vehicle_Start_KM, Vehicle_End_KM, 
                         Trip_No, Created_by
                     ) VALUES (
                         @STJ_Id, @ST_Inv_Id, @Branch_Id, @Journal_no, @Stock_Journal_date,
-                        @Stock_Journal_Bill_type, @Stock_Journal_Voucher_type, @Invoice_no, @Narration, 
-                        @Start_Time, @End_Time, @Vehicle_Start_KM, @Vehicle_End_KM, 
+                        @Stock_Journal_Bill_type, @Stock_Journal_Voucher_type, @Invoice_no, @Narration,
                         @Trip_No, @Created_by
                     );
                 `);
@@ -183,67 +183,64 @@ const StockJournal = () => {
 
     const updateStockJournal = async (req, res) => {
         const {
-            stockdetails = {},
-            Source = [],
-            StaffInvolve = [],
-            Destination = []
-        } = req.body;
-
-        const {
             STJ_Id = '',
             Stock_Journal_date = '',
             Stock_Journal_Bill_type = '',
             Stock_Journal_Voucher_type = '',
             Invoice_no = '',
             Narration = '',
-            Start_Time = '',
-            End_Time = '',
-            Vehicle_Start_KM = 0,
-            Vehicle_End_KM = 0,
-            Trip_No = '',
-            altered_by = ''
-        } = stockdetails;
-
+            // Start_Time = '',
+            // End_Time = '',
+            // Vehicle_Start_KM = 0,
+            // Vehicle_End_KM = 0,
+            // Trip_No = '',
+            altered_by = '',
+            Source = [],
+            StaffInvolve = [],
+            Destination = []
+        } = req.body;
 
         const transaction = new sql.Transaction();
 
 
-        if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
-            return invalidInput(res, 'Start Time cannot be greater than End Time');
-        }
+        // if (Start_Time && End_Time && new Date(Start_Time) > new Date(End_Time)) {
+        //     return invalidInput(res, 'Start Time cannot be greater than End Time');
+        // }
 
-        if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
-            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
-        }
+        // if (Vehicle_Start_KM && Vehicle_End_KM && Number(Vehicle_Start_KM) > Number(Vehicle_End_KM)) {
+        //     return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
+        // }
 
         try {
             await transaction.begin();
 
             const updateOrderDetails = await new sql.Request(transaction)
-                .input('STJ_Id', STJ_Id)
+                .input('STJ_Id', Number(STJ_Id))
                 .input('Stock_Journal_date', Stock_Journal_date)
                 .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
                 .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
                 .input('Invoice_no', Invoice_no)
                 .input('Narration', Narration)
-                .input('Start_Time', Start_Time)
-                .input('End_Time', End_Time)
-                .input('Vehicle_Start_KM', Vehicle_Start_KM)
-                .input('Vehicle_End_KM', Vehicle_End_KM)
-                .input('Trip_No', Trip_No)
+                // .input('Start_Time', Start_Time)
+                // .input('End_Time', End_Time)
+                // .input('Vehicle_Start_KM', Number(Vehicle_Start_KM) || 0)
+                // .input('Vehicle_End_KM', Number(Vehicle_End_KM) || 0)
+                // .input('Trip_No', Trip_No)
                 .input('altered_by', altered_by)
                 .query(`
                     UPDATE tbl_Stock_Journal_Gen_Info
-                    SET Stock_Journal_date = @Stock_Journal_date, Stock_Journal_Bill_type = @Stock_Journal_Bill_type,
-                        Stock_Journal_Voucher_type = @Stock_Journal_Voucher_type, Invoice_no = @Invoice_no, 
-                        Narration = @Narration, Start_Time = @Start_Time, End_Time = @End_Time, Vehicle_Start_KM = @Vehicle_Start_KM,
-                        Vehicle_End_KM = @Vehicle_End_KM, Trip_No = @Trip_No, 
+                    SET 
+                        Stock_Journal_date = @Stock_Journal_date, 
+                        Stock_Journal_Bill_type = @Stock_Journal_Bill_type,
+                        Stock_Journal_Voucher_type = @Stock_Journal_Voucher_type,
+                        Invoice_no = @Invoice_no,
+                        Narration = @Narration,
                         altered_by = @altered_by
                     WHERE STJ_Id = @STJ_Id
                 `);
 
             if (updateOrderDetails.rowsAffected[0] === 0) {
-                throw new Error('Failed to update order details');
+                throw new Error('Failed to update General Info');
             }
 
             await new sql.Request(transaction)
@@ -283,38 +280,19 @@ const StockJournal = () => {
                 }
             }
 
-            for (let i = 0; i < StaffInvolve.length; i++) {
-                const delivery = StaffInvolve[i];
-                const result = await new sql.Request(transaction)
-                    .input('STJ_Id', STJ_Id)
-                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id) || null)
-                    .input('Staff_Id', Number(delivery.Staff_Id) || null)
-                    .query(`
-                        INSERT INTO tbl_Stock_Journal_Staff_Involved (
-                            STJ_Id, Staff_Type_Id, Staff_Id
-                        ) VALUES (
-                            @STJ_Id, @Staff_Type_Id, @Staff_Id
-                        );
-                    `);
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Staff Involved details');
-                }
-            }
-
             for (let i = 0; i < Destination.length; i++) {
-                const final = Destination[i];
+                const item = Destination[i];
                 const result = await new sql.Request(transaction)
 
                     .input('STJ_Id', Number(STJ_Id) || null)
-                    .input('Dest_Item_Id', Number(final.Dest_Item_Id) || null)
-                    .input('Dest_Goodown_Id', Number(final.Dest_Goodown_Id) || null)
-                    .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
-                    .input('Dest_Qty', Number(final.Dest_Qty) || null)
-                    .input('Dest_Unit_Id', Number(final.Dest_Unit_Id) || null)
-                    .input('Dest_Unit', final.Dest_Unit)
-                    .input('Dest_Rate', Number(final.Dest_Rate) || null)
-                    .input('Dest_Amt', Number(final.Dest_Amt) || null)
+                    .input('Dest_Item_Id', Number(item.Dest_Item_Id) || null)
+                    .input('Dest_Goodown_Id', Number(item.Dest_Goodown_Id) || null)
+                    .input('Dest_Batch_Lot_No', item.Dest_Batch_Lot_No || null)
+                    .input('Dest_Qty', Number(item.Dest_Qty) || null)
+                    .input('Dest_Unit_Id', Number(item.Dest_Unit_Id) || null)
+                    .input('Dest_Unit', item.Dest_Unit || null)
+                    .input('Dest_Rate', Number(item.Dest_Rate) || null)
+                    .input('Dest_Amt', Number(item.Dest_Amt) || null)
                     .query(`
                         INSERT INTO tbl_Stock_Journal_Dest_Details (
                             STJ_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, 
@@ -330,6 +308,25 @@ const StockJournal = () => {
                 }
             }
 
+            for (let i = 0; i < StaffInvolve.length; i++) {
+                const staff = StaffInvolve[i];
+                const result = await new sql.Request(transaction)
+                    .input('STJ_Id', STJ_Id)
+                    .input('Staff_Type_Id', Number(staff.Staff_Type_Id) || null)
+                    .input('Staff_Id', Number(staff.Staff_Id) || null)
+                    .query(`
+                        INSERT INTO tbl_Stock_Journal_Staff_Involved (
+                            STJ_Id, Staff_Type_Id, Staff_Id
+                        ) VALUES (
+                            @STJ_Id, @Staff_Type_Id, @Staff_Id
+                        );
+                    `);
+
+                if (result.rowsAffected[0] == 0) {
+                    throw new Error('Failed to insert Staff Involved details');
+                }
+            }
+
             await transaction.commit();
             return success(res, 'Journal Updated Successfully');
         } catch (e) {
@@ -342,9 +339,9 @@ const StockJournal = () => {
 
     const deleteJournalInfo = async (req, res) => {
 
-        const { stj_Id } = req.body;
+        const { STJ_Id } = req.body;
 
-        if (!checkIsNumber(stj_Id)) return invalidInput(res, 'OrderId is required');
+        if (!checkIsNumber(STJ_Id)) return invalidInput(res, 'OrderId is required');
 
         const transaction = new sql.Transaction();
 
@@ -352,7 +349,7 @@ const StockJournal = () => {
             await transaction.begin();
 
             const request = new sql.Request(transaction)
-                .input('STJ_Id', stj_Id)
+                .input('STJ_Id', STJ_Id)
                 .query(`
                     DELETE FROM tbl_Stock_Journal_Gen_Info WHERE STJ_Id = @STJ_Id;
                     DELETE FROM tbl_Stock_Journal_Sour_Details WHERE STJ_Id = @STJ_Id;
@@ -491,11 +488,109 @@ const StockJournal = () => {
         }
     };
 
+    const godownActivity = async (req, res) => {
+        const { fromGodown, toGodown } = req.query;    
+
+        const FromDate = ISOString(req.query.FromDate), ToDate = ISOString(req.query.ToDate);
+
+        if (!checkIsNumber(fromGodown) || !checkIsNumber(toGodown)) {
+            return invalidInput(res, 'Source and Destination Godowns are required');
+        }
+    
+        try {
+    
+            const request = new sql.Request()
+                .input('fromDate', sql.Date, FromDate)
+                .input('toDate', sql.Date, ToDate)
+                .input('fromGodown', sql.Int, fromGodown)
+                .input('toGodown', sql.Int, toGodown)
+                .query(`
+                    WITH SJ_IDs AS (
+                    	SELECT 
+                    		DISTINCT sjg.STJ_Id
+                    	FROM
+                    		tbl_Stock_Journal_Sour_Details AS s,
+                    		tbl_Stock_Journal_Dest_Details AS d,
+                    		tbl_Stock_Journal_Gen_Info AS sjg
+                    		LEFT JOIN tbl_Trip_Details td 
+                    	    ON td.STJ_Id = sjg.STJ_Id
+                    	WHERE
+                    		sjg.Stock_Journal_date BETWEEN @fromDate AND @toDate
+                    	    AND sjg.Stock_Journal_Bill_type <> 'PROCESSING'
+                    		AND sjg.STJ_Id = s.STJ_Id 
+                    		AND sjg.STJ_Id = d.STJ_Id 
+                    		AND s.Sour_Goodown_Id = @fromGodown
+                    		AND d.Dest_Goodown_Id = @toGodown
+                    		AND td.STJ_Id IS NULL 
+                    ), SOURCE AS (
+                    	SELECT * 
+                    	FROM tbl_Stock_Journal_Sour_Details
+                    	WHERE STJ_Id IN (
+                    		SELECT STJ_Id FROM SJ_IDs
+                    	)
+                    )
+                    SELECT 
+                    	s.*,
+                    	d.Dest_Goodown_Id,
+                    	p.Product_Name AS Sour_Item_Name,
+                        g.Godown_Name AS Source_Godown_Name,
+                        sjg.Stock_Journal_Bill_type,
+                        sjg.Stock_Journal_Voucher_type,
+                        sjg.Journal_no
+                    FROM
+                    	SOURCE AS s,
+                    	tbl_Stock_Journal_Dest_Details AS d,
+                    	tbl_Godown_Master AS g,
+                    	tbl_Product_Master AS p,
+                        tbl_Stock_Journal_Gen_Info AS sjg
+                    WHERE
+                    	s.STJ_Id = d.STJ_Id
+                        AND s.STJ_Id = sjg.STJ_Id
+                    	AND s.Sour_Item_Id = d.Dest_Item_Id
+                    	AND p.Product_Id = s.Sour_Item_Id
+                    	AND s.Sour_Goodown_Id = g.Godown_Id
+                    ORDER BY s.STJ_Id`
+                )
+    
+          
+            const result = await request;
+    
+      
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset); 
+            } else {
+                noData(res); 
+            }
+    
+        } catch (e) {
+            console.error('Error fetching journal list:', e);
+            servError(e, res);
+        }
+    };
+
+    const syncTallyStockJournal = async (req, res) => {
+        try {
+            const result = await SPCall({
+                SPName: 'Stock_Journal_Sync',
+            })
+
+            if (result) {
+                success(res, 'Sync Success')
+            } else {
+                failed(res, 'Failed to sync')
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createStockJournal,
         updateStockJournal,
         deleteJournalInfo,
-        getJournalDetails
+        getJournalDetails,
+        godownActivity,
+        syncTallyStockJournal
     }
 }
 
