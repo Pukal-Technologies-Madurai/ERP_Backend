@@ -1,7 +1,7 @@
 
 import sql from 'mssql'
 import { servError, dataFound, noData, failed, success, invalidInput } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, isValidDate } from '../../helper_functions.mjs'
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
@@ -35,8 +35,8 @@ const tripActivities = () => {
             EmployeesInvolved = [],
         } = req.body;
 
-        const StartTime = req.query.StartTime ? ISOString(req.query.StartTime) : null, 
-        EndTime = req.query.EndTime ? ISOString(req.query.EndTime) : null;
+        const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null, 
+        EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
 
         if (!checkIsNumber(Branch_Id) || Trip_Date === '' || Vehicle_No === '') {
             return invalidInput(res, 'Select Branch');
@@ -167,15 +167,15 @@ const tripActivities = () => {
             Trip_Date,
             Vehicle_No,
             Trip_No = '',
-            Trip_ST_KM = '',
-            Trip_EN_KM = '',
+            Trip_ST_KM = 0,
+            Trip_EN_KM = 0,
             Updated_By = '',
             Product_Array = [],
             EmployeesInvolved = []
         } = req.body;
 
-        const StartTime = req.query.StartTime ? ISOString(req.query.StartTime) : null, 
-        EndTime = req.query.EndTime ? ISOString(req.query.EndTime) : null;
+        const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null, 
+        EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
 
         if (!checkIsNumber(Branch_Id) || Trip_Date === '' || Vehicle_No === '' || Trip_Id == '' || Trip_Id == null) {
             return invalidInput(res, 'Check values ');
@@ -192,16 +192,18 @@ const tripActivities = () => {
 
         try {
 
-            const tripCheck = await new sql.Request().query(`
-               SELECT COUNT(*) AS TripCount FROM tbl_Trip_Master WHERE Trip_Id = ${Trip_Id}
-           `);
+            const tripCheck = await new sql.Request()
+                .input('Trip_Id', Trip_Id)
+                .query(`
+                    SELECT COUNT(*) AS TripCount FROM tbl_Trip_Master WHERE Trip_Id = @Trip_Id
+                `);
 
             if (tripCheck.recordset[0].TripCount === 0) {
                 return invalidInput(res, 'Trip does not exist');
             }
 
             // const productsData = (await getProducts(1)).dataArray;
-            const Trip_Tot_Kms = Number(Trip_ST_KM) + Number(Trip_EN_KM);
+            const Trip_Tot_Kms =  Subraction(Trip_EN_KM, Trip_ST_KM);
 
             await transaction.begin();
 
