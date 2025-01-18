@@ -365,7 +365,9 @@ const tripActivities = () => {
                         COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
                         COALESCE(gm_from.Godown_Name, 'Unknown') AS FromLocation,
                         COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation,
-                        COALESCE(sjs.Journal_no, 'Unknown') AS Journal_no
+                        COALESCE(sjs.Journal_no, 'Unknown') AS Journal_no,
+                        COALESCE(sjs.Stock_Journal_Bill_type, 'Unknown') AS Stock_Journal_Bill_type,
+                        COALESCE(sjs.Stock_Journal_Voucher_type, 'Unknown') AS Stock_Journal_Voucher_type
                     FROM
                         tbl_Trip_Details AS td
                     LEFT JOIN tbl_Product_Master AS pm
@@ -381,7 +383,7 @@ const tripActivities = () => {
                 ), TRIP_EMPLOYEES AS (
                     SELECT 
                         te.*,
-                        e.User_Type AS Emp_Name,
+                        e.Cost_Center_Name AS Emp_Name,
                         cc.Cost_Category
                     FROM 
                         tbl_Trip_Employees AS te
