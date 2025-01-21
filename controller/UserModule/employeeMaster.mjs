@@ -796,14 +796,46 @@ const EmployeeController = () => {
             } else {
                 noData(res); 
             }
-        } catch (error) {
+        } catch (e) {
           servError(e, res); 
         }
     };
     
 
     
+    const maplatitudelongitude = async (req, res) => {
+        try {
+         
+            const query = `
+                              SELECT 
+                   rtm.Retailer_Name,
+                   rl.latitude AS latitude,
+                   rl.longitude AS longitude,
+                   COALESCE(u.Name, 'unknown') AS EntryByGet
+               FROM 
+                   tbl_Retailers_Locations rl
+               LEFT JOIN 
+                   tbl_Users u ON u.UserId = rl.EntryBy
+               LEFT JOIN 
+                   tbl_Retailers_Master rtm ON rtm.Retailer_Id = rl.Retailer_Id
+               ORDER BY 
+                   rl.EntryAt DESC
+
+            `;
     
+            const request = new sql.Request();
+            const result = await request.query(query);
+    
+    
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset); 
+            } else {
+                noData(res); 
+            }
+        } catch (e) {
+            servError(e, res); 
+          }
+    };
 
 
 return {
@@ -817,7 +849,8 @@ return {
         employeeGetActivityLogin,
         employeeGetActivityLoginMobile,
         employeeAttendanceModule,
-        employeeOverallAttendance
+        employeeOverallAttendance,
+        maplatitudelongitude
     }
 }
 

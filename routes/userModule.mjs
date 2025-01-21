@@ -34,6 +34,7 @@ UserModule.post('/employeeActivity/tracking', employeeMaster.employeeActivity);
 UserModule.get('/employeeActivity/trackinglist', employeeMaster.employeeGetActivity);
 UserModule.get('/employeeActivity/trackinglistlogin', employeeMaster.employeeGetActivityLogin);
 UserModule.get('/employeActivity/trackActivityloginMobile',employeeMaster.employeeGetActivityLoginMobile);
+UserModule.get('/employeeActivity/maplatitude',employeeMaster.maplatitudelongitude)
 
 UserModule.get('/employeActivity/trackActivitylogAttendance',employeeMaster.employeeAttendanceModule);
 UserModule.get('/employeActivity/employeeAttendanceModuledownload',employeeMaster.employeeOverallAttendance);

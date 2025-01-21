@@ -156,11 +156,12 @@ const appMenu = () => {
             const userRights = await getUserMenuRights(Auth);
 
             if (Array.isArray(userRights)) {
-                const mainMenu = userRights.filter(menu => isEqualNumber(menu.menu_type, 1)).sort((a, b) => a.display_order - b.display_order);
-                const subMenu = userRights.filter(menu => isEqualNumber(menu.menu_type, 2)).sort((a, b) => a.display_order - b.display_order);
-                const childMenu = userRights.filter(menu => isEqualNumber(menu.menu_type, 3)).sort((a, b) => a.display_order - b.display_order);
+                const activeMenus = userRights.filter(menu => isEqualNumber(menu.is_active, 1));
+                const mainMenu = activeMenus.filter(menu => isEqualNumber(menu.menu_type, 1)).sort((a, b) => a.display_order - b.display_order);
+                const subMenu = activeMenus.filter(menu => isEqualNumber(menu.menu_type, 2)).sort((a, b) => a.display_order - b.display_order);
+                const childMenu = activeMenus.filter(menu => isEqualNumber(menu.menu_type, 3)).sort((a, b) => a.display_order - b.display_order);
 
-                const subRoutings = userRights
+                const subRoutings = activeMenus
                     .filter(menu => isEqualNumber(menu.menu_type, 0))
                     .sort((a, b) => a.parent_id - b.parent_id);
 
@@ -386,6 +387,8 @@ const appMenu = () => {
         } = req.body;
 
         try {
+            const activeState = isEqualNumber(is_active, 1) || is_active == true;
+            
             const result = await new sql.Request()
                 .input('id', id)
                 .input('name', name)
@@ -393,7 +396,7 @@ const appMenu = () => {
                 .input('parent_id', parent_id ? parent_id : null)
                 .input('url', url)
                 .input('display_order', display_order)
-                .input('is_active', is_active ? 1 : 0)
+                .input('is_active', activeState ? 1 : 0)
                 .query(`
                     UPDATE
                         tbl_AppMenu
@@ -435,7 +438,11 @@ const appMenu = () => {
                 FROM 
                     tbl_AppMenu AS m`);
 
-            const result = menuData.recordset.map(data => ({...data, ParantData: JSON.parse(data.ParantData)}));
+            const result = menuData.recordset.map(data => ({
+                ...data, 
+                is_active: data.is_active ? 1 : 0, 
+                ParantData: JSON.parse(data.ParantData)
+            }));
 
             if (result.length > 0) {
                 const mainMenu = result.filter(menu => isEqualNumber(menu.menu_type, 1)).sort((a, b) => a.display_order - b.display_order);
