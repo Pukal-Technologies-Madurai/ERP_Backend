@@ -348,7 +348,9 @@ const tripActivities = () => {
             request.input('ToDate', sql.Date, ToDate);
             const result = await request.query(
                 `WITH TRIP_MASTER AS (
-                    SELECT tm.*,
+                    SELECT
+                        DISTINCT po.OrderId AS convertedPurchaseOrderId, 
+                        tm.*,
                 		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                 		COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
                 		COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User
@@ -359,6 +361,8 @@ const tripActivities = () => {
                 	ON cb_created.UserId = tm.Created_By
                 	LEFT JOIN tbl_Users AS cb_updated
                 	ON cb_updated.UserId = tm.Updated_By
+                    LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po
+                    ON po.Trip_Id = tm.Trip_Id
                     WHERE 
                 		tm.Trip_Date BETWEEN @FromDate AND @ToDate	
                 ), TRIP_DETAILS AS (

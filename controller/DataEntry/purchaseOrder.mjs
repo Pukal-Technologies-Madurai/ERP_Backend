@@ -270,6 +270,8 @@ const PurchaseOrderDataEntry = () => {
                     .input('indexValue', Number(delivery?.indexValue))
                     .input('OrderId', OrderId)
                     .input('TransporterIndex', Number(delivery?.TransporterIndex))
+                    .input('Trip_Id', checkIsNumber(delivery?.Trip_Id) ? Number(delivery?.Trip_Id) : null)
+                    .input('Trip_Item_SNo', checkIsNumber(delivery?.Trip_Item_SNo) ? Number(delivery?.Trip_Item_SNo) : null)
                     .input('LocationId', Number(delivery?.LocationId))
                     .input('Location', delivery?.Location)
                     .input('ArrivalDate', delivery?.ArrivalDate)
@@ -286,10 +288,12 @@ const PurchaseOrderDataEntry = () => {
                     .input('CreatedBy', Number(delivery?.CreatedBy))
                     .query(`
                         INSERT INTO tbl_PurchaseOrderDeliveryDetails (
-                            indexValue, OrderId, LocationId, Location, TransporterIndex, ArrivalDate, ItemId, ItemName, Concern, BillNo, BillDate, 
+                            indexValue, OrderId, LocationId, Location, TransporterIndex, Trip_Id, Trip_Item_SNo,
+                            ArrivalDate, ItemId, ItemName, Concern, BillNo, BillDate, 
                             BilledRate, Quantity, Weight, Units, BatchLocation, CreatedBy
                         ) VALUES (
-                            @indexValue, @OrderId, @LocationId, @Location, @TransporterIndex, @ArrivalDate, @ItemId, @ItemName, @Concern, @BillNo, @BillDate,
+                            @indexValue, @OrderId, @LocationId, @Location, @TransporterIndex, @Trip_Id, @Trip_Item_SNo,
+                            @ArrivalDate, @ItemId, @ItemName, @Concern, @BillNo, @BillDate,
                             @BilledRate, @Quantity, @Weight, @Units, @BatchLocation, @CreatedBy
                         )
                     `);
@@ -445,6 +449,8 @@ const PurchaseOrderDataEntry = () => {
                     .input('OrderId', Sno)
                     .input('Id', delivery?.Id)
                     .input('TransporterIndex', Number(delivery?.TransporterIndex))
+                    .input('Trip_Id', checkIsNumber(delivery?.Trip_Id) ? Number(delivery?.Trip_Id) : null)
+                    .input('Trip_Item_SNo', checkIsNumber(delivery?.Trip_Item_SNo) ? Number(delivery?.Trip_Item_SNo) : null)
                     .input('LocationId', Number(delivery?.LocationId))
                     .input('Location', delivery?.Location)
                     .input('ArrivalDate', delivery?.ArrivalDate)

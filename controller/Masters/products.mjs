@@ -46,6 +46,7 @@ const sfProductController = () => {
                     	COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
                     	COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
                         COALESCE(u.Units, 'NOT FOUND') AS Units,
+                        COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
                         COALESCE((
                             SELECT 
                                 TOP (1) Product_Rate 
@@ -64,6 +65,8 @@ const sfProductController = () => {
                     	ON pg.Pro_Group_Id = p.Product_Group
                         LEFT JOIN tbl_UOM AS u
                         ON u.Unit_Id = p.UOM_Id
+                        LEFT JOIN tbl_Pack_Master AS pck
+                        ON pck.Pack_Id = p.Pack_Id
                     WHERE
                         IS_Sold = @IS_Sold`
                 )
