@@ -1,8 +1,9 @@
 import sql from 'mssql'
 import { dataFound, invalidInput, noData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
+import { calculateGSTDetails } from '../../middleware/taxCalculator.js';
 
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
@@ -29,9 +30,8 @@ const PurchaseOrder = () => {
             Voucher_Type = '', Stock_Item_Ledger_Name = '',
         } = req.body;
 
-        const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
-        const Po_Entry_Date = ISOString(req?.body?.Po_Entry_Date);
-        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+        const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();
+        const Po_Entry_Date = req?.body?.Po_Entry_Date ? ISOString(req?.body?.Po_Entry_Date) : ISOString();
         const isInclusive = isEqualNumber(GST_Inclusive, 1);
         const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
         const isIGST = isEqualNumber(IS_IGST, 1);
@@ -76,46 +76,39 @@ const PurchaseOrder = () => {
 
             const PIN_Id = getPIN_Id.MaxId;
 
-            const Total_Invoice_value = Product_Array.reduce((o, item) => {
+            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = parseInt(item?.Bill_Qty);
-                const Amount = RoundNumber(Multiplication(billQty, itemRate));
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
 
-                if (isInclusive || isNotTaxableBill) {
-                    return o += Number(Amount);
-                }
-
-                if (isExclusiveBill) {
-                    const product = findProductDetails(productsData, item.Item_Id);
-                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-                    const tax = taxCalc(0, itemRate, gstPercentage)
-                    return o += (Amount + (tax * billQty));
-                }
-            }, 0);
-
-            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = parseInt(item?.Bill_Qty) || 0;
-
-                if (isNotTaxableBill) {
-                    acc.TotalValue += Multiplication(billQty, itemRate);
-                    return acc;
-                }
+                if (isNotTaxableBill) return Amount;
 
                 const product = findProductDetails(productsData, item.Item_Id);
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
 
                 if (isInclusive) {
-                    const itemTax = taxCalc(1, itemRate, gstPercentage);
-                    const basePrice = Subraction(itemRate, itemTax);
-                    acc.TotalTax += Multiplication(billQty, itemTax);
-                    acc.TotalValue += Multiplication(billQty, basePrice);
+                    return acc += calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax;
+                } else {
+                    return acc += calculateGSTDetails(Amount, gstPercentage, 'add').with_tax;
                 }
-                if (isExclusiveBill) {
-                    const itemTax = taxCalc(0, itemRate, gstPercentage);
-                    acc.TotalTax += Multiplication(billQty, itemTax);
-                    acc.TotalValue += Multiplication(billQty, itemRate);
+            }, 0))
+
+            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
+
+                if (isNotTaxableBill) return {
+                    TotalValue: Addition(acc.TotalValue, Amount),
+                    TotalTax: 0
                 }
+
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                acc.TotalValue += taxInfo.without_tax;
+                acc.TotalTax += taxInfo.tax_amount;
 
                 return acc;
             }, {
@@ -135,13 +128,13 @@ const PurchaseOrder = () => {
                 .input('Po_Inv_Date', Po_Inv_Date)
                 .input('Retailer_Id', Retailer_Id)
                 .input('GST_Inclusive', GST_Inclusive)
-                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('IGST_Total', isIGST ? totalValueBeforeTax.TotalTax : 0)
+                .input('CSGT_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
+                .input('SGST_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
+                .input('IGST_Total', isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('Round_off', Total_Invoice_value - (totalValueBeforeTax.TotalValue + totalValueBeforeTax.TotalTax))
-                .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
-                .input('Total_Tax', totalValueBeforeTax.TotalTax)
+                .input('Round_off', Subraction(Total_Invoice_value, Addition(totalValueBeforeTax.TotalValue, totalValueBeforeTax.TotalTax)))
+                .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
+                .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
                 .input('Total_Invoice_value', Total_Invoice_value)
                 .input('Narration', Narration)
                 .input('Cancel_status', 0)
@@ -179,17 +172,18 @@ const PurchaseOrder = () => {
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
                 const Taxble = gstPercentage > 0 ? 1 : 0;
-                const Bill_Qty = Number(product.Bill_Qty);
+                const Bill_Qty = RoundNumber(product?.Item_Rate);
                 const Item_Rate = RoundNumber(product.Item_Rate);
-                const Amount = Bill_Qty * Item_Rate;
-                const tax = taxCalc(GST_Inclusive, Amount, gstPercentage);
-                const itemTaxRate = taxCalc(GST_Inclusive, Item_Rate, gstPercentage);
-                const Taxable_Rate = RoundNumber(Subraction(Item_Rate, itemTaxRate));
+                const Amount = Multiplication(Bill_Qty, Item_Rate);
 
-                const Taxable_Amount = isInclusive ? (Amount - tax) : Amount;
-                const Final_Amo = isInclusive ? Amount : (Amount + tax);
-                const Cgst_Amo = !isIGST ? (taxCalc(GST_Inclusive, Amount, gstPercentage) / 2) : 0;
-                const Igst_Amo = isIGST ? taxCalc(GST_Inclusive, Amount, gstPercentage) : 0;
+                const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
+                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
 
                 const request2 = new sql.Request(transaction)
                     .input('DeliveryId', Number(product?.DeliveryId || 0))
@@ -216,7 +210,7 @@ const PurchaseOrder = () => {
                     .input('Alt_Unit_Name', product.Unit_Name ?? '')
 
                     .input('Batch_No', product?.Batch_No ?? '')
-                    .input('Taxable_Rate', Taxable_Rate)
+                    .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('Item_Rate', Item_Rate)
                     .input('Amount', Amount)
                     .input('Free_Qty', 0)
@@ -224,15 +218,15 @@ const PurchaseOrder = () => {
                     .input('Taxble', Taxble)
                     .input('HSN_Code', productDetails.HSN_Code)
 
-                    .input('Taxable_Amount', Taxable_Amount)
-                    .input('Tax_Rate', gstPercentage)
-                    .input('Cgst', (gstPercentage / 2) ?? 0)
-                    .input('Cgst_Amo', isNotTaxableBill ? 0 : Cgst_Amo)
-                    .input('Sgst', (gstPercentage / 2) ?? 0)
-                    .input('Sgst_Amo', isNotTaxableBill ? 0 : Cgst_Amo)
-                    .input('Igst', gstPercentage ?? 0)
-                    .input('Igst_Amo', isNotTaxableBill ? 0 : Igst_Amo)
-                    .input('Final_Amo', Final_Amo)
+                    .input('Taxable_Amount', gstInfo.base_amount)
+                    .input('Tax_Rate', gstInfo.tax_per)
+                    .input('Cgst', cgstPer ?? 0)
+                    .input('Cgst_Amo', Cgst_Amo)
+                    .input('Sgst', cgstPer ?? 0)
+                    .input('Sgst_Amo', Cgst_Amo)
+                    .input('Igst', igstPer ?? 0)
+                    .input('Igst_Amo', Igst_Amo)
+                    .input('Final_Amo', gstInfo.with_tax)
                     .input('Created_on', new Date())
                     .query(`
                         INSERT INTO tbl_Purchase_Order_Inv_Stock_Info (
@@ -306,7 +300,6 @@ const PurchaseOrder = () => {
 
         const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
         const Po_Entry_Date = ISOString(req?.body?.Po_Entry_Date);
-        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
         const isInclusive = isEqualNumber(GST_Inclusive, 1);
         const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
         const isIGST = isEqualNumber(IS_IGST, 1);
@@ -326,46 +319,39 @@ const PurchaseOrder = () => {
             const productsData = (await getProducts(0)).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
 
-            const Total_Invoice_value = Product_Array.reduce((o, item) => {
+            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = parseInt(item?.Bill_Qty);
-                const Amount = RoundNumber(Multiplication(billQty, itemRate));
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
 
-                if (isInclusive || isNotTaxableBill) {
-                    return o += Number(Amount);
-                }
+                if (isNotTaxableBill) return Amount;
 
-                if (isExclusiveBill) {
-                    const product = findProductDetails(productsData, item.Item_Id);
-                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-                    const tax = taxCalc(0, itemRate, gstPercentage)
-                    return o += (Number(Amount) + (tax * billQty));
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                if (isInclusive) {
+                    return acc += calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax;
+                } else {
+                    return acc += calculateGSTDetails(Amount, gstPercentage, 'add').with_tax;
                 }
-            }, 0);
+            }, 0))
 
             const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = parseInt(item?.Bill_Qty) || 0;
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
 
-                if (isNotTaxableBill) {
-                    acc.TotalValue += Multiplication(billQty, itemRate);
-                    return acc;
+                if (isNotTaxableBill) return {
+                    TotalValue: Addition(acc.TotalValue, Amount),
+                    TotalTax: 0
                 }
 
                 const product = findProductDetails(productsData, item.Item_Id);
-                const gstPercentage = isIGST ? product.Igst_P : product.Gst_P;
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
 
-                if (isInclusive) {
-                    const itemTax = taxCalc(1, itemRate, gstPercentage);
-                    const basePrice = Subraction(itemRate, itemTax);
-                    acc.TotalTax += Multiplication(billQty, itemTax);
-                    acc.TotalValue += Multiplication(billQty, basePrice);
-                }
-                if (isExclusiveBill) {
-                    const itemTax = taxCalc(0, itemRate, gstPercentage);
-                    acc.TotalTax += Multiplication(billQty, itemTax);
-                    acc.TotalValue += Multiplication(billQty, itemRate);
-                }
+                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                acc.TotalValue += taxInfo.without_tax;
+                acc.TotalTax += taxInfo.tax_amount;
 
                 return acc;
             }, {
@@ -381,23 +367,29 @@ const PurchaseOrder = () => {
                 .input('Po_Entry_Date', Po_Entry_Date)
                 .input('Voucher_Type', Voucher_Type)
                 .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
+
                 .input('Ref_Po_Inv_No', Ref_Po_Inv_No)
                 .input('Retailer_Id', Retailer_Id)
                 .input('Branch_Id', Branch_Id)
                 .input('GST_Inclusive', GST_Inclusive)
-                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('IGST_Total', isIGST ? totalValueBeforeTax.TotalTax : 0)
+                .input('CSGT_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
+
+                .input('SGST_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
+                .input('IGST_Total', isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('Round_off', Total_Invoice_value - (totalValueBeforeTax.TotalValue + totalValueBeforeTax.TotalTax))
+                .input('Round_off', Subraction(Total_Invoice_value, Addition(totalValueBeforeTax.TotalValue, totalValueBeforeTax.TotalTax)))
                 .input('Total_Invoice_value', Total_Invoice_value)
-                .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
-                .input('Total_Tax', totalValueBeforeTax.TotalTax)
-                .input('narration', Narration)
+
+                .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
+                .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
+                .input('Narration', Narration)
                 .input('Altered_by', Created_by)
+                .input('Alterd_on', new Date())
+
+                .input('Trans_Type', 'UPDATE')
                 .input('Alter_Id', Alter_Id)
                 .input('Alterd_on', new Date())
-                .input('Trans_Type', 'UPDATE')
+
                 .query(`
                     UPDATE 
                         tbl_Purchase_Order_Inv_Gen_Info
@@ -416,7 +408,7 @@ const PurchaseOrder = () => {
                         Total_Invoice_value = @Total_Invoice_value, 
                         Total_Before_Tax = @Total_Before_Tax, 
                         Total_Tax = @Total_Tax,
-                        Narration = @narration,  
+                        Narration = @Narration,  
                         Voucher_Type = @Voucher_Type,
                         Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
                         Altered_by = @Altered_by, 
@@ -448,17 +440,18 @@ const PurchaseOrder = () => {
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
                 const Taxble = gstPercentage > 0 ? 1 : 0;
-                const Bill_Qty = Number(product.Bill_Qty);
+                const Bill_Qty = RoundNumber(product?.Item_Rate);
                 const Item_Rate = RoundNumber(product.Item_Rate);
-                const Amount = Bill_Qty * Item_Rate;
-                const tax = taxCalc(GST_Inclusive, Amount, gstPercentage);
-                const itemTaxRate = taxCalc(GST_Inclusive, Item_Rate, gstPercentage);
-                const Taxable_Rate = RoundNumber(Subraction(Item_Rate, itemTaxRate));
+                const Amount = Multiplication(Bill_Qty, Item_Rate);
 
-                const Taxable_Amount = isInclusive ? (Amount - tax) : Amount;
-                const Final_Amo = isInclusive ? Amount : (Amount + tax);
-                const Cgst_Amo = !isIGST ? (taxCalc(GST_Inclusive, Amount, gstPercentage) / 2) : 0;
-                const Igst_Amo = isIGST ? taxCalc(GST_Inclusive, Amount, gstPercentage) : 0;
+                const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
+                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
 
                 const request2 = new sql.Request(transaction)
                     .input('DeliveryId', Number(product?.DeliveryId || 0))
@@ -485,7 +478,7 @@ const PurchaseOrder = () => {
                     .input('Alt_Unit_Name', product.Unit_Name ?? '')
 
                     .input('Batch_No', product?.Batch_No ?? '')
-                    .input('Taxable_Rate', Taxable_Rate)
+                    .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('Item_Rate', Item_Rate)
                     .input('Amount', Amount)
                     .input('Free_Qty', 0)
@@ -493,32 +486,32 @@ const PurchaseOrder = () => {
                     .input('Taxble', Taxble)
                     .input('HSN_Code', productDetails.HSN_Code)
 
-                    .input('Taxable_Amount', Taxable_Amount)
-                    .input('Tax_Rate', gstPercentage)
-                    .input('Cgst', (gstPercentage / 2) ?? 0)
-                    .input('Cgst_Amo', isNotTaxableBill ? 0 : Cgst_Amo)
-                    .input('Sgst', (gstPercentage / 2) ?? 0)
-                    .input('Sgst_Amo', isNotTaxableBill ? 0 : Cgst_Amo)
-                    .input('Igst', gstPercentage ?? 0)
-                    .input('Igst_Amo', isNotTaxableBill ? 0 : Igst_Amo)
-                    .input('Final_Amo', Final_Amo)
+                    .input('Taxable_Amount', gstInfo.base_amount)
+                    .input('Tax_Rate', gstInfo.tax_per)
+                    .input('Cgst', cgstPer ?? 0)
+                    .input('Cgst_Amo', Cgst_Amo)
+                    .input('Sgst', cgstPer ?? 0)
+                    .input('Sgst_Amo', Cgst_Amo)
+                    .input('Igst', igstPer ?? 0)
+                    .input('Igst_Amo', Igst_Amo)
+                    .input('Final_Amo', gstInfo.with_tax)
                     .input('Created_on', new Date())
                     .query(`
-                            INSERT INTO tbl_Purchase_Order_Inv_Stock_Info (
-                                DeliveryId, PIN_Id, Po_Inv_Date, Location_Id, S_No, Item_Id,
-                                Bill_Qty, Act_Qty, Bill_Alt_Qty, Alt_Act_Qty,
-                                Unit_Id, Bill_Alt_Unit_Id, Act_unit_Id, Alt_Unit_Id,
-                                Unit_Name, Bill_Alt_Unit_Name, Act_unit_Nmae, Alt_Unit_Name, Batch_No,
-                                Taxable_Rate, Item_Rate, Amount, Free_Qty, Total_Qty, Taxble,
-                                HSN_Code, Taxable_Amount, Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
-                            ) VALUES (
-                                @DeliveryId, @PIN_Id, @Po_Inv_Date, @Location_Id, @S_No, @Item_Id,
-                                @Bill_Qty, @Act_Qty, @Bill_Alt_Qty, @Alt_Act_Qty,
-                                @Unit_Id, @Bill_Alt_Unit_Id, @Act_unit_Id, @Alt_Unit_Id,
-                                @Unit_Name, @Bill_Alt_Unit_Name, @Act_unit_Nmae, @Alt_Unit_Name, @Batch_No,
-                                @Taxable_Rate, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, @Taxble,
-                                @HSN_Code, @Taxable_Amount, @Tax_Rate, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
-                            );`
+                        INSERT INTO tbl_Purchase_Order_Inv_Stock_Info (
+                            DeliveryId, PIN_Id, Po_Inv_Date, Location_Id, S_No, Item_Id,
+                            Bill_Qty, Act_Qty, Bill_Alt_Qty, Alt_Act_Qty,
+                            Unit_Id, Bill_Alt_Unit_Id, Act_unit_Id, Alt_Unit_Id,
+                            Unit_Name, Bill_Alt_Unit_Name, Act_unit_Nmae, Alt_Unit_Name, Batch_No,
+                            Taxable_Rate, Item_Rate, Amount, Free_Qty, Total_Qty, Taxble,
+                            HSN_Code, Taxable_Amount, Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+                        ) VALUES (
+                            @DeliveryId, @PIN_Id, @Po_Inv_Date, @Location_Id, @S_No, @Item_Id,
+                            @Bill_Qty, @Act_Qty, @Bill_Alt_Qty, @Alt_Act_Qty,
+                            @Unit_Id, @Bill_Alt_Unit_Id, @Act_unit_Id, @Alt_Unit_Id,
+                            @Unit_Name, @Bill_Alt_Unit_Name, @Act_unit_Nmae, @Alt_Unit_Name, @Batch_No,
+                            @Taxable_Rate, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, @Taxble,
+                            @HSN_Code, @Taxable_Amount, @Tax_Rate, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+                        );`
                     )
 
                 const result2 = await request2;
@@ -688,7 +681,7 @@ const PurchaseOrder = () => {
             const request = new sql.Request()
                 // .input('Type', Type)
                 .query(`SELECT * FROM tbl_Voucher_Type`)
-                // WHERE Type = @Type
+            // WHERE Type = @Type
 
             const result = await request;
 

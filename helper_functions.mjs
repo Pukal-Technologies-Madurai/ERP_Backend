@@ -288,25 +288,33 @@ export const createPadString = (number, padLength = 0) => {
     return numberStr.padStart(padLength, '0'); 
 }
 
+export const limitFractionDigits = (num = 0, maxFractionDigits = 2) => {
+    const factor = Math.pow(10, maxFractionDigits);
+    return Math.round(num * factor) / factor;
+}
+
+export const toNumber = (value) => {
+    if (!value) return 0; 
+    if (typeof value === 'string') {
+        const parsed = parseFloat(value.replace(/,/g, '')); 
+        return isNaN(parsed) ? 0 : parsed;
+    }
+    return typeof value === 'number' ? value : 0; 
+};
+
 export const RoundNumber = (num) => {
     return checkIsNumber(num) ? Number(num).toFixed(2) : 0;
 }
 
-export const Addition = (a, b) => {
-    return Number(a) + Number(b)
-}
+export const Addition = (a, b) => limitFractionDigits(Number(a) + Number(b));
 
-export const Subraction = (a, b) => {
-    return Number(a) - Number(b)
-}
+export const Subraction = (a, b) => limitFractionDigits(Number(a) - Number(b));
 
-export const Multiplication = (a, b) => {
-    return Number(a) * Number(b)
-}
+export const Multiplication = (a, b) => limitFractionDigits(Number(a || 0) * Number(b || 0));
 
-export const Division = (a, b) => {
-    return Number(a) / Number(b)
-}
+export const Division = (a, b) => limitFractionDigits(b != 0 ? Number(a || 0) / Number(b || 1) : 0);
+
+export const trimText = (text = '', replaceWith = '_') => String(text).trim().replace(/\s+/g, replaceWith ?? '_')
 
 export const validValue = (val) => {
     return Boolean(val) ? val : ''
