@@ -162,14 +162,14 @@ const StockAndPurchaseReport = () => {
 
     const externalAPI = async (req, res) => {
         try {
-            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+            // const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            // const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
             const DynamicDB = new sql.Request();
             DynamicDB.input('Company_Id', 5);
             DynamicDB.input('Vouche_Id', 0);
-            DynamicDB.input('Fromdate', Fromdate)
-            DynamicDB.input('Todate', Todate);
+            DynamicDB.input('Fromdate', req.query.Fromdate);
+            DynamicDB.input('Todate', req.query.Todate);
 
             const result = await DynamicDB.execute('Online_Sales_API');
             if (result.recordset.length > 0) {
@@ -191,8 +191,8 @@ const StockAndPurchaseReport = () => {
             const request = new sql.Request()
                 .input('Company_Id', 5)
                 .input('Vouche_Id', 0)
-                .input('Fromdate', Fromdate)
-                .input('Todate', Todate)
+                .input('Fromdate', req.query.Fromdate)
+                .input('Todate', req.query.Todate)
                 .execute('Online_Purchase_API')
 
             const result = await request;
@@ -215,8 +215,8 @@ const StockAndPurchaseReport = () => {
             const request = new sql.Request()
                 .input('Company_Id', 6)
                 .input('Vouche_Id', 0)
-                .input('Fromdate', Fromdate)
-                .input('Todate', Todate)
+                .input('Fromdate', req.query.Fromdate)
+                .input('Todate', req.query.Todate)
                 .execute('Online_Sales_Order_API')
 
             const result = await request;
