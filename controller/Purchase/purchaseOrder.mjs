@@ -3,23 +3,10 @@ import { dataFound, invalidInput, noData, servError, success } from '../../res.m
 import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
-import { calculateGSTDetails } from '../../middleware/taxCalculator.js';
+import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
-
-const taxCalc = (method = 1, amount = 0, percentage = 0) => {
-    switch (method) {
-        case 0:
-            return RoundNumber(amount * (percentage / 100));
-        case 1:
-            return RoundNumber(amount - (amount * (100 / (100 + percentage))));
-        case 2:
-            return 0;
-        default:
-            return 0;
-    }
-}
 
 const PurchaseOrder = () => {
 
