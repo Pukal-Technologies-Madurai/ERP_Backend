@@ -896,16 +896,79 @@ LEFT JOIN
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
-                    SELECT 
-                    	COUNT(s.tally_id) AS VoucherBreakUpCount,
-                    	voucher_name AS Voucher_Type,
-                    	'Sales' AS ModuleName,
-	                    SUM(total_invoice_value) AS Amount
-                    FROM sales_inv_geninfo_ob AS s
-                    LEFT JOIN voucher_type_ob AS v
-                    ON v.tally_id = s.sales_voucher_type_id
-                    WHERE invoice_date BETWEEN @Fromdate AND @Todate
-                    GROUP BY voucher_name
+                    WITH JOURNAL AS (
+                    	SELECT 
+                        	COUNT(distinct j.tally_id) AS VoucherBreakUpCount,
+                        	v.voucher_name AS Voucher_Type,
+                        	'Journal' AS ModuleName,
+                            SUM(j.debit_amount) AS Amount
+                        FROM journal_geninfo_ob AS j
+                        LEFT JOIN voucher_type_ob AS v
+                        ON v.tally_id = j.journal_type_id
+                        WHERE 
+                    		j.journal_date BETWEEN @Fromdate AND @Todate
+                    		AND j.credit_amount = 0
+                    	GROUP BY v.voucher_name
+                    ), PAYMENT AS (
+                    	SELECT 
+                        	COUNT(distinct p.tally_id) AS VoucherBreakUpCount,
+                        	v.voucher_name AS Voucher_Type,
+                        	'Payment' AS ModuleName,
+                            SUM(p.debit_amount) AS Amount
+                        FROM payment_geninfo_ob AS p
+                        LEFT JOIN voucher_type_ob AS v
+                        ON v.tally_id = p.payment_type_id
+                        WHERE 
+                    		p.payment_date BETWEEN @Fromdate AND @Todate
+                    		AND p.credit_amount = 0
+                    	GROUP BY v.voucher_name
+                    ), CONTRA AS (
+                    	SELECT 
+                        	COUNT(distinct c.tally_id) AS VoucherBreakUpCount,
+                        	v.voucher_name AS Voucher_Type,
+                        	'Contra' AS ModuleName,
+                            SUM(c.debit_amount) AS Amount
+                        FROM contra_geninfo_ob AS c
+                        LEFT JOIN voucher_type_ob AS v
+                        ON v.tally_id = c.contra_type_id
+                        WHERE 
+                    		c.contra_date BETWEEN @Fromdate AND @Todate
+                    		AND c.credit_amount = 0
+                    	GROUP BY v.voucher_name
+                    ), RECEIPT AS (
+                    	SELECT 
+                        	COUNT(distinct r.tally_id) AS VoucherBreakUpCount,
+                        	v.voucher_name AS Voucher_Type,
+                        	'Receipt' AS ModuleName,
+                            SUM(r.debit_amount) AS Amount
+                        FROM receipt_geninfo_ob AS r
+                        LEFT JOIN voucher_type_ob AS v
+                        ON v.tally_id = r.rcpt_type_id
+                        WHERE 
+                    		r.receipt_date BETWEEN @Fromdate AND @Todate
+                    		AND r.credit_amount = 0
+                    	GROUP BY v.voucher_name
+                    ), SALES AS (
+                    	SELECT 
+                        	COUNT(s.tally_id) AS VoucherBreakUpCount,
+                        	voucher_name AS Voucher_Type,
+                        	'Sales' AS ModuleName,
+                            SUM(total_invoice_value) AS Amount
+                        FROM sales_inv_geninfo_ob AS s
+                        LEFT JOIN voucher_type_ob AS v
+                        ON v.tally_id = s.sales_voucher_type_id
+                        WHERE invoice_date BETWEEN @Fromdate AND @Todate
+                        GROUP BY voucher_name
+                    )
+                    SELECT * FROM SALES
+                    UNION ALL
+                    SELECT * FROM JOURNAL
+                    UNION ALL
+                    SELECT * FROM PAYMENT
+                    UNION ALL 
+                    SELECT * FROM CONTRA
+                    UNION ALL
+                    SELECT * FROM RECEIPT
                     `);
 
             const result = await request;

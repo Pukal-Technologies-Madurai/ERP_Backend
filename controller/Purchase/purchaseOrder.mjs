@@ -70,13 +70,14 @@ const PurchaseOrder = () => {
 
                 if (isNotTaxableBill) return Amount;
 
+
                 const product = findProductDetails(productsData, item.Item_Id);
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
 
                 if (isInclusive) {
-                    return acc += calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax;
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
                 } else {
-                    return acc += calculateGSTDetails(Amount, gstPercentage, 'add').with_tax;
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
                 }
             }, 0))
 
@@ -94,10 +95,12 @@ const PurchaseOrder = () => {
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
 
                 const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                acc.TotalValue += taxInfo.without_tax;
-                acc.TotalTax += taxInfo.tax_amount;
+                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
 
-                return acc;
+                return {
+                    TotalValue, TotalTax
+                };
             }, {
                 TotalValue: 0,
                 TotalTax: 0
@@ -119,8 +122,7 @@ const PurchaseOrder = () => {
                 .input('SGST_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
                 .input('IGST_Total', isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('Round_off', 0)
-                // .input('Round_off', Subraction(Total_Invoice_value, Addition(totalValueBeforeTax.TotalValue, totalValueBeforeTax.TotalTax)))
+                .input('Round_off', Subraction(Total_Invoice_value, Addition(totalValueBeforeTax.TotalValue, totalValueBeforeTax.TotalTax)))
                 .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
                 .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
                 .input('Total_Invoice_value', Total_Invoice_value)
@@ -314,13 +316,14 @@ const PurchaseOrder = () => {
 
                 if (isNotTaxableBill) return Amount;
 
+
                 const product = findProductDetails(productsData, item.Item_Id);
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
 
                 if (isInclusive) {
-                    return acc += calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax;
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
                 } else {
-                    return acc += calculateGSTDetails(Amount, gstPercentage, 'add').with_tax;
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
                 }
             }, 0))
 
@@ -338,10 +341,12 @@ const PurchaseOrder = () => {
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
 
                 const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                acc.TotalValue += taxInfo.without_tax;
-                acc.TotalTax += taxInfo.tax_amount;
+                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
 
-                return acc;
+                return {
+                    TotalValue, TotalTax
+                };
             }, {
                 TotalValue: 0,
                 TotalTax: 0
@@ -549,98 +554,68 @@ const PurchaseOrder = () => {
     }
 
     const getPurchaseOrder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by } = req.query;
 
-        const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
         try {
-            let query = `
-            WITH SALES_DETAILS AS (
-                SELECT
-            		oi.*,
-            		COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
-                    COALESCE(pm.Product_Image_Name, 'unknown') AS Product_Image_Name,
-                    COALESCE(pdd.OrderId, '') AS OrderId
-            	FROM
-            		tbl_Purchase_Order_Inv_Stock_Info AS oi
-                    LEFT JOIN tbl_Product_Master AS pm
-                    ON pm.Product_Id = oi.Item_Id
-                    LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS pdd
-                    ON pdd.Id = oi.DeliveryId
-                WHERE
-                    CONVERT(DATE, oi.Po_Inv_Date) >= CONVERT(DATE, @from)
-            	    AND
-            	    CONVERT(DATE, oi.Po_Inv_Date) <= CONVERT(DATE, @to)
-            )
-            SELECT 
-            	so.*,
-            	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-            	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-            	COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
 
-            	COALESCE((
-            		SELECT
-            			sd.*
-            		FROM
-            			SALES_DETAILS AS sd
-            		WHERE
-            			sd.PIN_Id = so.PIN_Id
-            		FOR JSON PATH
-            	), '[]') AS Products_List
-            
-            FROM 
-            	tbl_Purchase_Order_Inv_Gen_Info AS so
-            
-            	LEFT JOIN tbl_Retailers_Master AS rm
-            	ON rm.Retailer_Id = so.Retailer_Id
-            
-            
-            	LEFT JOIN tbl_Branch_Master bm
-            	ON bm.BranchId = so.Branch_Id
-            
-            	LEFT JOIN tbl_Users AS cb
-            	ON cb.UserId = so.Created_by
-                        
-            WHERE
-                CONVERT(DATE, so.Po_Inv_Date) >= CONVERT(DATE, @from)
-            	AND
-            	CONVERT(DATE, so.Po_Inv_Date) <= CONVERT(DATE, @to) 
-            `;
+            const request = new sql.Request()
+                .input('from', Fromdate)
+                .input('to', Todate)
+                .query(`
+                    WITH SALES AS (
+			        	SELECT 
+                    	so.*,
+                    	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    	COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+                    FROM 
+                    	tbl_Purchase_Order_Inv_Gen_Info AS so
+                    	LEFT JOIN tbl_Retailers_Master AS rm
+                    	ON rm.Retailer_Id = so.Retailer_Id
+                    	LEFT JOIN tbl_Branch_Master bm
+                    	ON bm.BranchId = so.Branch_Id
+                    	LEFT JOIN tbl_Users AS cb
+                    	ON cb.UserId = so.Created_by
+                    WHERE
+                        CONVERT(DATE, so.Po_Entry_Date) >= CONVERT(DATE, @from)
+                    	AND
+                    	CONVERT(DATE, so.Po_Entry_Date) <= CONVERT(DATE, @to) 
+			        ), SALES_DETAILS AS (
+                        SELECT
+                    		oi.*,
+                    		COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+                            COALESCE(pm.Product_Image_Name, 'unknown') AS Product_Image_Name,
+                            COALESCE(pdd.OrderId, '') AS OrderId
+                    	FROM
+                    		tbl_Purchase_Order_Inv_Stock_Info AS oi
+                            LEFT JOIN tbl_Product_Master AS pm
+                            ON pm.Product_Id = oi.Item_Id
+                            LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS pdd
+                            ON pdd.Id = oi.DeliveryId
+                        WHERE
+                            oi.PIN_Id IN (
+			        			SELECT PIN_Id
+			        			FROM SALES
+			        		)
+                    ) 
+			        SELECT 
+			        	so.*,
+			        	COALESCE((
+			        		SELECT
+                    			sd.*
+                    		FROM
+                    			SALES_DETAILS AS sd
+                    		WHERE
+                    			sd.PIN_Id = so.PIN_Id
+                    		FOR JSON PATH 
+			        	), '[]') AS Products_List
+			        FROM SALES AS so
+                    ORDER BY CONVERT(DATE, so.Po_Entry_Date) DESC;`
+                );
 
-
-            // COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
-            // LEFT JOIN tbl_Users AS sp
-            // ON sp.UserId = so.Sales_Person_Id
-
-            if (Retailer_Id) {
-                query += `
-                AND
-            	so.Retailer_Id = @retailer `
-            }
-
-            if (Number(Cancel_status) === 0 || Number(Cancel_status) === 1) {
-                query += `
-                AND
-            	so.Cancel_status = @cancel `
-            }
-
-            if (Created_by) {
-                query += `
-                AND
-            	so.Created_by = @creater `
-            }
-
-            query += `
-            ORDER BY CONVERT(DATETIME, so.PIN_Id) DESC`;
-
-            const request = new sql.Request();
-            request.input('from', Fromdate);
-            request.input('to', Todate);
-            request.input('retailer', Retailer_Id);
-            request.input('cancel', Cancel_status);
-            request.input('creater', Created_by);
-
-            const result = await request.query(query);
+            const result = await request;
 
             if (result.recordset.length > 0) {
                 const parsed = result.recordset.map(o => ({

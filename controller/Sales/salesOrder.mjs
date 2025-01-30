@@ -553,12 +553,12 @@ const SaleOrder = () => {
 
 
     const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id,Route_Id,Area_Id } = req.query;
+        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, Route_Id, Area_Id } = req.query;
 
         const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
         try {
-                  let query=`
+            let query = `
                   WITH SALES_DETAILS AS (
                       SELECT
                           oi.*,
@@ -692,7 +692,7 @@ const SaleOrder = () => {
     }
 
 
-    
+
     return {
         saleOrderCreation,
         getSaleOrder,
