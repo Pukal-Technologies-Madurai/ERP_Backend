@@ -68,8 +68,7 @@ const PurchaseOrder = () => {
                 const billQty = RoundNumber(item?.Bill_Qty);
                 const Amount = Multiplication(billQty, itemRate);
 
-                if (isNotTaxableBill) return Amount;
-
+                if (isNotTaxableBill) return Addition(acc, Amount);
 
                 const product = findProductDetails(productsData, item.Item_Id);
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
@@ -122,10 +121,10 @@ const PurchaseOrder = () => {
                 .input('SGST_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
                 .input('IGST_Total', isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('Round_off', Subraction(Total_Invoice_value, Addition(totalValueBeforeTax.TotalValue, totalValueBeforeTax.TotalTax)))
+                .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
                 .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
                 .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
-                .input('Total_Invoice_value', Total_Invoice_value)
+                .input('Total_Invoice_value', Math.round(Total_Invoice_value))
                 .input('Narration', Narration)
                 .input('Cancel_status', 0)
                 .input('Po_Entry_Date', Po_Entry_Date)
@@ -314,8 +313,7 @@ const PurchaseOrder = () => {
                 const billQty = RoundNumber(item?.Bill_Qty);
                 const Amount = Multiplication(billQty, itemRate);
 
-                if (isNotTaxableBill) return Amount;
-
+                if (isNotTaxableBill) return Addition(acc, Amount);
 
                 const product = findProductDetails(productsData, item.Item_Id);
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
@@ -370,12 +368,12 @@ const PurchaseOrder = () => {
                 .input('SGST_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
                 .input('IGST_Total', isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('Round_off', 0)
-                // .input('Round_off', Subraction(Total_Invoice_value, Addition(totalValueBeforeTax.TotalValue, totalValueBeforeTax.TotalTax)))
-                .input('Total_Invoice_value', Total_Invoice_value)
 
+                .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
                 .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
                 .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
+                .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+
                 .input('Narration', Narration)
                 .input('Altered_by', Created_by)
                 .input('Alterd_on', new Date())
