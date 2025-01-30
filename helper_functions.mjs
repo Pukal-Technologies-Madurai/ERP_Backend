@@ -460,3 +460,30 @@ export const randomString = (length = 15) => {
 
     return result;
 }
+
+export const groupData = (arr, key) => {
+    if (Array.isArray(arr) && key) {
+        return arr.reduce((acc, item) => {
+            const groupKey = item[key];
+
+            if (groupKey === undefined || groupKey === null) {
+                return acc;
+            }
+
+            const groupIndex = acc.findIndex(group => group[key] === groupKey);
+
+            if (groupIndex === -1) {
+                acc.push({
+                    [key]: groupKey,
+                    groupedData: [{ ...item }]
+                });
+            } else {
+                acc[groupIndex].groupedData.push(item);
+            }
+
+            return acc;
+        }, []);
+    } else {
+        return [];
+    }
+};

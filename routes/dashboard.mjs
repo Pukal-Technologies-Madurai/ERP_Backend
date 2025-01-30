@@ -1,5 +1,5 @@
 import express from 'express';
-import DashboardController from '../controller/Dashboard/counts.mjs' 
+import DashboardController from '../controller/Dashboard/counts.mjs' ;
 const DashboardRouter = express.Router();
 import dbconnect from '../middleware/otherDB.mjs';
 
@@ -12,6 +12,7 @@ DashboardRouter.get('/purchaseInfo', DashboardController.getPurchaseInfo);
 DashboardRouter.get('/purchaseInfo/moreInfo', DashboardController.getPurchaseMoreInfo);
 DashboardRouter.get('/newEmployeeAbstract', DashboardController.getnewEmployeeAbstract);
 DashboardRouter.get('/usernewEmployeeAbstract', DashboardController.usergetnewEmployeeAbstract);
+DashboardRouter.get('/dayBook', dbconnect, DashboardController.getDayBookOfERP);
 
 
 export default DashboardRouter;

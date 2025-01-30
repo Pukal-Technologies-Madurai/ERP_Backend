@@ -1,6 +1,6 @@
 import sql from 'mssql'
-import { servError, dataFound, noData, invalidInput } from '../../res.mjs';
-import { checkIsNumber, ISOString } from '../../helper_functions.mjs';
+import { servError, dataFound, noData, invalidInput, sentData } from '../../res.mjs';
+import { checkIsNumber, groupData, ISOString } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 import dotenv from 'dotenv';
 
@@ -451,10 +451,10 @@ const DashboardController = () => {
         try {
             const result = await SPCall({
                 SPName: 'Day_List_Purchase', spParamerters: {
-                    Fromdate, Todate, Company_Id: Company ?? 1, 
+                    Fromdate, Todate, Company_Id: Company ?? 1,
                 }, spTransaction: req.db
             });
-            
+
             dataFound(res, result?.recordsets ?? []);
         } catch (e) {
             servError(e, res);
@@ -468,10 +468,10 @@ const DashboardController = () => {
         try {
             const result = await SPCall({
                 SPName: 'Day_List_Purchase_List', spParamerters: {
-                    Fromdate, Todate, Company_Id: Company ?? 1, 
+                    Fromdate, Todate, Company_Id: Company ?? 1,
                 }, spTransaction: req.db
             });
-            
+
             dataFound(res, result?.recordset || []);
         } catch (e) {
             servError(e, res);
@@ -823,6 +823,101 @@ LEFT JOIN
         }
     };
 
+    const getDayBookOfERP = async (req, res) => {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+        try {
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    WITH ERP_VOUCHERS AS (
+                        SELECT * 
+                        FROM tbl_Voucher_Type
+                    ), STOCKJOURNAL AS (
+                    	SELECT 
+                    		COUNT(STJ_Id) AS VoucherBreakUpCount,
+                    		Stock_Journal_Voucher_type AS Voucher_Type,
+                    		'StockJournal' AS ModuleName,
+                    		0 AS Amount
+                    	FROM tbl_Stock_Journal_Gen_Info
+                    	WHERE Stock_Journal_date BETWEEN @Fromdate AND @Todate
+                    	GROUP BY Stock_Journal_Voucher_type
+                    ), SALEORDER AS (
+                    	SELECT 
+                    		COUNT(So_Id) AS VoucherBreakUpCount,
+                    		'ERP_Voucher' AS Voucher_Type,
+                    		'SaleOrder' AS ModuleName,
+                    		ISNULL(SUM(Total_Invoice_value), 0) AS Amount
+                    	FROM tbl_Sales_Order_Gen_Info 
+                    	WHERE So_Date BETWEEN @Fromdate AND @Todate
+                    ), PURCHASEORDERDETAILS AS (
+                    	SELECT 
+                    		SUM(Weight * Rate) AS OrderAmount,
+                    		OrderId
+                    	FROM tbl_PurchaseOrderItemDetails
+                    	WHERE OrderId IN (
+                    		SELECT Sno
+                    		FROM tbl_PurchaseOrderGeneralDetails
+                    		WHERE TradeConfirmDate BETWEEN @Fromdate AND @Todate
+                    	)
+                    	GROUP BY OrderId
+                    ), PURCHASEORDER AS (
+                    	SELECT
+                    		COUNT(po.Sno) AS VoucherBreakUpCount,
+                    		'ERP_Voucher' AS Voucher_Type,
+                    		'PurchaseOrder' AS ModuleName,
+                    		SUM(pod.OrderAmount) AS Amount
+                    	FROM tbl_PurchaseOrderGeneralDetails AS po
+                    	LEFT JOIN PURCHASEORDERDETAILS AS pod
+                    	ON pod.OrderId = po.Sno
+                    	WHERE TradeConfirmDate BETWEEN @Fromdate AND @Todate
+                    ), PURCHASE AS (
+                    	SELECT 
+                    		COUNT(PIN_Id) AS VoucherBreakUpCount,
+                    		Voucher_Type AS Voucher_Type,
+                    		'Purchase' AS ModuleName,
+                    		SUM(Total_Invoice_value) AS Amount
+                    	FROM tbl_Purchase_Order_Inv_Gen_Info
+                    	WHERE Po_Inv_Date BETWEEN @Fromdate AND @Todate
+                    	GROUP BY Voucher_Type
+                    )
+                    SELECT * FROM STOCKJOURNAL
+                    UNION ALL
+                    SELECT * FROM SALEORDER
+                    UNION ALL 
+                    SELECT * FROM PURCHASEORDER
+                    UNION ALL 
+                    SELECT * FROM PURCHASE
+                    `);
+
+            const salesDetailsRequest = new sql.Request(req.db)
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    SELECT 
+                    	COUNT(s.tally_id) AS VoucherBreakUpCount,
+                    	voucher_name AS Voucher_Type,
+                    	'Sales' AS ModuleName,
+	                    SUM(total_invoice_value) AS Amount
+                    FROM sales_inv_geninfo_ob AS s
+                    LEFT JOIN voucher_type_ob AS v
+                    ON v.tally_id = s.sales_voucher_type_id
+                    WHERE invoice_date BETWEEN @Fromdate AND @Todate
+                    GROUP BY voucher_name
+                    `);
+
+            const result = await request;
+            const salesResult = await salesDetailsRequest;
+            const dataGrouping = groupData([...result.recordset, ...salesResult.recordset], 'ModuleName');
+
+            sentData(res, dataGrouping);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
 
     return {
         getDashboardData,
@@ -833,7 +928,8 @@ LEFT JOIN
         getPurchaseInfo,
         getPurchaseMoreInfo,
         getnewEmployeeAbstract,
-        usergetnewEmployeeAbstract
+        usergetnewEmployeeAbstract,
+        getDayBookOfERP
     }
 }
 
