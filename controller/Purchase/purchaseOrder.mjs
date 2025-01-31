@@ -161,7 +161,7 @@ const PurchaseOrder = () => {
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
                 const Taxble = gstPercentage > 0 ? 1 : 0;
-                const Bill_Qty = RoundNumber(product?.Item_Rate);
+                const Bill_Qty = RoundNumber(product?.Bill_Qty);
                 const Item_Rate = RoundNumber(product.Item_Rate);
                 const Amount = Multiplication(Bill_Qty, Item_Rate);
 
@@ -376,11 +376,10 @@ const PurchaseOrder = () => {
 
                 .input('Narration', Narration)
                 .input('Altered_by', Created_by)
-                .input('Alterd_on', new Date())
-
-                .input('Trans_Type', 'UPDATE')
                 .input('Alter_Id', Alter_Id)
+                
                 .input('Alterd_on', new Date())
+                .input('Trans_Type', 'UPDATE')
 
                 .query(`
                     UPDATE 
@@ -388,21 +387,21 @@ const PurchaseOrder = () => {
                     SET
                         Po_Inv_Date = @Po_Inv_Date, 
                         Po_Entry_Date = @Po_Entry_Date,
+                        Voucher_Type = @Voucher_Type,
+                        Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
                         Ref_Po_Inv_No = @Ref_Po_Inv_No, 
                         Retailer_Id = @Retailer_Id, 
                         Branch_Id = @Branch_Id, 
                         GST_Inclusive = @GST_Inclusive, 
-                        IS_IGST = @IS_IGST, 
                         CSGT_Total = @CSGT_Total, 
                         SGST_Total = @SGST_Total, 
                         IGST_Total = @IGST_Total, 
+                        IS_IGST = @IS_IGST, 
                         Round_off = @Round_off, 
-                        Total_Invoice_value = @Total_Invoice_value, 
                         Total_Before_Tax = @Total_Before_Tax, 
                         Total_Tax = @Total_Tax,
+                        Total_Invoice_value = @Total_Invoice_value, 
                         Narration = @Narration,  
-                        Voucher_Type = @Voucher_Type,
-                        Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
                         Altered_by = @Altered_by, 
                         Alter_Id = @Alter_Id, 
                         Alterd_on = @Alterd_on,
@@ -432,7 +431,7 @@ const PurchaseOrder = () => {
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
                 const Taxble = gstPercentage > 0 ? 1 : 0;
-                const Bill_Qty = RoundNumber(product?.Item_Rate);
+                const Bill_Qty = RoundNumber(product?.Bill_Qty);
                 const Item_Rate = RoundNumber(product.Item_Rate);
                 const Amount = Multiplication(Bill_Qty, Item_Rate);
 
