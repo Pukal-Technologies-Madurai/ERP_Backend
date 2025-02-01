@@ -828,7 +828,7 @@ LEFT JOIN
         const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
 
         try {
-            const request = new sql.Request()
+            const erpModuleRequest = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
@@ -840,7 +840,8 @@ LEFT JOIN
                     		COUNT(STJ_Id) AS VoucherBreakUpCount,
                     		Stock_Journal_Voucher_type AS Voucher_Type,
                     		'StockJournal' AS ModuleName,
-                    		0 AS Amount
+                    		0 AS Amount,
+                            '/erp/dayBook/stockJournal' AS navLink
                     	FROM tbl_Stock_Journal_Gen_Info
                     	WHERE Stock_Journal_date BETWEEN @Fromdate AND @Todate
                     	GROUP BY Stock_Journal_Voucher_type
@@ -849,7 +850,8 @@ LEFT JOIN
                     		COUNT(So_Id) AS VoucherBreakUpCount,
                     		'ERP_Voucher' AS Voucher_Type,
                     		'SaleOrder' AS ModuleName,
-                    		ISNULL(SUM(Total_Invoice_value), 0) AS Amount
+                    		ISNULL(SUM(Total_Invoice_value), 0) AS Amount,
+                            '/erp/dayBook/saleOrder' AS navLink
                     	FROM tbl_Sales_Order_Gen_Info 
                     	WHERE So_Date BETWEEN @Fromdate AND @Todate
                     ), PURCHASEORDERDETAILS AS (
@@ -868,7 +870,8 @@ LEFT JOIN
                     		COUNT(po.Sno) AS VoucherBreakUpCount,
                     		'ERP_Voucher' AS Voucher_Type,
                     		'PurchaseOrder' AS ModuleName,
-                    		SUM(pod.OrderAmount) AS Amount
+                    		SUM(pod.OrderAmount) AS Amount,
+                            '/erp/dayBook/purchaseOrder' AS navLink
                     	FROM tbl_PurchaseOrderGeneralDetails AS po
                     	LEFT JOIN PURCHASEORDERDETAILS AS pod
                     	ON pod.OrderId = po.Sno
@@ -878,7 +881,8 @@ LEFT JOIN
                     		COUNT(PIN_Id) AS VoucherBreakUpCount,
                     		Voucher_Type AS Voucher_Type,
                     		'Purchase' AS ModuleName,
-                    		SUM(Total_Invoice_value) AS Amount
+                    		SUM(Total_Invoice_value) AS Amount,
+                            '/erp/dayBook/purchase' AS navLink
                     	FROM tbl_Purchase_Order_Inv_Gen_Info
                     	WHERE Po_Inv_Date BETWEEN @Fromdate AND @Todate
                     	GROUP BY Voucher_Type
@@ -892,7 +896,7 @@ LEFT JOIN
                     SELECT * FROM PURCHASE
                     `);
 
-            const salesDetailsRequest = new sql.Request(req.db)
+            const tallyModuleRequest = new sql.Request(req.db)
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
@@ -901,7 +905,8 @@ LEFT JOIN
                         	COUNT(distinct j.tally_id) AS VoucherBreakUpCount,
                         	v.voucher_name AS Voucher_Type,
                         	'Journal' AS ModuleName,
-                            SUM(j.debit_amount) AS Amount
+                            SUM(j.debit_amount) AS Amount,
+                            '/erp/dayBook/journal' AS navLink
                         FROM journal_geninfo_ob AS j
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = j.journal_type_id
@@ -914,7 +919,8 @@ LEFT JOIN
                         	COUNT(distinct p.tally_id) AS VoucherBreakUpCount,
                         	v.voucher_name AS Voucher_Type,
                         	'Payment' AS ModuleName,
-                            SUM(p.debit_amount) AS Amount
+                            SUM(p.debit_amount) AS Amount,
+                            '/erp/dayBook/payment' AS navLink
                         FROM payment_geninfo_ob AS p
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = p.payment_type_id
@@ -927,7 +933,8 @@ LEFT JOIN
                         	COUNT(distinct c.tally_id) AS VoucherBreakUpCount,
                         	v.voucher_name AS Voucher_Type,
                         	'Contra' AS ModuleName,
-                            SUM(c.debit_amount) AS Amount
+                            SUM(c.debit_amount) AS Amount,
+                            '/erp/dayBook/contra' AS navLink
                         FROM contra_geninfo_ob AS c
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = c.contra_type_id
@@ -940,7 +947,8 @@ LEFT JOIN
                         	COUNT(distinct r.tally_id) AS VoucherBreakUpCount,
                         	v.voucher_name AS Voucher_Type,
                         	'Receipt' AS ModuleName,
-                            SUM(r.debit_amount) AS Amount
+                            SUM(r.debit_amount) AS Amount,
+                            '/erp/dayBook/receipt' AS navLink
                         FROM receipt_geninfo_ob AS r
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = r.rcpt_type_id
@@ -953,7 +961,8 @@ LEFT JOIN
                         	COUNT(s.tally_id) AS VoucherBreakUpCount,
                         	voucher_name AS Voucher_Type,
                         	'Sales' AS ModuleName,
-                            SUM(total_invoice_value) AS Amount
+                            SUM(total_invoice_value) AS Amount,
+                            '/erp/dayBook/sales' AS navLink
                         FROM sales_inv_geninfo_ob AS s
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = s.sales_voucher_type_id
@@ -971,9 +980,18 @@ LEFT JOIN
                     SELECT * FROM RECEIPT
                     `);
 
-            const result = await request;
-            const salesResult = await salesDetailsRequest;
-            const dataGrouping = groupData([...result.recordset, ...salesResult.recordset], 'ModuleName');
+            const ERP_Modules = await erpModuleRequest;
+            const Tally_Modults = await tallyModuleRequest;
+            const moduleSortList = ['StockJournal', 'SaleOrder', 'Sales', 'PurchaseOrder', 'Purchase', 'Payment', 'Receipt', 'Journal', 'Contra'];
+            const mergedArray = [...ERP_Modules.recordset, ...Tally_Modults.recordset];
+            const knownModules = mergedArray.filter(m => moduleSortList.includes(m.ModuleName));
+            const unknownModules = mergedArray.filter(m => !moduleSortList.includes(m.ModuleName));
+
+            const sortedArray = [...knownModules.sort((a, b) =>
+                moduleSortList.indexOf(a.ModuleName) - moduleSortList.indexOf(b.ModuleName)
+            ), ...unknownModules];
+
+            const dataGrouping = groupData(sortedArray, 'ModuleName');
 
             sentData(res, dataGrouping);
         } catch (e) {

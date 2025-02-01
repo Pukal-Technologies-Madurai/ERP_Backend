@@ -1,7 +1,4 @@
 import express from 'express';
-
-import dbconnect from '../middleware/otherDB.mjs';
-
 import deliverOrder from '../controller/Delivery/deliveryOrder.mjs'
 
 const DeliveryRouter = express.Router();
@@ -12,6 +9,10 @@ DeliveryRouter.put('/deliveryOrder', deliverOrder.editDeliveryOrder);
 DeliveryRouter.get('/deliveryOrderList', deliverOrder.getDeliveryorder);
 DeliveryRouter.delete('/deliveryOrder', deliverOrder.deleteDeliveryOrder);
 DeliveryRouter.put('/deliveryOrderMobile', deliverOrder.editmobileApi);
+
+DeliveryRouter.post('/deliveryOrderTrip',deliverOrder.deliveryOrderTrip);
+DeliveryRouter.get('/deliveryTripSheet',deliverOrder.deliveryTripsheetList)
+DeliveryRouter.put('/deliveryOrderTrip',deliverOrder.updateDeliveryOrderTrip)
 
 
 // DeliveryRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);

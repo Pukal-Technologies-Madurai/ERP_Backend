@@ -527,78 +527,86 @@ const SaleOrder = () => {
     }
 
     const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, Route_Id, Area_Id } = req.query;
+        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id,Route_Id,Area_Id } = req.query;
 
         const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
         try {
-            let query = `
-                  WITH SALES_DETAILS AS (
-                      SELECT
-                          oi.*,
-                          COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                          COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                          COALESCE(u.Units, 'not available') AS UOM,
-                          COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                      FROM
-                          tbl_Sales_Order_Stock_Info AS oi
-                      LEFT JOIN tbl_Product_Master AS pm
-                          ON pm.Product_Id = oi.Item_Id
-                      LEFT JOIN tbl_UOM AS u
-                          ON u.Unit_Id = oi.Unit_Id
-                      LEFT JOIN tbl_Brand_Master AS b
-                          ON b.Brand_Id = pm.Brand
-                              WHERE
-                                CONVERT(DATE, oi.So_Date) >= CONVERT(DATE, @from)
-                                AND
-                                CONVERT(DATE, oi.So_Date) <= CONVERT(DATE, @to)
-                  )
-                  SELECT 
-                      so.*,
-                      COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                      COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
-                      COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                      COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                      COALESCE(rmt.Route_Name, 'Unknown') AS Routename, 
-                      COALESCE(am.Area_Name, 'Unknown') AS AreaName,
-                      COALESCE(rmt.Route_Id, 0) AS Route_Id,
-                      COALESCE(rm.Area_Id, 0) AS Area_Id,
-                      COALESCE(sdgi.Delivery_Person_Id, 0) AS Delivery_Person_Id,
-                      COALESCE(sdgi.Delivery_Status, 0) AS Delivery_Status,
-                      COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
-                      COALESCE(( 
+            let query=`
+                WITH SALES_DETAILS AS (
+                    SELECT
+                    oi.*,
+                    pm.Product_Id,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet,
+                    so.Retailer_Id AS Retailer_Id_JSON, 
+                    rm.Retailer_Name AS Retailer_Name_JSON 
+                FROM
+                    tbl_Sales_Order_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm
+                    ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u
+                    ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Brand_Master AS b
+                    ON b.Brand_Id = pm.Brand
+                LEFT JOIN tbl_Sales_Order_Gen_Info AS so
+                    ON so.So_Id = oi.Sales_Order_Id
+                LEFT JOIN tbl_Retailers_Master AS rm
+                    ON rm.Retailer_Id = so.Retailer_Id 
+                WHERE
+                    CONVERT(DATE, oi.So_Date) >= CONVERT(DATE, @from)
+                    AND
+                    CONVERT(DATE, oi.So_Date) <= CONVERT(DATE, @to)
+                )
+                SELECT 
+                    so.*,
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(rmt.Route_Name, 'Unknown') AS Routename, 
+                    COALESCE(am.Area_Name, 'Unknown') AS AreaName,
+                    COALESCE(rmt.Route_Id, 0) AS Route_Id,
+                    COALESCE(rm.Area_Id, 0) AS Area_Id,
+                    COALESCE(sdgi.Delivery_Person_Id, 0) AS Delivery_Person_Id,
+                    COALESCE(sdgi.Delivery_Status, 0) AS Delivery_Status,
+                    COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
+                    COALESCE(( 
                           SELECT
-                              sd.*
+                              sd.*,
+                              sd.Retailer_Id_JSON AS Retailer_Id, 
+                              sd.Retailer_Name_JSON AS Retailer_Name
                           FROM
                               SALES_DETAILS AS sd
                           WHERE
                               sd.Sales_Order_Id = so.So_Id
                           FOR JSON PATH
-                      ), '[]') AS Products_List
-                  FROM 
-                      tbl_Sales_Order_Gen_Info AS so
-                  LEFT JOIN tbl_Retailers_Master AS rm
-                      ON rm.Retailer_Id = so.Retailer_Id
-                  LEFT JOIN tbl_Users AS sp
-                      ON sp.UserId = so.Sales_Person_Id
-                  LEFT JOIN tbl_Branch_Master bm
-                      ON bm.BranchId = so.Branch_Id
-                  LEFT JOIN tbl_Users AS cb
-                      ON cb.UserId = so.Created_by
-                  LEFT JOIN tbl_Route_Master AS rmt
-                      ON rmt.Route_Id = rm.Route_Id 
-                  LEFT JOIN tbl_Area_Master AS am
-                      ON am.Area_Id = rm.Area_Id
-                  LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sdgi
-                      ON sdgi.So_No = so.So_Id
-                  
-                        WHERE
-                         (sdgi.Cancel_status IS NULL OR sdgi.Cancel_status != 2) AND 
-                                  CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
-                              	AND
-                              	CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to) 
-                      `
-            if (Retailer_Id) {
+                    ), '[]') AS Products_List
+                FROM 
+                    tbl_Sales_Order_Gen_Info AS so
+                LEFT JOIN tbl_Retailers_Master AS rm
+                    ON rm.Retailer_Id = so.Retailer_Id
+                LEFT JOIN tbl_Users AS sp
+                    ON sp.UserId = so.Sales_Person_Id
+                LEFT JOIN tbl_Branch_Master bm
+                    ON bm.BranchId = so.Branch_Id
+                LEFT JOIN tbl_Users AS cb
+                    ON cb.UserId = so.Created_by
+                LEFT JOIN tbl_Route_Master AS rmt
+                    ON rmt.Route_Id = rm.Route_Id 
+                LEFT JOIN tbl_Area_Master AS am
+                    ON am.Area_Id = rm.Area_Id
+                LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sdgi
+                    ON sdgi.So_No = so.So_Id
+                WHERE
+                    (sdgi.Cancel_status IS NULL OR sdgi.Cancel_status != 2) AND 
+                    CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
+                    AND
+                    CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to)`;
+                    
+            if (checkIsNumber(Retailer_Id)) {
                 query += `
                 AND
             	so.Retailer_Id = @retailer `
@@ -608,22 +616,22 @@ const SaleOrder = () => {
                 AND
             	so.Cancel_status = @cancel`
             }
-            if (Created_by) {
+            if (checkIsNumber(Created_by)) {
                 query += `
                 AND
             	so.Created_by = @creater`
             }
-            if (Sales_Person_Id) {
+            if (checkIsNumber(Sales_Person_Id)) {
                 query += `
                 AND
                 so.Sales_Person_Id = @salesPerson`
             }
-            if (Route_Id) {
+            if (checkIsNumber(Route_Id)) {
                 query += `
                 AND
             	rmt.Route_Id = @Route_Id`
             }
-            if (Area_Id) {
+            if (checkIsNumber(Area_Id)) {
                 query += `
                 AND
             	rm.Area_Id = @Area_Id`
@@ -661,6 +669,7 @@ const SaleOrder = () => {
                 noData(res)
             }
         } catch (e) {
+        
             servError(e, res);
         }
     }
