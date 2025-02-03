@@ -841,7 +841,7 @@ LEFT JOIN
                     		Stock_Journal_Voucher_type AS Voucher_Type,
                     		'StockJournal' AS ModuleName,
                     		0 AS Amount,
-                            '/erp/dayBook/stockJournal' AS navLink
+                            '/erp/inventory/stockJournal' AS navLink
                     	FROM tbl_Stock_Journal_Gen_Info
                     	WHERE Stock_Journal_date BETWEEN @Fromdate AND @Todate
                     	GROUP BY Stock_Journal_Voucher_type
@@ -851,7 +851,7 @@ LEFT JOIN
                     		'ERP_Voucher' AS Voucher_Type,
                     		'SaleOrder' AS ModuleName,
                     		ISNULL(SUM(Total_Invoice_value), 0) AS Amount,
-                            '/erp/dayBook/saleOrder' AS navLink
+                            '/erp/sales/saleOrder' AS navLink
                     	FROM tbl_Sales_Order_Gen_Info 
                     	WHERE So_Date BETWEEN @Fromdate AND @Todate
                     ), PURCHASEORDERDETAILS AS (
@@ -871,7 +871,7 @@ LEFT JOIN
                     		'ERP_Voucher' AS Voucher_Type,
                     		'PurchaseOrder' AS ModuleName,
                     		SUM(pod.OrderAmount) AS Amount,
-                            '/erp/dayBook/purchaseOrder' AS navLink
+                            '/dataEntry/purchaseOrder' AS navLink
                     	FROM tbl_PurchaseOrderGeneralDetails AS po
                     	LEFT JOIN PURCHASEORDERDETAILS AS pod
                     	ON pod.OrderId = po.Sno
@@ -882,7 +882,7 @@ LEFT JOIN
                     		Voucher_Type AS Voucher_Type,
                     		'Purchase' AS ModuleName,
                     		SUM(Total_Invoice_value) AS Amount,
-                            '/erp/dayBook/purchase' AS navLink
+                            '/erp/purchase/invoice' AS navLink
                     	FROM tbl_Purchase_Order_Inv_Gen_Info
                     	WHERE Po_Inv_Date BETWEEN @Fromdate AND @Todate
                     	GROUP BY Voucher_Type
@@ -982,7 +982,7 @@ LEFT JOIN
 
             const ERP_Modules = await erpModuleRequest;
             const Tally_Modults = await tallyModuleRequest;
-            const moduleSortList = ['StockJournal', 'SaleOrder', 'Sales', 'PurchaseOrder', 'Purchase', 'Payment', 'Receipt', 'Journal', 'Contra'];
+            const moduleSortList = ['Sales', 'SaleOrder', 'Purchase', 'PurchaseOrder', 'StockJournal', 'Payment', 'Receipt', 'Journal', 'Contra'];
             const mergedArray = [...ERP_Modules.recordset, ...Tally_Modults.recordset];
             const knownModules = mergedArray.filter(m => moduleSortList.includes(m.ModuleName));
             const unknownModules = mergedArray.filter(m => !moduleSortList.includes(m.ModuleName));

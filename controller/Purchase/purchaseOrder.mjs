@@ -64,9 +64,7 @@ const PurchaseOrder = () => {
             const PIN_Id = getPIN_Id.MaxId;
 
             const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+                const Amount = RoundNumber(item?.Amount);
 
                 if (isNotTaxableBill) return Addition(acc, Amount);
 
@@ -81,9 +79,7 @@ const PurchaseOrder = () => {
             }, 0))
 
             const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+                const Amount = RoundNumber(item?.Amount);
 
                 if (isNotTaxableBill) return {
                     TotalValue: Addition(acc.TotalValue, Amount),
@@ -162,8 +158,8 @@ const PurchaseOrder = () => {
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
                 const Taxble = gstPercentage > 0 ? 1 : 0;
                 const Bill_Qty = RoundNumber(product?.Bill_Qty);
-                const Item_Rate = RoundNumber(product.Item_Rate);
-                const Amount = Multiplication(Bill_Qty, Item_Rate);
+                const Item_Rate = RoundNumber(product?.Item_Rate);
+                const Amount = RoundNumber(product?.Amount);
 
                 const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
                 const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
@@ -309,9 +305,7 @@ const PurchaseOrder = () => {
             const Alter_Id = Math.floor(Math.random() * 999999);
 
             const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+                const Amount = RoundNumber(item?.Amount);
 
                 if (isNotTaxableBill) return Addition(acc, Amount);
 
@@ -326,9 +320,7 @@ const PurchaseOrder = () => {
             }, 0))
 
             const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+                const Amount = RoundNumber(item?.Amount);
 
                 if (isNotTaxableBill) return {
                     TotalValue: Addition(acc.TotalValue, Amount),
@@ -433,7 +425,7 @@ const PurchaseOrder = () => {
                 const Taxble = gstPercentage > 0 ? 1 : 0;
                 const Bill_Qty = RoundNumber(product?.Bill_Qty);
                 const Item_Rate = RoundNumber(product.Item_Rate);
-                const Amount = Multiplication(Bill_Qty, Item_Rate);
+                const Amount = RoundNumber(product?.Amount);
 
                 const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
                 const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);

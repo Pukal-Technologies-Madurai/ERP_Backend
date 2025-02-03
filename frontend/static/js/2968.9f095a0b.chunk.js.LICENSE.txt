@@ -8,10 +8,6 @@
  *
  */
 
-/*! sheetjs (C) 2013-present SheetJS -- http://sheetjs.com */
-
-/*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
-
 /**
  * @license
   Copyright (c) 2008, Adobe Systems Incorporated
