@@ -22,8 +22,6 @@ const taxCalc = (method = 1, amount = 0, percentage = 0) => {
 
 const DeliveryOrder = () => {
 
-
-
     const salesDeliveryCreation = async (req, res) => {
         const {
             Retailer_Id, Delivery_Person_Id, Branch_Id,
@@ -604,9 +602,6 @@ const DeliveryOrder = () => {
         }
     }
 
-
-
-
     const getDeliveryorder = async (req, res) => {
         const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id } = req.query;
 
@@ -748,7 +743,6 @@ const DeliveryOrder = () => {
         }
     }
 
-
     const deleteDeliveryOrder = async (req, res) => {
         const { Order_Id, Do_Id } = req.body;
 
@@ -788,7 +782,6 @@ const DeliveryOrder = () => {
             servError(e, res);
         }
     };
-
 
     const editmobileApi = async (req, res) => {
         const {
@@ -883,9 +876,9 @@ const DeliveryOrder = () => {
             IS_IGST = 0,
             Delivery_Person_Id,
             Delivery_Location,
-            // Delivery_Time,               
-            // Payment_Ref_No,       
-            // Payment_Mode,           
+            // Delivery_Time,              
+            // Payment_Ref_No,      
+            // Payment_Mode,          
             // Payment_Status,            
             // Narration,          
             Delivery_Status
@@ -896,49 +889,15 @@ const DeliveryOrder = () => {
         var Alter_Id = req.body.Alter_Id;
 
         const transaction = new sql.Transaction();
-        if (!Trip_ST_KM || !Branch_Id || !StartTime || !Do_Date || !Array.isArray(Product_Array) || Product_Array.length === 0) {
-            return invalidInput(res, 'Please Select Required Fields')
-        }
+        // if (!Trip_ST_KM || !Branch_Id || !StartTime || !Do_Date || !Array.isArray(Product_Array) || Product_Array.length === 0) {
+        //     return invalidInput(res, 'Please Select Required Fields')
+        // }
         if (!Delivery_Person_Id) {
             return invalidInput(res, 'Please Select Delivery_Person Fields')
         }
         try {
             await transaction.begin();
-            for (let i = 0; i < DeliveryList.length; i++) {
-
-                var Retailer_Id = DeliveryList[i]?.Retailer_Id;
-
-                var CSGT_Total = DeliveryList[i].CSGT_Total;
-                var SGST_Total = DeliveryList[i].CSGT_Total;
-                var IGST_Total = DeliveryList[i].IGST_Total;
-                var Round_off = DeliveryList[i].Round_off;
-                var Total_Before_Tax = DeliveryList[i].Total_Before_Tax;
-
-                var Total_Tax = DeliveryList[i].TotalTax;
-                var Total_Invoice_Value = DeliveryList[i].Total_Invoice_value;
-                var Narration = DeliveryList[i].Narration;
-                var So_No = DeliveryList[i].So_No;
-                var Alter_Id = DeliveryList[i].Alter_Id;
-                var So_Id = DeliveryList[i].So_Id;
-                const requestForSoNoCheck = new sql.Request(transaction);
-                requestForSoNoCheck.input('So_No', sql.Int, So_No);
-                const resultForSoNoCheck = await requestForSoNoCheck.query(`
-                    SELECT COUNT(*) AS count 
-                    FROM tbl_Sales_Delivery_Gen_Info 
-                    WHERE So_No = @So_No
-                `);
-
-                if (resultForSoNoCheck.recordset[0].count > 0) {
-                    const queryUpdate = new sql.Request(transaction);
-                    queryUpdate.input('So_No', sql.Int, So_No);
-                    await queryUpdate.query(`
-                        UPDATE tbl_Sales_Delivery_Gen_Info
-                        SET Cancel_Status = 2
-                        WHERE So_No = @So_No
-                    `);
-                }
-            }
-
+     
             const requestForDoNos = new sql.Request(transaction);
             const resultForDoNo = await requestForDoNos.query(`
                 SELECT COUNT(*) AS count
@@ -982,127 +941,126 @@ const DeliveryOrder = () => {
                 throw new Error('Failed to insert into Trip Master');
             }
 
-
-
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
-                console.log("Reteailerid", Retailer_Id)
-                var Taxable_Amount = product?.Taxable_Amount ?? 0;
-                var Retailer_Id = Product_Array[i]?.Retailer_Id ?? null;
-                var Final_Amo = product?.Final_Amo ?? 0;
-                var Total_Tax = (product?.Cgst_Amo ?? 0) + (product?.Sgst_Amo ?? 0) + (product?.Igst_Amo ?? 0);
-                var Round_off = Final_Amo - (Taxable_Amount + Total_Tax);
-                Round_off = Math.round(Round_off * 100) / 100;
-
+         
+               
+                var Taxable_Amount = product?.Total_Before_Tax ?? 0;
+                var Retailer_Id = product?.Retailer_Id ?? null;
+                var Final_Amo = product?.Total_Invoice_value ?? 0;
+                var Total_Tax = product?.Total_Tax;
+                var Round_off = product?.Round_off;
+               
                 const request1 = new sql.Request(transaction);
-                request1.input('Do_No', maxDoNo)
+                request1.input('Do_No', maxDoNo);
                 request1.input('Do_Date', Do_Date);
-                request1.input('Retailer_Id', product?.Retailer_Id)
+                request1.input('Retailer_Id', product?.Retailer_Id);
                 request1.input('Delivery_Person_Id', Number(Delivery_Person_Id));
                 request1.input('Branch_Id', sql.Int, Branch_Id);
                 request1.input('GST_Inclusive', sql.Int, GST_Inclusive);
-                request1.input('CSGT_Total', product?.Cgst_Amo || 0);
-                request1.input('SGST_Total', product?.Sgst_Amo);
-                request1.input('IGST_Total', product?.Igst_Amo);
-                // request1.input('Round_off',  Final_Amo - (Taxable_Amount + Total_Tax));
+                request1.input('CSGT_Total', product?.CSGT_Total || 0);
+                request1.input('SGST_Total', product?.SGST_Total || 0);
+                request1.input('IGST_Total', product?.IGST_Total || 0);
                 request1.input('Round_off', sql.Decimal(18, 2), Round_off);
-
                 request1.input('Total_Before_Tax', Taxable_Amount);
                 request1.input('Total_Tax', Total_Tax);
-                request1.input('Total_Invoice_value', Final_Amo);
-                request1.input('Narration', Narration);
+                request1.input('Total_Invoice_value', product?.Total_Invoice_value);
                 request1.input('Cancel_status', 2);
-                request1.input('So_No', product?.Sales_Order_Id);
+                request1.input('So_No', product?.So_Id),
                 request1.input('Delivery_Status', sql.Int, 1);
                 request1.input('Delivery_Location', sql.NVarChar(250), Delivery_Location);
-                request1.input('Alter_Id', sql.BigInt, Alter_Id)
+                request1.input('Alter_Id', sql.BigInt, product?.Alter_Id);
                 request1.input('Created_by', sql.BigInt, Created_By);
                 request1.input('Created_on', sql.DateTime, new Date());
-                request1.input('Trans_Type', 'INSERT')
-
-                const result1 = await request1.query(` 
-                INSERT INTO tbl_Sales_Delivery_Gen_Info (
-                    Do_No, Do_Date, Retailer_Id,Delivery_Person_Id, Branch_Id, GST_Inclusive, CSGT_Total, 
-                    SGST_Total, IGST_Total, Round_off, Total_Before_Tax, Total_Tax, Total_Invoice_value, 
-                    Narration, Cancel_status,So_No, Delivery_Status,  Delivery_Location, 
-                   Alter_Id, Created_by, Created_on, Trans_Type
-                ) VALUES (
-                    @Do_No, @Do_Date, @Retailer_Id,@Delivery_Person_Id, @Branch_Id, @GST_Inclusive, @CSGT_Total, 
-                    @SGST_Total, @IGST_Total, @Round_off, @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, 
-                    @Narration, @Cancel_status,@So_No, @Delivery_Status, @Delivery_Location, 
-                   @Alter_Id, @Created_by, @Created_on, @Trans_Type
-                );
-                SELECT SCOPE_IDENTITY() AS DeliveryId;
-            `);
-
-                var DeliveryId = result1.recordset && result1.recordset.length > 0 ? result1.recordset[0].DeliveryId : 1;
-
-
-
-
-                const request2 = new sql.Request(transaction)
-                request2.input('Do_Date', Do_Date)
-                request2.input('DeliveryOrder', DeliveryId)
-                request2.input('S_No', i + 1)
-                request2.input('Item_Id', product.Item_Id)
-                request2.input('Bill_Qty', product?.Bill_Qty)
-                request2.input('Item_Rate', product?.Item_Rate)
-                request2.input('Amount', product?.Amount)
-                request2.input('Free_Qty', 0)
-                request2.input('Total_Qty', product?.Bill_Qty)
-                request2.input('Taxble', product?.Taxble)
-                request2.input('Taxable_Rate', product?.Taxable_Rate)
-                request2.input('HSN_Code', product?.HSN_Code)
-                request2.input('Unit_Id', product.Unit_Id)
-                request2.input('Unit_Name', product?.UOM)
-                request2.input('Taxable_Amount', product?.Taxable_Amount)
-                request2.input('Tax_Rate', product?.gstPercentage)
-                request2.input('Cgst', product?.Cgst ?? 0)
-                request2.input('Cgst_Amo', product?.Cgst_Amo || 0)
-                request2.input('Sgst', (product?.Sgst / 2) ?? 0)
-                request2.input('Sgst_Amo', product?.Sgst_Amo || 0)
-                request2.input('Igst', product?.Igst ?? 0)
-                request2.input('Igst_Amo', product?.Igst_Amo || 0)
-                request2.input('Final_Amo', product?.Final_Amo)
-                request2.input('Created_on', new Date())
-
-                await request2.query(`
-                    INSERT INTO tbl_Sales_Delivery_Stock_Info (
-                        Do_Date, Delivery_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty, 
-                        Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate, 
-                        Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+                request1.input('Trans_Type', 'INSERT');
+           
+                const result1 = await request1.query(`
+                    INSERT INTO tbl_Sales_Delivery_Gen_Info (
+                        Do_No, Do_Date, Retailer_Id,Delivery_Person_Id, Branch_Id, GST_Inclusive, CSGT_Total,
+                        SGST_Total, IGST_Total, Round_off, Total_Before_Tax, Total_Tax, Total_Invoice_value,
+                      Cancel_status,So_No, Delivery_Status,  Delivery_Location,
+                       Alter_Id, Created_by, Created_on, Trans_Type
                     ) VALUES (
-                        @Do_Date, @DeliveryOrder, @S_No, @Item_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, 
-                        @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate, 
-                        @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+                        @Do_No, @Do_Date, @Retailer_Id,@Delivery_Person_Id, @Branch_Id, @GST_Inclusive, @CSGT_Total,
+                        @SGST_Total, @IGST_Total, @Round_off, @Total_Before_Tax, @Total_Tax, @Total_Invoice_value,
+                        @Cancel_status,@So_No, @Delivery_Status, @Delivery_Location,
+                       @Alter_Id, @Created_by, @Created_on, @Trans_Type
                     );
+                    SELECT SCOPE_IDENTITY() AS DeliveryId;
                 `);
+   
+                    var DeliveryId = result1.recordset && result1.recordset.length > 0 ? result1.recordset[0].DeliveryId : 1;
+   
+   
+                   console.log("oridycrtlksit",product.Products_List)
+               
+                if (product.Products_List && Array.isArray(product.Products_List)) {
+                    for (let j = 0; j < product.Products_List.length; j++) {
+                        const subProduct = product.Products_List[j];
+           
+                        const request2 = new sql.Request(transaction);
+                        request2.input('Do_Date', Do_Date);
+                        request2.input('DeliveryOrder', DeliveryId);
+                        request2.input('S_No', j + 1);
+                        request2.input('Item_Id', subProduct.Item_Id);
+                        request2.input('Bill_Qty', subProduct?.Bill_Qty)
+                        request2.input('Item_Rate', subProduct?.Item_Rate)
+                        request2.input('Amount', subProduct?.Amount)
+                        request2.input('Free_Qty', 0)
+                        request2.input('Total_Qty', subProduct?.Bill_Qty)
+                        request2.input('Taxble', subProduct?.Taxble)
+                        request2.input('Taxable_Rate', subProduct?.Taxable_Rate)
+                        request2.input('HSN_Code', subProduct?.HSN_Code)
+                        request2.input('Unit_Id', subProduct.Unit_Id)
+                        request2.input('Unit_Name', subProduct?.UOM)
+                        request2.input('Taxable_Amount', subProduct?.Taxable_Amount)
+                        request2.input('Tax_Rate', subProduct?.gstPercentage)
+                        request2.input('Cgst', subProduct?.Cgst ?? 0)
+                        request2.input('Cgst_Amo', subProduct?.Cgst_Amo || 0)
+                        request2.input('Sgst', (subProduct?.Sgst / 2) ?? 0)
+                        request2.input('Sgst_Amo', subProduct?.Sgst_Amo || 0)
+               request2.input('Igst', subProduct?.Igst ?? 0)
+               request2.input('Igst_Amo', subProduct?.Igst_Amo || 0)
+               request2.input('Final_Amo', subProduct?.Final_Amo)
+               request2.input('Created_on', new Date())
 
+                        await request2.query(`
+                       INSERT INTO tbl_Sales_Delivery_Stock_Info (
+        Do_Date, Delivery_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty,
+        Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate,
+        Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+    ) VALUES (
+        @Do_Date, @DeliveryOrder, @S_No, @Item_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty,
+        @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate,
+        @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+    );
+`);
+       
                 const result = await new sql.Request(transaction)
                     .input('Trip_Id', Trip_Id)
                     .input('Delivery_Id', DeliveryId)
-                    .input('Batch_No', product?.Batch_No)
+                    .input('Batch_No', subProduct?.Batch_No)
                     .input('From_Location', Branch_Id)
-                    .input('To_Location', product.To_Location)
+                    .input('To_Location', subProduct.To_Location)
                     .input('S_No', i + 1)
-                    .input('Reason', product.Reason)
-                    .input('Product_Id', product.Item_Id)
-                    .input('HSN_Code', product.HSN_Code)
-                    .input('QTY', product.Bill_Qty)
-                    .input('KGS', product.KGS)
+                    .input('Reason', subProduct.Reason)
+                    .input('Product_Id', subProduct.Item_Id)
+                    .input('HSN_Code', subProduct.HSN_Code)
+                    .input('QTY', subProduct.Bill_Qty)
+                    .input('KGS', subProduct.KGS)
                     .input('GST_Inclusive', GST_Inclusive)
                     .input('IS_IGST', IS_IGST)
-                    .input('Gst_Rate', sql.Int, product.Gst_Rate)
-                    .input('Gst_P', product?.Gst_P || 0)
-                    .input('Cgst_P', product?.Cgst_Amo || 0)
-                    .input('Sgst_P', product?.Sgst_Amo || 0)
-                    .input('Igst_P', product?.Igst_Amo || 0)
-                    .input('Taxable_Value', product?.Taxable_Amount || 0)
-                    .input('Round_off', product?.Round_off)
-                    .input('Total_Value', product?.Final_Amo)
-                    .input('Trip_From', product.Trip_From)
-                    .input('Party_And_Branch_Id', product.Party_And_Branch_Id)
-                    .input('Transporter_Id', product.Transporter_Id)
+                    .input('Gst_Rate', sql.Int, subProduct.Gst_Rate)
+                    .input('Gst_P', subProduct?.Gst_P || 0)
+                    .input('Cgst_P', subProduct?.Cgst_Amo || 0)
+                    .input('Sgst_P', subProduct?.Sgst_Amo || 0)
+                    .input('Igst_P', subProduct?.Igst_Amo || 0)
+                    .input('Taxable_Value', subProduct?.Taxable_Amount || 0)
+                    .input('Round_off', subProduct?.Round_off)
+                    .input('Total_Value', subProduct?.Final_Amo)
+                    .input('Trip_From', subProduct.Trip_From)
+                    .input('Party_And_Branch_Id', subProduct.Party_And_Branch_Id)
+                    .input('Transporter_Id', subProduct.Transporter_Id)
                     .input('Dispatch_Date', Do_Date)
                     .input('Delivery_Date', Do_Date)
                     .input('Created_By', Created_By)
@@ -1120,9 +1078,15 @@ const DeliveryOrder = () => {
                     );
                 `);
 
-                if (result.rowsAffected[0] === 0) throw new Error('Failed to insert into Trip Details');
-            }
+             
 
+
+                    }
+                }
+            }
+           
+
+       
 
             for (let i = 0; i < EmployeesInvolved.length; i++) {
                 const employee = EmployeesInvolved[i];
@@ -1145,8 +1109,6 @@ const DeliveryOrder = () => {
             return servError(e, res);
         }
     };
-
-
 
     const deliveryTripsheetList = async (req, res) => {
 
@@ -1247,10 +1209,6 @@ const DeliveryOrder = () => {
 
 
     }
-
-
-
-
 
     const updateDeliveryOrderTrip = async (req, res) => {
         const {
