@@ -13,5 +13,4 @@ SalesRouter.get('/saleDelivery', salesOrder.getDeliveryorder);
 SalesRouter.get('/partyWiseReport', dbconnect, salesEntry.partyWiseSalesReport);
 SalesRouter.get('/partyWiseReport/details', dbconnect, salesEntry.partyDetailsReport);
 
-
 export default SalesRouter;

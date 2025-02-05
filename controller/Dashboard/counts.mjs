@@ -906,7 +906,7 @@ LEFT JOIN
                         	v.voucher_name AS Voucher_Type,
                         	'Journal' AS ModuleName,
                             SUM(j.debit_amount) AS Amount,
-                            '/erp/dayBook/journal' AS navLink
+                            '/erp/dayBook/details' AS navLink
                         FROM journal_geninfo_ob AS j
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = j.journal_type_id
@@ -920,7 +920,7 @@ LEFT JOIN
                         	v.voucher_name AS Voucher_Type,
                         	'Payment' AS ModuleName,
                             SUM(p.debit_amount) AS Amount,
-                            '/erp/dayBook/payment' AS navLink
+                            '/erp/dayBook/details' AS navLink
                         FROM payment_geninfo_ob AS p
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = p.payment_type_id
@@ -934,7 +934,7 @@ LEFT JOIN
                         	v.voucher_name AS Voucher_Type,
                         	'Contra' AS ModuleName,
                             SUM(c.debit_amount) AS Amount,
-                            '/erp/dayBook/contra' AS navLink
+                            '/erp/dayBook/details' AS navLink
                         FROM contra_geninfo_ob AS c
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = c.contra_type_id
@@ -948,7 +948,7 @@ LEFT JOIN
                         	v.voucher_name AS Voucher_Type,
                         	'Receipt' AS ModuleName,
                             SUM(r.debit_amount) AS Amount,
-                            '/erp/dayBook/receipt' AS navLink
+                            '/erp/dayBook/details' AS navLink
                         FROM receipt_geninfo_ob AS r
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = r.rcpt_type_id
@@ -962,7 +962,7 @@ LEFT JOIN
                         	voucher_name AS Voucher_Type,
                         	'Sales' AS ModuleName,
                             SUM(total_invoice_value) AS Amount,
-                            '/erp/dayBook/sales' AS navLink
+                            '/erp/dayBook/details' AS navLink
                         FROM sales_inv_geninfo_ob AS s
                         LEFT JOIN voucher_type_ob AS v
                         ON v.tally_id = s.sales_voucher_type_id
@@ -998,7 +998,6 @@ LEFT JOIN
             servError(e, res);
         }
     }
-
 
     return {
         getDashboardData,

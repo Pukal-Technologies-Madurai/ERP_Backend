@@ -1,14 +1,13 @@
 import { ISOString } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
-import { dataFound, noData, servError } from '../../res.mjs';
+import { dataFound, noData, sentData, servError } from '../../res.mjs';
 
 const SalesEntry = () => {
 
     const partyWiseSalesReport = async (req, res) => {
-        const Fromdate = ISOString(req.query.Fromdate);
-        const Todate = ISOString(req.query.Todate);
-
         try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
 
             const result = await SPCall({
                 spParamerters: {
@@ -27,8 +26,8 @@ const SalesEntry = () => {
     }
 
     const partyDetailsReport = async (req, res) => {
-        const Fromdate = ISOString(req.query.Fromdate);
-        const Todate = ISOString(req.query.Todate);
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
         const Party_Name = req.query.Party_Name ?? '';
 
         try {
