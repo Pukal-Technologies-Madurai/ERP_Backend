@@ -10,7 +10,9 @@ import products from '../controller/Masters/products.mjs';
 import salesAppMasters from '../controller/Masters/salesAppMasters.mjs';
 import retailerRoutes from '../controller/Masters/retailerRoutes.mjs';
 import retailerClosingStock from '../controller/Masters/retailerClosingStock.mjs';
-import employeesTasks from '../controller/EmployeesInvolved/EmployeesTask.mjs'
+import employeesTasks from '../controller/EmployeesInvolved/EmployeesTask.mjs';
+import TallyMasters from '../controller/Masters/tallyMasters.mjs';
+import dbconnect from '../middleware/otherDB.mjs';
 
 const MastersRouter = express.Router();
 
@@ -76,6 +78,9 @@ MastersRouter.get('/retailers/closingStock/myEntry', retailerClosingStock.getSal
 MastersRouter.post('/retailers/closingStock', retailerClosingStock.closeingStock);
 MastersRouter.put('/retailers/closingStock', retailerClosingStock.closeingStockUpdate);
 MastersRouter.post('/retailers/lolSync', retailers.syncTallyLOL);
+
+
+MastersRouter.get('/tallyMaster/ledger', dbconnect, TallyMasters.getTallyAndERPLOL);
 
 
 MastersRouter.get('/products', products.getProducts);
