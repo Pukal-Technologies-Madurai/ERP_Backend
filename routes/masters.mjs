@@ -7,6 +7,7 @@ import taskType from '../controller/Masters/taskType.mjs';
 import baseGroup from '../controller/Masters/baseGroup.mjs';
 import retailers from '../controller/Masters/retailers.mjs';
 import products from '../controller/Masters/products.mjs';
+import retailerArea from '../controller/Masters/retailerArea.mjs';
 import salesAppMasters from '../controller/Masters/salesAppMasters.mjs';
 import retailerRoutes from '../controller/Masters/retailerRoutes.mjs';
 import retailerClosingStock from '../controller/Masters/retailerClosingStock.mjs';
@@ -81,6 +82,7 @@ MastersRouter.post('/retailers/lolSync', retailers.syncTallyLOL);
 
 
 MastersRouter.get('/tallyMaster/ledger', dbconnect, TallyMasters.getTallyAndERPLOL);
+MastersRouter.get('/tallyMaster/items', dbconnect, TallyMasters.getTallyAndERPLOS);
 
 
 MastersRouter.get('/products', products.getProducts);
@@ -97,11 +99,17 @@ MastersRouter.post('/products/losSync', products.syncTallyLOS);
 
 MastersRouter.get('/routes', retailerRoutes.getRoutes);
 MastersRouter.post('/routes', retailerRoutes.addRoutes);
+MastersRouter.put('/routes', retailerRoutes.editRoutes);
+MastersRouter.delete('/routes', retailerRoutes.deleteRoute);
+
+MastersRouter.get('/areas', retailerArea.getAreaMaster);
+MastersRouter.post('/areas', retailerArea.addArea);
+MastersRouter.put('/areas', retailerArea.editArea);
+MastersRouter.delete('/areas', retailerArea.deleteArea);
 
 
 MastersRouter.get('/state', salesAppMasters.getStates);
 MastersRouter.get('/district', salesAppMasters.getDistricts);
-MastersRouter.get('/areas', salesAppMasters.getAreas);
 MastersRouter.get('/outlets', salesAppMasters.getOutlet);
 MastersRouter.get('/distributors', salesAppMasters.getDistributors);
 MastersRouter.get('/uom', salesAppMasters.getUOM);

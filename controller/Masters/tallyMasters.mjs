@@ -65,8 +65,37 @@ const TallyMasters = () => {
         }
     }
 
+    const getTallyAndERPLOS = async (req, res) => {
+        try {
+            const tallyLOLRequest = new sql.Request(req.db)
+                .query(`
+                    SELECT 
+                        *
+                    FROM tbl_Stock_LOS
+                    `
+                ); 
+            
+            const ERPLOLRequest = new sql.Request()
+                .query(`
+                    SELECT 
+                        *
+                    FROM tbl_Stock_LOS`
+                );
+
+            const tallyResult = await tallyLOLRequest;
+            const ERPResult = await ERPLOLRequest;
+
+            dataFound(res, ERPResult.recordset, 'dataFound', {
+                tallyResult: tallyResult.recordset
+            })
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getTallyAndERPLOL,
+        getTallyAndERPLOS,
     }
 }
 

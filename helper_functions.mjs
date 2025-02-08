@@ -314,7 +314,17 @@ export const Multiplication = (a, b) => limitFractionDigits(Number(a || 0) * Num
 
 export const Division = (a, b) => limitFractionDigits(b != 0 ? Number(a || 0) / Number(b || 1) : 0);
 
-export const trimText = (text = '', replaceWith = '_') => String(text).trim().replace(/\s+/g, replaceWith ?? '_')
+export const trimText = (text = '', replaceWith = '_') => String(text).trim().replace(/\s+/g, replaceWith ?? '_');
+
+export const filterableText = (text) => {
+    try {
+        const txt = String(trimText(text, ' ')).toLowerCase();
+        return txt
+    } catch (e) {
+        console.log('Error while convert to filterable text:', e);
+        return '';
+    }
+}
 
 export const validValue = (val) => {
     return Boolean(val) ? val : ''
