@@ -20,29 +20,33 @@ const retailerArea = () => {
 
     const addArea = async (req, res) => {
         const { Area_Name, District_Id } = req.body;
-
+    
         if (!Area_Name || !checkIsNumber(District_Id)) {
-            return invalidInput(res, 'Area_Name, District_Id is required')
+            return invalidInput(res, 'Area_Name and District_Id are required');
         }
-
+    
         try {
             const existArea = (await new sql.Request()
                 .query(`SELECT District_Id, Area_Name FROM tbl_Area_Master`)).recordset;
-
-            existArea.forEach(area => {
-                if (
-                    filterableText(area.Area_Name) === filterableText(Area_Name)
-                    && isEqualNumber(area.District_Id, District_Id)
-                ) return failed(res, 'This Area is already exist in the district');
-            })
-
+    
+            const areaExists = existArea.some(area =>
+                filterableText(area.Area_Name) === filterableText(Area_Name) &&
+                isEqualNumber(area.District_Id, District_Id)
+            );
+    
+            if (areaExists) {
+                return failed(res, 'This Area already exists in the district');
+            }
+    
             const getAreaId = await getNextId({ table: 'tbl_Area_Master', column: 'Area_Id' });
-
-            if (!getAreaId.status || !checkIsNumber(getAreaId.MaxId)) throw new Error('Failed to get Area_Id');
-
-            const Area_Id = getAreaId.MaxId
-
-            const request = new sql.Request()
+    
+            if (!getAreaId || !getAreaId.status || !checkIsNumber(getAreaId.MaxId)) {
+                return failed(res, 'Error generating Area_Id');
+            }
+    
+            const Area_Id = getAreaId.MaxId;
+    
+            const result = await new sql.Request()
                 .input('Area_Id', Area_Id)
                 .input('Area_Name', Area_Name)
                 .input('District_Id', District_Id)
@@ -52,20 +56,19 @@ const retailerArea = () => {
                     ) VALUES (
                         @Area_Id, @Area_Name, @District_Id
                     )`
-                )
-
-            const result = await request;
-
-            if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                success(res, 'new Area Created')
+                );
+    
+            if (result.rowsAffected?.length > 0 && result.rowsAffected[0] > 0) {
+                return success(res, 'New Area Created');
             } else {
-                failed(res, 'Failed to create Area')
+                return failed(res, 'Failed to create Area');
             }
-
+    
         } catch (e) {
-            servError(e, res)
+            servError(e, res); 
         }
-    }
+    };
+    
 
     const editArea = async (req, res) => {
         const { Area_Id, Area_Name, District_Id } = req.body;

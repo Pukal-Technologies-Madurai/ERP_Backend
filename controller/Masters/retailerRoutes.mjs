@@ -31,7 +31,9 @@ const retailerRoutes = () => {
 
             const getRouteId = await getNextId({ table: 'tbl_Route_Master', column: 'Route_Id' });
 
-            if (!getRouteId.status || !checkIsNumber(getRouteId.MaxId)) throw new Error('Failed to get Route_Id');
+            if (!getRouteId || !getRouteId.status || !checkIsNumber(getRouteId.MaxId)) {
+                return failed(res, 'error while creating route');
+            };
 
             const Route_Id = getRouteId.MaxId;
 
