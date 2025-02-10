@@ -31,12 +31,12 @@ const retailerArea = () => {
 
             existArea.forEach(area => {
                 if (
-                    filterableText(area.Area_Name) === filterableText(Area_Name) 
+                    filterableText(area.Area_Name) === filterableText(Area_Name)
                     && isEqualNumber(area.District_Id, District_Id)
                 ) return failed(res, 'This Area is already exist in the district');
             })
 
-            const getAreaId = await getNextId('tbl_Area_Master', 'Area_Id');
+            const getAreaId = await getNextId({ table: 'tbl_Area_Master', column: 'Area_Id' });
 
             if (!getAreaId.status || !checkIsNumber(getAreaId.MaxId)) throw new Error('Failed to get Area_Id');
 
@@ -80,7 +80,7 @@ const retailerArea = () => {
 
             existArea.forEach(area => {
                 if (
-                    filterableText(area.Route_Name) === filterableText(Area_Name) 
+                    filterableText(area.Route_Name) === filterableText(Area_Name)
                     && isEqualNumber(area.District_Id, District_Id)
                     && !isEqualNumber(area.Area_Id, Area_Id)
                 ) return failed(res, 'This Area is already exist in the district');
@@ -94,7 +94,7 @@ const retailerArea = () => {
                     UPDATE tbl_Area_Master 
                     SET 
                         Area_Name = @Area_Name, 
-                        District_Id = @District_Id,
+                        District_Id = @District_Id
                     WHERE
                         Area_Id = @Area_Id`
                 )

@@ -29,7 +29,7 @@ const retailerRoutes = () => {
 
         try {
 
-            const getRouteId = await getNextId('tbl_Route_Master', 'Route_Id');
+            const getRouteId = await getNextId({ table: 'tbl_Route_Master', column: 'Route_Id' });
 
             if (!getRouteId.status || !checkIsNumber(getRouteId.MaxId)) throw new Error('Failed to get Route_Id');
 
