@@ -1,6 +1,7 @@
 import sql from 'mssql';
 import { dataFound, failed, invalidInput, noData, servError, success } from '../../res.mjs'
 import { checkIsNumber, filterableText, isEqualNumber } from '../../helper_functions.mjs';
+import { getNextId } from '../../middleware/miniAPIs.mjs';
 
 const retailerArea = () => {
 
@@ -35,14 +36,21 @@ const retailerArea = () => {
                 ) return failed(res, 'This Area is already exist in the district');
             })
 
+            const getAreaId = await getNextId('tbl_Area_Master', 'Area_Id');
+
+            if (!getAreaId.status || !checkIsNumber(getAreaId.MaxId)) throw new Error('Failed to get Area_Id');
+
+            const Area_Id = getAreaId.MaxId
+
             const request = new sql.Request()
+                .input('Area_Id', Area_Id)
                 .input('Area_Name', Area_Name)
                 .input('District_Id', District_Id)
                 .query(`
-                    INSERT INTO tbl_Route_Master (
-                        Area_Name, District_Id
+                    INSERT INTO tbl_Area_Master (
+                        Area_Id, Area_Name, District_Id
                     ) VALUES (
-                        @Area_Name, @District_Id
+                        @Area_Id, @Area_Name, @District_Id
                     )`
                 )
 
@@ -83,7 +91,7 @@ const retailerArea = () => {
                 .input('Area_Name', Area_Name)
                 .input('District_Id', District_Id)
                 .query(`
-                    UPDATE tbl_Route_Master 
+                    UPDATE tbl_Area_Master 
                     SET 
                         Area_Name = @Area_Name, 
                         District_Id = @District_Id,
@@ -117,7 +125,7 @@ const retailerArea = () => {
                 .input('Area_Id', Area_Id)
                 .query(`
                     DELETE 
-                    FROM tbl_Route_Master 
+                    FROM tbl_Area_Master 
                     WHERE Area_Id = @Area_Id;`
                 )
 

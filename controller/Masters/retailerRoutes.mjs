@@ -1,14 +1,15 @@
 import sql from 'mssql';
 import { dataFound, failed, invalidInput, noData, servError, success } from '../../res.mjs'
 import { checkIsNumber } from '../../helper_functions.mjs';
+import { getNextId } from '../../middleware/miniAPIs.mjs';
 
 const retailerRoutes = () => {
 
     const getRoutes = async (req, res) => {
-        
+
         try {
             const result = await sql.query('SELECT * FROM tbl_Route_Master');
-            
+
             if (result.recordset.length) {
                 dataFound(res, result.recordset);
             } else {
@@ -17,7 +18,7 @@ const retailerRoutes = () => {
         } catch (e) {
             servError(e, res)
         }
-    } 
+    }
 
     const addRoutes = async (req, res) => {
         const { Route_Name } = req.body;
@@ -27,22 +28,31 @@ const retailerRoutes = () => {
         }
 
         try {
+
+            const getRouteId = await getNextId('tbl_Route_Master', 'Route_Id');
+
+            if (!getRouteId.status || !checkIsNumber(getRouteId.MaxId)) throw new Error('Failed to get Route_Id');
+
+            const Route_Id = getRouteId.MaxId;
+
             const request = new sql.Request()
-                .input('route', Route_Name)
+                .input('Route_Id', Route_Id)
+                .input('Route_Name', Route_Name)
                 .query(`
-                    INSERT INTO tbl_Route_Master
-                        (Route_Name)
-                    VALUES
-                        (@route)`)
+                    INSERT INTO tbl_Route_Master(
+                        Route_Id, Route_Name
+                    ) VALUES (
+                        @Route_Id, @Route_Name
+                    )`)
 
             const result = await request;
 
-            if(result.rowsAffected[0] && result.rowsAffected[0] > 0) {
+            if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
                 success(res, 'new Route Created')
             } else {
                 failed(res, 'Failed to create Route')
             }
-            
+
         } catch (e) {
             servError(e, res)
         }
@@ -67,46 +77,46 @@ const retailerRoutes = () => {
 
             const result = await request;
 
-            if(result.rowsAffected[0] && result.rowsAffected[0] > 0) {
+            if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
                 success(res, 'Changes Saved')
             } else {
                 failed(res, 'Failed to save changes')
             }
-            
+
         } catch (e) {
             servError(e, res)
         }
     }
 
-        const deleteRoute = async (req, res) => {
-            const { Route_Id } = req.body;
-    
-            if (!checkIsNumber(Route_Id)) {
-                return invalidInput(res, 'Route_Id is required')
-            }
-    
-            try {
-    
-                const request = new sql.Request()
-                    .input('Route_Id', Route_Id)
-                    .query(`
+    const deleteRoute = async (req, res) => {
+        const { Route_Id } = req.body;
+
+        if (!checkIsNumber(Route_Id)) {
+            return invalidInput(res, 'Route_Id is required')
+        }
+
+        try {
+
+            const request = new sql.Request()
+                .input('Route_Id', Route_Id)
+                .query(`
                         DELETE 
                         FROM tbl_Route_Master 
                         WHERE Route_Id = @Route_Id;`
-                    )
-    
-                const result = await request;
-    
-                if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                    success(res, 'Route deleted')
-                } else {
-                    failed(res, 'Failed to delete Route_Id')
-                }
-    
-            } catch (e) {
-                servError(e, res)
+                )
+
+            const result = await request;
+
+            if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
+                success(res, 'Route deleted')
+            } else {
+                failed(res, 'Failed to delete Route_Id')
             }
+
+        } catch (e) {
+            servError(e, res)
         }
+    }
 
     return {
         getRoutes,
