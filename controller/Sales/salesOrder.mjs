@@ -1,8 +1,8 @@
 import sql from 'mssql'
 import { dataFound, invalidInput, noData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat, createPadString } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
-import { getProducts } from '../../middleware/miniAPIs.mjs';
+import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 
 
@@ -13,7 +13,7 @@ const SaleOrder = () => {
     const saleOrderCreation = async (req, res) => {
         const {
             Retailer_Id, Sales_Person_Id, Branch_Id,
-            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0
+            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = 0,
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -37,6 +37,31 @@ const SaleOrder = () => {
         try {
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
+
+            const So_Year = new Date().getFullYear();
+            const So_Branch_Inv_Id = Number((await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .input('So_Year', So_Year)
+                .query(`
+                    SELECT 
+                        COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
+                    FROM 
+                        tbl_Sales_Order_Gen_Info
+                    WHERE
+                        Branch_Id = @Branch_Id
+                        AND
+                        So_Year = @So_Year`
+                ))?.recordset[0]?.So_Branch_Inv_Id) + 1;
+
+            if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
+
+            const So_Inv_No = 'SO_' + Branch_Id + '_' + So_Year + '_' + createPadString(So_Branch_Inv_Id, 4);
+
+            const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
+
+            if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
+
+            const So_Id = So_Id_Get.MaxId;
 
             const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
@@ -83,40 +108,46 @@ const SaleOrder = () => {
             await transaction.begin();
 
             const request = new sql.Request(transaction)
-                .input('date', So_Date)
-                .input('retailer', Retailer_Id)
-                .input('salesperson', Sales_Person_Id)
-                .input('branch', Branch_Id)
+                .input('So_Id', So_Id)
+                .input('So_Inv_No', So_Inv_No)
+                .input('So_Year', So_Year)
+                .input('So_Branch_Inv_Id', So_Branch_Inv_Id)
+                .input('So_Date', So_Date)
+                .input('Retailer_Id', Retailer_Id)
+                .input('Sales_Person_Id', Sales_Person_Id)
+                .input('Branch_Id', Branch_Id)
+                .input('VoucherType', VoucherType)
                 .input('GST_Inclusive', GST_Inclusive)
                 .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
                 .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
                 .input('IGST_Total', isIGST ? totalValueBeforeTax.TotalTax : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('roundoff', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
-                .input('totalinvoice', Math.round(Total_Invoice_value))
+                .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
+                .input('Total_Invoice_value', Math.round(Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
-                .input('narration', Narration)
-                .input('cancel', 0)
-                .input('createdby', Created_by)
-                .input('alterby', Created_by)
+                .input('Narration', Narration)
+                .input('Cancel_status', 0)
+                .input('Created_by', Created_by)
+                .input('Altered_by', Created_by)
                 .input('Alter_Id', Alter_Id)
-                .input('createdon', new Date())
-                .input('alteron', new Date())
+                .input('Created_on', new Date())
+                .input('Alterd_on', new Date())
                 .input('Trans_Type', 'INSERT')
                 .query(`
                     INSERT INTO tbl_Sales_Order_Gen_Info (
-                        So_Date, Retailer_Id, Sales_Person_Id, Branch_Id, CSGT_Total, SGST_Total, IGST_Total,
-                        GST_Inclusive, IS_IGST, Round_off, Total_Invoice_value, Total_Before_Tax, Total_Tax,
-                        Narration, Cancel_status, Created_by, Altered_by, Alter_Id, Created_on, Alterd_on,
-                        Trans_Type
+                        So_Id, So_Inv_No, So_Year, So_Branch_Inv_Id, So_Date, 
+                        Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, CSGT_Total, 
+                        SGST_Total, IGST_Total, GST_Inclusive, IS_IGST, Round_off, 
+                        Total_Invoice_value, Total_Before_Tax, Total_Tax,Narration, Cancel_status, 
+                        Created_by, Altered_by, Alter_Id, Created_on, Alterd_on, Trans_Type
                     ) VALUES (
-                        @date, @retailer, @salesperson, @branch, @CSGT_Total, @SGST_Total, @IGST_Total,
-                        @GST_Inclusive, @IS_IGST, @roundoff, @totalinvoice, @Total_Before_Tax, @Total_Tax,
-                        @narration, @cancel, @createdby, @alterby, @Alter_Id, @createdon, @alteron,
-                        @Trans_Type
-                    );
-                    SELECT SCOPE_IDENTITY() AS OrderId;`
+                        @So_Id, @So_Inv_No, @So_Year, @So_Branch_Inv_Id, @So_Date, 
+                        @Retailer_Id, @Sales_Person_Id, @Branch_Id, @VoucherType, @CSGT_Total, 
+                        @SGST_Total, @IGST_Total, @GST_Inclusive, @IS_IGST, @Round_off, 
+                        @Total_Invoice_value, @Total_Before_Tax, @Total_Tax, @Narration, @Cancel_status, 
+                        @Created_by, @Altered_by, @Alter_Id, @Created_on, @Alterd_on, @Trans_Type
+                    );`
                 );
 
             const result = await request;
@@ -124,9 +155,6 @@ const SaleOrder = () => {
             if (result.rowsAffected[0] === 0) {
                 throw new Error('Failed to create order, Try again.');
             }
-
-            const OrderId = result.recordset[0].OrderId;
-
 
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
@@ -148,7 +176,7 @@ const SaleOrder = () => {
 
                 const request2 = new sql.Request(transaction)
                     .input('So_Date', So_Date)
-                    .input('Sales_Order_Id', OrderId)
+                    .input('Sales_Order_Id', So_Id)
                     .input('S_No', i + 1)
                     .input('Item_Id', product.Item_Id)
                     .input('Bill_Qty', Bill_Qty)
@@ -204,7 +232,7 @@ const SaleOrder = () => {
     const editSaleOrder = async (req, res) => {
         const {
             So_Id, Retailer_Id, Sales_Person_Id, Branch_Id,
-            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0
+            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, VoucherType = 0
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -279,6 +307,7 @@ const SaleOrder = () => {
                 .input('retailer', Retailer_Id)
                 .input('salesperson', Sales_Person_Id)
                 .input('branch', Branch_Id)
+                .input('VoucherType', VoucherType)
                 .input('GST_Inclusive', GST_Inclusive)
                 .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
                 .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
@@ -301,6 +330,7 @@ const SaleOrder = () => {
                         Retailer_Id = @retailer, 
                         Sales_Person_Id = @salesperson, 
                         Branch_Id = @branch, 
+                        VoucherType = @VoucherType, 
                         GST_Inclusive = @GST_Inclusive, 
                         IS_IGST = @IS_IGST, 
                         CSGT_Total = @CSGT_Total, 
@@ -436,6 +466,7 @@ const SaleOrder = () => {
             	COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
             	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
             	COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+            	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
 
             	COALESCE((
             		SELECT
@@ -461,6 +492,9 @@ const SaleOrder = () => {
             
             	LEFT JOIN tbl_Users AS cb
             	ON cb.UserId = so.Created_by
+
+                LEFT JOIN tbl_Voucher_Type AS v
+                ON v.Vocher_Type_Id = so.VoucherType
                         
             WHERE
                 CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
@@ -527,12 +561,12 @@ const SaleOrder = () => {
     }
 
     const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id,Route_Id,Area_Id } = req.query;
+        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, Route_Id, Area_Id } = req.query;
 
         const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
         try {
-            let query=`
+            let query = `
                 WITH SALES_DETAILS AS (
                     SELECT
                     oi.*,
@@ -605,7 +639,7 @@ const SaleOrder = () => {
                     CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
                     AND
                     CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to)`;
-                    
+
             if (checkIsNumber(Retailer_Id)) {
                 query += `
                 AND
@@ -669,7 +703,7 @@ const SaleOrder = () => {
                 noData(res)
             }
         } catch (e) {
-        
+
             servError(e, res);
         }
     }

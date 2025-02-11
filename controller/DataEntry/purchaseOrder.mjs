@@ -15,108 +15,77 @@ const PurchaseOrderDataEntry = () => {
                 .input('Todate', Todate)
                 .query(`
                     WITH LOLData AS (
-                        SELECT * 
-                        FROM tbl_Ledger_LOL
+                        SELECT * FROM tbl_Ledger_LOL
                     ), LOSData AS (
-                        SELECT * 
-                        FROM tbl_Stock_LOS
+                        SELECT * FROM tbl_Stock_LOS
+                    ), ORDERINFO AS (
+                        SELECT 
+                            pgi.*, 
+                            COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
+                            COALESCE(lol.Party_District, 'Not found') AS Party_District,
+                            CASE 
+                                WHEN poi.Order_Id IS NOT NULL THEN 1 
+                                ELSE 0 
+                            END AS IsConvertedAsInvoice
+                        FROM
+                            tbl_PurchaseOrderGeneralDetails AS pgi
+                        LEFT JOIN tbl_Retailers_Master AS r
+                            ON r.Retailer_Id = pgi.PartyId
+                        LEFT JOIN LOLData AS lol
+                            ON lol.Ledger_Tally_Id = r.ERP_Id
+                        LEFT JOIN tbl_Purchase_Order_Inv_Gen_Order AS poi
+                            ON poi.Order_Id = pgi.Sno
+                        WHERE
+                            CONVERT(DATE, pgi.TradeConfirmDate) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
                     ), ITEM_DETAILS AS (
-                    	SELECT 
-                    		i.*,
+                        SELECT 
+                            i.*, 
                             COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
                             COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
-                    	FROM
-                    		tbl_PurchaseOrderItemDetails AS i
-                            LEFT JOIN tbl_Product_Master AS p
+                        FROM
+                            tbl_PurchaseOrderItemDetails AS i
+                        LEFT JOIN tbl_Product_Master AS p
                             ON i.ItemId = p.Product_Id
-                            LEFT JOIN tbl_Stock_LOS AS los
+                        LEFT JOIN LOSData AS los
                             ON los.Stock_Tally_Id = p.ERP_Id
-                    	WHERE
-                    		i.OrderId IN (
-                    			SELECT 
-                    				pgi.Sno
-                    			FROM
-                    				tbl_PurchaseOrderGeneralDetails AS pgi
-                    			WHERE
-                    				CONVERT(DATE, pgi.TradeConfirmDate) >= CONVERT(DATE, @Fromdate)
-                    				AND
-                    				CONVERT(DATE, pgi.TradeConfirmDate) <= CONVERT(DATE, @Todate)
-                    		)
+                        WHERE
+                            i.OrderId IN (SELECT Sno FROM ORDERINFO)
                     ), DELIVERY_DETAILS AS (
-                    	SELECT 
-                    		d.*,
+                        SELECT 
+                            d.*, 
                             COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
                             COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
-                    	FROM
-                    		tbl_PurchaseOrderDeliveryDetails AS d
-                            LEFT JOIN tbl_Product_Master AS p
+                        FROM
+                            tbl_PurchaseOrderDeliveryDetails AS d
+                        LEFT JOIN tbl_Product_Master AS p
                             ON d.ItemId = p.Product_Id
-                            LEFT JOIN tbl_Stock_LOS AS los
+                        LEFT JOIN LOSData AS los
                             ON los.Stock_Tally_Id = p.ERP_Id
-                    	WHERE
-                    		d.OrderId IN (
-                    			SELECT 
-                    				pgi.Sno
-                    			FROM
-                    				tbl_PurchaseOrderGeneralDetails AS pgi
-                    			WHERE
-                    				CONVERT(DATE, pgi.TradeConfirmDate) >= CONVERT(DATE, @Fromdate)
-                    				AND
-                    				CONVERT(DATE, pgi.TradeConfirmDate) <= CONVERT(DATE, @Todate)
-                    		)
+                        WHERE
+                            d.OrderId IN (SELECT Sno FROM ORDERINFO)
                     ), TRANSPOTER_DETAILS AS (
-                    	SELECT 
-                    		*
-                    	FROM
-                    		tbl_PurchaseOrderTranspoterDetails
-                    	WHERE
-                    		OrderId IN (
-                    			SELECT 
-                    				pgi.Sno
-                    			FROM
-                    				tbl_PurchaseOrderGeneralDetails AS pgi
-                    			WHERE
-                    				CONVERT(DATE, pgi.TradeConfirmDate) >= CONVERT(DATE, @Fromdate)
-                    				AND
-                    				CONVERT(DATE, pgi.TradeConfirmDate) <= CONVERT(DATE, @Todate)
-                    		)
+                        SELECT * FROM tbl_PurchaseOrderTranspoterDetails
+                        WHERE OrderId IN (SELECT Sno FROM ORDERINFO)
+                    ), STAFF_DETAILS AS (
+                        SELECT * FROM tbl_PurchaseOrderEmployeesInvolved
+                        WHERE OrderId IN (SELECT Sno FROM ORDERINFO)
                     )
                     SELECT 
-                    	pgi.*,
-                        COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
-                        COALESCE(lol.Party_District, 'Not found') AS Party_District,
-                        CASE 
-                            WHEN poi.Order_Id IS NOT NULL THEN 1 
-                            ELSE 0 
-                        END AS IsConvertedAsInvoice,
-                    	ISNULL((
-                    		SELECT JSON_QUERY((
-                    			SELECT * FROM ITEM_DETAILS WHERE ITEM_DETAILS.OrderId = pgi.Sno FOR JSON AUTO)
-                    		)
-                    	), '[]') AS ItemDetails,
-                    	ISNULL((
-                    		SELECT JSON_QUERY((
-                    			SELECT * FROM DELIVERY_DETAILS WHERE DELIVERY_DETAILS.OrderId = pgi.Sno FOR JSON AUTO)
-                    		)
-                    	), '[]') AS DeliveryDetails,
-                    	ISNULL((
-                    		SELECT JSON_QUERY((
-                    			SELECT * FROM TRANSPOTER_DETAILS WHERE TRANSPOTER_DETAILS.OrderId = pgi.Sno FOR JSON AUTO)
-                    		)
-                    	), '[]') AS TranspoterDetails
+                        pgi.*,
+                        ISNULL((
+                            SELECT JSON_QUERY((SELECT * FROM ITEM_DETAILS WHERE ITEM_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        ), '[]') AS ItemDetails,
+                        ISNULL((
+                            SELECT JSON_QUERY((SELECT * FROM DELIVERY_DETAILS WHERE DELIVERY_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        ), '[]') AS DeliveryDetails,
+                        ISNULL((
+                            SELECT JSON_QUERY((SELECT * FROM TRANSPOTER_DETAILS WHERE TRANSPOTER_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        ), '[]') AS TranspoterDetails,
+                        ISNULL((
+                            SELECT JSON_QUERY((SELECT * FROM STAFF_DETAILS WHERE STAFF_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        ), '[]') AS StaffDetails
                     FROM
-                    	tbl_PurchaseOrderGeneralDetails AS pgi
-                        LEFT JOIN tbl_Retailers_Master AS r
-                        ON r.Retailer_Id = pgi.PartyId
-                        LEFT JOIN LOLData AS lol
-                        ON lol.Ledger_Tally_Id = r.ERP_Id
-                        LEFT JOIN tbl_Purchase_Order_Inv_Gen_Order AS poi
-                        ON poi.Order_Id = pgi.Sno
-                    WHERE
-                    	CONVERT(DATE, pgi.TradeConfirmDate) >= CONVERT(DATE, @Fromdate)
-                    	AND
-                    	CONVERT(DATE, pgi.TradeConfirmDate) <= CONVERT(DATE, @Todate)
-                    ORDER BY pgi.Id DESC;
+                        ORDERINFO AS pgi;
                     `
                 );
 
@@ -127,7 +96,8 @@ const PurchaseOrderDataEntry = () => {
                     ...o,
                     ItemDetails: JSON.parse(o?.ItemDetails),
                     DeliveryDetails: JSON.parse(o?.DeliveryDetails),
-                    TranspoterDetails: JSON.parse(o?.TranspoterDetails)
+                    TranspoterDetails: JSON.parse(o?.TranspoterDetails),
+                    StaffDetails: JSON.parse(o?.StaffDetails)
                 }))
                 dataFound(res, extractedData);
             } else {
@@ -139,8 +109,6 @@ const PurchaseOrderDataEntry = () => {
     }
 
     const createPurchaseOrder = async (req, res) => {
-
-        const OrderDetails = req.body.OrderDetails ?? {};
         const {
             BranchId,
             LoadingDate = '',
@@ -156,7 +124,7 @@ const PurchaseOrderDataEntry = () => {
             Remarks = '',
             OrderStatus = '',
             CreatedBy = ''
-        } = OrderDetails;
+        } = req?.body?.OrderDetails;
 
         if (!checkIsNumber(BranchId)) {
             return invalidInput(res, 'Select Branch')
@@ -165,6 +133,7 @@ const PurchaseOrderDataEntry = () => {
         const OrderItems = Array.isArray(req.body.OrderItems) ? req.body.OrderItems : [];
         const DelivdryDetails = Array.isArray(req.body.DelivdryDetails) ? req.body.DelivdryDetails : [];
         const TranspoterDetails = Array.isArray(req.body.TranspoterDetails) ? req.body.TranspoterDetails : [];
+        const StaffDetails = Array.isArray(req.body.StaffDetails) ? req.body.StaffDetails : [];
 
         const transaction = new sql.Transaction();
 
@@ -228,12 +197,11 @@ const PurchaseOrderDataEntry = () => {
                         @PartyAddress, @PaymentCondition, @Remarks, @OrderStatus, @CreatedBy
                     );`
                 );
-            // SELECT SCOPE_IDENTITY() AS OrderId;
+
             if (OrderDetailsInsert.rowsAffected[0] == 0) {
                 throw new Error('Failed to insert order details')
             }
 
-            // const OrderId = OrderDetailsInsert?.recordset[0]?.OrderId;
             const OrderId = Sno;
 
             for (let i = 0; i < OrderItems.length; i++) {
@@ -334,6 +302,26 @@ const PurchaseOrderDataEntry = () => {
                 }
             }
 
+            for (let i = 0; i < StaffDetails.length; i++) {
+                const staff = StaffDetails[i];
+
+                const result = await new sql.Request(transaction)
+                    .input('OrderId', OrderId)
+                    .input('EmployeeId', staff?.EmployeeId)
+                    .input('CostType', staff?.CostType)
+                    .query(`
+                        INSERT INTO tbl_PurchaseOrderEmployeesInvolved (
+                            OrderId, EmployeeId, CostType
+                        ) VALUES (
+                            @OrderId, @EmployeeId, @CostType
+                        );
+                    `);
+
+                if (result.rowsAffected[0] == 0) {
+                    throw new Error('Failed to save Staff details')
+                }
+            }
+
             await transaction.commit();
             return success(res, 'Order Created')
 
@@ -346,12 +334,6 @@ const PurchaseOrderDataEntry = () => {
     }
 
     const updatePurchaseOrder = async (req, res) => {
-        const {
-            OrderDetails = {},
-            OrderItems = [],
-            DelivdryDetails = [],
-            TranspoterDetails = []
-        } = req.body;
 
         const {
             Sno = '',
@@ -368,7 +350,12 @@ const PurchaseOrderDataEntry = () => {
             Remarks = '',
             OrderStatus = '',
             CreatedBy = ''
-        } = OrderDetails;
+        } = req.body.OrderDetails;
+
+        const OrderItems = Array.isArray(req.body.OrderItems) ? req.body.OrderItems : [];
+        const DelivdryDetails = Array.isArray(req.body.DelivdryDetails) ? req.body.DelivdryDetails : [];
+        const TranspoterDetails = Array.isArray(req.body.TranspoterDetails) ? req.body.TranspoterDetails : [];
+        const StaffDetails = Array.isArray(req.body.StaffDetails) ? req.body.StaffDetails : [];
 
         const transaction = new sql.Transaction();
 
@@ -411,6 +398,7 @@ const PurchaseOrderDataEntry = () => {
                     DELETE FROM tbl_PurchaseOrderItemDetails WHERE OrderId = @OrderId;
                     DELETE FROM tbl_PurchaseOrderDeliveryDetails WHERE OrderId = @OrderId;
                     DELETE FROM tbl_PurchaseOrderTranspoterDetails WHERE OrderId = @OrderId;
+                    DELETE FROM tbl_PurchaseOrderEmployeesInvolved WHERE OrderId = @OrderId;
                 `);
 
             for (let i = 0; i < OrderItems.length; i++) {
@@ -509,6 +497,27 @@ const PurchaseOrderDataEntry = () => {
 
                 if (result.rowsAffected[0] == 0) {
                     throw new Error('Failed to update Transporter details')
+                }
+            }
+
+            // Update or Insert Staff Details
+            for (let i = 0; i < StaffDetails.length; i++) {
+                const staff = StaffDetails[i];
+
+                const result = await new sql.Request(transaction)
+                    .input('OrderId', Sno)
+                    .input('EmployeeId', staff?.EmployeeId)
+                    .input('CostType', staff?.CostType)
+                    .query(`
+                        INSERT INTO tbl_PurchaseOrderEmployeesInvolved (
+                            OrderId, EmployeeId, CostType
+                        ) VALUES (
+                            @OrderId, @EmployeeId, @CostType
+                        );
+                    `);
+
+                if (result.rowsAffected[0] == 0) {
+                    throw new Error('Failed to update Staff details')
                 }
             }
 

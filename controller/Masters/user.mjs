@@ -533,15 +533,9 @@ const user = () => {
     }
 
     const getSalesPersonDropdown = async (req, res) => {
-        const { Company_id } = req.query;
-
-        if (!checkIsNumber(Company_id)) {
-            return invalidInput(res, 'Company_id is Required')
-        }
 
         try {
             const result = (await new sql.Request()
-                .input('comp', Company_id)
                 .query(`
                     SELECT 
                         UserId, Name 

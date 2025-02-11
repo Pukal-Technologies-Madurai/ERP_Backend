@@ -373,7 +373,8 @@ const tripActivities = () => {
                         COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation,
                         COALESCE(sjs.Journal_no, 'Unknown') AS Journal_no,
                         COALESCE(sjs.Stock_Journal_Bill_type, 'Unknown') AS Stock_Journal_Bill_type,
-                        COALESCE(sjs.Stock_Journal_Voucher_type, 'Unknown') AS Stock_Journal_Voucher_type
+                        COALESCE(sjs.Stock_Journal_Voucher_type, 'Unknown') AS Stock_Journal_Voucher_type,
+                        po.OrderId AS arrivalOrderId
                     FROM
                         tbl_Trip_Details AS td
                     LEFT JOIN tbl_Product_Master AS pm
@@ -384,6 +385,8 @@ const tripActivities = () => {
                         ON gm_to.Godown_Id = td.To_Location
                     LEFT JOIN tbl_Stock_Journal_Gen_Info AS sjs
 		                ON sjs.STJ_Id = td.STJ_Id
+                    LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po
+                        ON po.Trip_Id = td.Trip_Id AND po.ItemId = td.Product_Id
                     WHERE 
                         td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
                 ), TRIP_EMPLOYEES AS (
