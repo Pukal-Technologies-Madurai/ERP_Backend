@@ -202,7 +202,7 @@ const PurchaseOrderDataEntry = () => {
                 throw new Error('Failed to insert order details')
             }
 
-            const OrderId = Sno;
+            const OrderId = Number(Sno);
 
             for (let i = 0; i < OrderItems.length; i++) {
                 const item = OrderItems[i];
@@ -276,17 +276,16 @@ const PurchaseOrderDataEntry = () => {
 
                 const result = await new sql.Request(transaction)
                     .input('OrderId', OrderId)
-                    .input('indexValue', Number(transporter?.indexValue))
-                    .input('Id', transporter?.Id)
-                    .input('Loading_Load', transporter?.Loading_Load)
-                    .input('Loading_Empty', transporter?.Loading_Empty)
-                    .input('Unloading_Load', transporter?.Unloading_Load)
-                    .input('Unloading_Empty', transporter?.Unloading_Empty)
+                    .input('indexValue', sql.Int, Number(transporter?.indexValue))
+                    .input('Loading_Load', sql.Int, transporter?.Loading_Load)
+                    .input('Loading_Empty', sql.Int, transporter?.Loading_Empty)
+                    .input('Unloading_Load', sql.Int, transporter?.Unloading_Load)
+                    .input('Unloading_Empty', sql.Int, transporter?.Unloading_Empty)
                     .input('EX_SH', transporter?.EX_SH)
                     .input('DriverName', transporter?.DriverName)
                     .input('VehicleNo', transporter?.VehicleNo)
-                    .input('PhoneNumber', Number(transporter?.PhoneNumber))
-                    .input('CreatedBy', Number(transporter?.CreatedBy))
+                    .input('PhoneNumber', String(transporter?.PhoneNumber))
+                    .input('CreatedBy', sql.Int, Number(transporter?.CreatedBy))
                     .query(`
                         INSERT INTO tbl_PurchaseOrderTranspoterDetails (
                             indexValue, OrderId, Loading_Load, Loading_Empty, Unloading_Load, Unloading_Empty, EX_SH, 
@@ -306,9 +305,9 @@ const PurchaseOrderDataEntry = () => {
                 const staff = StaffDetails[i];
 
                 const result = await new sql.Request(transaction)
-                    .input('OrderId', OrderId)
-                    .input('EmployeeId', staff?.EmployeeId)
-                    .input('CostType', staff?.CostType)
+                    .input('OrderId', sql.Int, OrderId)
+                    .input('EmployeeId', sql.Int, Number(staff?.EmployeeId))
+                    .input('CostType', sql.Int, Number(staff?.CostType))
                     .query(`
                         INSERT INTO tbl_PurchaseOrderEmployeesInvolved (
                             OrderId, EmployeeId, CostType
