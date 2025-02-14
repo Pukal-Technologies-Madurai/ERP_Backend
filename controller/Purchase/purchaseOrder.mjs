@@ -13,7 +13,7 @@ const PurchaseOrder = () => {
     const purchaseOrderCreation = async (req, res) => {
         const {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
-            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0,
+            Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
             Voucher_Type = '', Stock_Item_Ledger_Name = '',
         } = req.body;
 
@@ -27,8 +27,9 @@ const PurchaseOrder = () => {
             !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Created_by)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
+            || (!Array.isArray(StaffArray))
         ) {
-            return invalidInput(res, 'Retailer_Id, Created_by, Product_Array is Required')
+            return invalidInput(res, 'Retailer_Id, Created_by, Product_Array, StaffArray is Required')
         }
 
         const transaction = new sql.Transaction();
@@ -238,6 +239,28 @@ const PurchaseOrder = () => {
                 }
             }
 
+            for (let i = 0; i < StaffArray.length; i++) {
+                const staff = StaffArray[i];
+
+                const request3 = new sql.Request(transaction)
+                    .input('PIN_Id', sql.Int, Number(PIN_Id))
+                    .input('Involved_Emp_Id', sql.Int, Number(staff?.Involved_Emp_Id))
+                    .input('Cost_Center_Type_Id', sql.Int, Number(staff?.Cost_Center_Type_Id))
+                    .query(`
+                        INSERT INTO tbl_Purchase_Order_Inv_Staff_Details (
+                            PIN_Id, Involved_Emp_Id, Cost_Center_Type_Id
+                        ) VALUES (
+                            @PIN_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                        );`
+                    );
+
+                const result3 = await request3;
+
+                if (result3.rowsAffected[0] === 0) {
+                    throw new Error('Failed to create order, Try again.');
+                }
+            }
+
             const DE_PO_ID = Product_Array.reduce((acc, pro) => {
                 const existIndex = acc.findIndex(ind => isEqualNumber(ind, pro.OrderId));
 
@@ -279,7 +302,7 @@ const PurchaseOrder = () => {
     const editPurchaseOrder = async (req, res) => {
         const {
             PIN_Id, Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
-            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0,
+            Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
             Voucher_Type = '', Stock_Item_Ledger_Name = ''
         } = req.body;
 
@@ -294,8 +317,9 @@ const PurchaseOrder = () => {
             || !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Created_by)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
+            || (!Array.isArray(StaffArray))
         ) {
-            return invalidInput(res, 'PIN_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array is Required')
+            return invalidInput(res, 'PIN_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array, StaffArray is Required')
         }
 
         const transaction = new sql.Transaction();
@@ -414,6 +438,7 @@ const PurchaseOrder = () => {
                 .query(`
                     DELETE FROM tbl_Purchase_Order_Inv_Stock_Info WHERE PIN_Id = @PIN_Id
                     DELETE FROM tbl_Purchase_Order_Inv_Gen_Order WHERE PIN_Id = @PIN_Id
+                    DELETE FROM tbl_Purchase_Order_Inv_Staff_Details WHERE PIN_Id = @PIN_Id
                 `);
 
             for (let i = 0; i < Product_Array.length; i++) {
@@ -504,6 +529,28 @@ const PurchaseOrder = () => {
                 }
             }
 
+            for (let i = 0; i < StaffArray.length; i++) {
+                const staff = StaffArray[i];
+
+                const request3 = new sql.Request(transaction)
+                    .input('PIN_Id', sql.Int, Number(PIN_Id))
+                    .input('Involved_Emp_Id', sql.Int, Number(staff?.Involved_Emp_Id))
+                    .input('Cost_Center_Type_Id', sql.Int, Number(staff?.Cost_Center_Type_Id))
+                    .query(`
+                        INSERT INTO tbl_Purchase_Order_Inv_Staff_Details (
+                            PIN_Id, Involved_Emp_Id, Cost_Center_Type_Id
+                        ) VALUES (
+                            @PIN_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                        );`
+                    );
+
+                const result3 = await request3;
+
+                if (result3.rowsAffected[0] === 0) {
+                    throw new Error('Failed to create order, Try again.');
+                }
+            }
+
             const DE_PO_ID = Product_Array.reduce((acc, pro) => {
                 const existIndex = acc.findIndex(ind => isEqualNumber(ind, pro.OrderId));
 
@@ -553,25 +600,25 @@ const PurchaseOrder = () => {
                 .input('from', Fromdate)
                 .input('to', Todate)
                 .query(`
-                    WITH SALES AS (
-			        	SELECT 
-                    	so.*,
-                    	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                    	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                    	COALESCE(cb.Name, 'unknown') AS Created_BY_Name
-                    FROM 
-                    	tbl_Purchase_Order_Inv_Gen_Info AS so
-                    	LEFT JOIN tbl_Retailers_Master AS rm
-                    	ON rm.Retailer_Id = so.Retailer_Id
-                    	LEFT JOIN tbl_Branch_Master bm
-                    	ON bm.BranchId = so.Branch_Id
-                    	LEFT JOIN tbl_Users AS cb
-                    	ON cb.UserId = so.Created_by
-                    WHERE
-                        CONVERT(DATE, so.Po_Entry_Date) >= CONVERT(DATE, @from)
-                    	AND
-                    	CONVERT(DATE, so.Po_Entry_Date) <= CONVERT(DATE, @to) 
-			        ), SALES_DETAILS AS (
+                    WITH Purchase AS (
+			            SELECT 
+                        	so.*,
+                        	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                        	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                        	COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+                        FROM 
+                        	tbl_Purchase_Order_Inv_Gen_Info AS so
+                        	LEFT JOIN tbl_Retailers_Master AS rm
+                        	ON rm.Retailer_Id = so.Retailer_Id
+                        	LEFT JOIN tbl_Branch_Master bm
+                        	ON bm.BranchId = so.Branch_Id
+                        	LEFT JOIN tbl_Users AS cb
+                        	ON cb.UserId = so.Created_by
+                        WHERE
+                            CONVERT(DATE, so.Po_Entry_Date) >= CONVERT(DATE, @from)
+                        	AND
+                        	CONVERT(DATE, so.Po_Entry_Date) <= CONVERT(DATE, @to) 
+			        ), PurchaseDetails AS (
                         SELECT
                     		oi.*,
                     		COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
@@ -586,21 +633,44 @@ const PurchaseOrder = () => {
                         WHERE
                             oi.PIN_Id IN (
 			        			SELECT PIN_Id
-			        			FROM SALES
+			        			FROM Purchase
 			        		)
-                    ) 
+                    ), StaffDetails AS (
+                        SELECT 
+                            s.*,
+                            e.Cost_Center_Name AS Involved_Emp_Name,
+                            cc.Cost_Category AS Involved_Emp_Type
+                        FROM tbl_Purchase_Order_Inv_Staff_Details AS s
+                        LEFT JOIN tbl_ERP_Cost_Center AS e
+                            ON e.Cost_Center_Id = s.Involved_Emp_Id
+                        LEFT JOIN tbl_ERP_Cost_Category AS cc
+                            ON cc.Cost_Category_Id = s.Cost_Center_Type_Id
+                        WHERE s.PIN_Id IN (
+			        			SELECT PIN_Id
+			        			FROM Purchase
+			        		)
+                    )
 			        SELECT 
 			        	so.*,
 			        	COALESCE((
 			        		SELECT
                     			sd.*
                     		FROM
-                    			SALES_DETAILS AS sd
+                    			PurchaseDetails AS sd
                     		WHERE
                     			sd.PIN_Id = so.PIN_Id
                     		FOR JSON PATH 
-			        	), '[]') AS Products_List
-			        FROM SALES AS so
+			        	), '[]') AS Products_List,
+                        COALESCE((
+			        		SELECT
+                    			sd.*
+                    		FROM
+                    			StaffDetails AS sd
+                    		WHERE
+                    			sd.PIN_Id = so.PIN_Id
+                    		FOR JSON PATH 
+			        	), '[]') AS Staff_List
+			        FROM Purchase AS so
                     ORDER BY CONVERT(DATE, so.Po_Entry_Date) DESC;`
                 );
 

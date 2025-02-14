@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
-import { checkIsNumber, createPadString, ISOString } from '../../helper_functions.mjs';
+import { checkIsNumber, createPadString, isEqualNumber, ISOString } from '../../helper_functions.mjs';
 import { getLOL, getLOS, getNextId } from '../../middleware/miniAPIs.mjs';
 
 const PurchaseOrderDataEntry = () => {
@@ -22,21 +22,29 @@ const PurchaseOrderDataEntry = () => {
                         SELECT 
                             pgi.*, 
                             COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
-                            COALESCE(lol.Party_District, 'Not found') AS Party_District,
-                            CASE 
-                                WHEN poi.Order_Id IS NOT NULL THEN 1 
-                                ELSE 0 
-                            END AS IsConvertedAsInvoice
+                            COALESCE(lol.Party_District, 'Not found') AS Party_District
                         FROM
                             tbl_PurchaseOrderGeneralDetails AS pgi
                         LEFT JOIN tbl_Retailers_Master AS r
                             ON r.Retailer_Id = pgi.PartyId
                         LEFT JOIN LOLData AS lol
                             ON lol.Ledger_Tally_Id = r.ERP_Id
-                        LEFT JOIN tbl_Purchase_Order_Inv_Gen_Order AS poi
-                            ON poi.Order_Id = pgi.Sno
                         WHERE
                             CONVERT(DATE, pgi.TradeConfirmDate) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                    ), PurchaseInvoiceOrders AS (
+                        SELECT PIN_Id, Order_Id
+                        FROM tbl_Purchase_Order_Inv_Gen_Order
+                        WHERE Order_Id IN (
+                            SELECT Sno
+                            FROM ORDERINFO
+                        )
+                    ), PurchaseInvoiceOrderedProducts AS (
+                        SELECT PIN_Id, Item_Id, Bill_Qty
+                        FROM tbl_Purchase_Order_Inv_Stock_Info
+                        WHERE PIN_Id IN (
+                            SELECT PIN_Id
+                            FROM PurchaseInvoiceOrders
+                        )
                     ), ITEM_DETAILS AS (
                         SELECT 
                             i.*, 
@@ -67,22 +75,54 @@ const PurchaseOrderDataEntry = () => {
                         SELECT * FROM tbl_PurchaseOrderTranspoterDetails
                         WHERE OrderId IN (SELECT Sno FROM ORDERINFO)
                     ), STAFF_DETAILS AS (
-                        SELECT * FROM tbl_PurchaseOrderEmployeesInvolved
+                        SELECT stf.*,
+                        e.Cost_Center_Name AS Emp_Name,
+                        cc.Cost_Category
+                        FROM tbl_PurchaseOrderEmployeesInvolved AS stf
+                            LEFT JOIN tbl_ERP_Cost_Center AS e
+                            ON e.Cost_Center_Id = stf.EmployeeId
+                            LEFT JOIN tbl_ERP_Cost_Category AS cc
+                            ON cc.Cost_Category_Id = stf.CostType
                         WHERE OrderId IN (SELECT Sno FROM ORDERINFO)
                     )
                     SELECT 
                         pgi.*,
-                        ISNULL((
-                            SELECT JSON_QUERY((SELECT * FROM ITEM_DETAILS WHERE ITEM_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        COALESCE((
+                            SELECT 
+                                pi.*,
+                                COALESCE((
+                                    SELECT op.*
+                                    FROM PurchaseInvoiceOrderedProducts AS op
+                                    WHERE op.PIN_Id = pi.PIN_Id
+                                    FOR JSON PATH
+                                ), '[]') AS Products
+                            FROM PurchaseInvoiceOrders AS pi
+                            WHERE pi.Order_Id = pgi.Sno
+                            FOR JSON PATH
+                        ), '[]') AS ConvertedAsInvoices,
+                        COALESCE((
+                            SELECT * 
+                            FROM ITEM_DETAILS 
+                            WHERE ITEM_DETAILS.OrderId = pgi.Sno 
+                            FOR JSON PATH
                         ), '[]') AS ItemDetails,
-                        ISNULL((
-                            SELECT JSON_QUERY((SELECT * FROM DELIVERY_DETAILS WHERE DELIVERY_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        COALESCE((
+                            SELECT * 
+                            FROM DELIVERY_DETAILS 
+                            WHERE DELIVERY_DETAILS.OrderId = pgi.Sno 
+                            FOR JSON PATH
                         ), '[]') AS DeliveryDetails,
-                        ISNULL((
-                            SELECT JSON_QUERY((SELECT * FROM TRANSPOTER_DETAILS WHERE TRANSPOTER_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        COALESCE((
+                            SELECT * 
+                            FROM TRANSPOTER_DETAILS 
+                            WHERE TRANSPOTER_DETAILS.OrderId = pgi.Sno 
+                            FOR JSON PATH
                         ), '[]') AS TranspoterDetails,
-                        ISNULL((
-                            SELECT JSON_QUERY((SELECT * FROM STAFF_DETAILS WHERE STAFF_DETAILS.OrderId = pgi.Sno FOR JSON AUTO), '$')
+                        COALESCE((
+                            SELECT * 
+                            FROM STAFF_DETAILS 
+                            WHERE STAFF_DETAILS.OrderId = pgi.Sno 
+                            FOR JSON PATH
                         ), '[]') AS StaffDetails
                     FROM
                         ORDERINFO AS pgi;
@@ -94,12 +134,35 @@ const PurchaseOrderDataEntry = () => {
             if (result.recordset.length > 0) {
                 const extractedData = result.recordset.map(o => ({
                     ...o,
-                    ItemDetails: JSON.parse(o?.ItemDetails),
-                    DeliveryDetails: JSON.parse(o?.DeliveryDetails),
-                    TranspoterDetails: JSON.parse(o?.TranspoterDetails),
-                    StaffDetails: JSON.parse(o?.StaffDetails)
+                    ConvertedAsInvoices: JSON.parse(o.ConvertedAsInvoices),
+                    ItemDetails: JSON.parse(o.ItemDetails),
+                    DeliveryDetails: JSON.parse(o.DeliveryDetails),
+                    TranspoterDetails: JSON.parse(o.TranspoterDetails),
+                    StaffDetails: JSON.parse(o.StaffDetails)
+                }));
+                const parceProducts = extractedData.map(o => ({
+                    ...o,
+                    ConvertedAsInvoices: o.ConvertedAsInvoices.map(ci => ({
+                        ...ci,
+                        Products: JSON.parse(ci.Products)
+                    }))
+                }));
+                const productWiseStatus = parceProducts.map(o => ({
+                    ...o,
+                    DeliveryDetails: o.DeliveryDetails.map(item => ({
+                        ...item,
+                        convertableQuantity: Number(item?.Quantity) - Number(o.ConvertedAsInvoices.reduce((invAcc, inv) => {
+                            return Number(invAcc) + Number(inv.Products.filter(proFil => 
+                                isEqualNumber(proFil.Item_Id, item.ItemId)
+                            ).reduce((proAcc, pro) => Number(proAcc) + Number(pro?.Bill_Qty), 0))
+                        }, 0))
+                    }))
                 }))
-                dataFound(res, extractedData);
+                const OrderWiseStatus = productWiseStatus.map(order => ({
+                    ...order,
+                    IsConvertedAsInvoice: order.DeliveryDetails.reduce((acc, dItem) => acc + Number(dItem.convertableQuantity), 0) <= 0 ? 1 : 0,
+                }))
+                dataFound(res, OrderWiseStatus);
             } else {
                 noData(res);
             }
@@ -689,30 +752,60 @@ const PurchaseOrderDataEntry = () => {
             const request = new sql.Request()
                 .input('VendorId', VendorId)
                 .query(`
-                    SELECT 
-                        d.*,
-                        COALESCE(g.PO_ID, 'not found') AS PO_ID
-                    FROM 
-                        tbl_PurchaseOrderDeliveryDetails AS d
-                    LEFT JOIN 
-                        tbl_PurchaseOrderGeneralDetails AS g
-                        ON d.OrderId = g.Sno
-                    LEFT JOIN 
-                        tbl_Purchase_Order_Inv_Stock_Info AS ps
-                        ON d.Id = ps.DeliveryId
-                    WHERE 
-                        g.PartyId = @VendorId
-                        AND g.OrderStatus = 'Completed'
-                        AND ps.DeliveryId IS NULL
-                    ORDER BY 
-                        d.OrderId;
-                    `
+                    WITH DeliveryProducts AS (
+                        SELECT 
+                            d.*,
+                            COALESCE(g.PO_ID, 'not found') AS PO_ID
+                        FROM 
+                            tbl_PurchaseOrderDeliveryDetails AS d
+                        LEFT JOIN 
+                            tbl_PurchaseOrderGeneralDetails AS g
+                            ON d.OrderId = g.Sno
+                        LEFT JOIN 
+                            tbl_Purchase_Order_Inv_Stock_Info AS ps
+                            ON d.Id = ps.DeliveryId
+                        WHERE 
+                            g.PartyId = @VendorId
+                            AND g.OrderStatus = 'Completed'
+                            AND ps.DeliveryId IS NULL
+                    ), DeliveryInvolvedEmployee AS (
+                        SELECT 
+                            poe.*,
+                            COALESCE(cc.Cost_Center_Name, 'Not found') AS EmployeeName, 
+                            COALESCE(cct.Cost_Category, 'Not found') AS EmployeeType
+                        FROM tbl_PurchaseOrderEmployeesInvolved AS poe
+                            LEFT JOIN tbl_ERP_Cost_Center AS cc
+                            ON cc.Cost_Center_Id = poe.EmployeeId
+                            LEFT JOIN tbl_ERP_Cost_Category AS cct
+                            ON cct.Cost_Category_Id = poe.CostType
+                        WHERE
+                            poe.OrderId IN (
+                                SELECT OrderId FROM DeliveryProducts
+                            )
+                    )
+                    SELECT
+                        dp.*,
+                        COALESCE((
+                            SELECT *
+                            FROM DeliveryInvolvedEmployee AS poe
+                            WHERE dp.OrderId = poe.OrderId
+                            FOR JSON PATH
+                        ), '[]') AS EmployeesInvolved
+                    FROM
+                        DeliveryProducts AS dp;`
                     );
 
             const result = await request;
 
-            if (result.recordset.length > 0) dataFound(res, result.recordset)
-            else noData(res)
+            if (result.recordset.length > 0) {
+                const parsed = result.recordset.map(pro => ({
+                    ...pro,
+                    EmployeesInvolved: JSON.parse(pro.EmployeesInvolved)
+                }))
+                dataFound(res, parsed)
+            } else {
+                noData(res)
+            }
 
         } catch (e) {
             servError(e, res);

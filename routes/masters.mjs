@@ -13,6 +13,7 @@ import retailerRoutes from '../controller/Masters/retailerRoutes.mjs';
 import retailerClosingStock from '../controller/Masters/retailerClosingStock.mjs';
 import employeesTasks from '../controller/EmployeesInvolved/EmployeesTask.mjs';
 import TallyMasters from '../controller/Masters/tallyMasters.mjs';
+import voucherType from '../controller/Masters/voucherType.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 
 const MastersRouter = express.Router();
@@ -133,5 +134,10 @@ MastersRouter.get('/employeedetails/selectedTaskDetails',employeesTasks.selected
 
 MastersRouter.post('/users/costcenter', user.createUserForCostcenter);
 MastersRouter.get('/userTypecostcenter', userType.userTypeforcostcenter);
+
+MastersRouter.get('/voucher', voucherType.getVoucherType);
+MastersRouter.post('/voucher', voucherType.addVoucherType);
+MastersRouter.put('/voucher', voucherType.editVoucherType);
+MastersRouter.delete('/voucher', voucherType.deleteVoucherType);
 
 export default MastersRouter;

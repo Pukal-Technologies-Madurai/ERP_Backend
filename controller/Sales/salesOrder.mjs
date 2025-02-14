@@ -240,12 +240,13 @@ const SaleOrder = () => {
         const isInclusive = isEqualNumber(GST_Inclusive, 1);
         const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
         const isIGST = isEqualNumber(IS_IGST, 1);
+        const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
 
         if (
             !checkIsNumber(So_Id)
             || !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Sales_Person_Id)
-            || !checkIsNumber(Created_by)
+            || !checkIsNumber(Created_by)   
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
         ) {
             return invalidInput(res, 'So_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array is Required')
