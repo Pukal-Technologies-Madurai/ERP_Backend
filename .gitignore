@@ -1,0 +1,10 @@
+/node_modules
+/package-lock.json
+.env
+logs/access.log
+
+uploads/visitLogs/
+uploads/products/
+uploads/retailers/
+uploads/attendance/
+uploads/forumDocuments/
