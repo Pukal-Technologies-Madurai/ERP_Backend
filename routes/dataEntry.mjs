@@ -90,5 +90,6 @@ dataEntryRouter.delete('/costCategory',costCenter.deleteCostCategory)
 dataEntryRouter.get('/costCategory/DropDown',costCenter.costCategoryDropDown)
 
 dataEntryRouter.get('/costCenter/report',costCenter.costCenterInvolvedReports)
+dataEntryRouter.get('/costCenter/report/employee',costCenter.costCenterEmployeeReports)
 
 export default dataEntryRouter;

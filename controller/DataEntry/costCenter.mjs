@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, success, failed, invalidInput, sentData } from '../../res.mjs';
-import { checkIsNumber, ISOString, isValidDate } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, ISOString, isValidDate } from '../../helper_functions.mjs';
 
 const CostCenter = () => {
 
@@ -333,10 +333,117 @@ const CostCenter = () => {
                     UNION ALL
                     SELECT * FROM TRIP_EMPLOYEES;`
                 );
-            
+
             const result = await request;
 
             sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
+    const costCenterEmployeeReports = async (req, res) => {
+        const { reqDate, userid } = req.query;
+
+        try {
+            const validateion = {
+                reqDate: isValidDate(reqDate),
+                userid: checkIsNumber(userid)
+            }
+            if (!validateion.userid) return invalidInput(res, 'userid is required');
+
+            const filterDate = validateion.reqDate ? ISOString(reqDate) : ISOString();
+
+            const emp = await new sql.Request()
+                .input('user', userid)
+                .query(`
+                    SELECT Cost_Center_Id 
+	                FROM tbl_ERP_Cost_Center
+	                WHERE User_Id = @user`
+                );
+
+            if (emp.recordset.length === 0) {
+                return noData(res, 'User Not mapped in cost center')
+            }
+
+            const request = new sql.Request()
+                .input('reqDate', sql.Date, filterDate)
+                .input('user', sql.Int, userid)
+                .query(`
+                    WITH STAFF AS (
+                        SELECT 
+                            c.*,
+                            cc.Cost_Category AS ActualUserType,
+                            u.Name AS ERPName
+                        FROM tbl_ERP_Cost_Center AS c
+                        LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = c.User_Type
+                        LEFT JOIN tbl_Users AS u ON u.UserId = c.User_Id
+                        WHERE c.User_Id = @user
+                    ), STOCKJOURNAL AS (
+                        SELECT 
+                            DISTINCT sjs.Staff_Id AS SJ_StaffId,
+                            sjs.STJ_Id AS SJ_InvoiceId,
+                            SUM(sjd.Dest_Qty) AS SJTotalTonnage 
+                        FROM 
+                            tbl_Stock_Journal_Gen_Info AS sj
+                    		LEFT JOIN tbl_Stock_Journal_Staff_Involved AS sjs ON sjs.STJ_Id = sj.STJ_Id
+                    		LEFT JOIN tbl_Stock_Journal_Dest_Details AS sjd ON sjd.STJ_Id = sj.STJ_Id
+                        WHERE 
+                            sj.Stock_Journal_date = @reqDate
+                            AND sjs.Staff_Id IN (SELECT Cost_Center_Id FROM STAFF)
+                        GROUP BY sjs.Staff_Id, sjs.STJ_Id
+                    ), TRIPSHEET AS (
+                        SELECT 
+                            DISTINCT ts.Involved_Emp_Id AS TS_StaffId,
+                            t.Trip_Id AS TS_InvoiceId,
+                            SUM(td.QTY) AS TSTotalTonnage 
+                        FROM 
+                            tbl_Trip_Master AS t
+                    		LEFT JOIN tbl_Trip_Employees AS ts ON t.Trip_Id = ts.Trip_Id
+                    		LEFT JOIN tbl_Trip_Details AS td ON td.Trip_Id = t.Trip_Id
+                        WHERE 
+                            t.Trip_Date = @reqDate
+                            AND ts.Involved_Emp_Id IN (SELECT Cost_Center_Id FROM STAFF)
+                        GROUP BY ts.Involved_Emp_Id, t.Trip_Id
+                    )
+                    SELECT 
+                        stf.*,
+                    	COALESCE((
+                    		SELECT * 
+                    		FROM STOCKJOURNAL 
+                    		WHERE 
+                    			SJ_StaffId = stf.Cost_Center_Id 
+                    			AND SJ_InvoiceId IS NOT NULL
+                    		FOR JSON PATH
+                    	), '[]') AS Stock_Journals,
+                    	COALESCE((
+                    		SELECT * 
+                    		FROM TRIPSHEET 
+                    		WHERE 
+                    			TS_StaffId = stf.Cost_Center_Id
+                    			AND TS_InvoiceId IS NOT NULL
+                    		FOR JSON PATH
+                    	), '[]') AS Trip_Sheet
+                    FROM 
+                        STAFF AS stf;`
+                );
+
+            const result = await request;
+
+            const parsed = result.recordset.map(staff => ({
+                ...staff,
+                Stock_Journals: JSON.parse(staff.Stock_Journals),
+                Trip_Sheet: JSON.parse(staff.Trip_Sheet)
+            }));
+
+            const abstractData = parsed.map(staff => ({
+                ...staff,
+                StockJournalTotal: staff.Stock_Journals.reduce((acc, sj) => Addition(acc, sj.SJTotalTonnage), 0),
+                TripSheetTotal: staff.Trip_Sheet.reduce((acc, ts) => Addition(acc, ts.TSTotalTonnage), 0)
+            })).filter(staff => staff?.Stock_Journals?.length > 0 || staff?.Trip_Sheet?.length > 0);
+            
+
+            sentData(res, abstractData)
         } catch (e) {
             servError(e, res)
         }
@@ -351,7 +458,8 @@ const CostCenter = () => {
         deleteCostCategory,
         updateCostCategory,
         costCategoryDropDown,
-        costCenterInvolvedReports
+        costCenterInvolvedReports,
+        costCenterEmployeeReports
     }
 }
 
