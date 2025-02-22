@@ -1,5 +1,9 @@
 import sql from 'mssql';
 import { checkIsNumber, isEqualNumber } from '../helper_functions.mjs';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const userPortalDB = process.env.USERPORTALDB;
 
 const miniResponse = ({ status = true, dataArray = [], dataObject = {}, others = {} }) => ({ status, dataArray, dataObject, ...others })
 
@@ -142,7 +146,7 @@ export const getUserTypeBasedRights = async (usertype) => {
                     COALESCE(utr.Delete_Rights, 0) AS Delete_Rights,
                     COALESCE(utr.Print_Rights, 0) AS Print_Rights
                 FROM 
-                    tbl_AppMenu m
+                    [${userPortalDB}].[dbo].[tbl_AppMenu] m
                 LEFT JOIN 
                     tbl_AppMenu_UserTypeRights utr ON utr.UserTypeId = @usertype AND utr.MenuId = m.id`
             )
@@ -173,7 +177,7 @@ export const getUserBasedRights = async (userid) => {
                     COALESCE(ur.Delete_Rights, 0) AS Delete_Rights,
                     COALESCE(ur.Print_Rights, 0) AS Print_Rights
                 FROM 
-                    tbl_AppMenu m
+                    [${userPortalDB}].[dbo].[tbl_AppMenu] m
                 LEFT JOIN 
                     tbl_AppMenu_UserRights ur ON ur.UserId = @userid AND ur.MenuId = m.id`
             )
@@ -202,7 +206,7 @@ export const getUserMenuRights = async (Auth) => {
 	                1 as Delete_Rights,
 	                1 as Print_Rights
                 FROM
-                	tbl_AppMenu`
+                	[${userPortalDB}].[dbo].[tbl_AppMenu]`
             );
 
             const result = await request;
@@ -223,7 +227,7 @@ export const getUserMenuRights = async (Auth) => {
                         COALESCE(ur.Delete_Rights, utr.Delete_Rights, 0) AS Delete_Rights,
                         COALESCE(ur.Print_Rights, utr.Print_Rights, 0) AS Print_Rights
                     FROM 
-                        tbl_AppMenu m
+                        [${userPortalDB}].[dbo].[tbl_AppMenu] m
                     LEFT JOIN 
                         tbl_AppMenu_UserRights ur ON ur.UserId = @userid AND ur.MenuId = m.id
                     LEFT JOIN 

@@ -2,7 +2,10 @@ import sql from 'mssql';
 import { dataFound, failed, invalidInput, noData, servError, success } from '../../res.mjs';
 import { checkIsNumber, isEqualNumber } from '../../helper_functions.mjs';
 import { getUserBasedRights, getUserIdByAuth, getUserMenuRights, getUserTypeBasedRights, getUserTypeByAuth } from '../../middleware/miniAPIs.mjs';
+import dotenv from 'dotenv';
+dotenv.config();
 
+const userPortalDB = process.env.USERPORTALDB;
 
 const buildRoutesTree = (routes, parentId = null) => {
     return routes
@@ -14,140 +17,6 @@ const buildRoutesTree = (routes, parentId = null) => {
 };
 
 const appMenu = () => {
-
-    // const menuMaster = async (req, res) => {
-
-    //     try {
-    //         const getAppMenuData = (await new sql.Request()
-    //             .query(`
-    //                 WITH SubMenuData AS (
-    //                     SELECT * FROM tbl_Sub_Menu WHERE Id <> 60
-    //                 )
-    //                 SELECT 
-    //                     m.*,
-    //                     COALESCE((
-    //                         SELECT 
-    //                             s.*
-    //                         FROM
-    //                             SubMenuData AS s
-    //                         WHERE
-    //                             s.MenuId = m.Id
-    //                         FOR JSON PATH
-    //                     ), '[]') AS SubMenu
-    //                 FROM 
-    //                     tbl_Master_Menu AS m
-    //         `)).recordset;
-
-    //         // WHERE 
-    //         // m.Active = 1
-
-    //         if (getAppMenuData.length > 0) {
-    //             dataFound(res, getAppMenuData.map(o => ({ ...o, SubMenu: JSON.parse(o.SubMenu) })));
-    //         } else {
-    //             noData(res);
-    //         }
-
-    //     } catch (e) {
-    //         servError(e, res);
-    //     }
-    // }
-
-    // const createMenu = async (req, res) => {
-    //     const { MenuName, PageUrl, ParentId, OrderNo } = req.body;
-
-    //     if (!MenuName || (checkIsNumber(ParentId) && !PageUrl)) {
-    //         return invalidInput(res, 'MenuName is required, PageUrl is optional');
-    //     }
-
-    //     try {
-    //         let query;
-    //         if (checkIsNumber(ParentId)) {
-    //             query = `   INSERT INTO tbl_Sub_Menu (
-    //                             MenuId, SubMenuName, PageUrl, Active
-    //                         ) VALUES (
-    //                             @ParentId, @MenuName, @PageUrl, 1
-    //                         )`;
-    //         } else {
-    //             query = `   INSERT INTO tbl_Master_Menu (
-    //                             MenuName, PageUrl, OrderNo, Active, APP_Type 
-    //                         ) VALUES (
-    //                             @MenuName, @PageUrl, @OrderNo, 1, 2
-    //                         )`;
-    //         }
-    //         const request = new sql.Request()
-    //             .input('MenuName', MenuName)
-    //             .input('PageUrl', PageUrl)
-    //             .input('ParentId', ParentId)
-    //             .input('OrderNo', OrderNo)
-    //             .query(query);
-
-    //         const result = await request;
-
-    //         if (result.rowsAffected[0] > 0) {
-    //             success(res, 'Menu Created')
-    //         } else {
-    //             failed(res, 'Failed to create Menu')
-    //         }
-    //     } catch (e) {
-    //         servError(e, res);
-    //     }
-    // }
-
-    // const updateMenu = async (req, res) => {
-    //     const { Id, MenuName, PageUrl, ParentId, OrderNo, isActive } = req.body;
-
-    //     if (!checkIsNumber(Id) || !MenuName || (checkIsNumber(ParentId) && !PageUrl)) {
-    //         return invalidInput(res, 'MenuName, PageUrl is required');
-    //     }
-
-    //     try {
-    //         let query;
-
-    //         if (checkIsNumber(ParentId)) {
-    //             query = `
-    //             UPDATE tbl_Sub_Menu 
-    //             SET 
-    //                 SubMenuName = @MenuName,
-    //                 PageUrl = @PageUrl,
-    //                 MenuId = @ParentId,
-    //                 Active = @Active
-    //             WHERE
-    //                 Id = @Id`
-    //         } else {
-    //             // if (Number(Id) === 8) {
-    //             //     return failed(res, 'You Cannot Update Authorization Menu');
-    //             // }
-    //             query = `   
-    //             UPDATE tbl_Master_Menu
-    //             SET
-    //                 MenuName = @MenuName,
-    //                 PageUrl = @PageUrl,
-    //                 Active = @Active,
-    //                 OrderNo = @OrderNo
-    //             WHERE
-    //                 Id = @Id`
-    //         }
-
-    //         const request = new sql.Request()
-    //             .input('MenuName', MenuName)
-    //             .input('ParentId', ParentId)
-    //             .input('PageUrl', PageUrl)
-    //             .input('OrderNo', OrderNo)
-    //             .input('Active', Boolean(isActive) ? 1 : 0)
-    //             .input('Id', Id)
-    //             .query(query)
-
-    //         const result = await request;
-
-    //         if (result.rowsAffected[0] > 0) {
-    //             success(res, 'Changes saved')
-    //         } else {
-    //             failed(res, 'Failed to save')
-    //         }
-    //     } catch (e) {
-    //         servError(e, res);
-    //     }
-    // }
 
     const newAppMenu = async (req, res) => {
         const Auth = req.header('Authorization');
@@ -364,7 +233,7 @@ const appMenu = () => {
                 .input('display_order', display_order)
                 .input('is_active', 1)
                 .query(`
-                    INSERT INTO tbl_AppMenu (
+                    INSERT INTO [${userPortalDB}].[dbo].[tbl_AppMenu] (
                         name, menu_type, parent_id, url, display_order, is_active
                     ) VALUES (
                         @name, @menu_type, @parent_id, @url, @display_order, @is_active
@@ -399,7 +268,7 @@ const appMenu = () => {
                 .input('is_active', activeState ? 1 : 0)
                 .query(`
                     UPDATE
-                        tbl_AppMenu
+                        [${userPortalDB}].[dbo].[tbl_AppMenu]
                     SET
                         name = @name,
                         menu_type = @menu_type,
@@ -430,13 +299,13 @@ const appMenu = () => {
                         SELECT 
                             p.*
                         FROM
-                            tbl_AppMenu AS p
+                            [${userPortalDB}].[dbo].[tbl_AppMenu] AS p
                         WHERE
                             p.id = m.parent_id
                         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
                     ), '{}') AS ParantData
                 FROM 
-                    tbl_AppMenu AS m`);
+                    [${userPortalDB}].[dbo].[tbl_AppMenu] AS m`);
 
             const result = menuData.recordset.map(data => ({
                 ...data, 
