@@ -14,6 +14,7 @@ DashboardRouter.get('/purchaseInfo/moreInfo', DashboardController.getPurchaseMor
 DashboardRouter.get('/newEmployeeAbstract', DashboardController.getnewEmployeeAbstract);
 DashboardRouter.get('/usernewEmployeeAbstract', DashboardController.usergetnewEmployeeAbstract);
 DashboardRouter.get('/dayBook', dbconnect, DashboardController.getDayBookOfERP);
+DashboardRouter.get('/lastSyncedTime', dbconnect, DashboardController.getLastSyncedTime);
 
 DashboardRouter.get('/dayBook/sales', dbconnect, tallyModules.getTallySalesDetails);
 DashboardRouter.get('/dayBook/journal', dbconnect, tallyModules.getTallyJournalDetails);

@@ -32,27 +32,27 @@ connectDB();
 app.use('/api', indexRouter);
 
 app.use('/api', (req, res) => {
-  try {
-    return listRoutes(app, res)
-  } catch (e) {
-    console.error(e);
-    return failed(res, 'Failed to list routes')
-  }
+    try {
+        return listRoutes(app, res)
+    } catch (e) {
+        console.error(e);
+        return failed(res, 'Failed to list routes')
+    }
 })
 
 const reactBuildPath = path.join(__dirname, 'frontend');
 app.use(express.static(reactBuildPath));
 
 staticPaths.forEach(({ route, folder }) => {
-  const resolvedPath = path.join(__dirname, folder);
-  app.use(route, express.static(resolvedPath));
+    const resolvedPath = path.join(__dirname, folder);
+    app.use(route, express.static(resolvedPath));
 });
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(reactBuildPath, 'index.html'));
+    res.sendFile(path.join(reactBuildPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 9001;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });

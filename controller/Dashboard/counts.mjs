@@ -999,6 +999,19 @@ LEFT JOIN
         }
     }
 
+    const getLastSyncedTime = async (req, res) => {
+        try {
+            const request = new sql.Request(req.db)
+                .query('SELECT Last_Sync_Date_Time FROM tbl_Sync_Time');
+
+            const result = await request;
+
+            sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getDashboardData,
         getTallyWorkDetails,
@@ -1009,7 +1022,8 @@ LEFT JOIN
         getPurchaseMoreInfo,
         getnewEmployeeAbstract,
         usergetnewEmployeeAbstract,
-        getDayBookOfERP
+        getDayBookOfERP,
+        getLastSyncedTime
     }
 }
 
