@@ -120,6 +120,7 @@ const user = () => {
     // }
 
     // new api for create global user
+    
     const createUser = async (req, res) => {
         const { Name, UserName, UserTypeId, Password, BranchId } = req.body;
 
@@ -266,6 +267,7 @@ const user = () => {
     // }
 
     // new api for update global user
+    
     const updateUser = async (req, res) => {
         const { 
             UserId, Name, UserName, UserTypeId, Password, BranchId
