@@ -20,6 +20,7 @@ inventoryRouter.put('/stockJournal', stockJournals.updateStockJournal);
 inventoryRouter.delete('/stockJournal', stockJournals.deleteJournalInfo);
 inventoryRouter.get('/stockJournal/godownActivity', stockJournals.godownActivity);
 inventoryRouter.get('/stockJournal/tallySync', stockJournals.syncTallyStockJournal);
+inventoryRouter.get('/stockJournal/inwardsReport', stockJournals.getDestinationItemsOfInwards);
 
 inventoryRouter.get('/tripSheet', tripmaster.getTripDetails);
 inventoryRouter.post('/tripSheet', tripmaster.createTripDetails);

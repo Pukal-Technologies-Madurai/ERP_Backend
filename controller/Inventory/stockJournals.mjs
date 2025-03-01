@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
+import { servError, dataFound, noData, success, failed, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber, createPadString, ISOString } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 
@@ -60,7 +60,7 @@ const StockJournal = () => {
             if (!checkIsNumber(STJ_Id)) throw new Error('Failed to get Stock Journal ID');
 
             const Journal_no = 'JN_' + Branch_Id + '_' + createPadString(ST_Inv_Id, 4);
-            
+
             await transaction.begin();
 
             const OrderDetailsInsert = await new sql.Request(transaction)
@@ -489,16 +489,16 @@ const StockJournal = () => {
     };
 
     const godownActivity = async (req, res) => {
-        const { fromGodown, toGodown } = req.query;    
+        const { fromGodown, toGodown } = req.query;
 
         const FromDate = ISOString(req.query.FromDate), ToDate = ISOString(req.query.ToDate);
 
         if (!checkIsNumber(fromGodown) || !checkIsNumber(toGodown)) {
             return invalidInput(res, 'Source and Destination Godowns are required');
         }
-    
+
         try {
-    
+
             const request = new sql.Request()
                 .input('fromDate', sql.Date, FromDate)
                 .input('toDate', sql.Date, ToDate)
@@ -560,17 +560,17 @@ const StockJournal = () => {
                     	AND s.Sour_Goodown_Id = g.Godown_Id
                     ORDER BY s.STJ_Id`
                 )
-    
-          
+
+
             const result = await request;
-    
-      
+
+
             if (result.recordset.length > 0) {
-                dataFound(res, result.recordset); 
+                dataFound(res, result.recordset);
             } else {
-                noData(res); 
+                noData(res);
             }
-    
+
         } catch (e) {
             console.error('Error fetching journal list:', e);
             servError(e, res);
@@ -593,13 +593,65 @@ const StockJournal = () => {
         }
     }
 
+    const getDestinationItemsOfInwards = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    SELECT
+                        g.Stock_Journal_date,
+                        g.Journal_no,
+                        d.Dest_Item_Id,
+                        p.Product_Name AS destinationItemNameGet,
+                        p.Pack_Id,
+                        pck.Pack,
+                        d.Dest_Goodown_Id,
+                        dgd.Godown_Name AS destinationGodownGet,
+                        s.Sour_Goodown_Id,
+                        sgd.Godown_Name AS sourceGodownGet,
+                        d.Dest_Qty,
+                        TRY_CAST(
+                    		COALESCE(TRY_CAST(d.Dest_Qty AS DECIMAL(18,2)), 0) / 
+                    		NULLIF(COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18,2)), 0), 0) 
+                    	 AS decimal(18, 2)) AS bagsQuantity
+                    FROM tbl_Stock_Journal_Gen_Info AS g
+                    LEFT JOIN tbl_Stock_Journal_Dest_Details AS d
+                        ON d.STJ_Id = g.STJ_Id
+                    LEFT JOIN tbl_Product_Master AS p
+                        ON p.Product_Id = d.Dest_Item_Id
+                    LEFT JOIN tbl_Pack_Master AS pck
+                        ON pck.Pack_Id = p.Pack_Id
+                    LEFT JOIN tbl_Godown_Master AS dgd
+                        ON dgd.Godown_Id = d.Dest_Goodown_Id
+                    LEFT JOIN tbl_Stock_Journal_Sour_Details AS s
+                        ON g.STJ_Id = s.STJ_Id AND d.Dest_Item_Id = s.Sour_Item_Id
+                    LEFT JOIN tbl_Godown_Master AS sgd
+                        ON sgd.Godown_Id = s.Sour_Goodown_Id
+                    WHERE g.Stock_Journal_Bill_type = 'MATERIAL INWARD'
+                    AND g.Stock_Journal_date BETWEEN @Fromdate AND @Todate
+                    ORDER BY g.Stock_Journal_date, g.Journal_no;`
+                );
+            
+            const result = await request;
+
+            sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createStockJournal,
         updateStockJournal,
         deleteJournalInfo,
         getJournalDetails,
         godownActivity,
-        syncTallyStockJournal
+        syncTallyStockJournal,
+        getDestinationItemsOfInwards
     }
 }
 
