@@ -375,12 +375,15 @@ const StockJournal = () => {
 
     const getJournalDetails = async (req, res) => {
         try {
-            const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+            const Stock_Journal_Bill_type = req.query.billType;
             const request = new sql.Request();
 
             const result = await request
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
+                .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
                 .query(`
                     WITH UserTypes AS (
                         SELECT Id, UserType
@@ -406,8 +409,13 @@ const StockJournal = () => {
                         FROM tbl_Stock_Journal_Gen_Info AS sj
                         LEFT JOIN Branch AS b
                         ON sj.Branch_Id = b.BranchId
-                        WHERE CONVERT(DATE, sj.Stock_Journal_date) >= CONVERT(DATE, @Fromdate) 
+                        WHERE 
+                            CONVERT(DATE, sj.Stock_Journal_date) >= CONVERT(DATE, @Fromdate) 
                             AND CONVERT(DATE, sj.Stock_Journal_date) <= CONVERT(DATE, @Todate)
+                            ${Stock_Journal_Bill_type 
+                                ? ' AND sj.Stock_Journal_Bill_type = @Stock_Journal_Bill_type ' 
+                                : ''
+                            }
                     ), Source AS (
                       SELECT s.*,
                         p.Product_Name,

@@ -3,7 +3,7 @@ import { dataFound, noData, servError, invalidInput, failed, success } from '../
 import { encryptPasswordFun } from '../../helper_functions.mjs';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
-import {getUserIdByAuth,getUserType,getUserTypeByAuth} from '../../middleware/miniAPIs.mjs'
+import { getUserIdByAuth, getUserType, getUserTypeByAuth } from '../../middleware/miniAPIs.mjs'
 dotenv.config();
 
 const domain = process.env.domain;
@@ -349,9 +349,9 @@ const EmployeeController = () => {
         VALUES (@UserId, @UserTypeId, @Timing, @Work_Date, @Latitude, @Longitude,@Company_id)
       `);
 
-         
 
-            
+
+
             if (result.rowsAffected[0] > 0) {
                 return success(res, 'Location data received successfully')
             } else {
@@ -386,7 +386,7 @@ const EmployeeController = () => {
 
             const result = await request.query(getEmp);
 
-   
+
             if (result.recordset.length > 0) {
                 dataFound(res, result.recordset)
             } else {
@@ -516,14 +516,14 @@ const EmployeeController = () => {
 
     const employeeGetActivityLoginMobile = async (req, res) => {
         const { UserId } = req.query;
-    
+
 
         try {
             if (!checkIsNumber(UserId)) {
                 return invalidInput(res, 'UserId is required');
             }
-    
-         
+
+
             const getEmp = `
                 WITH RankedLogs AS (
                     SELECT 
@@ -560,12 +560,12 @@ const EmployeeController = () => {
                 ORDER BY 
                     e.User_Mgt_Id DESC
             `;
-    
+
             const request = new sql.Request();
-            request.input('UserId', sql.Int, UserId); 
-    
+            request.input('UserId', sql.Int, UserId);
+
             const result = await request.query(getEmp);
-    
+
             if (result.recordset.length > 0) {
                 dataFound(res, result.recordset)
             } else {
@@ -579,145 +579,143 @@ const EmployeeController = () => {
 
     const employeeAttendanceModule = async (req, res) => {
         const { FromDate, ToDate, UserId } = req.query;
-    
+
         try {
             if (!FromDate || !ToDate) {
-                return invalidInput(res,'FromDate is required and must be a valid number');
+                return invalidInput(res, 'FromDate is required and must be a valid number');
             }
-              const adjustedToDate = new Date(ToDate);
-             adjustedToDate.setDate(adjustedToDate.getDate() + 1);
-             const adjustedToDateStr = adjustedToDate.toISOString(); 
-             
+            const adjustedToDate = new Date(ToDate);
+            adjustedToDate.setDate(adjustedToDate.getDate() + 1);
+            const adjustedToDateStr = adjustedToDate.toISOString();
+
 
             const userTypeId = await getUserType(UserId);
-    
-            // if (!userTypeId) {
-               
-            //         return invalidInput(res,'userTypeId is required and must be a valid number');
-            //     }
-            
-              
+
             let condition = '';
             if (UserId == "" || UserId == "0") {
                 condition = ``;
             } else {
-                condition = `AND rl.User_Mgt_Id = @UserId`; 
+                condition = `AND rl.User_Mgt_Id = @UserId`;
             }
-    
-                                 let query=`WITH RankedLogs AS (
-                        SELECT 
-                            em.User_Mgt_Id,          
-                            u.Name AS username,  
-                            pd.EmployeeCode,        
-                            al.AttendanceDate AS LogDateTime,           
-                            CAST(al.AttendanceDate AS DATE) AS LogDate,  
-                            ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE) ORDER BY al.AttendanceDate) AS rn, 
-                            COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE)) AS record_count  
-                        FROM 
-                            tbl_Employee_Master em
-                        LEFT JOIN 
-                            tbl_Users u ON u.UserId = em.User_Mgt_Id
-                        LEFT JOIN 
-                            etimetracklite1.dbo.Employees pd 
-                            ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
-                        LEFT JOIN 
-                            etimetracklite1.dbo.AttendanceLogs al 
-                            ON al.EmployeeId = pd.EmployeeId 
-                    ),
-                    
-                    PunchDetails AS (
-                        SELECT 
-                            pd.EmployeeCode, 
-                            CAST(al.AttendanceDate AS DATE) AS LogDate,
-                            STRING_AGG(
-                                CASE 
-                                    WHEN al.PunchRecords LIKE '%in%' THEN 
-                                    
-                                        SUBSTRING(al.PunchRecords, 1, 5000) -- Extracting time 
-                                    WHEN al.PunchRecords LIKE '%out%' THEN 
-                                        CONCAT(CAST(al.AttendanceDate AS DATE), ' ', 
-                                        SUBSTRING(al.PunchRecords, 1, 5000)) -- Extracting time
-                                    ELSE ''
-                                END,
-                                ', '
-                            ) AS PunchDateTimes
-                        FROM 
-                            etimetracklite1.dbo.Employees pd 
-                        LEFT JOIN 
-                            etimetracklite1.dbo.AttendanceLogs al 
-                            ON al.EmployeeId = pd.EmployeeId
-                        GROUP BY 
-                            pd.EmployeeCode, CAST(al.AttendanceDate AS DATE)
-                    )
-                    
-                    SELECT 
-                        e.User_Mgt_Id, 
-                        COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
-                        rl.username,  
-                        rl.LogDate,
-                        COALESCE(ag.PunchDateTimes, '[]') AS AttendanceDetails, 
-                        MAX(rl.record_count) AS TotalRecords
-                    FROM 
-                        tbl_Employee_Master AS e
-                    LEFT JOIN 
-                        tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
-                    LEFT JOIN 
-                        tbl_Users AS u ON e.User_Mgt_Id = u.UserId
-                    LEFT JOIN 
-                        RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
-                    LEFT JOIN 
-                        PunchDetails AS ag 
-                        ON ag.EmployeeCode = rl.EmployeeCode AND ag.LogDate = rl.LogDate
-                           WHERE 
-                                  rl.LogDate >= CAST(@FromDate AS DATETIME) AND 
-                                    rl.LogDate < CAST(@ToDate AS DATETIME)
-                                     ${condition}
-                    GROUP BY 
-                        e.User_Mgt_Id, 
-                        d.Designation, 
-                        rl.username,  
-                        rl.LogDate, 
-                        ag.PunchDateTimes
-                    ORDER BY 
-                        rl.LogDate DESC;
-                    
-                    `
+
+            let query = `
+            WITH RankedLogs AS (
+                SELECT 
+                    em.User_Mgt_Id,          
+                    u.Name AS username,  
+                    u.UDel_Flag,
+                    pd.EmployeeCode,        
+                    al.AttendanceDate AS LogDateTime,           
+                    CAST(al.AttendanceDate AS DATE) AS LogDate,  
+                    ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE) ORDER BY al.AttendanceDate) AS rn, 
+                    COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE)) AS record_count  
+                FROM 
+                    tbl_Employee_Master em
+                LEFT JOIN 
+                    tbl_Users u ON u.UserId = em.User_Mgt_Id
+                LEFT JOIN 
+                    etimetracklite1.dbo.Employees pd 
+                    ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+                LEFT JOIN 
+                    etimetracklite1.dbo.AttendanceLogs al 
+                    ON al.EmployeeId = pd.EmployeeId 
+                WHERE 
+                    u.UDel_Flag != 1 
+                    AND al.status != 'Resigned'
+            ), PunchDetails AS (
+                SELECT 
+                    pd.EmployeeCode, 
+                    CAST(al.AttendanceDate AS DATE) AS LogDate,
+                    STRING_AGG(
+                        CASE 
+                            WHEN al.PunchRecords LIKE '%in%' THEN 
+                                SUBSTRING(al.PunchRecords, 1, 5000) -- Extracting time 
+                            WHEN al.PunchRecords LIKE '%out%' THEN 
+                                CONCAT(CAST(al.AttendanceDate AS DATE), ' ', 
+                                SUBSTRING(al.PunchRecords, 1, 5000)) -- Extracting time
+                            ELSE ''
+                        END,
+                        ', '
+                    ) AS PunchDateTimes
+                FROM 
+                    etimetracklite1.dbo.Employees pd 
+                LEFT JOIN 
+                    etimetracklite1.dbo.AttendanceLogs al 
+                    ON al.EmployeeId = pd.EmployeeId
+                WHERE 
+                    al.status != 'Resigned'
+                    AND ISNULL(CAST(al.PunchRecords AS NVARCHAR(MAX)), '') <> ''
+                GROUP BY 
+                    pd.EmployeeCode, CAST(al.AttendanceDate AS DATE)
+            )
+            SELECT 
+                e.User_Mgt_Id, 
+                COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+                rl.username,  
+                rl.LogDate,
+                COALESCE(ag.PunchDateTimes, '[]') AS AttendanceDetails, 
+                MAX(rl.record_count) AS TotalRecords
+            FROM 
+                tbl_Employee_Master AS e
+            LEFT JOIN 
+                tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
+            LEFT JOIN 
+                tbl_Users AS u ON e.User_Mgt_Id = u.UserId
+            LEFT JOIN 
+                RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
+            LEFT JOIN 
+                PunchDetails AS ag 
+                ON ag.EmployeeCode = rl.EmployeeCode 
+                AND ag.LogDate = rl.LogDate
+            WHERE 
+                rl.LogDate IS NOT NULL -- **Ensure only employees with attendance records are included**
+                AND rl.LogDate >= CAST(@FromDate AS DATETIME) 
+                AND rl.LogDate < CAST(@ToDate AS DATETIME)
+                AND (@UserId IS NULL OR rl.User_Mgt_Id = @UserId)  -- Properly handle UserId condition
+                AND u.UDel_Flag != 1 
+                AND COALESCE(ag.PunchDateTimes, '') <> ''  -- Exclude rows where PunchDateTimes is empty
+            GROUP BY 
+                e.User_Mgt_Id, 
+                d.Designation, 
+                rl.username,  
+                rl.LogDate, 
+                ag.PunchDateTimes
+            ORDER BY 
+                rl.LogDate DESC;`;
+                
             const request = new sql.Request();
             request.input('FromDate', sql.DateTime, FromDate || '1900-01-01');
             request.input('ToDate', sql.DateTime, adjustedToDateStr);
 
-    
+
             if (UserId == "" || UserId == "0") {
-                request.input('UserId', sql.Int, null); 
+                request.input('UserId', sql.Int, null);
             } else {
-                request.input('UserId', sql.Int, UserId); 
+                request.input('UserId', sql.Int, UserId);
             }
-    
+
             const result = await request.query(query);
-    
+
             if (result.recordset.length > 0) {
-                dataFound(res, result.recordset); 
+                dataFound(res, result.recordset);
             } else {
-                noData(res); 
+                noData(res);
             }
         } catch (e) {
-            servError(e, res); 
+            servError(e, res);
         }
     };
-    
-    const employeeOverallAttendance = async (req, res) => {
-        const { FromDate,ToDate } = req.query;
-    
-        try {
 
-            if (!FromDate|| !ToDate) {
-                return invalidInput(res,'FromDate is required and must be a valid number');
+    const employeeOverallAttendance = async (req, res) => {
+        const { FromDate, ToDate } = req.query;
+
+        try {
+            if (!FromDate || !ToDate) {
+                return invalidInput(res, 'FromDate and ToDate are required and must be valid dates');
             }
-    
-   
-    
+
             const query = `
-                          WITH RankedLogs AS (
+                WITH RankedLogs AS (
                     SELECT 
                         em.User_Mgt_Id,          
                         u.Name AS username,  
@@ -736,50 +734,26 @@ const EmployeeController = () => {
                     LEFT JOIN 
                         etimetracklite1.dbo.AttendanceLogs al 
                         ON al.EmployeeId = pd.EmployeeId 
+                    WHERE 
+                        al.AttendanceDate BETWEEN @FromDate AND @ToDate 
+                        AND CAST(al.PunchRecords AS NVARCHAR(MAX)) IS NOT NULL  
+                        AND LTRIM(RTRIM(CAST(al.PunchRecords AS NVARCHAR(MAX)))) <> ''
+
                 ),
-                
-                PunchDetails AS (
-                    SELECT 
-                        pd.EmployeeCode, 
-                        CAST(al.AttendanceDate AS DATE) AS LogDate,
-                        STRING_AGG(
-                            CASE 
-                                WHEN al.PunchRecords LIKE '%in%' THEN 
-                                    SUBSTRING(al.PunchRecords, 1, 5000)
-                                WHEN al.PunchRecords LIKE '%out%' THEN 
-                                    CONCAT(CAST(al.AttendanceDate AS DATE), ' ', 
-                                    SUBSTRING(al.PunchRecords, 1, 5000))
-                                ELSE ''
-                            END,
-                            ', '
-                        ) AS PunchDateTimes
-                    FROM 
-                        etimetracklite1.dbo.Employees pd 
-                    LEFT JOIN 
-                        etimetracklite1.dbo.AttendanceLogs al 
-                        ON al.EmployeeId = pd.EmployeeId
-                    GROUP BY 
-                        pd.EmployeeCode, CAST(al.AttendanceDate AS DATE)
-                ),
-                
                 AttendanceSummary AS (
                     SELECT 
                         rl.username,
                         rl.User_Mgt_Id,
                         rl.LogDate,
-                        CASE
-                            WHEN COUNT(rl.EmployeeCode) > 0 THEN 'P'
-                            ELSE 'A'
-                        END AS AttendanceStatus
+                        'P' AS AttendanceStatus
                     FROM 
                         RankedLogs rl
                     GROUP BY 
                         rl.username, rl.User_Mgt_Id, rl.LogDate
                 )
-                
                 SELECT 
                     outerEA.username AS Name,
-                    COUNT(CASE WHEN outerEA.AttendanceStatus = 'P' THEN 1 END) AS TotalPresent,
+                    COUNT(outerEA.AttendanceStatus) AS TotalPresent,
                     (
                         SELECT 
                             sub.LogDate AS Date,
@@ -796,26 +770,27 @@ const EmployeeController = () => {
                     outerEA.username
                 ORDER BY 
                     outerEA.username;
-                `
+            `;
+
             const request = new sql.Request();
-            request.input('FromDate', sql.DateTime, FromDate || '1900-01-01');
-            request.input('ToDate', sql.DateTime, ToDate || '2100-01-01'); 
-    
+            request.input('FromDate', sql.DateTime, FromDate);
+            request.input('ToDate', sql.DateTime, ToDate);
+
             const result = await request.query(query);
-    
+
             if (result.recordset.length > 0) {
-                dataFound(res, result.recordset); 
+                dataFound(res, result.recordset);
             } else {
-                noData(res); 
+                noData(res);
             }
         } catch (e) {
-          servError(e, res); 
+            servError(e, res);
         }
     };
-    
+
     const maplatitudelongitude = async (req, res) => {
         try {
-         
+
             const query = `
                               SELECT 
                    rtm.Retailer_Name,
@@ -832,22 +807,22 @@ const EmployeeController = () => {
                    rl.EntryAt DESC
 
             `;
-    
+
             const request = new sql.Request();
             const result = await request.query(query);
-    
-    
+
+
             if (result.recordset.length > 0) {
-                dataFound(res, result.recordset); 
+                dataFound(res, result.recordset);
             } else {
-                noData(res); 
+                noData(res);
             }
         } catch (e) {
-            servError(e, res); 
-          }
+            servError(e, res);
+        }
     };
 
-return {
+    return {
         emp_designation,
         employeeDepartmentGet,
         employeeGet,
