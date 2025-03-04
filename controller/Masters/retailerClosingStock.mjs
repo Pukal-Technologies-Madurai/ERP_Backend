@@ -251,6 +251,8 @@ const ClosingStockControll = () => {
                                     SELECT 
                                         pre.*,
                                         pm.Product_Name,
+                                        pm.Brand,
+                                        pb.Brand_Name,
                                         COALESCE((
                                             SELECT 
                                                 TOP (1) Product_Rate 
@@ -265,6 +267,8 @@ const ClosingStockControll = () => {
                                         Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
                                         LEFT JOIN tbl_Product_Master AS pm
                                         ON pm.Product_Id = pre.Item_Id
+                                        LEFT JOIN tbl_Brand_Master AS pb
+                                        ON pb.Brand_Id = pm.Brand
                                     WHERE 
                                         pre.Previous_Balance * COALESCE((
                                             SELECT 

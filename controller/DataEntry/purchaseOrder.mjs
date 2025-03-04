@@ -116,6 +116,7 @@ const PurchaseOrderDataEntry = () => {
                             SELECT * 
                             FROM TRANSPOTER_DETAILS 
                             WHERE TRANSPOTER_DETAILS.OrderId = pgi.Sno 
+                            ORDER BY indexValue
                             FOR JSON PATH
                         ), '[]') AS TranspoterDetails,
                         COALESCE((
