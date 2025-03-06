@@ -22,8 +22,6 @@ const taxCalc = (method = 1, amount = 0, percentage = 0) => {
 
 const DeliveryOrder = () => {
 
-
-
     const salesDeliveryCreation = async (req, res) => {
         const {
             Retailer_Id, Delivery_Person_Id, Branch_Id,
@@ -1094,7 +1092,6 @@ const DeliveryOrder = () => {
                             .input('From_Location', Branch_Id)
                             .input('To_Location', subProduct.To_Location)
                             .input('S_No', i + 1)
-                            .input('Reason', subProduct.Reason)
                             .input('Product_Id', subProduct.Item_Id)
                             .input('HSN_Code', subProduct.HSN_Code)
                             .input('QTY', subProduct.Bill_Qty)
@@ -1117,12 +1114,12 @@ const DeliveryOrder = () => {
                             .input('Created_By', Created_By)
                             .query(`
                                     INSERT INTO tbl_Trip_Details (
-                                        Trip_Id, Delivery_Id, Batch_No, From_Location, To_Location, S_No, Reason, Product_Id,
+                                        Trip_Id, Delivery_Id, Batch_No, From_Location, To_Location, S_No, Product_Id,
                                         HSN_Code, QTY, KGS, GST_Inclusive, IS_IGST, Gst_Rate, Gst_P, Cgst_P, Sgst_P, Igst_P, Taxable_Value,
                                         Round_off, Total_Value, Trip_From, Party_And_Branch_Id, Transporter_Id,
                                         Dispatch_Date, Delivery_Date, Created_By
                                     ) VALUES (
-                                        @Trip_Id, @Delivery_Id, @Batch_No, @From_Location, @To_Location, @S_No, @Reason, @Product_Id,
+                                        @Trip_Id, @Delivery_Id, @Batch_No, @From_Location, @To_Location, @S_No, @Product_Id,
                                         @HSN_Code, @QTY, @KGS, @GST_Inclusive, @IS_IGST, @Gst_Rate, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @Taxable_Value,
                                         @Round_off, @Total_Value, @Trip_From, @Party_And_Branch_Id, @Transporter_Id,
                                         @Dispatch_Date, @Delivery_Date, @Created_By
@@ -1593,7 +1590,6 @@ const DeliveryOrder = () => {
                             .input('From_Location', Branch_Id)
                             .input('To_Location', subProduct.To_Location)
                             .input('S_No', subProduct?.S_No)
-                            .input('Reason', subProduct.Reason)
                             .input('Product_Id', subProduct.Item_Id)
                             .input('HSN_Code', subProduct.HSN_Code)
                             .input('QTY', subProduct.Bill_Qty)
@@ -1616,12 +1612,12 @@ const DeliveryOrder = () => {
                             .input('Created_By', Created_By)
                             .query(`
                         INSERT INTO tbl_Trip_Details (
-                            Trip_Id, Delivery_Id, Batch_No, From_Location, To_Location, S_No, Reason, Product_Id,
+                            Trip_Id, Delivery_Id, Batch_No, From_Location, To_Location, S_No, Product_Id,
                             HSN_Code, QTY, KGS, GST_Inclusive, IS_IGST, Gst_Rate, Gst_P, Cgst_P, Sgst_P, Igst_P, Taxable_Value,
                             Round_off, Total_Value, Trip_From, Party_And_Branch_Id, Transporter_Id,
                             Dispatch_Date, Delivery_Date, Created_By
                         ) VALUES (
-                            @Trip_Id, @Delivery_Id, @Batch_No, @From_Location, @To_Location, @S_No, @Reason, @Product_Id,
+                            @Trip_Id, @Delivery_Id, @Batch_No, @From_Location, @To_Location, @S_No, @Product_Id,
                             @HSN_Code, @QTY, @KGS, @GST_Inclusive, @IS_IGST, @Gst_Rate, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @Taxable_Value,
                             @Round_off, @Total_Value, @Trip_From, @Party_And_Branch_Id, @Transporter_Id,
                             @Dispatch_Date, @Delivery_Date, @Created_By
