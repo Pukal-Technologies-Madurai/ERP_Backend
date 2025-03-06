@@ -1,24 +1,10 @@
 
 import sql from 'mssql'
 import { servError, dataFound, noData, failed, success, invalidInput } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, isValidDate } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, createPadString, isValidDate, toNumber } from '../../helper_functions.mjs'
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
-
-const taxCalc = (method = 1, amount = 0, percentage = 0) => {
-    switch (method) {
-        case 0:
-            return RoundNumber(amount * (percentage / 100));
-        case 1:
-            return RoundNumber(amount - (amount * (100 / (100 + percentage))));
-        case 2:
-            return 0;
-        default:
-            return 0;
-    }
-}
-
 
 const tripActivities = () => {
 
@@ -26,17 +12,26 @@ const tripActivities = () => {
         const {
             Branch_Id,
             Trip_Date,
-            Vehicle_No,
+            Vehicle_No = '',
             Trip_No = '',
             Trip_ST_KM = '',
             Trip_EN_KM = '',
             Created_by = '',
+            PhoneNumber = '',
+            LoadingLoad = 0,
+            LoadingEmpty = 0,
+            UnloadingLoad = 0,
+            UnloadingEmpty = 0,
+            Godownlocation = 0,
+            BillType = '',
+            VoucherType = 0,
+            Narration = '',
             Product_Array = [],
             EmployeesInvolved = [],
         } = req.body;
 
-        const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null, 
-        EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
+        const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null,
+            EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
 
         if (!checkIsNumber(Branch_Id) || Trip_Date === '' || Vehicle_No === '') {
             return invalidInput(res, 'Select Branch');
@@ -63,25 +58,39 @@ const tripActivities = () => {
             await transaction.begin();
 
             const insertMaster = await new sql.Request(transaction)
-                .input('Trip_Id', Trip_Id)
+                .input('Trip_Id', toNumber(Trip_Id))
                 .input('Challan_No', Challan_No)
-                .input('Branch_Id', Branch_Id)
+                .input('Branch_Id', toNumber(Branch_Id))
                 .input('Trip_Date', Trip_Date)
                 .input('Vehicle_No', Vehicle_No)
                 .input('StartTime', StartTime)
                 .input('EndTime', EndTime)
-                .input('Trip_No', Trip_No)
+                .input('Trip_No', toNumber(Trip_No))
+                .input('PhoneNumber', PhoneNumber)
+                .input('LoadingLoad', Number(LoadingLoad || 0))
+                .input('LoadingEmpty', Number(LoadingEmpty || 0))
+                .input('UnloadingLoad', Number(UnloadingLoad || 0))
+                .input('UnloadingEmpty', Number(UnloadingEmpty || 0))
+                .input('Godownlocation', toNumber(Godownlocation))
+                .input('BillType', BillType)
+                .input('VoucherType', toNumber(VoucherType))
+                .input('Narration', Narration)
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
                 .input('Trip_EN_KM', Number(Trip_EN_KM))
-                .input('Trip_Tot_Kms', Trip_Tot_Kms)
-                .input('Created_by', Created_by)
+                .input('Trip_Tot_Kms', toNumber(Trip_Tot_Kms))
+                .input('Created_By', Created_by)
+                .input('Created_At', new Date())
                 .query(`
                    INSERT INTO tbl_Trip_Master (
                        Trip_Id, Challan_No, Branch_Id, Trip_Date, Vehicle_No,
-                       StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Created_by
+                       PhoneNumber, LoadingLoad, LoadingEmpty, UnloadingLoad, UnloadingEmpty, Narration, BillType, VoucherType,
+                       StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Godownlocation,
+                       Created_At, Created_By
                    ) VALUES (
                        @Trip_Id, @Challan_No, @Branch_Id, @Trip_Date, @Vehicle_No,
-                       @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_EN_KM, @Trip_Tot_Kms, @Created_by
+                       @PhoneNumber, @LoadingLoad, @LoadingEmpty, @UnloadingLoad, @UnloadingEmpty, @Narration, @BillType, @VoucherType,
+                       @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_EN_KM, @Trip_Tot_Kms, @Godownlocation, 
+                       @Created_At, @Created_By
                    );
                `);
 
@@ -92,44 +101,49 @@ const tripActivities = () => {
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
                 const result = await new sql.Request(transaction)
-                    .input('Trip_Id', Trip_Id)
-                    .input('STJ_Id', product.STJ_Id)
-                    .input('Batch_No', product.Batch_No)
-                    .input('From_Location', product.From_Location)
-                    .input('To_Location', product.To_Location)
+                    .input('Trip_Id', toNumber(Trip_Id))
+                    .input('Batch_No', product?.Batch_No)
+                    .input('From_Location', toNumber(product?.From_Location))
+                    .input('To_Location', toNumber(Godownlocation))
                     .input('S_No', i + 1)
-                    .input('Reason', product.Reason)
-                    .input('Product_Id', product.Product_Id)
-                    .input('HSN_Code', product.HSN_Code)
-                    .input('QTY', product.QTY)
-                    .input('KGS', product.KGS)
-                    .input('GST_Inclusive', product?.GST_Inclusive)
-                    .input('IS_IGST', product.IS_IGST)
-                    .input('Gst_Rate', product.Gst_Rate)
-                    .input('Gst_P', product.Gst_P || 0)
-                    .input('Cgst_P', product.Cgst_P)
-                    .input('Sgst_P', product.Sgst_P)
-                    .input('Igst_P', product.Igst_P)
-                    .input('Taxable_Value', product?.Taxable_Value)
-                    .input('Round_off', product.Round_off)
-                    .input('Total_Value', product.Total_Value)
-                    .input('Trip_From', product.Trip_From)
-                    .input('Party_And_Branch_Id', product.Party_And_Branch_Id)
-                    .input('Transporter_Id', product.Transporter_Id)
-                    .input('Dispatch_Date', product.Dispatch_Date)
-                    .input('Delivery_Date', product.Delivery_Date)
+
+                    .input('Concern', product?.Concern)
+                    .input('BillNo', product?.BillNo)
+                    .input('BatchLocation', product?.BatchLocation)
+
+                    .input('Product_Id', toNumber(product?.Product_Id))
+                    .input('HSN_Code', product?.HSN_Code)
+                    .input('QTY', toNumber(product?.QTY))
+                    .input('KGS', toNumber(product?.KGS))
+
+                    .input('Unit_Id', toNumber(product?.Unit_Id))
+                    .input('Units', product?.Units)
+
+                    .input('GST_Inclusive', toNumber(product?.GST_Inclusive))
+                    .input('IS_IGST', toNumber(product?.IS_IGST))
+                    .input('Gst_Rate', toNumber(product?.Gst_Rate))
+                    .input('Gst_P', toNumber(product?.Gst_P))
+                    .input('Cgst_P', toNumber(product?.Cgst_P))
+                    .input('Sgst_P', toNumber(product?.Sgst_P))
+                    .input('Igst_P', toNumber(product?.Igst_P))
+                    .input('Taxable_Value', toNumber(product?.Taxable_Value))
+                    .input('Round_off', toNumber(product?.Round_off))
+                    .input('Total_Value', toNumber(product?.Total_Value))
+                    .input('Trip_From', product?.Trip_From)
+                    .input('Party_And_Branch_Id', product?.Party_And_Branch_Id)
+                    .input('Transporter_Id', product?.Transporter_Id)
                     .input('Created_By', Created_by)
                     .query(`
                        INSERT INTO tbl_Trip_Details (
-                           Trip_Id, STJ_Id,Batch_No,From_Location, To_Location, S_No, Reason, Product_Id,
+                           Trip_Id, Batch_No,From_Location, To_Location, S_No, Product_Id,
                            HSN_Code, QTY, KGS, GST_Inclusive, IS_IGST, Gst_Rate, Gst_P, Cgst_P, Sgst_P, Igst_P, Taxable_Value,
-                           Round_off, Total_Value, Trip_From, Party_And_Branch_Id, Transporter_Id,
-                           Dispatch_Date, Delivery_Date, Created_By
+                           Concern, BillNo, BatchLocation, Unit_Id, Units,
+                           Round_off, Total_Value, Trip_From, Party_And_Branch_Id, Transporter_Id, Created_By
                        ) VALUES (
-                           @Trip_Id,@STJ_Id,@Batch_No, @From_Location, @To_Location, @S_No, @Reason, @Product_Id,
+                           @Trip_Id, @Batch_No, @From_Location, @To_Location, @S_No, @Product_Id,
                            @HSN_Code, @QTY, @KGS, @GST_Inclusive, @IS_IGST, @Gst_Rate, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @Taxable_Value,
-                           @Round_off, @Total_Value, @Trip_From, @Party_And_Branch_Id, @Transporter_Id,
-                           @Dispatch_Date, @Delivery_Date,  @Created_By
+                           @Concern, @BillNo, @BatchLocation, @Unit_Id, @Units,
+                           @Round_off, @Total_Value, @Trip_From, @Party_And_Branch_Id, @Transporter_Id, @Created_By
                        );
                    `);
 
@@ -169,13 +183,22 @@ const tripActivities = () => {
             Trip_No = '',
             Trip_ST_KM = 0,
             Trip_EN_KM = 0,
+            PhoneNumber = '',
+            LoadingLoad = 0,
+            LoadingEmpty = 0,
+            UnloadingLoad = 0,
+            UnloadingEmpty = 0,
+            Godownlocation = 0,
+            BillType = 0,
+            VoucherType = 0,
+            Narration = '',
             Updated_By = '',
             Product_Array = [],
             EmployeesInvolved = []
         } = req.body;
 
-        const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null, 
-        EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
+        const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null,
+            EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
 
         if (!checkIsNumber(Branch_Id) || Trip_Date === '' || Vehicle_No === '' || Trip_Id == '' || Trip_Id == null) {
             return invalidInput(res, 'Check values ');
@@ -186,7 +209,6 @@ const tripActivities = () => {
         if (Trip_ST_KM && Trip_EN_KM && Number(Trip_ST_KM) > Number(Trip_EN_KM)) {
             return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
         }
-
 
         const transaction = new sql.Transaction();
 
@@ -202,114 +224,120 @@ const tripActivities = () => {
                 return invalidInput(res, 'Trip does not exist');
             }
 
-            // const productsData = (await getProducts(1)).dataArray;
-            const Trip_Tot_Kms =  Subraction(Trip_EN_KM, Trip_ST_KM);
+            const Trip_Tot_Kms = Subraction(Trip_EN_KM, Trip_ST_KM);
 
             await transaction.begin();
 
-            // Update tbl_Trip_Master
             const updateMaster = await new sql.Request(transaction)
-                .input('Trip_Id', Trip_Id)
+                .input('Trip_Id', toNumber(Trip_Id))
                 .input('Branch_Id', Branch_Id)
                 .input('Trip_Date', Trip_Date)
                 .input('Vehicle_No', Vehicle_No)
+                .input('PhoneNumber', PhoneNumber)
+                .input('LoadingLoad', toNumber(LoadingLoad || 0))
+                .input('LoadingEmpty', toNumber(LoadingEmpty || 0))
+                .input('UnloadingLoad', toNumber(UnloadingLoad || 0))
+                .input('UnloadingEmpty', toNumber(UnloadingEmpty || 0))
+                .input('BillType', BillType)
+                .input('VoucherType', toNumber(VoucherType))
+                .input('Narration', Narration)
                 .input('StartTime', StartTime)
                 .input('EndTime', EndTime)
                 .input('Trip_No', Trip_No)
-                .input('Trip_ST_KM', Number(Trip_ST_KM))
-                .input('Trip_EN_KM', Number(Trip_EN_KM))
+                .input('Trip_ST_KM', toNumber(Trip_ST_KM))
+                .input('Trip_EN_KM', toNumber(Trip_EN_KM))
                 .input('Trip_Tot_Kms', Trip_Tot_Kms)
+                .input('Godownlocation', Godownlocation)
                 .input('Updated_By', Updated_By)
+                .input('Updated_At', new Date())
                 .query(`
-                   UPDATE tbl_Trip_Master
-                   SET 
-                       Branch_Id = @Branch_Id,
-                       Trip_Date = @Trip_Date,
-                       Vehicle_No = @Vehicle_No,
-                       StartTime = @StartTime,
-                       EndTime = @EndTime,
-                       Trip_No = @Trip_No,
-                       Trip_ST_KM = @Trip_ST_KM,
-                       Trip_EN_KM = @Trip_EN_KM,
-                       Trip_Tot_Kms = @Trip_Tot_Kms,
-                       Updated_By = @Updated_By
-                   WHERE Trip_Id = @Trip_Id
+                    UPDATE tbl_Trip_Master
+                    SET 
+                        Branch_Id = @Branch_Id,
+                        Trip_Date = @Trip_Date,
+                        Vehicle_No = @Vehicle_No,
+                        StartTime = @StartTime,
+                        EndTime = @EndTime,
+                        Trip_No = @Trip_No,
+                        Trip_ST_KM = @Trip_ST_KM,
+                        Trip_EN_KM = @Trip_EN_KM,
+                        Trip_Tot_Kms = @Trip_Tot_Kms,
+                        Godownlocation = @Godownlocation,
+                        PhoneNumber = @PhoneNumber,
+                        LoadingLoad = @LoadingLoad,
+                        LoadingEmpty = @LoadingEmpty,
+                        UnloadingLoad = @UnloadingLoad,
+                        UnloadingEmpty = @UnloadingEmpty,
+                        BillType = @BillType,
+                        VoucherType = @VoucherType,
+                        Narration = @Narration,
+                        Updated_By = @Updated_By,
+                        Updated_At = @Updated_At
+                    WHERE Trip_Id = @Trip_Id
                `);
 
             if (updateMaster.rowsAffected[0] === 0) {
                 throw new Error('Failed to update Trip Master');
             }
 
-            const deleteTripDetailsQuery = `
-               DELETE FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id
-           `;
-            const deleteResult = await new sql.Request(transaction)
+            await new sql.Request(transaction)
                 .input('Trip_Id', Trip_Id)
-                .query(deleteTripDetailsQuery);
-
-            if (deleteResult.rowsAffected[0] === 0) {
-                throw new Error('Failed to delete existing trip details');
-            }
-
-            const deleteTripEmployeesQuery = `
-               DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @Trip_Id
-           `;
-            const deleteEmployeesResult = await new sql.Request(transaction)
-                .input('Trip_Id', Trip_Id)
-                .query(deleteTripEmployeesQuery);
-
-            if (deleteEmployeesResult.rowsAffected[0] === 0) {
-                throw new Error('Failed to delete existing trip employees');
-            }
+                .query(`
+                    DELETE FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id
+                    DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @Trip_Id`
+                );
 
             for (let i = 0; i < Product_Array.length; i++) {
-
                 const product = Product_Array[i];
-
                 const result = await new sql.Request(transaction)
-                    .input('Trip_Id', Trip_Id)
-                    .input('STJ_Id', product.STJ_Id)
-                    .input('Batch_No', product.Batch_No)
-                    .input('From_Location', product.From_Location)
-                    .input('To_Location', product.To_Location)
+                    .input('Trip_Id', toNumber(Trip_Id))
+                    .input('Batch_No', product?.Batch_No)
+                    .input('From_Location', toNumber(product?.From_Location))
+                    .input('To_Location', toNumber(Godownlocation))
                     .input('S_No', i + 1)
-                    .input('Reason', product.Reason)
-                    .input('Product_Id', product.Product_Id)
-                    .input('HSN_Code', product.HSN_Code)
-                    .input('QTY', product.QTY)
-                    .input('KGS', product.KGS)
-                    .input('GST_Inclusive', product.GST_Inclusive)
-                    .input('IS_IGST', product.IS_IGST)
-                    .input('Gst_Rate', product.Gst_Rate)
-                    .input('Gst_P', product.Gst_P || 0)
-                    .input('Cgst_P', product.isIGST)
-                    .input('Sgst_P', product.isIGST)
-                    .input('Igst_P', product.isIGST)
-                    .input('Taxable_Value', product.Amount)
-                    .input('Round_off', product.roundOff)
-                    .input('Total_Value', product.Total_Value)
-                    .input('Trip_From', product.Trip_From)
-                    .input('Party_And_Branch_Id', product.Party_And_Branch_Id)
-                    .input('Transporter_Id', product.Transporter_Id)
-                    .input('Dispatch_Date', product.Dispatch_Date)
-                    .input('Delivery_Date', product.Delivery_Date)
-                    .input('Updated_By', Updated_By)
+
+                    .input('Concern', product?.Concern)
+                    .input('BillNo', product?.BillNo)
+                    .input('BatchLocation', product?.BatchLocation)
+
+                    .input('Product_Id', toNumber(product?.Product_Id))
+                    .input('HSN_Code', product?.HSN_Code)
+                    .input('QTY', toNumber(product?.QTY))
+                    .input('KGS', toNumber(product?.KGS))
+
+                    .input('Unit_Id', toNumber(product?.Unit_Id))
+                    .input('Units', product?.Units)
+
+                    .input('GST_Inclusive', toNumber(product?.GST_Inclusive))
+                    .input('IS_IGST', toNumber(product?.IS_IGST))
+                    .input('Gst_Rate', toNumber(product?.Gst_Rate))
+                    .input('Gst_P', toNumber(product?.Gst_P))
+                    .input('Cgst_P', toNumber(product?.Cgst_P))
+                    .input('Sgst_P', toNumber(product?.Sgst_P))
+                    .input('Igst_P', toNumber(product?.Igst_P))
+                    .input('Taxable_Value', toNumber(product?.Taxable_Value))
+                    .input('Round_off', toNumber(product?.Round_off))
+                    .input('Total_Value', toNumber(product?.Total_Value))
+                    .input('Trip_From', product?.Trip_From)
+                    .input('Party_And_Branch_Id', product?.Party_And_Branch_Id)
+                    .input('Transporter_Id', product?.Transporter_Id)
+                    .input('Created_By', Updated_By)
                     .query(`
-                       INSERT INTO tbl_Trip_Details
-                       (Trip_Id,STJ_Id,Batch_No,From_Location, To_Location, S_No, Reason, Product_Id, HSN_Code, QTY, KGS, 
-                       GST_Inclusive, IS_IGST, Gst_Rate, Gst_P, Cgst_P, Sgst_P, Igst_P, Taxable_Value, 
-                       Round_off, Total_Value, Trip_From, Party_And_Branch_Id, Transporter_Id, Dispatch_Date, 
-                       Delivery_Date, Updated_By)
-                       VALUES
-                       (@Trip_Id,@STJ_Id,@Batch_No, @From_Location, @To_Location, @S_No, @Reason, @Product_Id, @HSN_Code, 
-                       @QTY, @KGS, @GST_Inclusive, @IS_IGST, @Gst_Rate, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, 
-                       @Taxable_Value, @Round_off, @Total_Value, @Trip_From, @Party_And_Branch_Id, 
-                       @Transporter_Id, @Dispatch_Date, @Delivery_Date, @Updated_By)
-                   `);
+                           INSERT INTO tbl_Trip_Details (
+                               Trip_Id, Batch_No, From_Location, To_Location, S_No, Product_Id,
+                               HSN_Code, QTY, KGS, GST_Inclusive, IS_IGST, Gst_Rate, Gst_P, Cgst_P, Sgst_P, Igst_P, Taxable_Value,
+                               Concern, BillNo, BatchLocation, Unit_Id, Units,
+                               Round_off, Total_Value, Trip_From, Party_And_Branch_Id, Transporter_Id, Created_By
+                           ) VALUES (
+                               @Trip_Id, @Batch_No, @From_Location, @To_Location, @S_No, @Product_Id,
+                               @HSN_Code, @QTY, @KGS, @GST_Inclusive, @IS_IGST, @Gst_Rate, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @Taxable_Value,
+                               @Concern, @BillNo, @BatchLocation, @Unit_Id, @Units,
+                               @Round_off, @Total_Value, @Trip_From, @Party_And_Branch_Id, @Transporter_Id, @Created_By
+                           );
+                       `);
 
-                if (result.rowsAffected[0] === 0) throw new Error('Failed to insert new Trip Details');
+                if (result.rowsAffected[0] === 0) throw new Error('Failed to insert into Trip Details');
             }
-
 
             for (let i = 0; i < EmployeesInvolved.length; i++) {
                 const employee = EmployeesInvolved[i];
@@ -371,9 +399,6 @@ const tripActivities = () => {
                         COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
                         COALESCE(gm_from.Godown_Name, 'Unknown') AS FromLocation,
                         COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation,
-                        COALESCE(sjs.Journal_no, 'Unknown') AS Journal_no,
-                        COALESCE(sjs.Stock_Journal_Bill_type, 'Unknown') AS Stock_Journal_Bill_type,
-                        COALESCE(sjs.Stock_Journal_Voucher_type, 'Unknown') AS Stock_Journal_Voucher_type,
                         po.OrderId AS arrivalOrderId
                     FROM
                         tbl_Trip_Details AS td
@@ -383,8 +408,6 @@ const tripActivities = () => {
                         ON gm_from.Godown_Id = td.From_Location
                     LEFT JOIN tbl_Godown_Master AS gm_to
                         ON gm_to.Godown_Id = td.To_Location
-                    LEFT JOIN tbl_Stock_Journal_Gen_Info AS sjs
-		                ON sjs.STJ_Id = td.STJ_Id
                     LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po
                         ON po.Trip_Id = td.Trip_Id AND po.ItemId = td.Product_Id
                     WHERE 
@@ -444,7 +467,6 @@ const tripActivities = () => {
             servError(e, res);
         }
     };
-
 
     return {
         createTripDetails,
