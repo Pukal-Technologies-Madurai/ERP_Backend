@@ -231,6 +231,30 @@ const StockAndPurchaseReport = () => {
         }
     }
 
+    const externalAPIStockJournal = async (req, res) => {
+        try {
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', req.query.Fromdate)
+                .input('Todate', req.query.Todate)
+                .input('Company_Id', 6)
+                .input('Vouche_Id', 0)
+                .execute('Online_Stock_Journal_API')
+
+            const result = await request;
+            if (result.recordset.length > 0) {
+                const stockjournal = JSON.parse(result.recordset[0]?.Stock)
+                dataFound(res, stockjournal)
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
     return {
         stockReport,
         liveStockReport,
@@ -241,6 +265,7 @@ const StockAndPurchaseReport = () => {
         porductBasedSalesResult,
         externalAPIPurchase,
         externalAPISaleOrder,
+        externalAPIStockJournal,
     }
 }
 
