@@ -412,10 +412,10 @@ const StockJournal = () => {
                         WHERE 
                             CONVERT(DATE, sj.Stock_Journal_date) >= CONVERT(DATE, @Fromdate) 
                             AND CONVERT(DATE, sj.Stock_Journal_date) <= CONVERT(DATE, @Todate)
-                            ${Stock_Journal_Bill_type 
-                                ? ' AND sj.Stock_Journal_Bill_type = @Stock_Journal_Bill_type ' 
-                                : ''
-                            }
+                            ${Stock_Journal_Bill_type
+                        ? ' AND sj.Stock_Journal_Bill_type = @Stock_Journal_Bill_type '
+                        : ''
+                    }
                     ), Source AS (
                       SELECT s.*,
                         p.Product_Name,
@@ -605,10 +605,13 @@ const StockJournal = () => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+            const { sourceGodown = '', destinationGodown = '' } = req.query;
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
+                .input('sourceGodown', sourceGodown)
+                .input('destinationGodown', destinationGodown)
                 .query(`
                     SELECT
                         g.Stock_Journal_date,
@@ -620,8 +623,9 @@ const StockJournal = () => {
                         d.Dest_Goodown_Id,
                         dgd.Godown_Name AS destinationGodownGet,
                         s.Sour_Goodown_Id,
+                        COALESCE(s.Sour_Qty, 0) AS Sour_Qty,
                         sgd.Godown_Name AS sourceGodownGet,
-                        d.Dest_Qty,
+                        COALESCE(d.Dest_Qty, 0) AS Dest_Qty,
                         TRY_CAST(
                     		COALESCE(TRY_CAST(d.Dest_Qty AS DECIMAL(18,2)), 0) / 
                     		NULLIF(COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18,2)), 0), 0) 
@@ -641,9 +645,11 @@ const StockJournal = () => {
                         ON sgd.Godown_Id = s.Sour_Goodown_Id
                     WHERE g.Stock_Journal_Bill_type = 'MATERIAL INWARD'
                     AND g.Stock_Journal_date BETWEEN @Fromdate AND @Todate
+                    ${sourceGodown ? ' AND s.Sour_Goodown_Id = @sourceGodown ' : ''}
+                    ${destinationGodown ? ' AND d.Dest_Goodown_Id = @destinationGodown ' : ''}
                     ORDER BY g.Stock_Journal_date, g.Journal_no;`
                 );
-            
+
             const result = await request;
 
             sentData(res, result.recordset)
