@@ -437,7 +437,8 @@ const SaleOrder = () => {
     const getSaleOrder = async (req, res) => {
         const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id } = req.query;
 
-        const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
         try {
             let query = `

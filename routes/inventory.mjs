@@ -25,5 +25,6 @@ inventoryRouter.get('/stockJournal/inwardsReport', stockJournals.getDestinationI
 inventoryRouter.get('/tripSheet', tripmaster.getTripDetails);
 inventoryRouter.post('/tripSheet', tripmaster.createTripDetails);
 inventoryRouter.put('/tripSheet', tripmaster.updateTripDetails);
+inventoryRouter.get('/tripSheet/arrivalList', tripmaster.getArrivalReport);
 
 export default inventoryRouter;
