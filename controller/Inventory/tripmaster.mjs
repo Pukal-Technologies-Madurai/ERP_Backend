@@ -365,9 +365,8 @@ const tripActivities = () => {
 
     const getTripDetails = async (req, res) => {
         try {
-
-            const FromDate = req.query?.FromDate ? ISOString(req.query.FromDate) : ISOString();
-            const ToDate = req.query?.ToDate ? ISOString(req.query.ToDate) : ISOString();
+            const FromDate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const ToDate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
             if (!FromDate && !ToDate) {
                 return invalidInput(res, 'Select StartDate & EndDate')
@@ -488,6 +487,7 @@ const tripActivities = () => {
 		                    t.StartTime, t.EndTime,
 		                    t.Trip_ST_KM, t.Trip_EN_KM,
 		                    t.Godownlocation, 
+                            t.Narration,
 		                    pm.Product_Name,
                     	    COALESCE(gm_from.Godown_Name, 'Unknown') AS FromLocation,
                             COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation
