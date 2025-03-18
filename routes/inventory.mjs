@@ -1,6 +1,7 @@
 import express from 'express';
 import tallyStockBased from '../controller/Inventory/tallyStockBased.mjs';
 import stockJournals from '../controller/Inventory/stockJournals.mjs';
+import stockProcessing from '../controller/Inventory/stockProcessing.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 import tripmaster from '../controller/Inventory/tripmaster.mjs';
 
@@ -26,5 +27,10 @@ inventoryRouter.get('/tripSheet', tripmaster.getTripDetails);
 inventoryRouter.post('/tripSheet', tripmaster.createTripDetails);
 inventoryRouter.put('/tripSheet', tripmaster.updateTripDetails);
 inventoryRouter.get('/tripSheet/arrivalList', tripmaster.getArrivalReport);
+
+inventoryRouter.get('/stockProcessing', stockProcessing.getProcessingDetails);
+inventoryRouter.post('/stockProcessing', stockProcessing.createStockProcessing);
+inventoryRouter.put('/stockProcessing', stockProcessing.updateStockProcessing);
+inventoryRouter.delete('/stockProcessing', stockProcessing.deleteStockProcessing);
 
 export default inventoryRouter;

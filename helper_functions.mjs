@@ -227,6 +227,28 @@ export const timeDifferenceHHMM = (startDate, endDate) => {
     return `${pad(hours)}:${pad(minutes)}`;
 }
 
+export const formatDateForDatetimeLocal = (date) => {
+    try {
+        const pad = (num) => num?.toString().padStart(2, '0');
+
+        const year = date.getFullYear();
+        const month = pad(date.getMonth() + 1);
+        const day = pad(date.getDate());
+        const hours = pad(date.getHours());
+        const minutes = pad(date.getMinutes());
+
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch (e) {
+        console.log('Error in formatDateForDatetimeLocal function: ', e);
+        return formatDateForDatetimeLocal(new Date())
+    }
+}
+
+export const convertUTCToLocal = (utcDateString) => {
+    const utcDate = new Date(utcDateString + "Z"); // Append 'Z' to indicate UTC time
+    return utcDate.toLocaleString();
+}
+
 export const onlynum = (e) => {
     const value = e.target.value;
     const newValue = value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
