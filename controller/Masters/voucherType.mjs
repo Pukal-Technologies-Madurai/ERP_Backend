@@ -21,10 +21,10 @@ const voucherType = () => {
     }
 
     const addVoucherType = async (req, res) => {
-        const { Voucher_Type, Branch_Id,Type } = req.body;
+        const { Voucher_Type,Voucher_Code, Branch_Id,Type } = req.body;
     
-        if (!Voucher_Type || !checkIsNumber(Branch_Id) || !Type) {
-            return invalidInput(res, 'Voucher_Type and Branch_Id are required');
+        if (!Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
+            return invalidInput(res, 'Voucher_Type and Branch_Id,Voucher_Code are required');
         }
     
         try {
@@ -50,11 +50,12 @@ const voucherType = () => {
             const request = new sql.Request()
                 .input('Vocher_Type_Id', Voucher_Type_Id)
                 .input('Voucher_Type', Voucher_Type)
+                .input('Voucher_Code', Voucher_Code)
                 .input('Branch_Id', Branch_Id)
                 .input('Type', Type)
                 .query(`
-                    INSERT INTO tbl_Voucher_Type (Vocher_Type_Id, Voucher_Type, Branch_Id,Type)
-                    VALUES (@Vocher_Type_Id, @Voucher_Type, @Branch_Id,@Type)
+                    INSERT INTO tbl_Voucher_Type (Vocher_Type_Id, Voucher_Type,Voucher_Code, Branch_Id,Type)
+                    VALUES (@Vocher_Type_Id, @Voucher_Type,@Voucher_Code, @Branch_Id,@Type)
                 `);
     
             const result = await request;
@@ -71,15 +72,15 @@ const voucherType = () => {
     };
 
     const editVoucherType = async (req, res) => {
-        const { Voucher_Type_Id, Voucher_Type, Branch_Id,Type } = req.body;
+        const { Voucher_Type_Id, Voucher_Type,Voucher_Code, Branch_Id,Type } = req.body;
 
-        if (!checkIsNumber(Voucher_Type_Id) || !Voucher_Type || !checkIsNumber(Branch_Id) || !Type) {
+        if (!checkIsNumber(Voucher_Type_Id) || !Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
             return invalidInput(res, 'Voucher_Type_Id, Voucher_Type, Branch_Id,Type is required')
         }
 
         try {
             const existVoucher = (await new sql.Request()
-                .query(`SELECT Vocher_Type_Id, Voucher_Type, Branch_Id,Type FROM tbl_Voucher_Type`)).recordset;
+                .query(`SELECT Vocher_Type_Id, Voucher_Type,Voucher_Code, Branch_Id,Type FROM tbl_Voucher_Type`)).recordset;
 
                 existVoucher.forEach(voucher => {
                 if (
@@ -92,6 +93,7 @@ const voucherType = () => {
             const request = new sql.Request()
                 .input('Voucher_Type_Id', Voucher_Type_Id)
                 .input('Voucher_Type', Voucher_Type)
+                .input('Voucher_Code', Voucher_Code)
                 .input('Branch_Id', Branch_Id)
                 .input('Type', Type)
                 .query(`
@@ -99,6 +101,7 @@ const voucherType = () => {
                     SET 
                         Voucher_Type = @Voucher_Type, 
                         Branch_Id = @Branch_Id,
+                        Voucher_Code=@Voucher_Code,
                         Type=@Type
                     WHERE
                         Vocher_Type_Id = @Voucher_Type_Id`

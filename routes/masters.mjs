@@ -14,6 +14,9 @@ import retailerClosingStock from '../controller/Masters/retailerClosingStock.mjs
 import employeesTasks from '../controller/EmployeesInvolved/EmployeesTask.mjs';
 import TallyMasters from '../controller/Masters/tallyMasters.mjs';
 import voucherType from '../controller/Masters/voucherType.mjs';
+import branchPos from '../controller/Masters/pos.mjs';
+import uom  from '../controller/Masters/uom.mjs';
+import posRateMaster from '../controller/Masters/posRateMaster.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 
 const MastersRouter = express.Router();
@@ -139,5 +142,31 @@ MastersRouter.get('/voucher', voucherType.getVoucherType);
 MastersRouter.post('/voucher', voucherType.addVoucherType);
 MastersRouter.put('/voucher', voucherType.editVoucherType);
 MastersRouter.delete('/voucher', voucherType.deleteVoucherType);
+
+
+
+// 24-03-2025
+
+MastersRouter.get('/posbranch/dropdown', branchPos.getPosDropDown);
+MastersRouter.get('/posbranch', branchPos.getPosBranch);
+MastersRouter.post('/posbranch', branchPos.postPosBranch);
+MastersRouter.put('/posbranch', branchPos.putPosBranch);
+MastersRouter.delete('/posbranch',branchPos.deleteBranch)
+
+MastersRouter.get('/posbrand/productList',branchPos.getProductsList)
+
+MastersRouter.get('/uom', uom.getUOM);
+MastersRouter.post('/uom', uom.postUOM);
+MastersRouter.put('/uom', uom.putUOM);
+MastersRouter.delete('/uom',uom.deleteUOM)
+
+MastersRouter.get('/posRateMaster', posRateMaster.getPosRateMaster);
+MastersRouter.get('/product/dropdown',posRateMaster.getProductDropdown)
+MastersRouter.post('/posRateMaster',posRateMaster.postPosRateMaster)
+MastersRouter.put('/posRateMaster',posRateMaster.putPosRateMaster)
+MastersRouter.delete('/posRateMaster',posRateMaster.deletePosRateMaster)
+
+
+MastersRouter.post('/exportRateMaster', posRateMaster.postbulkExport);
 
 export default MastersRouter;

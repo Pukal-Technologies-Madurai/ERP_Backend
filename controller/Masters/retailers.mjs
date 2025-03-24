@@ -9,6 +9,7 @@ import getImage from '../../middleware/getImageIfExist.mjs';
 import dotenv from 'dotenv';
 import { checkIsNumber } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
+import { getNextId } from '../../middleware/miniAPIs.mjs';
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -317,76 +318,78 @@ const RetailerControll = () => {
     }
 
     const addRetailers = async (req, res) => {
-
         try {
-
+         
             await uploadFile(req, res, 1, 'Profile_Pic');
             const fileName = req?.file?.filename;
             const filePath = req?.file?.path;
             const filetype = req?.file?.mimetype;
             const filesize = req?.file?.size;
-
-            // if (!fileName) {
-            //     return invalidInput(res, 'Retailer Photo is required')
-            // }
-
+    
+          
             const {
                 Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id, PinCode,
                 Retailer_Class, Route_Id, Area_Id, Reatailer_Address, Reatailer_City,
                 State_Id, Branch_Id, Gstno, Latitude, Longitude,
                 Created_By, Company_Id, isRetailer = 1, isVendor = 0
             } = req.body;
-
+    
+       
+            const getMaxId = await getNextId({ table: 'tbl_Retailers_Master', column: 'Retailer_Id' });
+            
+         
+            if (!checkIsNumber(getMaxId.MaxId)) {
+                return failed(res, 'Error generating Id');
+            }
+            
+            const MaxRetailerId = getMaxId.MaxId;
+    
             const request = new sql.Request()
+                .input('MaxRetailerId', sql.Int, MaxRetailerId)
+                .input('Retailer_Id', MaxRetailerId)
                 .input('code', 0)
                 .input('rname', Retailer_Name)
                 .input('cperson', Contact_Person)
                 .input('mobile', Mobile_No)
                 .input('channel', Retailer_Channel_Id)
-
                 .input('rclass', Retailer_Class)
                 .input('route', Route_Id)
                 .input('area', Area_Id)
                 .input('address', Reatailer_Address)
                 .input('city', Reatailer_City)
-
                 .input('pincode', PinCode)
                 .input('state', State_Id)
                 .input('salesforce', '')
                 .input('branch', Branch_Id)
                 .input('gst', Gstno)
-
                 .input('erp', 0)
                 .input('lati', Latitude ? Latitude : null)
                 .input('long', Longitude ? Longitude : null)
                 .input('profile', fileName ? domain + '/imageURL/retailers/' + fileName : null)
                 .input('created', new Date())
-
                 .input('createdby', Created_By)
                 .input('update', new Date())
                 .input('updateby', 0)
                 .input('dflag', 0)
                 .input('filename', fileName ? fileName : null)
-
                 .input('filepath', filePath ? filePath : null)
                 .input('filetype', filetype ? filetype : null)
                 .input('filesize', filesize ? filesize : null)
                 .input('other5', null)
                 .input('company', Company_Id)
-
                 .input('isRetailer', isRetailer)
                 .input('isVendor', isVendor)
                 .query(`
                     INSERT INTO tbl_Retailers_Master (
-                        Retailer_Code, Retailer_Name,  Contact_Person,  Mobile_No,  Retailer_Channel_Id, 
+                        Retailer_Id, Retailer_Code, Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id, 
                         Retailer_Class, Route_Id, Area_Id, Reatailer_Address, Reatailer_City,
                         PinCode, State_Id, Sales_Force_Id, Branch_Id, Gstno,
                         ERP_Id, Latitude, Longitude, Profile_Pic, Created_Date,
                         Created_By, Updated_Date, Updated_By, Del_Flag, ImageName,
-                        ImagePath, ImageType, ImageSize, Others_5,  Company_Id,
+                        ImagePath, ImageType, ImageSize, Others_5, Company_Id,
                         isRetailer, isVendor 
                     ) VALUES (
-                        @code, @rname, @cperson, @mobile, @channel, 
+                        @MaxRetailerId, @code, @rname, @cperson, @mobile, @channel, 
                         @rclass, @route, @area, @address, @city, 
                         @pincode, @state, @salesforce, @branch, @gst, 
                         @erp, @lati, @long, @profile, @created, 
@@ -396,11 +399,13 @@ const RetailerControll = () => {
                     );
                     SELECT SCOPE_IDENTITY() AS Retailer_Id
                 `);
-
+    
+         
             const result = await request;
-            const Retailer_Id = result?.recordset[0]?.Retailer_Id;
-
+            const Retailer_Id = MaxRetailerId
+    
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0 && checkIsNumber(Retailer_Id)) {
+           
                 if (Latitude && Longitude) {
                     await new sql.Request()
                         .input('id', Retailer_Id)
@@ -417,14 +422,28 @@ const RetailerControll = () => {
                         );`
                         );
                 }
-                return success(res, 'New Customer Added')
+    
+             
+                const request7 = new sql.Request();
+                const currentDateTime = new Date();
+                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
+                request7.input('Last_Update_Time', formattedDateTime);
+    
+                const updateQuery = `UPDATE tbl_POS_Table_Synch 
+                    SET Last_Update_Time = @Last_Update_Time 
+                    WHERE Sync_Table_Id = 4`;
+                const updateResult = await request7.query(updateQuery);
+    
+                return success(res, 'New Customer Added');
             } else {
-                return failed(res, 'Failed to create customer')
+               
+                return failed(res, 'Failed to create customer');
             }
         } catch (e) {
-            servError(e, res);
+                 servError(e, res);
         }
-    }
+    };
+    
 
     const putRetailers = async (req, res) => {
         try {
@@ -505,6 +524,15 @@ const RetailerControll = () => {
             const result = await request;
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
+                const request7 = new sql.Request();
+                const currentDateTime = new Date();
+                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
+                request7.input('Last_Update_Time', formattedDateTime);
+
+                const updateQuery = `UPDATE tbl_POS_Table_Synch 
+                                            SET Last_Update_Time = @Last_Update_Time 
+                                            WHERE Sync_Table_Id = 4`;
+                const updateResult = await request7.query(updateQuery);
                 return success(res, 'Retailer information updated successfully');
             } else {
                 return failed(res, 'Failed to update retailer information');

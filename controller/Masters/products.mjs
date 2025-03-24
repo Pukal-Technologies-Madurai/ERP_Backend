@@ -259,7 +259,7 @@ const sfProductController = () => {
 
             const {
                 Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By
+                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By,Pos_Brand_Id,IsActive
             } = req.body;
 
             const getMaxId = await sql.query(`SELECT COALESCE(MAX(Product_Id), 0) AS MaxId FROM tbl_Product_Master`);
@@ -286,22 +286,37 @@ const sfProductController = () => {
                 .input('Sgst_P', (Number(Gst_P) / 2) ?? 0)
                 .input('Igst_P', Number(Gst_P) ?? 0)
                 .input('ERP_Id', ERP_Id)
+                .input('Pos_Brand_Id', Pos_Brand_Id)
+                .input('IsActive', IsActive)
                 .query(`
                     INSERT INTO tbl_Product_Master (
                         Product_Id, Product_Code, Product_Name, Short_Name, Product_Description, Brand, 
                         Product_Group, Pack_Id, UOM_Id, IS_Sold, Display_Order_By, Product_Image_Name,
-                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id
+                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id,Pos_Brand_Id,IsActive
                     ) VALUES (
                         @Product_Id, @Product_Code, @Product_Name, @Short_Name, @Product_Description, @Brand, 
                         @Product_Group, @Pack_Id, @UOM_Id, @IS_Sold, @Display_Order_By, @Product_Image_Name, 
-                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id
+                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id.@Pos_Brand_Id,@IsActive
                     )`
                 );
 
             const result = await request;
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                success(res, 'New Product Added')
+                    const request2 = new sql.Request()
+                  
+                    const currentDateTime = new Date();
+                    
+                    const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
+                 
+                    request2.input('Last_Update_Time', formattedDateTime); 
+    
+                   const updateQuery = `UPDATE tbl_POS_Table_Synch  SET Last_Update_Time = @Last_Update_Time 
+                                         WHERE Sync_Table_Id = 3`;
+                     
+                     const updateResult = await request2.query(updateQuery);
+               
+                     success(res, 'New Product Added')
             } else {
                 failed(res)
             }
@@ -314,7 +329,7 @@ const sfProductController = () => {
     const postProductsWithoutImage = async (req, res) => {
         const {
             Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-            Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By
+            Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By,Pos_Brand_Id,IsActive
         } = req?.body;
 
         try {
@@ -352,22 +367,37 @@ const sfProductController = () => {
                 .input('Sgst_P', (Number(Gst_P) / 2) ?? 0)
                 .input('Igst_P', Number(Gst_P) ?? 0)
                 .input('ERP_Id', ERP_Id)
+                .input('Pos_Brand_Id', Pos_Brand_Id)
+                .input('IsActive', IsActive)
                 .query(`
                     INSERT INTO tbl_Product_Master (
                         Product_Id, Product_Code, Product_Name, Short_Name, Product_Description, Brand, 
                         Product_Group, Pack_Id, UOM_Id, IS_Sold, Display_Order_By, Product_Image_Name,
-                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id
+                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id,Pos_Brand_Id,IsActive
                     ) VALUES (
                         @Product_Id, @Product_Code, @Product_Name, @Short_Name, @Product_Description, @Brand, 
                         @Product_Group, @Pack_Id, @UOM_Id, @IS_Sold, @Display_Order_By, @Product_Image_Name, 
-                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id
+                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id,@Pos_Brand_Id,@IsActive
                     )`
                 );
 
             const result = await request;
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                success(res, 'New Product Added')
+              
+                const request2 = new sql.Request()
+               
+                const currentDateTime = new Date();
+               
+                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
+               
+                request2.input('Last_Update_Time', formattedDateTime); 
+    
+                const updateQuery = `UPDATE tbl_POS_Table_Synch  SET Last_Update_Time = @Last_Update_Time 
+                                       WHERE Sync_Table_Id = 3`;
+                           const updateResult = await request2.query(updateQuery);
+
+                           success(res, 'New Product Added')
             } else {
                 failed(res)
             }
@@ -381,7 +411,7 @@ const sfProductController = () => {
         try {
             const {
                 Product_Id, Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By
+                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By,Pos_Brand_Id,IsActive
             } = req?.body;
 
             if (!Product_Id) {
@@ -405,6 +435,8 @@ const sfProductController = () => {
                 .input('Sgst_P', (Number(Gst_P) / 2) ?? 0)
                 .input('Igst_P', Number(Gst_P) ?? 0)
                 .input('ERP_Id', ERP_Id)
+                .input('Pos_Brand_Id', Pos_Brand_Id)
+                .input('IsActive', IsActive)
                 .query(`
                     UPDATE tbl_Product_Master
                     SET 
@@ -422,14 +454,28 @@ const sfProductController = () => {
                         Cgst_P = @Cgst_P,
                         Sgst_P = @Sgst_P,
                         Igst_P = @Igst_P,
-                        ERP_Id = @ERP_Id
+                        ERP_Id = @ERP_Id,
+                          Pos_Brand_Id = @Pos_Brand_Id,
+                            IsActive = @IsActive
                     WHERE Product_Id = @Product_Id`
                 );
 
             const result = await request;
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                success(res, 'Product updated successfully');
+                    const request2 = new sql.Request()
+             
+                    const currentDateTime = new Date();
+               
+                    const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
+               
+                    request2.input('Last_Update_Time', formattedDateTime); 
+     
+                    const updateQuery = `UPDATE tbl_POS_Table_Synch   SET Last_Update_Time = @Last_Update_Time 
+                                           WHERE Sync_Table_Id = 3`;
+                   const updateResult = await request2.query(updateQuery);
+                
+                   success(res, 'Product updated successfully');
             } else {
                 failed(res, 'Failed to update product');
             }
@@ -473,6 +519,17 @@ const sfProductController = () => {
             const result = await request;
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
+                    const request2 = new sql.Request()
+             
+                    const currentDateTime = new Date();
+              
+                    const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
+              
+                    request2.input('Last_Update_Time', formattedDateTime); 
+    
+                   const updateQuery = `UPDATE tbl_POS_Table_Synch   SET Last_Update_Time = @Last_Update_Time 
+                                  WHERE Sync_Table_Id = 3`;
+                const updateResult = await request2.query(updateQuery);
                 success(res, 'Product image updated successfully');
             } else {
                 failed(res, 'Failed to update product image');
