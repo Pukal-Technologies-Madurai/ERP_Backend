@@ -29,8 +29,8 @@ const tripActivities = () => {
         const StartTime = req.body?.StartTime ? new Date(req.body.StartTime) : new Date();
         const EndTime = req.body?.EndTime ? new Date(req.body.EndTime) : new Date();
 
-        if (!checkIsNumber(Branch_Id) || Trip_Date === '') {
-            return invalidInput(res, 'Select Branch, Trip_Date is required');
+        if (!checkIsNumber(Branch_Id) || !BillType || !checkIsNumber(VoucherType) ) {
+            return invalidInput(res, 'Select Branch, BillType, VoucherType is required');
         }
         if (Trip_ST_KM && Trip_EN_KM && Number(Trip_ST_KM) > Number(Trip_EN_KM)) {
             return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
@@ -568,8 +568,6 @@ const tripActivities = () => {
             servError(e, res);
         }
     }
-
-
 
     return {
         createTripDetails,
