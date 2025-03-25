@@ -206,7 +206,6 @@ const tripActivities = () => {
             Branch_Id,
             Trip_Date,
             Vehicle_No,
-            Trip_No = '',
             Trip_ST_KM = 0,
             Trip_EN_KM = 0,
             PhoneNumber = '',
@@ -269,7 +268,6 @@ const tripActivities = () => {
                 .input('Narration', Narration)
                 .input('StartTime', StartTime)
                 .input('EndTime', EndTime)
-                .input('Trip_No', Trip_No)
                 .input('Trip_ST_KM', toNumber(Trip_ST_KM))
                 .input('Trip_EN_KM', toNumber(Trip_EN_KM))
                 .input('Trip_Tot_Kms', Trip_Tot_Kms)
@@ -284,7 +282,6 @@ const tripActivities = () => {
                         Vehicle_No = @Vehicle_No,
                         StartTime = @StartTime,
                         EndTime = @EndTime,
-                        Trip_No = @Trip_No,
                         Trip_ST_KM = @Trip_ST_KM,
                         Trip_EN_KM = @Trip_EN_KM,
                         Trip_Tot_Kms = @Trip_Tot_Kms,

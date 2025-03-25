@@ -31,6 +31,7 @@ inventoryRouter.get('/tripSheet/arrivalList', tripmaster.getArrivalReport);
 
 inventoryRouter.get('/tripSheet/arrivalEntry', arrivalMaster.getArrivalEntry);
 inventoryRouter.post('/tripSheet/arrivalEntry', arrivalMaster.addArrivalEntry);
+inventoryRouter.put('/tripSheet/arrivalEntry', arrivalMaster.editArrivalEntry);
 // inventoryRouter.put('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
 // inventoryRouter.delete('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
 
