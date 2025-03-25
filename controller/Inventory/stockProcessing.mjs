@@ -241,10 +241,10 @@ const StockManagement = () => {
     }
 
     const updateStockProcessing = async (req, res) => {
+        const transaction = new sql.Transaction();
 
         try {
 
-            const transaction = new sql.Transaction();
             const {
                 PR_Id = 0,
                 Branch_Id = 0,
@@ -298,6 +298,7 @@ const StockManagement = () => {
                 .input('PR_Status', PR_Status)
                 .input('Updated_By', Updated_By)
                 .input('Updated_At', new Date())
+                .input('PR_Id', PR_Id)
                 .query(`
                     UPDATE tbl_Processing_Gen_Info
                     SET 
