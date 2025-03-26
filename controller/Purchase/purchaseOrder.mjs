@@ -14,7 +14,7 @@ const PurchaseOrder = () => {
         const {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
-            Voucher_Type = '', Stock_Item_Ledger_Name = '',
+            Voucher_Type = 0, Stock_Item_Ledger_Name = '',
         } = req.body;
 
         const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();
@@ -25,11 +25,13 @@ const PurchaseOrder = () => {
 
         if (
             !checkIsNumber(Retailer_Id)
-            || !checkIsNumber(Created_by)
+            || !checkIsNumber(Voucher_Type)
+            || !checkIsNumber(Branch_Id)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
             || (!Array.isArray(StaffArray))
+            || !checkIsNumber(Created_by)
         ) {
-            return invalidInput(res, 'Retailer_Id, Created_by, Product_Array, StaffArray is Required')
+            return invalidInput(res, 'Retailer_Id, Voucher_Type, Branch_Id, Created_by, Product_Array, StaffArray is Required')
         }
 
         const transaction = new sql.Transaction();
@@ -38,31 +40,68 @@ const PurchaseOrder = () => {
             const productsData = (await getProducts(1)).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
 
-            const PO_Inv_Year = new Date().getFullYear();
+            const getPIN_Id = await getNextId({ table: 'tbl_Purchase_Order_Inv_Gen_Info', column: 'PIN_Id' });
+            if (!getPIN_Id.status || !checkIsNumber(getPIN_Id.MaxId)) throw new Error('Failed to get PIN_Id');
+
+            const PIN_Id = getPIN_Id.MaxId;
 
             const PO_Inv_Id = Number((await new sql.Request()
                 .input('Branch_Id', Branch_Id)
-                .input('PO_Inv_Year', PO_Inv_Year)
+                .input('Voucher_Type', Voucher_Type)
                 .query(`
-                    SELECT 
-                        COALESCE(MAX(PO_Inv_Id), 0) AS PO_Inv_Id
-                    FROM 
-                        tbl_Purchase_Order_Inv_Gen_Info
-                    WHERE
-                        Branch_Id = @Branch_Id
-                        AND
-                        PO_Inv_Year = @PO_Inv_Year`
+                SELECT 
+                    COALESCE(MAX(PO_Inv_Id), 0) AS PO_Inv_Id
+                FROM 
+                    tbl_Purchase_Order_Inv_Gen_Info
+                WHERE
+                    Branch_Id = @Branch_Id
+                    AND
+                    Voucher_Type = @Voucher_Type`
                 ))?.recordset[0]?.PO_Inv_Id) + 1;
 
             if (!checkIsNumber(PO_Inv_Id)) throw new Error('Failed to get Order Id');
 
-            const Po_Inv_No = 'PO_' + Branch_Id + '_' + PO_Inv_Year + '_' + createPadString(PO_Inv_Id, 4);
+            const PO_Inv_Year = await new sql.Request()
+                .input('Po_Inv_Date', Po_Inv_Date)
+                .query(`
+                    SELECT Id AS Year_Id, Year_Desc
+                    FROM tbl_Year_Master
+                    WHERE 
+                        Fin_Start_Date <= @Po_Inv_Date 
+                        AND Fin_End_Date >= @Po_Inv_Date`
+                );
 
-            const getPIN_Id = await getNextId({ table: 'tbl_Purchase_Order_Inv_Gen_Info', column: 'PIN_Id' });
+            if (PO_Inv_Year.recordset.length === 0) throw new Error('Year_Id not found');
 
-            if (!getPIN_Id.status || !checkIsNumber(getPIN_Id.MaxId)) throw new Error('Failed to get PIN_Id');
+            const { Year_Id, Year_Desc } = PO_Inv_Year.recordset[0];
 
-            const PIN_Id = getPIN_Id.MaxId;
+            const BranchCodeGet = await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .query(`
+                    SELECT BranchCode
+                    FROM tbl_Branch_Master
+                    WHERE BranchId = @Branch_Id`
+                );
+
+            if (BranchCodeGet.recordset.length === 0) throw new Error('Failed to get BranchCode');
+
+            const BranchCode = BranchCodeGet.recordset[0]?.BranchCode || '';
+
+            const VoucherCodeGet = await new sql.Request()
+                .input('Vocher_Type_Id', Voucher_Type)
+                .query(`
+                    SELECT Voucher_Code
+                    FROM tbl_Voucher_Type
+                    WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                );
+
+            if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
+
+            const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
+
+            const Po_Inv_No = BranchCode + '_' + createPadString(PO_Inv_Id, 6) + '_' + Voucher_Code + "_" + Year_Desc;
+
+            // const Po_Inv_No = 'PO_' + Branch_Id + '_' + PO_Inv_Year + '_' + createPadString(PO_Inv_Id, 4);
 
             const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
                 const Amount = RoundNumber(item?.Amount);
@@ -106,11 +145,12 @@ const PurchaseOrder = () => {
 
             const request = new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
-                .input('PO_Inv_Id', PO_Inv_Id)
-                .input('PO_Inv_Year', PO_Inv_Year)
-                .input('Ref_Po_Inv_No', Ref_Po_Inv_No)
-                .input('Branch_Id', Branch_Id)
                 .input('Po_Inv_No', Po_Inv_No)
+                .input('Branch_Id', Branch_Id)
+                .input('PO_Inv_Id', PO_Inv_Id)
+                .input('Voucher_Type', Voucher_Type)
+                .input('PO_Inv_Year', Year_Id)
+                .input('Ref_Po_Inv_No', Ref_Po_Inv_No)
                 .input('Po_Inv_Date', Po_Inv_Date)
                 .input('Retailer_Id', Retailer_Id)
                 .input('GST_Inclusive', GST_Inclusive)
@@ -125,7 +165,6 @@ const PurchaseOrder = () => {
                 .input('Narration', Narration)
                 .input('Cancel_status', 0)
                 .input('Po_Entry_Date', Po_Entry_Date)
-                .input('Voucher_Type', Voucher_Type)
                 .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
                 .input('Created_by', Created_by)
                 .input('Altered_by', Created_by)
@@ -393,7 +432,7 @@ const PurchaseOrder = () => {
                 .input('Narration', Narration)
                 .input('Altered_by', Created_by)
                 .input('Alter_Id', Alter_Id)
-                
+
                 .input('Alterd_on', new Date())
                 .input('Trans_Type', 'UPDATE')
 
