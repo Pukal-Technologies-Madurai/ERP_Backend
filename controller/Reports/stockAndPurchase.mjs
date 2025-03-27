@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { dataFound, noData, invalidInput, servError } from '../../res.mjs';
-import { ISOString } from '../../helper_functions.mjs';
+import { isEqualNumber, ISOString } from '../../helper_functions.mjs';
 
 const StockAndPurchaseReport = () => {
 
@@ -106,7 +106,24 @@ const StockAndPurchaseReport = () => {
                 .execute('Avg_Live_Sales_Report_3')
 
             if (result.recordsets[0].length > 0) {
-                dataFound(res, result.recordsets[0], 'dataFound', { dataTypeInfo: result.recordsets[1] })
+                const columnDataTypes = Array.isArray(result.recordsets[1]) ? result.recordsets[1] : [];
+                const dayWiseSales = Array.isArray(result.recordsets[2]) ? result.recordsets[2] : [];
+
+                const uniqueKeys = dayWiseSales[0] ? Object.keys(dayWiseSales[0]).map(keys => ({
+                    Column_Name: keys, 
+                    Data_Type: 'number', 
+                })) : [];
+                
+                const mergeDataType = [...columnDataTypes, ...uniqueKeys]
+
+                const mergeData = (Array.isArray(result.recordsets[0]) ? result.recordsets[0] : []).map(o => ({
+                    ...o,
+                    ...dayWiseSales.find(daySales => isEqualNumber(daySales?.sales_party_ledger_id, o?.Ledger_Tally_Id))
+                }))
+                dataFound(res, mergeData, 'dataFound', { 
+                    dataTypeInfo: mergeDataType, 
+                    // daysTransactions: dayWiseSales
+                })
             } else {
                 noData(res)
             }
@@ -151,7 +168,28 @@ const StockAndPurchaseReport = () => {
 
             const result = await DynamicDB;
             if (result.recordsets[0].length > 0) {
-                dataFound(res, result.recordsets[0], 'dataFound', { LOSAbstract: result.recordsets[1] })
+                const itemSales = Array.isArray(result.recordsets[0]) ? result.recordsets[0] : [];
+                const losAbs = Array.isArray(result.recordsets[1]) ? result.recordsets[1] : [];
+                const dayBasedSales = Array.isArray(result.recordsets[2]) ? result.recordsets[2] : [];
+
+                const mergedItemWithDayBasedSales = itemSales.map(item => {
+                    const daysWithSales = dayBasedSales.find(
+                        day => (
+                            day.Item_Name_Modified === item.Item_Name_Modified
+                            && day.Stock_Group === item.Stock_Group
+                        )
+                    )
+
+                    return {
+                        ...item,
+                        ...daysWithSales
+                    }
+                })
+
+                dataFound(res, mergedItemWithDayBasedSales, 'dataFound', { 
+                    LOSAbstract: losAbs,
+                    dateWiseSales: dayBasedSales
+                })
             } else {
                 noData(res)
             }

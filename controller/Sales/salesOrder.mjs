@@ -6,6 +6,7 @@ import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 
 
+
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
 const SaleOrder = () => {
@@ -38,24 +39,54 @@ const SaleOrder = () => {
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
 
-            const So_Year = new Date().getFullYear();
+
+            const So_Year_Master = await new sql.Request()
+                .query(`SELECT Year_Desc, Id FROM tbl_Year_Master WHERE Active_Status = 'Yes' or  Active_Status= 'YES'`);
+
+            const So_Year_Desc = So_Year_Master.recordset[0]?.Year_Desc;
+            const Year_Master_Id = So_Year_Master.recordset[0]?.Id;
+
+            if (!So_Year_Desc || !Year_Master_Id) throw new Error('Failed to fetch active year');
+
+            const branchData = await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .query(`SELECT BranchCode FROM tbl_Branch_Master WHERE BranchId = @Branch_Id`);
+
+            const BranchCode = branchData.recordset[0]?.BranchCode;
+            if (!BranchCode) throw new Error('Failed to fetch Branch Code');
+
+            const voucherData = await new sql.Request()
+                .input('Voucher_Type', VoucherType)
+                .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Voucher_Type`);
+
+            const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
+
+            if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
+
+
             const So_Branch_Inv_Id = Number((await new sql.Request()
                 .input('Branch_Id', Branch_Id)
-                .input('So_Year', So_Year)
+                .input('So_Year', Year_Master_Id)
+                .input('Voucher_Type', VoucherType)
                 .query(`
-                    SELECT 
-                        COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
-                    FROM 
-                        tbl_Sales_Order_Gen_Info
-                    WHERE
-                        Branch_Id = @Branch_Id
-                        AND
-                        So_Year = @So_Year`
-                ))?.recordset[0]?.So_Branch_Inv_Id) + 1;
+                            SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
+                            FROM tbl_Sales_Order_Gen_Info
+                            WHERE Branch_Id = @Branch_Id
+                            AND So_Year = @So_Year
+                            AND VoucherType = @Voucher_Type
+                        `)
+            )?.recordset[0]?.So_Branch_Inv_Id) + 1;
 
             if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
 
-            const So_Inv_No = 'SO_' + Branch_Id + '_' + So_Year + '_' + createPadString(So_Branch_Inv_Id, 4);
+            const YearSplit = So_Year_Desc;
+            const FinancialYear = `${YearSplit}`;
+
+            const So_Inv_No = `${BranchCode}_${createPadString(So_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
+
+
+
+
 
             const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
 
@@ -110,7 +141,7 @@ const SaleOrder = () => {
             const request = new sql.Request(transaction)
                 .input('So_Id', So_Id)
                 .input('So_Inv_No', So_Inv_No)
-                .input('So_Year', So_Year)
+                .input('So_Year', Year_Master_Id)
                 .input('So_Branch_Inv_Id', So_Branch_Inv_Id)
                 .input('So_Date', So_Date)
                 .input('Retailer_Id', Retailer_Id)
@@ -246,7 +277,7 @@ const SaleOrder = () => {
             !checkIsNumber(So_Id)
             || !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Sales_Person_Id)
-            || !checkIsNumber(Created_by)   
+            || !checkIsNumber(Created_by)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
         ) {
             return invalidInput(res, 'So_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array is Required')
@@ -529,7 +560,8 @@ const SaleOrder = () => {
             }
 
             query += `
-            ORDER BY CONVERT(DATETIME, so.So_Id) DESC`;
+          ORDER BY  CONVERT(DATETIME, so.So_Id) DESC`
+
 
             const request = new sql.Request();
             request.input('from', Fromdate);
@@ -637,10 +669,12 @@ const SaleOrder = () => {
                 LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sdgi
                     ON sdgi.So_No = so.So_Id
                 WHERE
-                    (sdgi.Cancel_status IS NULL OR sdgi.Cancel_status != 2) AND 
+              
+             
                     CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
                     AND
-                    CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to)`;
+                    CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to)
+                   `
 
             if (checkIsNumber(Retailer_Id)) {
                 query += `
@@ -674,7 +708,13 @@ const SaleOrder = () => {
             }
 
             query += `
-            ORDER BY CONVERT(DATETIME, so.So_Id) DESC`;
+    ORDER BY 
+    CASE 
+        WHEN so.isConverted = 2 THEN 1  
+        ELSE 0
+    END,
+    so.So_Id DESC;
+`
 
             const request = new sql.Request();
             request.input('from', Fromdate);

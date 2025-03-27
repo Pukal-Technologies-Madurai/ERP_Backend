@@ -377,7 +377,11 @@ const tripActivities = () => {
                 	LEFT JOIN tbl_Users AS cb_updated
                 	ON cb_updated.UserId = tm.Updated_By
                     WHERE 
-                		tm.Trip_Date BETWEEN @FromDate AND @ToDate	
+                		tm.Trip_Date BETWEEN @FromDate AND @ToDate
+                        AND tm.BillType IN (
+                            'MATERIAL INWARD',
+                            'OTHER GODOWN'
+                        )
                 ), TRIP_DETAILS AS (
                     SELECT
                         td.*, ta.*,
