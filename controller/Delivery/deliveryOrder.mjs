@@ -87,102 +87,102 @@ const DeliveryOrder = () => {
             // if (!checkIsNumber(Do_No)) throw new Error('Failed to get Order Id');
 
             // const Do_Inv_No = 'DO_' + Branch_Id + '_' + Do_Year + '_' + createPadString(Do_No, 4);
-                             
-                                 
-                         const Do_Year_Master = await new sql.Request()
-                         .query(`SELECT Year_Desc, Id FROM tbl_Year_Master WHERE Active_Status = 'Yes' or  Active_Status= 'YES'`);
-                         
-                         const Do_Year_Desc = Do_Year_Master.recordset[0]?.Year_Desc;
-                         const Year_Master_Id = Do_Year_Master.recordset[0]?.Id;
-                         
-                         if (!Do_Year_Desc || !Year_Master_Id) throw new Error('Failed to fetch active year');
-                         
-                         const branchData = await new sql.Request()
-                         .input('Branch_Id', Branch_Id)
-                         .query(`SELECT BranchCode FROM tbl_Branch_Master WHERE BranchId = @Branch_Id`);
-                         
-                         const BranchCode = branchData.recordset[0]?.BranchCode;
-                         if (!BranchCode) throw new Error('Failed to fetch Branch Code');
-                         
-                         const voucherData = await new sql.Request()
-                         .input('Voucher_Type', VoucherType)
-                         .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Voucher_Type`);
-                         
-                         const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
-                         
-                         if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
-                         
-                         const Do_Branch_Inv_Id = Number((await new sql.Request()
-                         .input('Branch_Id', Branch_Id)
-                         .input('Do_Year', Year_Master_Id)
-                         .input('Voucher_Type', VoucherType)
-                         .query(`
+
+
+            const Do_Year_Master = await new sql.Request()
+                .query(`SELECT Year_Desc, Id FROM tbl_Year_Master WHERE Active_Status = 'Yes' or  Active_Status= 'YES'`);
+
+            const Do_Year_Desc = Do_Year_Master.recordset[0]?.Year_Desc;
+            const Year_Master_Id = Do_Year_Master.recordset[0]?.Id;
+
+            if (!Do_Year_Desc || !Year_Master_Id) throw new Error('Failed to fetch active year');
+
+            const branchData = await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .query(`SELECT BranchCode FROM tbl_Branch_Master WHERE BranchId = @Branch_Id`);
+
+            const BranchCode = branchData.recordset[0]?.BranchCode;
+            if (!BranchCode) throw new Error('Failed to fetch Branch Code');
+
+            const voucherData = await new sql.Request()
+                .input('Voucher_Type', VoucherType)
+                .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Voucher_Type`);
+
+            const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
+
+            if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
+
+            const Do_Branch_Inv_Id = Number((await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .input('Do_Year', Year_Master_Id)
+                .input('Voucher_Type', VoucherType)
+                .query(`
                                SELECT COALESCE(MAX(Do_No), 0) AS Do_No
                              FROM tbl_Sales_Delivery_Gen_Info
                              WHERE Branch_Id = @Branch_Id
                              AND Do_Year = @Do_Year
                              AND Voucher_Type = @Voucher_Type
                          `)).recordset[0]?.Do_No) + 1;
-                         
-                         if (!checkIsNumber(Do_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
-                         
-                         
-                         const YearSplit = Do_Year_Desc;
-                         const FinancialYear = `${YearSplit}`;
-                         
-                              const Do_Inv_No = `${BranchCode}_${createPadString(Do_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
-                                     const getDo_Id = await getNextId({ table: 'tbl_Sales_Delivery_Gen_Info', column: 'Do_Id' });
-                         
-                                     if (!getDo_Id.status || !checkIsNumber(getDo_Id.MaxId)) throw new Error('Failed to get Do_Id');
-                         
-                                     const Do_Id = getDo_Id.MaxId;
-                         
-                                     const Total_Invoice_value = Product_Array.reduce((o, item) => {
-                                         const itemRate = RoundNumber(item?.Item_Rate);
-                                         const billQty = parseInt(item?.Bill_Qty);
-                                         const Amount = RoundNumber(Multiplication(billQty, itemRate));
-                         
-                                         if (isInclusive || isNotTaxableBill) {
-                                             return o += Number(Amount);
-                                         }
-                         
-                                         if (isExclusiveBill) {
-                                             const product = findProductDetails(productsData, item.Item_Id);
-                                             const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-                                             const tax = taxCalc(0, itemRate, gstPercentage)
-                                             return o += (Amount + (tax * billQty));
-                                         }
-                                     }, 0);
-                         
-                                     const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                                         const itemRate = RoundNumber(item?.Item_Rate);
-                                         const billQty = parseInt(item?.Bill_Qty) || 0;
-                         
-                                         if (isNotTaxableBill) {
-                                             acc.TotalValue += Multiplication(billQty, itemRate);
-                                             return acc;
-                                         }
-                         
-                                         const product = findProductDetails(productsData, item.Item_Id);
-                                         const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-                         
-                                         if (isInclusive) {
-                                             const itemTax = taxCalc(1, itemRate, gstPercentage);
-                                             const basePrice = Subraction(itemRate, itemTax);
-                                             acc.TotalTax += Multiplication(billQty, itemTax);
-                                             acc.TotalValue += Multiplication(billQty, basePrice);
-                                         }
-                                         if (isExclusiveBill) {
-                                             const itemTax = taxCalc(0, itemRate, gstPercentage);
-                                             acc.TotalTax += Multiplication(billQty, itemTax);
-                                             acc.TotalValue += Multiplication(billQty, itemRate);
-                                         }
-                         
-                                         return acc;
-                                     }, {
-                                         TotalValue: 0,
-                                         TotalTax: 0
-                                     });
+
+            if (!checkIsNumber(Do_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
+
+
+            const YearSplit = Do_Year_Desc;
+            const FinancialYear = `${YearSplit}`;
+
+            const Do_Inv_No = `${BranchCode}_${createPadString(Do_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
+            const getDo_Id = await getNextId({ table: 'tbl_Sales_Delivery_Gen_Info', column: 'Do_Id' });
+
+            if (!getDo_Id.status || !checkIsNumber(getDo_Id.MaxId)) throw new Error('Failed to get Do_Id');
+
+            const Do_Id = getDo_Id.MaxId;
+
+            const Total_Invoice_value = Product_Array.reduce((o, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = parseInt(item?.Bill_Qty);
+                const Amount = RoundNumber(Multiplication(billQty, itemRate));
+
+                if (isInclusive || isNotTaxableBill) {
+                    return o += Number(Amount);
+                }
+
+                if (isExclusiveBill) {
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+                    const tax = taxCalc(0, itemRate, gstPercentage)
+                    return o += (Amount + (tax * billQty));
+                }
+            }, 0);
+
+            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = parseInt(item?.Bill_Qty) || 0;
+
+                if (isNotTaxableBill) {
+                    acc.TotalValue += Multiplication(billQty, itemRate);
+                    return acc;
+                }
+
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                if (isInclusive) {
+                    const itemTax = taxCalc(1, itemRate, gstPercentage);
+                    const basePrice = Subraction(itemRate, itemTax);
+                    acc.TotalTax += Multiplication(billQty, itemTax);
+                    acc.TotalValue += Multiplication(billQty, basePrice);
+                }
+                if (isExclusiveBill) {
+                    const itemTax = taxCalc(0, itemRate, gstPercentage);
+                    acc.TotalTax += Multiplication(billQty, itemTax);
+                    acc.TotalValue += Multiplication(billQty, itemRate);
+                }
+
+                return acc;
+            }, {
+                TotalValue: 0,
+                TotalTax: 0
+            });
 
             // await transaction.begin();
 
@@ -865,7 +865,7 @@ const DeliveryOrder = () => {
         const {
             Do_Id, Retailer_Id, Delivery_Person_Id,
             Delivery_Status,
-            Delivery_Time, Delivery_Location, Delivery_Latitude, Delivery_Longitude, Payment_Mode, Payment_Status, Payment_Ref_No,Altered_by,Altered_on
+            Delivery_Time, Delivery_Location, Delivery_Latitude, Delivery_Longitude, Payment_Mode, Payment_Status, Payment_Ref_No, Altered_by, Altered_on
         } = req.body;
 
         const Do_Date = ISOString(req?.body?.Do_Date);
@@ -923,7 +923,7 @@ const DeliveryOrder = () => {
             const result = await request;
 
             if (result.rowsAffected[0] === 0) {
-             
+
                 throw new Error('Failed to update order, Try again')
             }
 
@@ -978,93 +978,93 @@ const DeliveryOrder = () => {
             //         FROM tbl_Sales_Delivery_Gen_Info
             //     `);
             // const maxDoNo = Number(resultForDoNo.recordset[0].count) + 1;
-            
+
             const Trip_Id = Number((await new sql.Request().query(`
                           SELECT COALESCE(MAX(Trip_Id), 0) AS MaxId
                           FROM tbl_Trip_Master
                       `))?.recordset[0]?.MaxId) + 1;
-           
-                       if (!checkIsNumber(Trip_Id)) throw new Error('Failed to get Trip Id');
-           
-                       const Trip_No = Number((await new sql.Request()
-                           .input('Trip_Date', Trip_Date)
-                           .query(`
+
+            if (!checkIsNumber(Trip_Id)) throw new Error('Failed to get Trip Id');
+
+            const Trip_No = Number((await new sql.Request()
+                .input('Trip_Date', Trip_Date)
+                .query(`
                                SELECT COALESCE(MAX(Trip_No), 0) AS MaxId
                                FROM tbl_Trip_Master    
                                WHERE 
                                    Trip_Date = @Trip_Date
                                 `
-                           ))?.recordset[0]?.MaxId) + 1;
-           
-                       if (!checkIsNumber(Trip_No)) throw new Error('Failed to get Trip_No');
-           
-                       const getYearId = await new sql.Request()
-                           .input('Trip_Date', Trip_Date)
-                           .query(`
+                ))?.recordset[0]?.MaxId) + 1;
+
+            if (!checkIsNumber(Trip_No)) throw new Error('Failed to get Trip_No');
+
+            const getYearId = await new sql.Request()
+                .input('Trip_Date', Trip_Date)
+                .query(`
                                SELECT Id AS Year_Id, Year_Desc
                                FROM tbl_Year_Master
                                WHERE 
                                    Fin_Start_Date <= @Trip_Date 
                                    AND Fin_End_Date >= @Trip_Date`
-                           );
-           
-                       if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
-           
-                       const { Year_Id, Year_Desc } = getYearId.recordset[0];
-           
-                       const T_No = Number((await new sql.Request()
-                           .input('Branch_Id', Branch_Id)
-                           .input('VoucherType', VoucherType)
-                           .query(`
+                );
+
+            if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
+
+            const { Year_Id, Year_Desc } = getYearId.recordset[0];
+
+            const T_No = Number((await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .input('VoucherType', VoucherType)
+                .query(`
                                SELECT COALESCE(MAX(T_No), 0) AS MaxId
                                FROM tbl_Trip_Master
                                WHERE Branch_Id = @Branch_Id
                                AND VoucherType = @VoucherType`
-                           ))?.recordset[0]?.MaxId) + 1;
-           
-                       if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
-           
-                       const BranchCodeGet = await new sql.Request()
-                           .input('Branch_Id', Branch_Id)
-                           .query(`
+                ))?.recordset[0]?.MaxId) + 1;
+
+            if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
+
+            const BranchCodeGet = await new sql.Request()
+                .input('Branch_Id', Branch_Id)
+                .query(`
                                SELECT BranchCode
                                FROM tbl_Branch_Master
                                WHERE BranchId = @Branch_Id`
-                           );
-           
-                       if (BranchCodeGet.recordset.length === 0) throw new Error('Failed to get BranchCode');
-           
-                       const BranchCode = BranchCodeGet.recordset[0]?.BranchCode || '';
-           
-                       const VoucherCodeGet = await new sql.Request()
-                           .input('Vocher_Type_Id', VoucherType)
-                           .query(`
+                );
+
+            if (BranchCodeGet.recordset.length === 0) throw new Error('Failed to get BranchCode');
+
+            const BranchCode = BranchCodeGet.recordset[0]?.BranchCode || '';
+
+            const VoucherCodeGet = await new sql.Request()
+                .input('Vocher_Type_Id', VoucherType)
+                .query(`
                                SELECT Voucher_Code
                                FROM tbl_Voucher_Type
                                WHERE Vocher_Type_Id = @Vocher_Type_Id`
-                           );
-           
-                       if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
-           
-                       const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
-           
-                       const TR_INV_ID = BranchCode + '_' + createPadString(T_No, 6) + '_' + Voucher_Code + "_" + Year_Desc;
-           
-                       const Challan_No = createPadString(Trip_Id, 4);
-                       const Trip_Tot_Kms = Number(Trip_ST_KM) + Number(Trip_EN_KM);
-           
-           
+                );
+
+            if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
+
+            const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
+
+            const TR_INV_ID = BranchCode + '_' + createPadString(T_No, 6) + '_' + Voucher_Code + "_" + Year_Desc;
+
+            const Challan_No = createPadString(Trip_Id, 4);
+            const Trip_Tot_Kms = Number(Trip_ST_KM) + Number(Trip_EN_KM);
+
+
 
             const insertMaster = await new sql.Request(transaction)
                 .input('Trip_Id', Trip_Id)
                 .input('TR_INV_ID', TR_INV_ID)
-                .input('T_NO',T_No)
-                .input('VoucherType',VoucherType)
-                .input('Year_Id',Year_Id)
+                .input('T_NO', T_No)
+                .input('VoucherType', VoucherType)
+                .input('Year_Id', Year_Id)
                 .input('Challan_No', Challan_No)
                 .input('Branch_Id', Branch_Id)
                 .input('Trip_Date', Trip_Date)
-                .input('BillType',BillType)
+                .input('BillType', 'SALES')
                 .input('Vehicle_No', Vehicle_No)
                 .input('StartTime', StartTime)
                 .input('Trip_No', Trip_No)
@@ -1086,22 +1086,22 @@ const DeliveryOrder = () => {
                 throw new Error('Failed to insert into Trip Master');
             }
 
-         
+
 
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
                 var DeliveryId = product?.Do_Id;
-              
 
-        
+
+
                 const getMax = await new sql.Request(transaction)
                     .query(`SELECT COALESCE(MAX(Trip_Id),0) AS MaxTripId FROM tbl_Trip_Master`);
-            
-                var getMaxTripId = getMax.recordset[0].MaxTripId; 
-                
+
+                var getMaxTripId = getMax.recordset[0].MaxTripId;
+
                 if (EmployeesInvolved.length > 0) {
-                    const FirstEmployeeId = EmployeesInvolved[0].Involved_Emp_Id; 
-                
+                    const FirstEmployeeId = EmployeesInvolved[0].Involved_Emp_Id;
+
                     await new sql.Request(transaction)
                         .input('DeliveryId', DeliveryId)
                         .input('Delivery_Person_Id', FirstEmployeeId)
@@ -1111,8 +1111,8 @@ const DeliveryOrder = () => {
                             WHERE Do_Id = @DeliveryId;
                         `);
                 }
-                
-            
+
+
                 await new sql.Request(transaction)
                     .input('Trip_Id', getMaxTripId)
                     .input('Delivery_Id', DeliveryId)
@@ -1124,11 +1124,11 @@ const DeliveryOrder = () => {
                         );
                     `);
             }
-            
-         
+
+
             for (let i = 0; i < EmployeesInvolved.length; i++) {
                 const employee = EmployeesInvolved[i];
-              
+
                 await new sql.Request(transaction)
                     .input('Trip_Id', Trip_Id)
                     .input('Involved_Emp_Id', employee.Involved_Emp_Id)
@@ -1261,13 +1261,22 @@ SELECT
             td.Altered_by,
             td.Sales_Order_Id,
             td.Order_Retailer_Id,
-            td.Delivery_Do_Date  
-        FROM TRIP_DETAILS AS td
-        LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
-        LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
-        WHERE td.Trip_Id = tm.Trip_Id
-        FOR JSON PATH
-    ), '[]') AS Trip_Details,
+            ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,  
+        ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
+           ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
+        ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
+        ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
+        ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
+        ISNULL(sgi.Collected_By, '') AS Collected_By,
+        ISNULL(sgi.Collected_Status, '') AS Collected_Status,
+        sgi.Payment_Status
+    FROM TRIP_DETAILS AS td
+    LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
+    LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
+    LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id  
+    WHERE td.Trip_Id = tm.Trip_Id
+    FOR JSON PATH
+), '[]') AS Trip_Details,
 
     COALESCE((  
         SELECT
@@ -1353,32 +1362,32 @@ FROM TRIP_MASTER AS tm
             VoucherType,
             BillType
         } = req.body;
-    
+
         var Branch_Id = req.body.Branch_Id;
         var Trip_Id = req.body.Trip_Id;
         const Do_Date = ISOString(req?.body?.Do_Date);
         var Trip_Date = req.body.Trip_Date;
         var Alter_Id = req.body.Alter_Id;
-    
+
         if (!Trip_ST_KM || !StartTime || !Do_Date || !Branch_Id || !Array.isArray(Product_Array) || Product_Array.length === 0 || !Delivery_Person_Id) {
             return invalidInput(res, 'Please Select Required Fields');
         }
-    
+
         const transaction = new sql.Transaction();
-    
+
         try {
             const tripCheck = await new sql.Request()
                 .input('Trip_Id', Trip_Id)
                 .query(`SELECT COUNT(*) AS TripCount FROM tbl_Trip_Master WHERE Trip_Id = @Trip_Id`);
-    
+
             if (tripCheck.recordset[0].TripCount === 0) {
                 return invalidInput(res, 'Trip does not exist');
             }
-    
+
             const Trip_Tot_Kms = Subraction(Trip_EN_KM, Trip_ST_KM);
-    
+
             await transaction.begin();
-    
+
             try {
                 await new sql.Request(transaction)
                     .input('Trip_Id', Trip_Id)
@@ -1387,8 +1396,8 @@ FROM TRIP_MASTER AS tm
                     .input('Vehicle_No', Vehicle_No)
                     .input('StartTime', StartTime)
                     .input('EndTime', EndTime)
-                    .input('VoucherType',VoucherType)
-                    .input('BillType',BillType)
+                    .input('VoucherType', VoucherType)
+                    .input('BillType', BillType)
                     .input('Trip_No', Trip_No)
                     .input('Trip_ST_KM', Number(Trip_ST_KM))
                     .input('Trip_EN_KM', Number(Trip_EN_KM))
@@ -1406,9 +1415,9 @@ FROM TRIP_MASTER AS tm
                 console.error("Error updating Trip Master:", error);
                 throw error;
             }
-    
+
             try {
-                
+
                 await new sql.Request(transaction)
                     .input('Trip_Id', Trip_Id)
                     .query(`DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @Trip_Id`);
@@ -1417,7 +1426,7 @@ FROM TRIP_MASTER AS tm
                 throw error;
             }
             try {
-                
+
                 await new sql.Request(transaction)
                     .input('Trip_Id', Trip_Id)
                     .query(`DELETE FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id`);
@@ -1427,7 +1436,7 @@ FROM TRIP_MASTER AS tm
             }
             for (const product of Product_Array) {
                 var DeliveryId = product?.Do_Id;
-    
+
                 await new sql.Request(transaction)
                     .input('Trip_Id', Trip_Id)
                     .input('Delivery_Id', DeliveryId)
@@ -1435,10 +1444,10 @@ FROM TRIP_MASTER AS tm
                         INSERT INTO tbl_Trip_Details (Trip_Id, Delivery_Id)
                         VALUES (@Trip_Id, @Delivery_Id);
                     `);
-                       
+
                 if (EmployeesInvolved.length > 0) {
-                    const FirstEmployeeId = EmployeesInvolved[0].Involved_Emp_Id; 
-                
+                    const FirstEmployeeId = EmployeesInvolved[0].Involved_Emp_Id;
+
                     await new sql.Request(transaction)
                         .input('DeliveryId', DeliveryId)
                         .input('Delivery_Person_Id', FirstEmployeeId)
@@ -1449,8 +1458,8 @@ FROM TRIP_MASTER AS tm
                         `);
                 }
             }
-            
-          
+
+
 
             for (const employee of EmployeesInvolved) {
                 try {
@@ -1464,13 +1473,13 @@ FROM TRIP_MASTER AS tm
                     `);
 
 
-                    
+
                 } catch (error) {
                     console.error(`Error inserting employee involvement for EmployeeId: ${employee.Involved_Emp_Id}`, error);
                     throw error;
                 }
             }
-    
+
             await transaction.commit();
             success(res, 'Trip Updated Successfully!');
         } catch (e) {
@@ -1481,12 +1490,12 @@ FROM TRIP_MASTER AS tm
             return servError(e, res);
         }
     };
-    
+
 
 
 
     const salesMultipleDelivery = async (req, res) => {
-    
+
         const {
             DeliveryList = [],
             EmployeesInvolved = [],
@@ -1494,22 +1503,22 @@ FROM TRIP_MASTER AS tm
             Created_by,
             GST_Inclusive = 1
         } = req.body;
-    
-   
-    
+
+
+
         const Do_Date = ISOString(req?.body?.Do_Date);
         const Trip_Date = req.body.Trip_Date;
-    
-    
+
+
         const transaction = new sql.Transaction();
-       
+
         try {
-       
-          
+
+
             await transaction.begin();
-    
-       
-           
+
+
+
             const yearData = await new sql.Request(transaction).query(
                 "SELECT Year_Desc, Id FROM tbl_Year_Master WHERE Active_Status IN ('Yes', 'YES')"
             );
@@ -1518,20 +1527,20 @@ FROM TRIP_MASTER AS tm
                 .query("SELECT BranchCode FROM tbl_Branch_Master WHERE BranchId = @Branch_Id");
             const voucherData = await new sql.Request(transaction)
                 .query("SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = 0");
-    
+
             if (!yearData.recordset[0] || !branchData.recordset[0] || !voucherData.recordset[0]) {
                 throw new Error('Failed to fetch required master data');
             }
-    
+
             const Do_Year_Desc = yearData.recordset[0].Year_Desc;
             const Year_Master_Id = yearData.recordset[0].Id;
             const BranchCode = branchData.recordset[0].BranchCode;
             const VoucherCode = voucherData.recordset[0].Voucher_Code;
-           
-            
+
+
             const FinancialYear = `${Do_Year_Desc}`;
             const createdDeliveryIds = [];
-            
+
             for (const [i, product] of DeliveryList.entries()) {
                 if (!product || typeof product !== 'object') {
                     console.warn(`Skipping invalid product at index ${i}`);
@@ -1542,13 +1551,13 @@ FROM TRIP_MASTER AS tm
                     SELECT COALESCE(MAX(Do_Id), 0) + 1 AS MaxId
                FROM tbl_Sales_Delivery_Gen_Info 
            `);
-           
-          
-           const currentMaxId = (getDoIdResult.recordset[0]?.MaxId || 1);
-           let Do_Id = currentMaxId; 
-            const Alter_Id = product?.Alter_Id || Math.floor(Math.random() * 999999);
-                
-     
+
+
+                const currentMaxId = (getDoIdResult.recordset[0]?.MaxId || 1);
+                let Do_Id = currentMaxId;
+                const Alter_Id = product?.Alter_Id || Math.floor(Math.random() * 999999);
+
+
                 const doNoResult = await new sql.Request(transaction)
                     .input('Branch_Id', sql.Int, Branch_Id)
                     .input('Do_Year', sql.Int, Year_Master_Id)
@@ -1560,14 +1569,14 @@ FROM TRIP_MASTER AS tm
                         AND Do_Year = @Do_Year 
                         AND Voucher_Type = @Voucher_Type
                     `);
-            
+
                 const Do_Branch_Inv_Id = doNoResult.recordset[0]?.Do_No;
                 if (!checkIsNumber(Do_Branch_Inv_Id)) {
                     throw new Error(`Invalid Do_No received for delivery ${i + 1}`);
                 }
-            
+
                 const Do_Inv_No = `${BranchCode}_${createPadString(Do_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
-            
+
                 const genInfoRequest = new sql.Request(transaction);
                 genInfoRequest.input('Do_Id', sql.Int, Do_Id);
                 genInfoRequest.input('Do_No', sql.Int, Do_Branch_Inv_Id);
@@ -1595,7 +1604,7 @@ FROM TRIP_MASTER AS tm
                 genInfoRequest.input('Created_by', Created_by);
                 genInfoRequest.input('Created_on', sql.DateTime, new Date());
                 genInfoRequest.input('Trans_Type', sql.NVarChar(50), 'INSERT');
-    
+
                 await genInfoRequest.query(`
                     INSERT INTO tbl_Sales_Delivery_Gen_Info (
                         Do_Id, Do_No, Do_Year, Do_Inv_No, Voucher_Type, Do_Date, 
@@ -1613,27 +1622,27 @@ FROM TRIP_MASTER AS tm
                         @Created_by, @Created_on, @Trans_Type
                     )
                 `);
-    
+
                 createdDeliveryIds.push(Do_Id);
-    
-              
+
+
                 if (product?.So_Id) {
-                
+
                     await new sql.Request(transaction)
                         .input('So_Id', sql.Int, product.So_Id)
                         .query("UPDATE tbl_Sales_Order_Gen_Info SET isConverted = 2 WHERE So_Id = @So_Id");
                 }
-    
-             
+
+
                 if (product.Products_List && Array.isArray(product.Products_List)) {
-                
+
                     for (const [j, subProduct] of product.Products_List.entries()) {
                         if (!subProduct || typeof subProduct !== 'object') {
                             console.warn(`Skipping invalid subProduct at index ${j} in delivery ${i}`);
                             continue;
                         }
-    
-                    
+
+
                         const stockRequest = new sql.Request(transaction);
                         stockRequest.input('Do_Date', sql.DateTime, new Date(Do_Date));
                         stockRequest.input('Delivery_Order_Id', sql.Int, Do_Id);
@@ -1659,8 +1668,8 @@ FROM TRIP_MASTER AS tm
                         stockRequest.input('Igst_Amo', sql.Decimal(18, 2), subProduct?.Igst_Amo || 0);
                         stockRequest.input('Final_Amo', sql.Decimal(18, 2), subProduct?.Final_Amo || 0);
                         stockRequest.input('Created_on', sql.DateTime, new Date());
-                        
-    
+
+
                         await stockRequest.query(`
                             INSERT INTO tbl_Sales_Delivery_Stock_Info (
                                 Do_Date, Delivery_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate, 
@@ -1677,39 +1686,39 @@ FROM TRIP_MASTER AS tm
                     }
                 }
             }
-    
-          
+
+
             await transaction.commit();
-              success(res, 'Delivery Created!')
-    
+            success(res, 'Delivery Created!')
+
         } catch (error) {
-          
-    
-          
+
+
+
             if (transaction._aborted === false) {
-                
+
                 try {
                     await transaction.rollback();
-                  servError('Transaction rolled back successfully');
-                  
+                    servError('Transaction rolled back successfully');
+
                 } catch (rollbackError) {
                     servError(rollbackError, res);
                 }
             }
-    
-         
-        } 
+
+
+        }
     };
 
 
-        const getDeliveryDetails = async (req, res) => {
-            const {  Sales_Person_Id } = req.query;
-    
-            const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
-    
-            try {
-                                let query = 
-                                    `WITH DELIVERY_DETAILS AS (
+    const getDeliveryDetails = async (req, res) => {
+        const { Sales_Person_Id } = req.query;
+
+        const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+
+        try {
+            let query =
+                `WITH DELIVERY_DETAILS AS (
                     SELECT
                         oi.*,
                         pm.Product_Id,
@@ -1757,54 +1766,54 @@ FROM TRIP_MASTER AS tm
                       CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
                                         AND
                                         CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)`;
-                
-                              
-                    
-                                if (checkIsNumber(Sales_Person_Id)) {
-                                    query += `
+
+
+
+            if (checkIsNumber(Sales_Person_Id)) {
+                query += `
                                     AND
                                     sogi.Sales_Person_Id = @salesPerson`
-                }
-               
-             
-                query += `
+            }
+
+
+            query += `
                 ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
-    
-                const request = new sql.Request();
-                request.input('from', Fromdate);
-                request.input('to', Todate);
-                request.input('salesPerson', Sales_Person_Id)
-               
-    
-                const result = await request.query(query);
-    
-                if (result.recordset.length > 0) {
-                    const parsed = result.recordset.map(o => ({
-                        ...o,
-                        Products_List: JSON.parse(o?.Products_List)
+
+            const request = new sql.Request();
+            request.input('from', Fromdate);
+            request.input('to', Todate);
+            request.input('salesPerson', Sales_Person_Id)
+
+
+            const result = await request.query(query);
+
+            if (result.recordset.length > 0) {
+                const parsed = result.recordset.map(o => ({
+                    ...o,
+                    Products_List: JSON.parse(o?.Products_List)
+                }))
+                const withImage = parsed.map(o => ({
+                    ...o,
+                    Products_List: o?.Products_List.map(oo => ({
+                        ...oo,
+                        ProductImageUrl: getImage('products', oo?.Product_Image_Name)
                     }))
-                    const withImage = parsed.map(o => ({
-                        ...o,
-                        Products_List: o?.Products_List.map(oo => ({
-                            ...oo,
-                            ProductImageUrl: getImage('products', oo?.Product_Image_Name)
-                        }))
-                    }));
-                    dataFound(res, withImage);
-                } else {
-                    noData(res)
-                }
-            } catch (e) {
-    
-                servError(e, res);
-            
+                }));
+                dataFound(res, withImage);
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+
+            servError(e, res);
+
         }
     };
-    
+
 
 
     const getDeliveryDetailsListing = async (req, res) => {
-        const {  Sales_Person_Id } = req.query;
+        const { Sales_Person_Id } = req.query;
 
         const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
@@ -1859,17 +1868,17 @@ FROM TRIP_MASTER AS tm
                 CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
                 AND NOT EXISTS (
                     SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
-                )`; 
-            
-                          
-                
-                            if (checkIsNumber(Sales_Person_Id)) {
-                                query += `
+                )`;
+
+
+
+            if (checkIsNumber(Sales_Person_Id)) {
+                query += `
                                 AND
                                 sogi.Sales_Person_Id = @salesPerson`
             }
-           
-         
+
+
             query += `
             ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
 
@@ -1877,7 +1886,7 @@ FROM TRIP_MASTER AS tm
             request.input('from', Fromdate);
             request.input('to', Todate);
             request.input('salesPerson', Sales_Person_Id)
-           
+
 
             const result = await request.query(query);
 
@@ -1900,36 +1909,36 @@ FROM TRIP_MASTER AS tm
         } catch (e) {
 
             servError(e, res);
-        
-    }
-     };
+
+        }
+    };
 
 
-     const tripDetails = async (req, res) => {
+    const tripDetails = async (req, res) => {
         const { Trip_Id } = req.body;
-    
+
         if (!Trip_Id) {
             return invalidInput(res, 'Invalid Trip_Id');
         }
-    
+
         try {
             const request = new sql.Request();
             request.input('Trip_Id', sql.Int, Trip_Id);
-    
+
             const deliveryIdsResult = await request.query(`
                 SELECT Delivery_Id FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id
             `);
-    
+
             const deliveryIds = deliveryIdsResult.recordset.map(row => row.Delivery_Id);
-    
+
             if (deliveryIds.length === 0) {
                 return noData(res, 'No Delivery Orders found for the given Trip_Id.');
             }
-    
+
             await request.query(`
                 DELETE FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id
             `);
-    
+
             await request.query(`
                 DELETE FROM tbl_Trip_Master WHERE Trip_Id = @Trip_Id
             `);

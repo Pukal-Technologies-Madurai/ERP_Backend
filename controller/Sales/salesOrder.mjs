@@ -1,6 +1,6 @@
 import sql from 'mssql'
-import { dataFound, invalidInput, noData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat, createPadString } from '../../helper_functions.mjs'
+import { dataFound, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat, createPadString, toNumber } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -69,12 +69,11 @@ const SaleOrder = () => {
                 .input('So_Year', Year_Master_Id)
                 .input('Voucher_Type', VoucherType)
                 .query(`
-                            SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
-                            FROM tbl_Sales_Order_Gen_Info
-                            WHERE Branch_Id = @Branch_Id
-                            AND So_Year = @So_Year
-                            AND VoucherType = @Voucher_Type
-                        `)
+                    SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
+                    FROM tbl_Sales_Order_Gen_Info
+                    WHERE Branch_Id = @Branch_Id
+                    AND So_Year = @So_Year
+                    AND VoucherType = @Voucher_Type`)
             )?.recordset[0]?.So_Branch_Inv_Id) + 1;
 
             if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
@@ -83,10 +82,6 @@ const SaleOrder = () => {
             const FinancialYear = `${YearSplit}`;
 
             const So_Inv_No = `${BranchCode}_${createPadString(So_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
-
-
-
-
 
             const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
 
@@ -210,6 +205,7 @@ const SaleOrder = () => {
                     .input('Sales_Order_Id', So_Id)
                     .input('S_No', i + 1)
                     .input('Item_Id', product.Item_Id)
+                    .input('Pre_Id', toNumber(product.Pre_Id) || null)
                     .input('Bill_Qty', Bill_Qty)
                     .input('Item_Rate', Item_Rate)
                     .input('Amount', Amount)
@@ -232,11 +228,11 @@ const SaleOrder = () => {
                     .input('Created_on', new Date())
                     .query(`
                         INSERT INTO tbl_Sales_Order_Stock_Info (
-                            So_Date, Sales_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty, 
+                            So_Date, Sales_Order_Id, S_No, Item_Id, Pre_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty, 
                             Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate, 
                             Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
                         ) VALUES (
-                            @So_Date, @Sales_Order_Id, @S_No, @Item_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, 
+                            @So_Date, @Sales_Order_Id, @S_No, @Item_Id, @Pre_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, 
                             @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate, 
                             @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
                         );`
@@ -415,6 +411,7 @@ const SaleOrder = () => {
                     .input('Sales_Order_Id', So_Id)
                     .input('S_No', i + 1)
                     .input('Item_Id', product.Item_Id)
+                    .input('Pre_Id', toNumber(product.Pre_Id) || null)
                     .input('Bill_Qty', Bill_Qty)
                     .input('Item_Rate', Item_Rate)
                     .input('Amount', Amount)
@@ -437,11 +434,11 @@ const SaleOrder = () => {
                     .input('Created_on', new Date())
                     .query(`
                             INSERT INTO tbl_Sales_Order_Stock_Info (
-                                So_Date, Sales_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty, 
+                                So_Date, Sales_Order_Id, S_No, Item_Id, Pre_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty, 
                                 Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate, 
                                 Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
                             ) VALUES (
-                                @So_Date, @Sales_Order_Id, @S_No, @Item_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, 
+                                @So_Date, @Sales_Order_Id, @S_No, @Item_Id, @Pre_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, 
                                 @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate, 
                                 @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
                             );`
@@ -750,11 +747,66 @@ const SaleOrder = () => {
         }
     }
 
+    const importFromPos = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+            const Retailer_Id = req.query?.Retailer_Id;
+
+            if (!checkIsNumber(Retailer_Id)) return invalidInput(res, 'Select Retailer');
+
+            const request = new sql.Request()
+                .input('Fromdate', sql.Date, Fromdate)
+                .input('Todate', sql.Date, Todate)
+                .input('Retailer_Id', sql.Int, Retailer_Id)
+                .query(`
+                    SELECT 
+                    	gt.Pre_Id,
+                    	gt.Pos_Id,
+                    	gt.Pre_Date,
+                    	gt.Custome_Id,
+                    	COALESCE(r.Retailer_Name, 'Not Found') AS Retailer_Name,
+                    	gt.Total_Invoice_value,
+                    	st.S_No,
+                    	st.Item_Id,
+                    	COALESCE(p.Product_Name, 'Not Found') AS Product_Name,
+                    	st.Unit_Id,
+                    	COALESCE(uom.Units, 'Not Found') AS Units,
+                    	st.Bill_Qty,
+                    	st.Rate AS Item_Rate,
+                    	st.Amount
+                    FROM tbl_Pre_Sales_Order_Gen_Info AS gt
+                    JOIN tbl_Pre_Sales_Order_Stock_Info AS st
+                        ON st.Pre_Id = gt.Pre_Id
+                    LEFT JOIN tbl_Sales_Order_Stock_Info AS sosi
+                        ON sosi.Pre_Id = gt.Pre_Id
+                    LEFT JOIN tbl_Retailers_Master AS r
+                        ON r.Retailer_Id = gt.Custome_Id
+                    LEFT JOIN tbl_Product_Master AS p
+                        ON p.Product_Id = st.Item_Id
+                    LEFT JOIN tbl_UOM AS uom
+                        ON uom.Unit_Id = st.Unit_Id
+                    WHERE 
+                    	CONVERT(DATE, gt.Pre_Date) BETWEEN @Fromdate AND @Todate
+                    	AND gt.Custome_Id = @Retailer_Id
+                        AND sosi.Pre_Id IS NULL
+                    ORDER BY gt.Pos_Id`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         saleOrderCreation,
         getSaleOrder,
         editSaleOrder,
-        getDeliveryorder
+        getDeliveryorder,
+        importFromPos,
     }
 }
 

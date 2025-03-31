@@ -84,17 +84,6 @@ const posBranchController = () => {
     
             if (insertResult.rowsAffected[0] > 0) {
              
-                const request1 = new sql.Request();
-                const currentDateTime = new Date();
-                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-                request1.input('Last_Update_Time', formattedDateTime); 
-    
-         
-                const updateQuery = `UPDATE tbl_POS_Table_Synch 
-                                     SET Last_Update_Time = @Last_Update_Time 
-                                     WHERE Sync_Table_Id = 1`; 
-    
-                const updateResult = await request1.query(updateQuery);
                 success(res, 'POS_Brand created and Last_Update_Time updated successfully');
             } else {
                 failed(res, 'Failed to create POS_Brand');
@@ -122,18 +111,7 @@ const posBranchController = () => {
                 WHERE POS_Brand_Id = @POS_Brand_Id
             `);
             if (result.rowsAffected[0] > 0) {
-                const request1 = new sql.Request();
-                const currentDateTime = new Date();
-                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-                request1.input('Last_Update_Time', formattedDateTime); 
-    
-         
-                const updateQuery = `UPDATE tbl_POS_Table_Synch 
-                                     SET Last_Update_Time = @Last_Update_Time 
-                                     WHERE Sync_Table_Id = 1`; 
-    
-                const updateResult = await request1.query(updateQuery);
-                return success(res, 'POS_Brand updated successfully');
+               return success(res, 'POS_Brand updated successfully');
             } else {
                 return failed(res, 'No changes were made, the POS brand might not exist');
             }

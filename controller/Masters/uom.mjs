@@ -84,15 +84,7 @@ const uomController = () => {
 
 
             if (result.rowsAffected[0] > 0) {
-                const request7 = new sql.Request();
-                const currentDateTime = new Date();
-                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-                request7.input('Last_Update_Time', formattedDateTime); 
-    
-                const updateQuery = `UPDATE tbl_POS_Table_Synch 
-                            SET Last_Update_Time = @Last_Update_Time 
-                            WHERE Sync_Table_Id = 2`;
-                const updateResult = await request7.query(updateQuery);
+               
                 success(res, 'Unit created successfully');
             } else {
                 failed(res, 'Failed to create Unit_Id');
@@ -119,15 +111,7 @@ const uomController = () => {
                 WHERE Unit_Id = @Unit_Id
             `);
             if (result.rowsAffected[0] > 0) {
-                const request7 = new sql.Request();
-                const currentDateTime = new Date();
-                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-                request7.input('Last_Update_Time', formattedDateTime); 
-    
-                const updateQuery = `UPDATE tbl_POS_Table_Synch 
-                SET Last_Update_Time = @Last_Update_Time 
-                WHERE Sync_Table_Id = 2`;
-                const updateResult = await request7.query(updateQuery);
+            
                 return success(res, 'Units updated successfully');
             } else {
                 return failed(res, 'No changes were made, the Units might not exist');

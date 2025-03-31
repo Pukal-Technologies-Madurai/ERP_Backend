@@ -168,5 +168,8 @@ MastersRouter.delete('/posRateMaster',posRateMaster.deletePosRateMaster)
 
 
 MastersRouter.post('/exportRateMaster', posRateMaster.postbulkExport);
+MastersRouter.post('/syncPOSData',posRateMaster.valuesSync)
+MastersRouter.get('/posproductSync',posRateMaster.posProductSync);
+MastersRouter.get('/posRetailersSync', retailers.posRetailesSync);
 
 export default MastersRouter;

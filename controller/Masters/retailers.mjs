@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 import { checkIsNumber } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
+import fetch from 'node-fetch';
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -424,15 +425,7 @@ const RetailerControll = () => {
                 }
     
              
-                const request7 = new sql.Request();
-                const currentDateTime = new Date();
-                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-                request7.input('Last_Update_Time', formattedDateTime);
-    
-                const updateQuery = `UPDATE tbl_POS_Table_Synch 
-                    SET Last_Update_Time = @Last_Update_Time 
-                    WHERE Sync_Table_Id = 4`;
-                const updateResult = await request7.query(updateQuery);
+              
     
                 return success(res, 'New Customer Added');
             } else {
@@ -524,15 +517,7 @@ const RetailerControll = () => {
             const result = await request;
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                const request7 = new sql.Request();
-                const currentDateTime = new Date();
-                const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-                request7.input('Last_Update_Time', formattedDateTime);
-
-                const updateQuery = `UPDATE tbl_POS_Table_Synch 
-                                            SET Last_Update_Time = @Last_Update_Time 
-                                            WHERE Sync_Table_Id = 4`;
-                const updateResult = await request7.query(updateQuery);
+               
                 return success(res, 'Retailer information updated successfully');
             } else {
                 return failed(res, 'Failed to update retailer information');
@@ -844,6 +829,29 @@ const RetailerControll = () => {
         }
     }
 
+
+
+
+ const posRetailesSync = async (req, res) => {
+        try {
+            const response = await fetch("https://smtraders.posbill.in/api/interledgerapi.php");
+            const data = await response.json();
+
+            if (data) {
+                success(res, data.data)
+            }
+            else {
+                failed(res, "Failed to sync POS products")
+            }
+
+        } catch (error) {
+            console.error("Error fetching POS product data:", error);
+            servError(res, "Internal server error")
+        }
+    }
+
+
+    
     return {
         getSFCustomers,
         getRetailerDropDown,
@@ -855,7 +863,8 @@ const RetailerControll = () => {
         getRetailerInfo,
         getRetailerInfoWithClosingStock,
         convertVisitLogToRetailer,
-        syncTallyLOL
+        syncTallyLOL,
+        posRetailesSync
     }
 }
 

@@ -1,7 +1,10 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, invalidInput, failed, success } from '../../res.mjs';
-import { checkIsNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
+
+
+import fetch from 'node-fetch';
 const posBranchController = () => {
 
     const getPosRateDropDown = async (req, res) => {
@@ -34,26 +37,26 @@ const posBranchController = () => {
         const { FromDate } = req.query; 
     
         if (!FromDate) {
-            return invalidInput(res, 'FromDate and ToDate are required');
+            return invalidInput(res, 'FromDate is required');
         }
     
         try {
             const request = new sql.Request();
-           
+    
             let query = `
-                SELECT rm.*,pb.POS_Brand_Name,pm.Product_Name,pm.Short_Name
+                SELECT rm.Id, rm.Rate_Date, rm.Pos_Brand_Id, rm.Item_Id, rm.Rate, 
+                       pb.POS_Brand_Name, pm.Product_Name, pm.Short_Name, 
+                       pm.isActive AS Is_Active_Decative
                 FROM tbl_Pos_Rate_Master rm
-				LEFT JOIN tbl_POS_Brand pb on pb.POS_Brand_Id=rm.Pos_Brand_Id
-				LEFT JOIN tbl_Product_Master pm on pm.Product_Id=rm.Item_Id
+                LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
+                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
                 WHERE Rate_Date = @FromDate
+                ORDER BY pm.IsActive DESC; 
             `;
     
-            if (FromDate) {
-                query += ` AND Rate_Date = @FromDate`; 
-                request.input('FromDate', sql.Date, FromDate);
-            }
+            request.input('FromDate', sql.Date, FromDate);
     
-          const result = await request.query(query);
+            const result = await request.query(query);
     
             if (result.recordset.length > 0) {
                 return dataFound(res, result.recordset);
@@ -64,7 +67,7 @@ const posBranchController = () => {
             return servError(e, res);
         }
     };
-
+    
     const postPosRateMaster = async (req, res) => {
         const { Rate_Date, Pos_Brand_Id, Item_Id, Rate, Is_Active_Decative } = req.body;
 
@@ -98,17 +101,9 @@ const posBranchController = () => {
             request3.input('Rate_Date', formattedRateDate);
             request3.input('Item_Id', Item_Id);
 
-            const query3 = `SELECT * FROM tbl_Pro_Rate_Master WHERE Product_Id=@Item_Id`;
+            const query3 = `SELECT * FROM tbl_Product_Master WHERE Product_Id=@Item_Id`;
             const result3 = await request3.query(query3);
 
-
-            if (result3.recordset.length > 0) {
-                const request4 = new sql.Request();
-                request4.input('Rate_Date', formattedRateDate);
-                request4.input('Item_Id', Item_Id);
-                const query4 = `DELETE FROM tbl_Pro_Rate_Master WHERE  Product_Id=@Item_Id`;
-                await request4.query(query4);
-            }
 
 
             const request6 = new sql.Request();
@@ -118,23 +113,13 @@ const posBranchController = () => {
             request6.input('Is_Active_Decative', Is_Active_Decative);
 
             const query6 = `
-                INSERT INTO tbl_Pro_Rate_Master (Rate_Date, Product_Id, Product_Rate, Is_Active_Dective) 
-                VALUES (@Rate_Date, @Item_Id, @Rate, @Is_Active_Decative)
+                update tbl_Product_Master SET Product_Rate=@Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id
+                
             `;
 
             await request6.query(query6);
 
-            const request7 = new sql.Request();
-            const currentDateTime = new Date();
-            const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-            request7.input('Last_Update_Time', formattedDateTime);
-
-            const updateQuery = `
-                UPDATE tbl_POS_Table_Synch
-                SET Last_Update_Time = @Last_Update_Time
-                WHERE Sync_Table_Id = 5
-            `;
-            await request7.query(updateQuery);
+          
 
             const getMaxId = await getNextId({ table: 'tbl_Pos_Rate_Master', column: 'Id' });
             if (!checkIsNumber(getMaxId.MaxId)) {
@@ -159,6 +144,7 @@ const posBranchController = () => {
             const result5 = await request5.query(query5);
 
             if (result5.rowsAffected[0] > 0) {
+              
                 success(res, 'Rate Master created successfully');
             } else {
                 failed(res, 'Failed to create POS_Brand');
@@ -197,15 +183,15 @@ const posBranchController = () => {
             const request3 = new sql.Request();
             request3.input('Item_Id', Item_Id);
 
-            const query3 = `SELECT * FROM tbl_Pro_Rate_Master WHERE  Product_Id=@Item_Id`;
+            const query3 = `SELECT * FROM tbl_Product_Master WHERE Product_Id=@Item_Id`;
             const result3 = await request3.query(query3);
 
-            if (result3.recordset.length > 0) {
-                const request4 = new sql.Request();
-                request4.input('Item_Id', Item_Id);
-                const query4 = `DELETE FROM tbl_Pro_Rate_Master WHERE Product_Id=@Item_Id`;
-                await request4.query(query4);
-            }
+            // if (result3.recordset.length > 0) {
+            //     const request4 = new sql.Request();
+            //     request4.input('Item_Id', Item_Id);
+            //     const query4 = `DELETE FROM tbl_Pro_Rate_Master WHERE Product_Id=@Item_Id`;
+            //     await request4.query(query4);
+            // }
 
 
             const request6 = new sql.Request();
@@ -214,26 +200,13 @@ const posBranchController = () => {
             request6.input('Rate', Rate);
             request6.input('Is_Active_Decative', Is_Active_Decative);
 
-            const query6 = `INSERT INTO tbl_Pro_Rate_Master (Rate_Date, Product_Id, Product_Rate, Is_Active_Dective) 
-                            VALUES (@Rate_Date, @Item_Id, @Rate, @Is_Active_Decative)`;
+            const query6 = `update tbl_Product_Master SET Product_Rate=@Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id`;
 
             const result6 = await request6.query(query6);
 
 
-
-            const request7 = new sql.Request();
-            const currentDateTime = new Date();
-            const formattedDateTime = `${currentDateTime.getFullYear()}/${(currentDateTime.getMonth() + 1).toString().padStart(2, '0')}/${currentDateTime.getDate().toString().padStart(2, '0')} ${currentDateTime.getHours().toString().padStart(2, '0')}:${currentDateTime.getMinutes().toString().padStart(2, '0')}`;
-            request7.input('Last_Update_Time', formattedDateTime);
-
-            const updateQuery = `
-                    UPDATE tbl_POS_Table_Synch
-                    SET Last_Update_Time = @Last_Update_Time
-                    WHERE Sync_Table_Id = 5
-                `;
-            await request7.query(updateQuery);
-
             if (result.rowsAffected[0] > 0) {
+         
                 return success(res, 'Rate Master updated successfully');
             } else {
                 return failed(res, 'No changes were made, the Rate Master not exist');
@@ -247,28 +220,49 @@ const posBranchController = () => {
 
     const deletePosRateMaster = async (req, res) => {
         const { Id } = req.body;
-
+    
         if (!Id) {
-            return invalidInput(res, 'Id is required')
+            return invalidInput(res, 'Id is required');
         }
-
+    
         try {
-            const request = new sql.Request();
-            request.input('Id', Id);
-
+            const request = new sql.Request().input('Id', Id);
+    
+           
+            const getData = await request.query(`
+                SELECT Item_Id FROM tbl_Pos_Rate_Master WHERE Id = @Id
+            `);
+    
+            if (getData.recordset.length === 0) {
+                return failed(res, 'Rate Master not found');
+            }
+    
+            const productId = getData.recordset[0].Item_Id;
+    
+       
             const result = await request.query(`
-                 DELETE tbl_Pos_Rate_Master where Id=@Id
-             `);
+                DELETE FROM tbl_Pos_Rate_Master WHERE Id = @Id
+            `);
+    
             if (result.rowsAffected[0] > 0) {
+             
+                if (productId) {
+                    await new sql.Request()
+                        .input('Product_Id', productId)
+                        .query(`
+                            UPDATE tbl_Product_Master SET IsActive = 0 WHERE Product_Id = @Product_Id
+                        `);
+                }
+    
                 return success(res, 'Rate Master Deleted successfully');
             } else {
                 return failed(res, 'No changes were made, the Master might not exist');
             }
         } catch (e) {
-
-            return servError(e, res);
+            return servError(res, e);
         }
     };
+    
 
     const getProductDropdown = async (req, res) => {
 
@@ -330,20 +324,20 @@ const posBranchController = () => {
                 const records = result.recordset;
 
 
-                const deletePromises = records.map(async (record) => {
-                    const requestDelete = new sql.Request();
-                    requestDelete.input('Item_Id', sql.Int, record.Item_Id);
+                // const deletePromises = records.map(async (record) => {
+                //     const requestDelete = new sql.Request();
+                //     requestDelete.input('Item_Id', sql.Int, record.Item_Id);
 
-                    const queryDelete = `
-                        DELETE FROM tbl_Pro_Rate_Master
-                        WHERE  Product_Id = @Item_Id
-                    `;
+                //     const queryDelete = `
+                //         DELETE FROM tbl_Pro_Rate_Master
+                //         WHERE  Product_Id = @Item_Id
+                //     `;
 
-                    await requestDelete.query(queryDelete);
-                });
+                //     await requestDelete.query(queryDelete);
+                // });
 
 
-                await Promise.all(deletePromises);
+                // await Promise.all(deletePromises);
 
                 const deletePromisesData = records.map(async (record) => {
                     const requestDelete1 = new sql.Request();
@@ -382,15 +376,14 @@ const posBranchController = () => {
                     requestProInsert.input('Rate', sql.Decimal, record.Rate);
                     requestProInsert.input('Is_Active_Decative', sql.Int, record.Is_Active_Decative);
                     const queryProInsert = `
-                        INSERT INTO tbl_Pro_Rate_Master (Rate_Date, Product_Id, Product_Rate,Is_Active_Dective)
-                        VALUES (@Rate_Date, @Item_Id, @Rate,@Is_Active_Decative)
+                    UPDATE tbl_Product_Master SET Product_Rate=@Item_Id,isActive=@Is_Active_Decative where Product_Id=@Item_Id
                     `;
 
                     await requestProInsert.query(queryProInsert);
                 });
 
                 await Promise.all(insertPromises);
-
+            
                 return success(res, 'Records successfully updated and inserted into both tables');
             } else {
                 return noData(res, 'No records found for the given date range');
@@ -402,6 +395,150 @@ const posBranchController = () => {
     };
 
 
+
+    const valuesSync = async (req, res) => {
+        try {
+            const { invoiceId } = req.query;
+    
+            if (!invoiceId) {
+                return invalidInput(res, "No invoice id");
+            }
+    
+            const apiUrl = `https://smtraders.posbill.in/api/fetchbilldata.php?invoiceid=${invoiceId}`;
+            const response = await axios.get(apiUrl);
+            const data = response.data;
+    
+            if (!data.invoice_data || data.invoice_data.length === 0) {
+                return invalidInput(res, "No invoice data found.");
+            }
+    
+            const invoice = data.invoice_data[0];
+            const { invoiceno, edate, cusid, namount, items } = invoice;
+    
+            const posId = (invoiceno) || 0;
+            const customerId = (cusid) || 0;
+            const totalInvoiceValue = (namount) || 0;
+    
+         
+            const result1 = await new sql.Request()
+                .input("Pos_Id", sql.BigInt, posId)
+                .query(`SELECT Pre_Id FROM tbl_Pre_Sales_Order_Gen_Info WHERE Pos_Id = @Pos_Id`);
+    
+            if (result1.recordset.length > 0) {
+                const getId = result1.recordset[0].Pre_Id;
+               
+    
+               
+                await new sql.Request()
+                .input("Pre_Id",  getId)
+                    .query(`DELETE FROM tbl_Pre_Sales_Order_Gen_Info WHERE Pre_Id = @Pre_Id`);
+    
+                await new sql.Request()
+                .input("Pre_Id", sql.BigInt, getId)
+                    .query(`DELETE FROM tbl_Pre_Sales_Order_Stock_Info WHERE Pre_Id = @Pre_Id`);
+    
+            
+                await new sql.Request()
+                    .input("Pre_Id",  getId)
+                    .input("Pos_Id", posId)
+                    .input("Pre_Date",  edate)
+                    .input("Custome_Id", customerId)
+                    .input("Total_Invoice_value",  totalInvoiceValue)
+                    .input("Cancel_status", sql.NVarChar, '0') 
+                    .query(
+                        `INSERT INTO tbl_Pre_Sales_Order_Gen_Info 
+                         (Pre_Id, Pos_Id, Pre_Date, Custome_Id, Total_Invoice_value, isConverted, Cancel_status, Created_by, Created_on)
+                         VALUES (@Pre_Id, @Pos_Id, @Pre_Date, @Custome_Id, @Total_Invoice_value, 0, @Cancel_status, 0, GETDATE())`
+                    );
+    
+              
+                let sNo = 1;
+                for (const item of items) {
+                    await new sql.Request()
+                        .input("Pre_Id", getId)
+                        .input("Pos_Id", posId)
+                        .input("S_No", sNo++)
+                        .input("Item_Id",  (item.icode) || 0)
+                        .input("Unit_Id",  (item.uom) || '')
+                        .input("Bill_Qty",(item.qty) || 0)
+                        .input("Rate", (item.sell) || 0)
+                        .input("Amount",  (parseFloat(item.sell) || 0) * (parseInt(item.qty) || 0))
+                        .query(
+                            `INSERT INTO tbl_Pre_Sales_Order_Stock_Info 
+                             (Pre_Id, Pos_Id, S_No, Item_Id,Unit_Id, Bill_Qty, Rate, Amount)
+                             VALUES (@Pre_Id, @Pos_Id, @S_No, @Item_Id,@Unit_Id, @Bill_Qty, @Rate, @Amount)`
+                        );
+                }
+    
+                return success(res,"Data Sync Successfully")
+            } else {
+               
+                const getId = await getNextId({
+                    table: "tbl_Pre_Sales_Order_Gen_Info",
+                    column: "Pre_Id",
+                });
+    
+                const newPreId = getId.MaxId;
+             
+    
+            
+                await new sql.Request()
+                    .input("Pre_Id",  newPreId)
+                    .input("Pos_Id",  posId)
+                    .input("Pre_Date",  edate)
+                    .input("Custome_Id", customerId)
+                    .input("Total_Invoice_value", totalInvoiceValue)
+                    .input("Cancel_status", sql.NVarChar, '0')
+                    .query(
+                        `INSERT INTO tbl_Pre_Sales_Order_Gen_Info 
+                         (Pre_Id, Pos_Id, Pre_Date, Custome_Id, Total_Invoice_value, isConverted, Cancel_status, Created_by, Created_on)
+                         VALUES (@Pre_Id, @Pos_Id, @Pre_Date, @Custome_Id, @Total_Invoice_value, 0, @Cancel_status, 0, GETDATE())`
+                    );
+    
+              
+                let sNo = 1;
+                for (const item of items) {
+                    await new sql.Request()
+                        .input("Pre_Id", newPreId)
+                        .input("Pos_Id", posId)
+                        .input("S_No",  sNo++)
+                        .input("Item_Id", item.icode || 0)
+                        .input("Unit_Id",item.uom || '')
+                        .input("Bill_Qty", item.qty || 0)
+                        .input("Rate",  item.sell || 0)
+                        .input("Amount",  (item.sell || 0) * (item.qty) || 0)
+                        .query(
+                            `INSERT INTO tbl_Pre_Sales_Order_Stock_Info 
+                             (Pre_Id, Pos_Id, S_No, Item_Id,Unit_Id, Bill_Qty, Rate, Amount)
+                             VALUES (@Pre_Id, @Pos_Id, @S_No, @Item_Id,@Unit_Id, @Bill_Qty, @Rate, @Amount)`
+                        );
+                }
+    
+                return success(res,"Data Sync Successfully")
+            }
+        } catch (error) {
+        
+            return servError(res, error);
+        }
+    };
+    
+    const posProductSync = async (req, res) => {
+        try {
+            const response = await fetch("https://smtraders.posbill.in/api/interproductapi.php");
+            const data = await response.json();
+
+            if (data) {
+                success(res, data.data)
+            }
+            else {
+                failed(res, "Failed to sync POS products")
+            }
+
+        } catch (error) {
+            console.error("Error fetching POS product data:", error);
+            servError(res, "Internal server error")
+        }
+    }
     return {
 
         getPosRateMaster,
@@ -409,7 +546,9 @@ const posBranchController = () => {
         putPosRateMaster,
         deletePosRateMaster,
         getProductDropdown,
-        postbulkExport
+        postbulkExport,
+        valuesSync,
+        posProductSync
     }
 }
 
