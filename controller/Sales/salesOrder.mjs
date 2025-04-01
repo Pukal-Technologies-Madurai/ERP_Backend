@@ -36,58 +36,68 @@ const SaleOrder = () => {
         const transaction = new sql.Transaction();
 
         try {
+
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
-
-
-            const So_Year_Master = await new sql.Request()
-                .query(`SELECT Year_Desc, Id FROM tbl_Year_Master WHERE Active_Status = 'Yes' or  Active_Status= 'YES'`);
-
-            const So_Year_Desc = So_Year_Master.recordset[0]?.Year_Desc;
-            const Year_Master_Id = So_Year_Master.recordset[0]?.Id;
-
-            if (!So_Year_Desc || !Year_Master_Id) throw new Error('Failed to fetch active year');
-
-            const branchData = await new sql.Request()
-                .input('Branch_Id', Branch_Id)
-                .query(`SELECT BranchCode FROM tbl_Branch_Master WHERE BranchId = @Branch_Id`);
-
-            const BranchCode = branchData.recordset[0]?.BranchCode;
-            if (!BranchCode) throw new Error('Failed to fetch Branch Code');
-
-            const voucherData = await new sql.Request()
-                .input('Voucher_Type', VoucherType)
-                .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Voucher_Type`);
-
-            const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
-
-            if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
-
-
-            const So_Branch_Inv_Id = Number((await new sql.Request()
-                .input('Branch_Id', Branch_Id)
-                .input('So_Year', Year_Master_Id)
-                .input('Voucher_Type', VoucherType)
-                .query(`
-                    SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
-                    FROM tbl_Sales_Order_Gen_Info
-                    WHERE Branch_Id = @Branch_Id
-                    AND So_Year = @So_Year
-                    AND VoucherType = @Voucher_Type`)
-            )?.recordset[0]?.So_Branch_Inv_Id) + 1;
-
-            if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
-
-            const YearSplit = So_Year_Desc;
-            const FinancialYear = `${YearSplit}`;
-
-            const So_Inv_No = `${BranchCode}_${createPadString(So_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
+            
+            // unique Sale order id
 
             const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
 
             if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
 
             const So_Id = So_Id_Get.MaxId;
+
+            // year id and year code
+
+            const So_Year_Master = await new sql.Request()
+                .input('So_Date', So_Date)
+                .query(`
+                    SELECT Id AS Year_Id, Year_Desc
+                    FROM tbl_Year_Master
+                    WHERE 
+                        Fin_Start_Date <= @So_Date 
+                        AND Fin_End_Date >= @So_Date
+                    `);
+
+            if (So_Year_Master.recordset.length === 0) throw new Error('Year_Id not found');
+
+            const { Year_Id, Year_Desc } = So_Year_Master.recordset[0];
+
+            // voucher code
+
+            const voucherData = await new sql.Request()
+                .input('Voucher_Type', VoucherType)
+                .query(`
+                    SELECT Voucher_Code 
+                    FROM tbl_Voucher_Type 
+                    WHERE Vocher_Type_Id = @Voucher_Type`
+                );
+
+            const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
+
+            if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
+
+            // year id and year code
+
+            const So_Branch_Inv_Id = Number((await new sql.Request()
+                .input('So_Year', Year_Id)
+                .input('Voucher_Type', VoucherType)
+                .query(`
+                    SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
+                    FROM tbl_Sales_Order_Gen_Info
+                    WHERE 
+                        So_Year = @So_Year
+                        AND VoucherType = @Voucher_Type`)
+            )?.recordset[0]?.So_Branch_Inv_Id) + 1;
+
+            if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
+
+            // creating invoice code
+
+            const So_Inv_No = `${VoucherCode}/${createPadString(So_Branch_Inv_Id, 6)}/${Year_Desc}`;
+
+            // tax calculation
 
             const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
@@ -136,7 +146,7 @@ const SaleOrder = () => {
             const request = new sql.Request(transaction)
                 .input('So_Id', So_Id)
                 .input('So_Inv_No', So_Inv_No)
-                .input('So_Year', Year_Master_Id)
+                .input('So_Year', Year_Id)
                 .input('So_Branch_Inv_Id', So_Branch_Inv_Id)
                 .input('So_Date', So_Date)
                 .input('Retailer_Id', Retailer_Id)

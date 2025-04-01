@@ -40,26 +40,14 @@ const PurchaseOrder = () => {
             const productsData = (await getProducts(1)).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
 
+            // get unique Purchase invoice id
+
             const getPIN_Id = await getNextId({ table: 'tbl_Purchase_Order_Inv_Gen_Info', column: 'PIN_Id' });
             if (!getPIN_Id.status || !checkIsNumber(getPIN_Id.MaxId)) throw new Error('Failed to get PIN_Id');
 
             const PIN_Id = getPIN_Id.MaxId;
 
-            const PO_Inv_Id = Number((await new sql.Request()
-                .input('Branch_Id', Branch_Id)
-                .input('Voucher_Type', Voucher_Type)
-                .query(`
-                SELECT 
-                    COALESCE(MAX(PO_Inv_Id), 0) AS PO_Inv_Id
-                FROM 
-                    tbl_Purchase_Order_Inv_Gen_Info
-                WHERE
-                    Branch_Id = @Branch_Id
-                    AND
-                    Voucher_Type = @Voucher_Type`
-                ))?.recordset[0]?.PO_Inv_Id) + 1;
-
-            if (!checkIsNumber(PO_Inv_Id)) throw new Error('Failed to get Order Id');
+            // get Year and Year code
 
             const PO_Inv_Year = await new sql.Request()
                 .input('Po_Inv_Date', Po_Inv_Date)
@@ -75,17 +63,25 @@ const PurchaseOrder = () => {
 
             const { Year_Id, Year_Desc } = PO_Inv_Year.recordset[0];
 
-            const BranchCodeGet = await new sql.Request()
-                .input('Branch_Id', Branch_Id)
+            // get Voucher and year based invoice count
+
+            const PO_Inv_Id = Number((await new sql.Request()
+                .input('Year_Id', Year_Id)
+                .input('Voucher_Type', Voucher_Type)
                 .query(`
-                    SELECT BranchCode
-                    FROM tbl_Branch_Master
-                    WHERE BranchId = @Branch_Id`
-                );
+                SELECT 
+                    COALESCE(MAX(PO_Inv_Id), 0) AS PO_Inv_Id
+                FROM 
+                    tbl_Purchase_Order_Inv_Gen_Info
+                WHERE
+                    PO_Inv_Year = @Year_Id
+                    AND
+                    Voucher_Type = @Voucher_Type`
+                ))?.recordset[0]?.PO_Inv_Id) + 1;
 
-            if (BranchCodeGet.recordset.length === 0) throw new Error('Failed to get BranchCode');
+            if (!checkIsNumber(PO_Inv_Id)) throw new Error('Failed to get Order Id');
 
-            const BranchCode = BranchCodeGet.recordset[0]?.BranchCode || '';
+            // get Voucher Code
 
             const VoucherCodeGet = await new sql.Request()
                 .input('Vocher_Type_Id', Voucher_Type)
@@ -99,7 +95,9 @@ const PurchaseOrder = () => {
 
             const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
 
-            const Po_Inv_No = BranchCode + '_' + createPadString(PO_Inv_Id, 6) + '_' + Voucher_Code + "_" + Year_Desc;
+            // get invoice code
+
+            const Po_Inv_No = Voucher_Code + "/" + createPadString(PO_Inv_Id, 6) + '/' + Year_Desc;
 
             // const Po_Inv_No = 'PO_' + Branch_Id + '_' + PO_Inv_Year + '_' + createPadString(PO_Inv_Id, 4);
 

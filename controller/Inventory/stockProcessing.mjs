@@ -43,6 +43,8 @@ const StockManagement = () => {
             const StaffInvolve = Array.isArray(req.body.StaffInvolve) ? req.body.StaffInvolve : [];
             const Destination = Array.isArray(req.body.Destination) ? req.body.Destination : [];
 
+            // unique id for processing
+
             const PR_Id = Number((await new sql.Request().query(`
                 SELECT COALESCE(MAX(PR_Id), 0) AS MaxId
                 FROM tbl_Processing_Gen_Info
@@ -50,56 +52,37 @@ const StockManagement = () => {
 
             if (!checkIsNumber(PR_Id)) throw new Error('Failed to get PR_Id');
 
-            const Process_no = Number((await new sql.Request()
-                .input('Process_date', Process_date)
-                .input('Godownlocation', Godownlocation)
-                .query(`
-                    SELECT COALESCE(MAX(Process_no), 0) AS MaxId
-                    FROM tbl_Processing_Gen_Info
-                    WHERE 
-                        Process_date = @Process_date
-                        AND Godownlocation = @Godownlocation`
-                ))?.recordset[0]?.MaxId) + 1;
-
-            if (!checkIsNumber(Process_no)) throw new Error('Failed to get Process_no');
+            // year and desc
 
             const getYearId = await new sql.Request()
                 .input('Process_date', Process_date)
                 .query(`
-                SELECT Id AS Year_Id, Year_Desc
-                FROM tbl_Year_Master
-                WHERE 
-                    Fin_Start_Date <= @Process_date 
-                    AND Fin_End_Date >= @Process_date`
+                    SELECT Id AS Year_Id, Year_Desc
+                    FROM tbl_Year_Master
+                    WHERE 
+                        Fin_Start_Date <= @Process_date 
+                        AND Fin_End_Date >= @Process_date`
                 );
 
             if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
 
             const { Year_Id, Year_Desc } = getYearId.recordset[0];
 
+            // process on based on year and voucher
+
             const P_No = Number((await new sql.Request()
-                .input('Branch_Id', Branch_Id)
+                .input('Year_Id', Year_Id)
                 .input('VoucherType', VoucherType)
                 .query(`
                     SELECT COALESCE(MAX(P_No), 0) AS MaxId
                     FROM tbl_Processing_Gen_Info
-                    WHERE Branch_Id = @Branch_Id
+                    WHERE Year_Id = @Year_Id
                     AND VoucherType = @VoucherType`
                 ))?.recordset[0]?.MaxId) + 1;
 
             if (!checkIsNumber(P_No)) throw new Error('Failed to get P_No');
 
-            const BranchCodeGet = await new sql.Request()
-                .input('Branch_Id', Branch_Id)
-                .query(`
-                SELECT BranchCode
-                FROM tbl_Branch_Master
-                WHERE BranchId = @Branch_Id`
-                );
-
-            if (BranchCodeGet.recordset.length === 0) throw new Error('Failed to get BranchCode');
-
-            const BranchCode = BranchCodeGet.recordset[0]?.BranchCode || '';
+            // voucher code
 
             const VoucherCodeGet = await new sql.Request()
                 .input('Vocher_Type_Id', VoucherType)
@@ -113,7 +96,22 @@ const StockManagement = () => {
 
             const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
 
-            const PR_Inv_Id = BranchCode + '_' + createPadString(P_No, 6) + '_' + Voucher_Code + "_" + Year_Desc;
+            const PR_Inv_Id = Voucher_Code + '/' + createPadString(P_No, 6) + '/' + Year_Desc;
+
+            // process no for godown and each date based
+
+            const Process_no = Number((await new sql.Request()
+                .input('Process_date', Process_date)
+                .input('Godownlocation', Godownlocation)
+                .query(`
+                SELECT COALESCE(MAX(Process_no), 0) AS MaxId
+                FROM tbl_Processing_Gen_Info
+                WHERE 
+                    Process_date = @Process_date
+                    AND Godownlocation = @Godownlocation`
+                ))?.recordset[0]?.MaxId) + 1;
+
+            if (!checkIsNumber(Process_no)) throw new Error('Failed to get Process_no');
 
             await transaction.begin();
 

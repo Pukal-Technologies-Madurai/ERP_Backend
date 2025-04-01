@@ -130,7 +130,8 @@ const DeliveryOrder = () => {
             const YearSplit = Do_Year_Desc;
             const FinancialYear = `${YearSplit}`;
 
-            const Do_Inv_No = `${BranchCode}_${createPadString(Do_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
+            const Do_Inv_No = `${VoucherCode}/${createPadString(Do_Branch_Inv_Id, 6)}/${FinancialYear}`;
+
             const getDo_Id = await getNextId({ table: 'tbl_Sales_Delivery_Gen_Info', column: 'Do_Id' });
 
             if (!getDo_Id.status || !checkIsNumber(getDo_Id.MaxId)) throw new Error('Failed to get Do_Id');
@@ -950,6 +951,7 @@ const DeliveryOrder = () => {
             Trip_No,
             StartTime,
             Created_By,
+            TripStatus,
             GST_Inclusive = 1,
             BillType,
             VoucherType,
@@ -959,12 +961,11 @@ const DeliveryOrder = () => {
 
         } = req.body;
 
-        var Do_Date = ISOString(req?.body?.Do_Date);
         var Trip_Date = req.body.Trip_Date;
         var Alter_Id = req.body.Alter_Id;
         const transaction = new sql.Transaction();
 
-        if (!Delivery_Person_Id || !Branch_Id || !Do_Date) {
+        if (!Delivery_Person_Id || !Branch_Id || !BillType || !VoucherType || !TripStatus  ) {
             return invalidInput(res, 'Please Select Required Fields');
         }
 
@@ -1010,17 +1011,23 @@ const DeliveryOrder = () => {
 
             if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
 
-            const { Year_Id, Year_Desc } = getYearId.recordset[0];
+            const { Year_Id,Year_Desc } = getYearId.recordset[0];
 
-            const T_No = Number((await new sql.Request()
-                .input('Branch_Id', Branch_Id)
+        
+            const countResult = await new sql.Request()
+                .input('Year_Id', Year_Id)
                 .input('VoucherType', VoucherType)
                 .query(`
-                               SELECT COALESCE(MAX(T_No), 0) AS MaxId
-                               FROM tbl_Trip_Master
-                               WHERE Branch_Id = @Branch_Id
-                               AND VoucherType = @VoucherType`
-                ))?.recordset[0]?.MaxId) + 1;
+                    SELECT COUNT(*) AS RecordCount
+                    FROM tbl_Trip_Master
+                    WHERE Year_Id = @Year_Id
+                    AND VoucherType = @VoucherType
+                `);
+    
+            const recordCount = countResult.recordset[0].RecordCount;
+            const T_No = recordCount + 1;  
+       
+            
 
             if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
 
@@ -1048,7 +1055,7 @@ const DeliveryOrder = () => {
 
             const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
 
-            const TR_INV_ID = BranchCode + '_' + createPadString(T_No, 6) + '_' + Voucher_Code + "_" + Year_Desc;
+            const TR_INV_ID = Voucher_Code  +"/"+ createPadString(T_No, 6)  + "/" + Year_Desc;
 
             const Challan_No = createPadString(Trip_Id, 4);
             const Trip_Tot_Kms = Number(Trip_ST_KM) + Number(Trip_EN_KM);
@@ -1066,6 +1073,7 @@ const DeliveryOrder = () => {
                 .input('Trip_Date', Trip_Date)
                 .input('BillType', 'SALES')
                 .input('Vehicle_No', Vehicle_No)
+                .input('TripStatus', TripStatus)
                 .input('StartTime', StartTime)
                 .input('Trip_No', Trip_No)
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
@@ -1073,10 +1081,10 @@ const DeliveryOrder = () => {
                 .input('Created_At', new Date())
                 .query(`
                         INSERT INTO tbl_Trip_Master (
-                            Trip_Id,TR_INV_ID,T_NO, Challan_No,Year_Id, Branch_Id, Trip_Date,VoucherType,BillType, Vehicle_No,
+                            Trip_Id,TR_INV_ID,T_NO, Challan_No,Year_Id, Branch_Id, Trip_Date,VoucherType,BillType, Vehicle_No,TripStatus,
                             StartTime, Trip_No, Trip_ST_KM, Created_By, Created_At
                         ) VALUES (
-                            @Trip_Id,@TR_INV_ID,@T_NO, @Challan_No,@Year_Id, @Branch_Id, @Trip_Date,@VoucherType,@BillType, @Vehicle_No,
+                            @Trip_Id,@TR_INV_ID,@T_NO, @Challan_No,@Year_Id, @Branch_Id, @Trip_Date,@VoucherType,@BillType, @Vehicle_No,@TripStatus,
                             @StartTime, @Trip_No, @Trip_ST_KM, @Created_By, @Created_At
                         );
                     
@@ -1575,7 +1583,7 @@ FROM TRIP_MASTER AS tm
                     throw new Error(`Invalid Do_No received for delivery ${i + 1}`);
                 }
 
-                const Do_Inv_No = `${BranchCode}_${createPadString(Do_Branch_Inv_Id, 6)}_${VoucherCode}_${FinancialYear}`;
+                const Do_Inv_No = `${VoucherCode}/${createPadString(Do_Branch_Inv_Id, 6)}/${FinancialYear}`;
 
                 const genInfoRequest = new sql.Request(transaction);
                 genInfoRequest.input('Do_Id', sql.Int, Do_Id);
