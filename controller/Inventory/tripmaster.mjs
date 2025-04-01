@@ -21,6 +21,7 @@ const tripActivities = () => {
             BillType = '',
             VoucherType = 0,
             Narration = '',
+            TripStatus = 'New',
             Product_Array = [],
             EmployeesInvolved = [],
         } = req.body;
@@ -29,7 +30,7 @@ const tripActivities = () => {
         const StartTime = req.body?.StartTime ? new Date(req.body.StartTime) : new Date();
         const EndTime = req.body?.EndTime ? new Date(req.body.EndTime) : new Date();
 
-        if (!checkIsNumber(Branch_Id) || !BillType || !checkIsNumber(VoucherType) ) {
+        if (!checkIsNumber(Branch_Id) || !BillType || !checkIsNumber(VoucherType)) {
             return invalidInput(res, 'Select Branch, BillType, VoucherType is required');
         }
         if (Trip_ST_KM && Trip_EN_KM && Number(Trip_ST_KM) > Number(Trip_EN_KM)) {
@@ -39,12 +40,65 @@ const tripActivities = () => {
         const transaction = new sql.Transaction();
 
         try {
+
+            // ------------------ Unique Trip_Id
+
             const Trip_Id = Number((await new sql.Request().query(`
                SELECT COALESCE(MAX(Trip_Id), 0) AS MaxId
                FROM tbl_Trip_Master
            `))?.recordset[0]?.MaxId) + 1;
 
             if (!checkIsNumber(Trip_Id)) throw new Error('Failed to get Trip Id');
+
+            // ------------------ year details
+
+            const getYearId = await new sql.Request()
+                .input('Trip_Date', Trip_Date)
+                .query(`
+                SELECT Id AS Year_Id, Year_Desc
+                FROM tbl_Year_Master
+                WHERE 
+                    Fin_Start_Date <= @Trip_Date 
+                    AND Fin_End_Date >= @Trip_Date`
+                );
+
+            if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
+
+            const { Year_Id, Year_Desc } = getYearId.recordset[0];
+
+            // ------------------ T_No
+
+            const T_No = Number((await new sql.Request()
+                .input('VoucherType', VoucherType)
+                .input('Year_Id', Year_Id)
+                .query(`
+                SELECT COALESCE(MAX(T_No), 0) AS MaxId
+                FROM tbl_Trip_Master
+                WHERE VoucherType = @VoucherType
+                AND Year_Id = @Year_Id;`
+                ))?.recordset[0]?.MaxId) + 1;
+
+            if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
+
+            // ------------------ Voucher Code
+
+            const VoucherCodeGet = await new sql.Request()
+                .input('Vocher_Type_Id', VoucherType)
+                .query(`
+                SELECT Voucher_Code
+                FROM tbl_Voucher_Type
+                WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                );
+
+            if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
+
+            const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
+
+            // ------------------ TR_INV_ID creations
+
+            const TR_INV_ID = Voucher_Code + "/" + createPadString(T_No, 6) + '/' + Year_Desc;
+
+            // ------------------ Trip_No (day wise count)
 
             const Trip_No = Number((await new sql.Request()
                 .input('Trip_Date', Trip_Date)
@@ -58,58 +112,6 @@ const tripActivities = () => {
                 ))?.recordset[0]?.MaxId) + 1;
 
             if (!checkIsNumber(Trip_No)) throw new Error('Failed to get Trip_No');
-
-            const getYearId = await new sql.Request()
-                .input('Trip_Date', Trip_Date)
-                .query(`
-                    SELECT Id AS Year_Id, Year_Desc
-                    FROM tbl_Year_Master
-                    WHERE 
-                        Fin_Start_Date <= @Trip_Date 
-                        AND Fin_End_Date >= @Trip_Date`
-                );
-
-            if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
-
-            const { Year_Id, Year_Desc } = getYearId.recordset[0];
-
-            const T_No = Number((await new sql.Request()
-                .input('Branch_Id', Branch_Id)
-                .input('VoucherType', VoucherType)
-                .query(`
-                    SELECT COALESCE(MAX(T_No), 0) AS MaxId
-                    FROM tbl_Trip_Master
-                    WHERE Branch_Id = @Branch_Id
-                    AND VoucherType = @VoucherType`
-                ))?.recordset[0]?.MaxId) + 1;
-
-            if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
-
-            const BranchCodeGet = await new sql.Request()
-                .input('Branch_Id', Branch_Id)
-                .query(`
-                    SELECT BranchCode
-                    FROM tbl_Branch_Master
-                    WHERE BranchId = @Branch_Id`
-                );
-
-            if (BranchCodeGet.recordset.length === 0) throw new Error('Failed to get BranchCode');
-
-            const BranchCode = BranchCodeGet.recordset[0]?.BranchCode || '';
-
-            const VoucherCodeGet = await new sql.Request()
-                .input('Vocher_Type_Id', VoucherType)
-                .query(`
-                    SELECT Voucher_Code
-                    FROM tbl_Voucher_Type
-                    WHERE Vocher_Type_Id = @Vocher_Type_Id`
-                );
-
-            if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
-
-            const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
-
-            const TR_INV_ID = BranchCode + '_' + createPadString(T_No, 6) + '_' + Voucher_Code + "_" + Year_Desc;
 
             const Challan_No = createPadString(Trip_Id, 4);
             const Trip_Tot_Kms = Number(Trip_ST_KM) + Number(Trip_EN_KM);
@@ -137,6 +139,7 @@ const tripActivities = () => {
                 .input('Godownlocation', toNumber(Godownlocation))
                 .input('BillType', BillType)
                 .input('Narration', Narration)
+                .input('TripStatus', TripStatus)
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
                 .input('Trip_EN_KM', Number(Trip_EN_KM))
                 .input('Trip_Tot_Kms', toNumber(Trip_Tot_Kms))
@@ -146,12 +149,12 @@ const tripActivities = () => {
                    INSERT INTO tbl_Trip_Master (
                        Trip_Id, TR_INV_ID, Branch_Id, T_No, VoucherType, Year_Id, Challan_No, Trip_Date, Vehicle_No,
                        PhoneNumber, LoadingLoad, LoadingEmpty, UnloadingLoad, UnloadingEmpty, Narration, BillType,
-                       StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Godownlocation,
+                       StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Godownlocation, TripStatus,
                        Created_At, Created_By
                    ) VALUES (
                        @Trip_Id, @TR_INV_ID, @Branch_Id, @T_No, @VoucherType, @Year_Id, @Challan_No, @Trip_Date, @Vehicle_No,
                        @PhoneNumber, @LoadingLoad, @LoadingEmpty, @UnloadingLoad, @UnloadingEmpty, @Narration, @BillType,
-                       @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_Tot_Kms, @Trip_EN_KM, @Godownlocation,
+                       @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_Tot_Kms, @Trip_EN_KM, @Godownlocation, @TripStatus,
                        @Created_At, @Created_By
                    );
                `);
@@ -218,6 +221,7 @@ const tripActivities = () => {
             VoucherType = 0,
             Narration = '',
             Updated_By = '',
+            TripStatus = 'New',
             Product_Array = [],
             EmployeesInvolved = []
         } = req.body;
@@ -266,6 +270,7 @@ const tripActivities = () => {
                 .input('BillType', BillType)
                 .input('VoucherType', toNumber(VoucherType))
                 .input('Narration', Narration)
+                .input('TripStatus', TripStatus)
                 .input('StartTime', StartTime)
                 .input('EndTime', EndTime)
                 .input('Trip_ST_KM', toNumber(Trip_ST_KM))
@@ -294,6 +299,7 @@ const tripActivities = () => {
                         BillType = @BillType,
                         VoucherType = @VoucherType,
                         Narration = @Narration,
+                        TripStatus = @TripStatus,
                         Updated_By = @Updated_By,
                         Updated_At = @Updated_At
                     WHERE Trip_Id = @Trip_Id
