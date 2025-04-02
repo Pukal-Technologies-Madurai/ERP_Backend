@@ -628,21 +628,27 @@ const PurchaseOrder = () => {
 
     const getPurchaseOrder = async (req, res) => {
 
-        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
-
         try {
+
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            const { Retailer_Id, Cancel_status, VoucherType } = req?.query;
 
             const request = new sql.Request()
                 .input('from', Fromdate)
                 .input('to', Todate)
+                .input('Retailer_Id', Retailer_Id)
+                .input('Cancel_status', Cancel_status)
+                .input('VoucherType', VoucherType)
                 .query(`
                     WITH Purchase AS (
 			            SELECT 
                         	so.*,
                         	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                         	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                        	COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+                        	COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                        	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
                         FROM 
                         	tbl_Purchase_Order_Inv_Gen_Info AS so
                         	LEFT JOIN tbl_Retailers_Master AS rm
@@ -651,10 +657,15 @@ const PurchaseOrder = () => {
                         	ON bm.BranchId = so.Branch_Id
                         	LEFT JOIN tbl_Users AS cb
                         	ON cb.UserId = so.Created_by
+                            LEFT JOIN tbl_Voucher_Type AS v
+                            ON v.Vocher_Type_Id = so.Voucher_Type
                         WHERE
                             CONVERT(DATE, so.Po_Entry_Date) >= CONVERT(DATE, @from)
                         	AND
                         	CONVERT(DATE, so.Po_Entry_Date) <= CONVERT(DATE, @to) 
+                            ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @Retailer_Id ' : ''}
+                            ${checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @Cancel_status ' : ''}
+                            ${checkIsNumber(VoucherType) ? ' AND so.Voucher_Type = @VoucherType ' : ''}
 			        ), PurchaseDetails AS (
                         SELECT
                     		oi.*,

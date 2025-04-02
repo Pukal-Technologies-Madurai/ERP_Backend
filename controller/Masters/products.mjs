@@ -4,7 +4,7 @@ import { dataFound, failed, invalidInput, noData, servError, success } from '../
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import getImage from '../../middleware/getImageIfExist.mjs';
 import fileRemoverMiddleware from '../../middleware/unSyncFile.mjs';
-import { checkIsNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 
@@ -417,8 +417,8 @@ const sfProductController = () => {
                 .input('ERP_Id', ERP_Id)
                 .input('Pos_Brand_Id', Pos_Brand_Id)
                 .input('IsActive', IsActive)
-                .input('Product_Rate', Product_Rate)
-                .input('Max_Rate', Max_Rate)
+                .input('Product_Rate', toNumber(Product_Rate))
+                .input('Max_Rate', toNumber(Max_Rate))
                 .query(`
                     UPDATE tbl_Product_Master
                     SET 

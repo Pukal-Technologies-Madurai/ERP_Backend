@@ -374,7 +374,8 @@ const tripActivities = () => {
                         tm.*,
                 		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                 		COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
-                		COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User
+                		COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User,
+                		COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
                     FROM tbl_Trip_Master AS tm
                 	LEFT JOIN tbl_Branch_Master AS bm
                 	ON bm.BranchId = tm.Branch_Id
@@ -382,6 +383,8 @@ const tripActivities = () => {
                 	ON cb_created.UserId = tm.Created_By
                 	LEFT JOIN tbl_Users AS cb_updated
                 	ON cb_updated.UserId = tm.Updated_By
+                    LEFT JOIN tbl_Voucher_Type AS v
+                    ON v.Vocher_Type_Id = tm.VoucherType
                     WHERE 
                 		tm.Trip_Date BETWEEN @FromDate AND @ToDate
                         AND tm.BillType IN (
