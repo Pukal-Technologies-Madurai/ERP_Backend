@@ -1,10 +1,12 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, invalidInput, failed, success } from '../../res.mjs';
-import { checkIsNumber, toNumber } from '../../helper_functions.mjs';
-import { getNextId } from '../../middleware/miniAPIs.mjs';
-
-
+import { checkIsNumber, isEqualNumber } from '../../helper_functions.mjs';
+import { getProducts,getNextId } from '../../middleware/miniAPIs.mjs';
 import fetch from 'node-fetch';
+
+
+
+const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 const posBranchController = () => {
 
     const getPosRateDropDown = async (req, res) => {
@@ -213,7 +215,7 @@ const posBranchController = () => {
             }
         } catch (e) {
 
-            console.error('Database error:', e);
+       
             return servError(e, res);
         }
     };
@@ -289,236 +291,242 @@ const posBranchController = () => {
         }
     }
 
+  
     const postbulkExport = async (req, res) => {
-        const { FromDate, NewDate } = req.query;
-
+        var { FromDate, NewDate } = req.query;
+    
         if (!FromDate || !NewDate) {
-            return invalidInput(res, 'FromDate, and NewDate are required');
+            return invalidInput(res, "Both FromDate and NewDate are required");
         }
-
+    
+        let transaction;
         try {
-            const request = new sql.Request();
-
-
-            let query = `
+            const pool = await sql.connect();
+            transaction = new sql.Transaction(pool);
+            await transaction.begin();
+    
+            const request = new sql.Request(transaction);
+            request.input("FromDate", sql.Date, FromDate);
+            request.input("NewDate", sql.Date, NewDate);
+    
+            const query = `
                 SELECT rm.*, pb.POS_Brand_Name, pm.Product_Name
                 FROM tbl_Pos_Rate_Master rm
                 LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
                 LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
                 WHERE Rate_Date = @FromDate
             `;
-            request.input('FromDate', sql.Date, FromDate);
-
+    
             const result = await request.query(query);
-
-            const getMaxId = await getNextId({ table: 'tbl_Pos_Rate_Master', column: 'Id' });
-
+            const getMaxId = await getNextId({ table: "tbl_Pos_Rate_Master", column: "Id" });
+    
             if (!checkIsNumber(getMaxId.MaxId)) {
-                return failed(res, 'Error generating RateMaster');
+                await transaction.rollback();
+                return failed(res, "Error generating RateMaster");
             }
-
+    
             let newId = getMaxId.MaxId;
-
-
+    
             if (result.recordset.length > 0) {
                 const records = result.recordset;
-
-
-                // const deletePromises = records.map(async (record) => {
-                //     const requestDelete = new sql.Request();
-                //     requestDelete.input('Item_Id', sql.Int, record.Item_Id);
-
-                //     const queryDelete = `
-                //         DELETE FROM tbl_Pro_Rate_Master
-                //         WHERE  Product_Id = @Item_Id
-                //     `;
-
-                //     await requestDelete.query(queryDelete);
-                // });
-
-
-                // await Promise.all(deletePromises);
-
-                const deletePromisesData = records.map(async (record) => {
-                    const requestDelete1 = new sql.Request();
-                    requestDelete1.input('Rate_Date', sql.Date, NewDate);
-                    requestDelete1.input('Item_Id', sql.Int, record.Item_Id);
-
-                    const queryDelete1 = `
-                        DELETE FROM tbl_Pos_Rate_Master
-                        WHERE Rate_Date=@Rate_Date AND Item_Id = @Item_Id
-                    `;
-
-                    await requestDelete1.query(queryDelete1);
-                });
-
-
-                await Promise.all(deletePromisesData);
-
-                const insertPromises = records.map(async (record) => {
-                    const requestInsert = new sql.Request();
-                    requestInsert.input('Id', sql.Int, newId++);
-                    requestInsert.input('Rate_Date', sql.Date, NewDate);
-                    requestInsert.input('Pos_Brand_Id', sql.Int, record.Pos_Brand_Id);
-                    requestInsert.input('Item_Id', sql.Int, record.Item_Id);
-                    requestInsert.input('Rate', sql.Decimal, record.Rate);
-                    requestInsert.input('Is_Active_Decative', sql.Int, record.Is_Active_Decative);
-
-                    const queryInsert = `
-                        INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Is_Active_Decative)
-                        VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate, @Is_Active_Decative)
-                    `;
-                    await requestInsert.query(queryInsert);
-
-                    const requestProInsert = new sql.Request();
-                    requestProInsert.input('Rate_Date', sql.Date, NewDate);
-                    requestProInsert.input('Item_Id', sql.Int, record.Item_Id);
-                    requestProInsert.input('Rate', sql.Decimal, record.Rate);
-                    requestProInsert.input('Is_Active_Decative', sql.Int, record.Is_Active_Decative);
-                    const queryProInsert = `
-                    UPDATE tbl_Product_Master SET Product_Rate=@Item_Id,isActive=@Is_Active_Decative where Product_Id=@Item_Id
-                    `;
-
-                    await requestProInsert.query(queryProInsert);
-                });
-
-                await Promise.all(insertPromises);
-            
-                return success(res, 'Records successfully updated and inserted into both tables');
+    
+                await deleteRecords(records, transaction, NewDate);
+                await insertRecords(records, newId, transaction, NewDate);
+    
+                await transaction.commit();
+                return success(res, "Records successfully updated and inserted into both tables");
             } else {
-                return noData(res, 'No records found for the given date range');
+                await transaction.rollback();
+                return noData(res, "No records found for the given date range");
             }
         } catch (e) {
-            console.error('Error occurred while processing the request:', e);
-            return servError(e, res);
+            if (transaction) await transaction.rollback();
+            return servError(e,res);
         }
     };
-
-
-
+    
+    const deleteRecords = async (records, transaction, NewDate) => {
+        for (const record of records) {
+            const requestDelete = new sql.Request(transaction);
+            requestDelete.input("Rate_Date", sql.Date, NewDate); 
+            requestDelete.input("Item_Id", sql.Int, record.Item_Id);
+    
+            await requestDelete.query(`
+                DELETE FROM tbl_Pos_Rate_Master
+                WHERE Rate_Date = @Rate_Date AND Item_Id = @Item_Id
+            `);
+        }
+    };
+    
+    const insertRecords = async (records, newId, transaction, NewDate) => {
+     
+        for (const record of records) {
+            const requestInsert = new sql.Request(transaction);
+            requestInsert.input("Id", newId++);
+            requestInsert.input("Rate_Date",  NewDate); 
+            requestInsert.input("Pos_Brand_Id", record.Pos_Brand_Id);
+            requestInsert.input("Item_Id",  record.Item_Id);
+            requestInsert.input("Rate",  record.Rate);
+            requestInsert.input("Is_Active_Decative",  record.Is_Active_Decative);
+    
+            await requestInsert.query(`
+                INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Is_Active_Decative)
+                VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate, @Is_Active_Decative)
+            `);
+    
+            // const requestProInsert = new sql.Request(transaction);
+            // requestProInsert.input("Rate_Date",  NewDate);
+            // requestProInsert.input("Item_Id",  record.Item_Id);
+            // requestProInsert.input("Rate",  record.Rate);
+            // requestProInsert.input("Is_Active_Decative",  record.Is_Active_Decative);
+    
+            // await requestProInsert.query(`
+            //     UPDATE tbl_Product_Master SET Product_Rate=@Rate, IsActive=@Is_Active_Decative WHERE Product_Id=@Item_Id
+            // `);
+        }
+    };
+    
+    
     const valuesSync = async (req, res) => {
         try {
             const { invoiceId } = req.query;
     
             if (!invoiceId) {
-                return invalidInput(res, "No invoice id");
+                return res.status(400).json({
+                    data: [],
+                    message: "No invoiceId FOUND",
+                    success: false,
+                });
             }
     
             const apiUrl = `https://smtraders.posbill.in/api/fetchbilldata.php?invoiceid=${invoiceId}`;
-            const response = await axios.get(apiUrl);
-            const data = response.data;
-    
-            if (!data.invoice_data || data.invoice_data.length === 0) {
-                return invalidInput(res, "No invoice data found.");
+
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+ 
+            if (!data.invoice_data || data.invoice_data.length === 0 || data.status === "error") {
+                return res.status(400).json({
+                    data: [],
+                    success: false,
+                    message: "No Data Found",
+                    invoiceId: invoiceId,
+                });
             }
     
-            const invoice = data.invoice_data[0];
-            const { invoiceno, edate, cusid, namount, items } = invoice;
+            const invoice = data.invoice_data[0] || {};
+            const { invoiceno = 0, edate, cusid = 0, namount = 0, items = [] } = invoice;
     
-            const posId = (invoiceno) || 0;
-            const customerId = (cusid) || 0;
-            const totalInvoiceValue = (namount) || 0;
-    
-         
             const result1 = await new sql.Request()
-                .input("Pos_Id", sql.BigInt, posId)
+                .input("Pos_Id", sql.BigInt, invoiceno)
                 .query(`SELECT Pre_Id FROM tbl_Pre_Sales_Order_Gen_Info WHERE Pos_Id = @Pos_Id`);
     
             if (result1.recordset.length > 0) {
                 const getId = result1.recordset[0].Pre_Id;
-               
-    
-               
-                await new sql.Request()
-                .input("Pre_Id",  getId)
-                    .query(`DELETE FROM tbl_Pre_Sales_Order_Gen_Info WHERE Pre_Id = @Pre_Id`);
     
                 await new sql.Request()
-                .input("Pre_Id", sql.BigInt, getId)
+                    .input("Pre_Id", getId)
+                    .input("Pos_Id", invoiceno)
+                    .input("Pre_Date", edate)
+                    .input("Custome_Id", cusid)
+                    .input("Total_Invoice_value", namount)
+                    .input("Cancel_status", sql.NVarChar, "Pending")
+                    .query(`
+                        UPDATE tbl_Pre_Sales_Order_Gen_Info 
+                        SET Pos_Id = @Pos_Id, 
+                            Pre_Date = @Pre_Date, 
+                            Custome_Id = @Custome_Id, 
+                            Total_Invoice_value = @Total_Invoice_value, 
+                            isConverted = 0, 
+                            Cancel_status = @Cancel_status
+                        WHERE Pre_Id = @Pre_Id
+                    `);
+    
+                await new sql.Request()
+                    .input("Pre_Id", getId)
                     .query(`DELETE FROM tbl_Pre_Sales_Order_Stock_Info WHERE Pre_Id = @Pre_Id`);
     
-            
-                await new sql.Request()
-                    .input("Pre_Id",  getId)
-                    .input("Pos_Id", posId)
-                    .input("Pre_Date",  edate)
-                    .input("Custome_Id", customerId)
-                    .input("Total_Invoice_value",  totalInvoiceValue)
-                    .input("Cancel_status", sql.NVarChar, '0') 
-                    .query(
-                        `INSERT INTO tbl_Pre_Sales_Order_Gen_Info 
-                         (Pre_Id, Pos_Id, Pre_Date, Custome_Id, Total_Invoice_value, isConverted, Cancel_status, Created_by, Created_on)
-                         VALUES (@Pre_Id, @Pos_Id, @Pre_Date, @Custome_Id, @Total_Invoice_value, 0, @Cancel_status, 0, GETDATE())`
-                    );
-    
-              
+                const productsData = (await getProducts()).dataArray || [];
                 let sNo = 1;
+    
                 for (const item of items) {
+                    const product = findProductDetails(productsData, item.icode) || {};
                     await new sql.Request()
                         .input("Pre_Id", getId)
-                        .input("Pos_Id", posId)
+                        .input("Pos_Id", invoiceno)
                         .input("S_No", sNo++)
-                        .input("Item_Id",  (item.icode) || 0)
-                        .input("Unit_Id",  (item.uom) || '')
-                        .input("Bill_Qty",(item.qty) || 0)
-                        .input("Rate", (item.sell) || 0)
-                        .input("Amount",  (parseFloat(item.sell) || 0) * (parseInt(item.qty) || 0))
-                        .query(
-                            `INSERT INTO tbl_Pre_Sales_Order_Stock_Info 
-                             (Pre_Id, Pos_Id, S_No, Item_Id,Unit_Id, Bill_Qty, Rate, Amount)
-                             VALUES (@Pre_Id, @Pos_Id, @S_No, @Item_Id,@Unit_Id, @Bill_Qty, @Rate, @Amount)`
-                        );
+                        .input("Item_Id", item.icode || 0)
+                        .input("Unit_Id", product.UOM_Id || 0)
+                        .input("Bill_Qty", item.qty || 0)
+                        .input("Rate", item.sell || 0)
+                        .input("Amount", (item.sell || 0) * (item.qty || 0))
+                        .query(`
+                            INSERT INTO tbl_Pre_Sales_Order_Stock_Info 
+                            (Pre_Id, Pos_Id, S_No, Item_Id, Unit_Id, Bill_Qty, Rate, Amount)
+                            VALUES (@Pre_Id, @Pos_Id, @S_No, @Item_Id, @Unit_Id, @Bill_Qty, @Rate, @Amount)
+                        `);
                 }
     
-                return success(res,"Data Sync Successfully")
+                return res.status(200).json({
+                    data,
+                    message: "Data Updated Successfully",
+                    invoiceId: invoiceno,
+                    success: true,
+                });
             } else {
-               
                 const getId = await getNextId({
                     table: "tbl_Pre_Sales_Order_Gen_Info",
                     column: "Pre_Id",
                 });
     
                 const newPreId = getId.MaxId;
-             
-    
-            
+
                 await new sql.Request()
-                    .input("Pre_Id",  newPreId)
-                    .input("Pos_Id",  posId)
-                    .input("Pre_Date",  edate)
-                    .input("Custome_Id", customerId)
-                    .input("Total_Invoice_value", totalInvoiceValue)
-                    .input("Cancel_status", sql.NVarChar, '0')
-                    .query(
-                        `INSERT INTO tbl_Pre_Sales_Order_Gen_Info 
-                         (Pre_Id, Pos_Id, Pre_Date, Custome_Id, Total_Invoice_value, isConverted, Cancel_status, Created_by, Created_on)
-                         VALUES (@Pre_Id, @Pos_Id, @Pre_Date, @Custome_Id, @Total_Invoice_value, 0, @Cancel_status, 0, GETDATE())`
-                    );
+                    .input("Pre_Id", newPreId)
+                    .input("Pos_Id", invoiceno)
+                    .input("Pre_Date", edate)
+                    .input("Custome_Id", cusid)
+                    .input("Total_Invoice_value", namount)
+                    .input("Cancel_status",  "Pending")
+                    .query(`
+                        INSERT INTO tbl_Pre_Sales_Order_Gen_Info 
+                        (Pre_Id, Pos_Id, Pre_Date, Custome_Id, Total_Invoice_value, isConverted, Cancel_status, Created_by, Created_on)
+                        VALUES (@Pre_Id, @Pos_Id, @Pre_Date, @Custome_Id, @Total_Invoice_value, 0, @Cancel_status, 0, GETDATE())
+                    `);
     
-              
+                const productsData = (await getProducts()).dataArray || [];
                 let sNo = 1;
+    
                 for (const item of items) {
+                    const product = findProductDetails(productsData, item.icode) || {};
                     await new sql.Request()
                         .input("Pre_Id", newPreId)
-                        .input("Pos_Id", posId)
-                        .input("S_No",  sNo++)
+                        .input("Pos_Id", invoiceno)
+                        .input("S_No", sNo++)
                         .input("Item_Id", item.icode || 0)
-                        .input("Unit_Id",item.uom || '')
+                        .input("Unit_Id", product.UOM_Id || 0)
                         .input("Bill_Qty", item.qty || 0)
-                        .input("Rate",  item.sell || 0)
-                        .input("Amount",  (item.sell || 0) * (item.qty) || 0)
-                        .query(
-                            `INSERT INTO tbl_Pre_Sales_Order_Stock_Info 
-                             (Pre_Id, Pos_Id, S_No, Item_Id,Unit_Id, Bill_Qty, Rate, Amount)
-                             VALUES (@Pre_Id, @Pos_Id, @S_No, @Item_Id,@Unit_Id, @Bill_Qty, @Rate, @Amount)`
-                        );
+                        .input("Rate", item.sell || 0)
+                        .input("Amount", (item.sell || 0) * (item.qty || 0))
+                        .query(`
+                            INSERT INTO tbl_Pre_Sales_Order_Stock_Info 
+                            (Pre_Id, Pos_Id, S_No, Item_Id, Unit_Id, Bill_Qty, Rate, Amount)
+                            VALUES (@Pre_Id, @Pos_Id, @S_No, @Item_Id, @Unit_Id, @Bill_Qty, @Rate, @Amount)
+                        `);
                 }
     
-                return success(res,"Data Sync Successfully")
+                return res.status(200).json({
+                    data,
+                    message: "Data Sync Successfully",
+                    invoiceId: invoiceno,
+                    success: true,
+                });
             }
         } catch (error) {
-        
-            return servError(res, error);
+          
+            return res.status(500).json({
+                message: "Internal Server Error. Please try again.",
+                success: false,
+            });
         }
     };
     
@@ -526,20 +534,210 @@ const posBranchController = () => {
         try {
             const response = await fetch("https://smtraders.posbill.in/api/interproductapi.php");
             const data = await response.json();
-
-            if (data) {
-                success(res, data.data)
+    
+            if (data && Array.isArray(data.data) && data.data.length > 0) {
+                success(res, data.data);
+            } else if(data.data.length <=0){
+                success(res, []);
             }
-            else {
-                failed(res, "Failed to sync POS products")
-            }
-
+    
         } catch (error) {
-            console.error("Error fetching POS product data:", error);
-            servError(res, "Internal server error")
-        }
-    }
-    return {
+        
+            servError(res, error);
+        }
+    };
+    
+
+// const posProductList = async (req, res) => {
+//     const { FromDate, ToDate } = req.query;
+
+//     try {
+      
+//         const response = await fetch(`https://smtraders.posbill.in/api/fetchbilldata.php?from=${FromDate}&to=${ToDate}`);
+//         const data = await response.json();
+      
+//         if (!data || !data.invoice_data) {
+//             return failed(res, "Failed to sync POS products");
+//         }
+
+//         const PosSyncData = data?.invoice_data;
+     
+//         const result = await new sql.Request()
+//         .input("FromDate", sql.Date, FromDate)
+//         .input("ToDate", sql.Date, ToDate)
+//         .query(`
+//             SELECT 
+//                 i.Pre_Id AS Pre_Id,
+//                 i.Pos_Id AS invoiceno,
+//                 i.Pre_Date AS edate,
+//                 i.Custome_Id AS cusid,
+//                 i.Total_Invoice_Value AS namount,
+//                 rm.Retailer_Name,
+//                 (
+//                     SELECT 
+//                         ii.Item_Id AS icode,
+//                         pm.product_name,
+//                         ii.Unit_Id AS uom,
+//                         ii.Bill_Qty AS qty,
+//                         ii.Rate AS sell
+//                     FROM tbl_Pre_Sales_Order_Stock_Info ii
+//                     LEFT JOIN tbl_Product_Master pm ON ii.Item_Id = pm.Product_Id
+//                     WHERE ii.Pre_Id = i.Pre_Id
+//                     FOR JSON PATH
+//                 ) AS stock_info
+//             FROM tbl_Pre_Sales_Order_Gen_Info i
+//             LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = i.Custome_Id
+//             WHERE i.Pre_Date BETWEEN @FromDate AND @ToDate
+//             ORDER BY i.Pre_Id
+//         `);
+
+//     const invoices = {};
+    
+//     result.recordset.forEach(row => {
+//         if (!invoices[row.invoiceno]) {
+//             invoices[row.invoiceno] = {
+//                 Pre_Id:row.Pre_Id,
+//                 invoiceno: row.invoiceno,
+//                 edate: row.edate,
+//                 cusid: row.cusid,
+//                 namount: row.namount,
+//                 Retailer_Name:row.Retailer_Name,
+             
+//                 items: row.stock_info ? JSON.parse(row.stock_info) : [] 
+//             };
+//         }
+//         invoices[row.invoiceno].items.push({
+//             product_name:row.product_name,
+//             icode: row.icode,
+//             uom: row.uom ,
+//             qty: row.qty,
+//             sell: row.sell
+//         });
+//     });
+
+    
+//     const invoiceData = Object.values(invoices);
+
+     
+      
+//        return dataFound(res, PosSyncData, 'dataFound', {
+//             tallyResult:invoiceData
+//         });
+
+//     } catch (error) {
+       
+//         servError(res, "Internal server error");
+//     } 
+// };
+ 
+
+
+
+const posProductList = async (req, res) => {
+    const { FromDate, ToDate } = req.query;
+
+    try {
+     
+        const response = await fetch(`https://smtraders.posbill.in/api/fetchbilldata.php?from=${FromDate}&to=${ToDate}`);
+        const data = await response.json();
+
+        if (!data || !data.invoice_data) {
+            return success(res, 'No Invoce Id');
+        }
+        else if(data.length<=0){
+            return success(res, []);
+        }
+
+        let PosSyncData = data.invoice_data;
+
+    
+        const retailerResult = await new sql.Request()
+            .query(`SELECT Retailer_Id, Retailer_Name FROM tbl_Retailers_Master`);
+        
+        const retailerMap = {};
+        retailerResult.recordset.forEach(row => {
+            retailerMap[row.Retailer_Id] = row.Retailer_Name;
+        });
+
+    
+        const productResult = await new sql.Request()
+            .query(`SELECT Product_Id, product_name FROM tbl_Product_Master`);
+        
+        const productMap = {};
+        productResult.recordset.forEach(row => {
+            productMap[row.Product_Id] = row.product_name;
+        });
+
+      
+        PosSyncData = PosSyncData.map(invoice => ({
+            ...invoice,
+            Retailer_Name: retailerMap[invoice.cusid] || "0",  
+            items: invoice.items.map(item => ({
+                ...item,
+                product_name: productMap[item.icode] || "0" 
+            }))
+        }));
+
+       
+        const result = await new sql.Request()
+            .input("FromDate", sql.Date, FromDate)
+            .input("ToDate", sql.Date, ToDate)
+            .query(`
+                SELECT 
+                    i.Pre_Id AS Pre_Id,
+                    i.Pos_Id AS invoiceno,
+                    i.Pre_Date AS edate,
+                    i.Custome_Id AS cusid,
+                    i.Total_Invoice_Value AS namount,
+                    rm.Retailer_Name,
+                    (
+                        SELECT 
+                            ii.Item_Id AS icode,
+                            pm.product_name,
+                            ii.Unit_Id AS uom,
+                            ii.Bill_Qty AS qty,
+                            ii.Rate AS sell
+                        FROM tbl_Pre_Sales_Order_Stock_Info ii
+                        LEFT JOIN tbl_Product_Master pm ON ii.Item_Id = pm.Product_Id
+                        WHERE ii.Pre_Id = i.Pre_Id
+                        FOR JSON PATH
+                    ) AS stock_info
+                FROM tbl_Pre_Sales_Order_Gen_Info i
+                LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = i.Custome_Id
+                WHERE i.Pre_Date >= @FromDate AND i.Pre_Date <=@ToDate
+                ORDER BY i.Pre_Id
+            `);
+
+        const invoices = {};
+
+        result.recordset.forEach(row => {
+            if (!invoices[row.invoiceno]) {
+                invoices[row.invoiceno] = {
+                    Pre_Id: row.Pre_Id,
+                    invoiceno: row.invoiceno,
+                    edate: row.edate,
+                    cusid: row.cusid,
+                    namount: row.namount,
+                    Retailer_Name: row.Retailer_Name,
+                    items: row.stock_info ? JSON.parse(row.stock_info) : []
+                };
+            }
+        });
+
+        const invoiceData = Object.values(invoices);
+
+        return dataFound(res, PosSyncData, 'dataFound', {
+            tallyResult: invoiceData
+        });
+
+    } catch (error) {
+      
+        servError(res, error);
+    }
+};
+
+
+return {
 
         getPosRateMaster,
         postPosRateMaster,
@@ -548,7 +746,8 @@ const posBranchController = () => {
         getProductDropdown,
         postbulkExport,
         valuesSync,
-        posProductSync
+        posProductSync,
+        posProductList
     }
 }
 

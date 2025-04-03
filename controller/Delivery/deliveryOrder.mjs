@@ -688,11 +688,11 @@ const DeliveryOrder = () => {
     const getDeliveryorder = async (req, res) => {
         const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id } = req.query;
 
-        // Convert dates to ISO format
-        const Fromdate = new Date(req.query.Fromdate).toISOString();
-        const Todate = new Date(req.query.Todate).toISOString();
-
         try {
+
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+            
             let query = `
                                     WITH SALES_DETAILS AS (
                           SELECT
@@ -965,7 +965,7 @@ const DeliveryOrder = () => {
         var Alter_Id = req.body.Alter_Id;
         const transaction = new sql.Transaction();
 
-        if (!Delivery_Person_Id || !Branch_Id || !BillType || !VoucherType || !TripStatus  ) {
+        if (!Delivery_Person_Id || !Branch_Id || !BillType || !VoucherType || !TripStatus) {
             return invalidInput(res, 'Please Select Required Fields');
         }
 
@@ -1011,9 +1011,9 @@ const DeliveryOrder = () => {
 
             if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
 
-            const { Year_Id,Year_Desc } = getYearId.recordset[0];
+            const { Year_Id, Year_Desc } = getYearId.recordset[0];
 
-        
+
             const countResult = await new sql.Request()
                 .input('Year_Id', Year_Id)
                 .input('VoucherType', VoucherType)
@@ -1023,11 +1023,11 @@ const DeliveryOrder = () => {
                     WHERE Year_Id = @Year_Id
                     AND VoucherType = @VoucherType
                 `);
-    
+
             const recordCount = countResult.recordset[0].RecordCount;
-            const T_No = recordCount + 1;  
-       
-            
+            const T_No = recordCount + 1;
+
+
 
             if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
 
@@ -1055,7 +1055,7 @@ const DeliveryOrder = () => {
 
             const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
 
-            const TR_INV_ID = Voucher_Code  +"/"+ createPadString(T_No, 6)  + "/" + Year_Desc;
+            const TR_INV_ID = Voucher_Code + "/" + createPadString(T_No, 6) + "/" + Year_Desc;
 
             const Challan_No = createPadString(Trip_Id, 4);
             const Trip_Tot_Kms = Number(Trip_ST_KM) + Number(Trip_EN_KM);

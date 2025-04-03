@@ -39,7 +39,7 @@ const SaleOrder = () => {
 
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
-            
+
             // unique Sale order id
 
             const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
@@ -473,112 +473,82 @@ const SaleOrder = () => {
     }
 
     const getSaleOrder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id } = req.query;
-
-        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
-
         try {
-            let query = `
-            WITH SALES_DETAILS AS (
-                SELECT
-            		oi.*,
-            		COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                    COALESCE(u.Units, 'not available') AS UOM,
-                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
-            	FROM
-            		tbl_Sales_Order_Stock_Info AS oi
-                    LEFT JOIN tbl_Product_Master AS pm
-                    ON pm.Product_Id = oi.Item_Id
-                    LEFT JOIN tbl_UOM AS u
-                    ON u.Unit_Id = oi.Unit_Id
-                    LEFT JOIN tbl_Brand_Master AS b
-                    ON b.Brand_Id = pm.Brand
-                WHERE
-                    CONVERT(DATE, oi.So_Date) >= CONVERT(DATE, @from)
-            	    AND
-            	    CONVERT(DATE, oi.So_Date) <= CONVERT(DATE, @to)
-            )
-            SELECT 
-            	so.*,
-            	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-            	COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
-            	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-            	COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-            	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+            const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, VoucherType } = req.query;
 
-            	COALESCE((
-            		SELECT
-            			sd.*
-            		FROM
-            			SALES_DETAILS AS sd
-            		WHERE
-            			sd.Sales_Order_Id = so.So_Id
-            		FOR JSON PATH
-            	), '[]') AS Products_List
-            
-            FROM 
-            	tbl_Sales_Order_Gen_Info AS so
-            
-            	LEFT JOIN tbl_Retailers_Master AS rm
-            	ON rm.Retailer_Id = so.Retailer_Id
-            
-            	LEFT JOIN tbl_Users AS sp
-            	ON sp.UserId = so.Sales_Person_Id
-            
-            	LEFT JOIN tbl_Branch_Master bm
-            	ON bm.BranchId = so.Branch_Id
-            
-            	LEFT JOIN tbl_Users AS cb
-            	ON cb.UserId = so.Created_by
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
-                LEFT JOIN tbl_Voucher_Type AS v
-                ON v.Vocher_Type_Id = so.VoucherType
-                        
-            WHERE
-                CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
-            	AND
-            	CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to) 
-            `;
+            const request = new sql.Request()
+                .input('from', Fromdate)
+                .input('to', Todate)
+                .input('retailer', Retailer_Id)
+                .input('cancel', Cancel_status)
+                .input('creater', Created_by)
+                .input('salesPerson', Sales_Person_Id)
+                .input('VoucherType', VoucherType)
+                .query(`
+                    WITH SALES_DETAILS AS (
+                        SELECT
+                    		oi.*,
+                    		COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                            COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                            COALESCE(u.Units, 'not available') AS UOM,
+                            COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                    	FROM
+                    		tbl_Sales_Order_Stock_Info AS oi
+                            LEFT JOIN tbl_Product_Master AS pm
+                            ON pm.Product_Id = oi.Item_Id
+                            LEFT JOIN tbl_UOM AS u
+                            ON u.Unit_Id = oi.Unit_Id
+                            LEFT JOIN tbl_Brand_Master AS b
+                            ON b.Brand_Id = pm.Brand
+                        WHERE
+                            CONVERT(DATE, oi.So_Date) >= CONVERT(DATE, @from)
+                    	    AND
+                    	    CONVERT(DATE, oi.So_Date) <= CONVERT(DATE, @to)
+                    )
+                    SELECT 
+                    	so.*,
+                    	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    	COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                    	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    	COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+                    	COALESCE((
+                    		SELECT
+                    			sd.*
+                    		FROM
+                    			SALES_DETAILS AS sd
+                    		WHERE
+                    			sd.Sales_Order_Id = so.So_Id
+                    		FOR JSON PATH
+                    	), '[]') AS Products_List
+                    FROM 
+                    	tbl_Sales_Order_Gen_Info AS so
+                    	LEFT JOIN tbl_Retailers_Master AS rm
+                    	    ON rm.Retailer_Id = so.Retailer_Id
+                    	LEFT JOIN tbl_Users AS sp
+                    	    ON sp.UserId = so.Sales_Person_Id
+                    	LEFT JOIN tbl_Branch_Master bm
+                    	    ON bm.BranchId = so.Branch_Id
+                    	LEFT JOIN tbl_Users AS cb
+                    	    ON cb.UserId = so.Created_by
+                        LEFT JOIN tbl_Voucher_Type AS v
+                            ON v.Vocher_Type_Id = so.VoucherType
+                    WHERE
+                        CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
+                    	AND
+                    	CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to) 
+                        ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
+                        ${(toNumber(Cancel_status) === 0 || toNumber(Cancel_status) === 1) ? ' AND so.Cancel_status = @cancel ' : ''}
+                        ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
+                        ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
+                        ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
+                    ORDER BY CONVERT(DATETIME, so.So_Id) DESC`
+                )
 
-            if (Retailer_Id) {
-                query += `
-                AND
-            	so.Retailer_Id = @retailer `
-            }
-
-            if (Number(Cancel_status) === 0 || Number(Cancel_status) === 1) {
-                query += `
-                AND
-            	so.Cancel_status = @cancel `
-            }
-
-            if (Created_by) {
-                query += `
-                AND
-            	so.Created_by = @creater `
-            }
-
-            if (Sales_Person_Id) {
-                query += `
-                AND
-                so.Sales_Person_Id = @salesPerson `
-            }
-
-            query += `
-          ORDER BY  CONVERT(DATETIME, so.So_Id) DESC`
-
-
-            const request = new sql.Request();
-            request.input('from', Fromdate);
-            request.input('to', Todate);
-            request.input('retailer', Retailer_Id);
-            request.input('cancel', Cancel_status);
-            request.input('creater', Created_by);
-            request.input('salesPerson', Sales_Person_Id)
-
-            const result = await request.query(query);
+            const result = await request
 
             if (result.recordset.length > 0) {
                 const parsed = result.recordset.map(o => ({
@@ -602,11 +572,12 @@ const SaleOrder = () => {
     }
 
     const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, Route_Id, Area_Id } = req.query;
-
-        const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
         try {
+            const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, Route_Id, Area_Id } = req.query;
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+            
             let query = `
                 WITH SALES_DETAILS AS (
                     SELECT
@@ -811,12 +782,37 @@ const SaleOrder = () => {
         }
     }
 
+    const getRetailerNameForSearch = async (req, res) => {
+        try {
+            const request = new sql.Request()
+               .query(`
+                    SELECT 
+                        so.Retailer_Id,  
+                        r.Retailer_Name,
+                        SUM(so.Total_Invoice_value) AS TotalSales,
+                        COUNT(so.S_Id) AS OrderCount
+                    FROM tbl_Sales_Order_Gen_Info AS so
+                    LEFT JOIN tbl_Retailers_Master AS r
+                    ON r.Retailer_Id = so.Retailer_Id
+                    GROUP BY so.Retailer_Id, r.Retailer_Name
+                    ORDER BY r.Retailer_Name;
+                `);
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         saleOrderCreation,
         getSaleOrder,
         editSaleOrder,
         getDeliveryorder,
         importFromPos,
+        getRetailerNameForSearch
     }
 }
 
