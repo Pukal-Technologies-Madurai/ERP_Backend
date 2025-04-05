@@ -50,13 +50,13 @@ const PurchaseOrder = () => {
             // get Year and Year code
 
             const PO_Inv_Year = await new sql.Request()
-                .input('Po_Inv_Date', Po_Inv_Date)
+                .input('Po_Entry_Date', Po_Entry_Date)
                 .query(`
                     SELECT Id AS Year_Id, Year_Desc
                     FROM tbl_Year_Master
                     WHERE 
-                        Fin_Start_Date <= @Po_Inv_Date 
-                        AND Fin_End_Date >= @Po_Inv_Date`
+                        Fin_Start_Date <= @Po_Entry_Date 
+                        AND Fin_End_Date >= @Po_Entry_Date`
                 );
 
             if (PO_Inv_Year.recordset.length === 0) throw new Error('Year_Id not found');

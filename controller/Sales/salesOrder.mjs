@@ -474,7 +474,7 @@ const SaleOrder = () => {
 
     const getSaleOrder = async (req, res) => {
         try {
-            const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, VoucherType } = req.query;
+            const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType } = req.query;
 
             const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -488,7 +488,36 @@ const SaleOrder = () => {
                 .input('salesPerson', Sales_Person_Id)
                 .input('VoucherType', VoucherType)
                 .query(`
-                    WITH SALES_DETAILS AS (
+                    WITH SALES AS (
+                    	SELECT 
+                    		so.*,
+                    		COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    		COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                    		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    		COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    		COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                    	FROM 
+                    		tbl_Sales_Order_Gen_Info AS so
+                    		LEFT JOIN tbl_Retailers_Master AS rm
+                    		    ON rm.Retailer_Id = so.Retailer_Id
+                    		LEFT JOIN tbl_Users AS sp
+                    		    ON sp.UserId = so.Sales_Person_Id
+                    		LEFT JOIN tbl_Branch_Master bm
+                    		    ON bm.BranchId = so.Branch_Id
+                    		LEFT JOIN tbl_Users AS cb
+                    		    ON cb.UserId = so.Created_by
+                    	    LEFT JOIN tbl_Voucher_Type AS v
+                    	        ON v.Vocher_Type_Id = so.VoucherType
+                        WHERE
+                            CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
+                        	AND
+                        	CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to)
+                    		${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
+                            ${(Number(Cancel_status) === 0 || Number(Cancel_status) === 1) ? ' AND so.Cancel_status = @cancel ' : ''}
+                            ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
+                            ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
+                            ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
+                    ), SALES_DETAILS AS (
                         SELECT
                     		oi.*,
                     		COALESCE(pm.Product_Name, 'not available') AS Product_Name,
@@ -503,49 +532,18 @@ const SaleOrder = () => {
                             ON u.Unit_Id = oi.Unit_Id
                             LEFT JOIN tbl_Brand_Master AS b
                             ON b.Brand_Id = pm.Brand
-                        WHERE
-                            CONVERT(DATE, oi.So_Date) >= CONVERT(DATE, @from)
-                    	    AND
-                    	    CONVERT(DATE, oi.So_Date) <= CONVERT(DATE, @to)
+                    	WHERE oi.Sales_Order_Id IN (SELECT So_Id FROM SALES)
                     )
                     SELECT 
-                    	so.*,
-                    	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                    	COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
-                    	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                    	COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                    	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+                    	sg.*,
                     	COALESCE((
-                    		SELECT
-                    			sd.*
-                    		FROM
-                    			SALES_DETAILS AS sd
-                    		WHERE
-                    			sd.Sales_Order_Id = so.So_Id
-                    		FOR JSON PATH
+                    		SELECT *
+                    		FROM SALES_DETAILS
+                    		WHERE Sales_Order_Id = sg.So_Id
+                            FOR JSON PATH
                     	), '[]') AS Products_List
-                    FROM 
-                    	tbl_Sales_Order_Gen_Info AS so
-                    	LEFT JOIN tbl_Retailers_Master AS rm
-                    	    ON rm.Retailer_Id = so.Retailer_Id
-                    	LEFT JOIN tbl_Users AS sp
-                    	    ON sp.UserId = so.Sales_Person_Id
-                    	LEFT JOIN tbl_Branch_Master bm
-                    	    ON bm.BranchId = so.Branch_Id
-                    	LEFT JOIN tbl_Users AS cb
-                    	    ON cb.UserId = so.Created_by
-                        LEFT JOIN tbl_Voucher_Type AS v
-                            ON v.Vocher_Type_Id = so.VoucherType
-                    WHERE
-                        CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
-                    	AND
-                    	CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to) 
-                        ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
-                        ${(toNumber(Cancel_status) === 0 || toNumber(Cancel_status) === 1) ? ' AND so.Cancel_status = @cancel ' : ''}
-                        ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
-                        ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
-                        ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
-                    ORDER BY CONVERT(DATETIME, so.So_Id) DESC`
+                    FROM SALES AS sg
+                    ORDER BY CONVERT(DATETIME, sg.So_Id) DESC`
                 )
 
             const result = await request
@@ -794,6 +792,7 @@ const SaleOrder = () => {
                     FROM tbl_Sales_Order_Gen_Info AS so
                     LEFT JOIN tbl_Retailers_Master AS r
                     ON r.Retailer_Id = so.Retailer_Id
+                    WHERE r.Retailer_Name IS NOT NULL
                     GROUP BY so.Retailer_Id, r.Retailer_Name
                     ORDER BY r.Retailer_Name;
                 `);

@@ -34,7 +34,6 @@ const posBranchController = () => {
             servError(e, res)
         }
     }
-
     const getPosRateMaster = async (req, res) => {
         const { FromDate } = req.query; 
     
@@ -46,7 +45,7 @@ const posBranchController = () => {
             const request = new sql.Request();
     
             let query = `
-                SELECT rm.Id, rm.Rate_Date, rm.Pos_Brand_Id, rm.Item_Id, rm.Rate, 
+                SELECT rm.Id, rm.Rate_Date, rm.Pos_Brand_Id, rm.Item_Id, rm.Rate,rm.Max_Rate, 
                        pb.POS_Brand_Name, pm.Product_Name, pm.Short_Name, 
                        pm.isActive AS Is_Active_Decative
                 FROM tbl_Pos_Rate_Master rm
@@ -71,9 +70,9 @@ const posBranchController = () => {
     };
     
     const postPosRateMaster = async (req, res) => {
-        const { Rate_Date, Pos_Brand_Id, Item_Id, Rate, Is_Active_Decative } = req.body;
+        const { Rate_Date, Pos_Brand_Id, Item_Id, Rate,MaxRate, Is_Active_Decative } = req.body;
 
-        if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Rate || !Is_Active_Decative) {
+        if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Rate || !Is_Active_Decative || !MaxRate) {
             return invalidInput(res, 'Enter Required Fields');
         }
 
@@ -111,11 +110,12 @@ const posBranchController = () => {
             const request6 = new sql.Request();
             request6.input('Rate_Date', formattedRateDate);
             request6.input('Item_Id', Item_Id);
+            request6.input('Max_Rate',MaxRate)
             request6.input('Rate', Rate);
             request6.input('Is_Active_Decative', Is_Active_Decative);
 
             const query6 = `
-                update tbl_Product_Master SET Product_Rate=@Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id
+                update tbl_Product_Master SET Product_Rate=@Rate,Max_Rate=@Max_Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id
                 
             `;
 
@@ -136,11 +136,12 @@ const posBranchController = () => {
             request5.input('Pos_Brand_Id', Pos_Brand_Id);
             request5.input('Item_Id', Item_Id);
             request5.input('Rate', Rate);
+            request5.input('Max_Rate', MaxRate);
             request5.input('Is_Active_Decative', Is_Active_Decative);
 
             const query5 = `
-                INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Is_Active_Decative) 
-                VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate, @Is_Active_Decative)
+                INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,Max_Rate, Is_Active_Decative) 
+                VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate,@Max_Rate,@Is_Active_Decative)
             `;
 
             const result5 = await request5.query(query5);
@@ -157,9 +158,9 @@ const posBranchController = () => {
     };
 
     const putPosRateMaster = async (req, res) => {
-        const { Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Is_Active_Decative } = req.body;
+        const { Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,MaxRate, Is_Active_Decative } = req.body;
 
-        if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Id) {
+        if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Id | !MaxRate) {
             return invalidInput(res, 'Rate_Date,Pos_Brand,Item is required')
         }
 
@@ -170,10 +171,12 @@ const posBranchController = () => {
             request.input('Pos_Brand_Id', Pos_Brand_Id);
             request.input('Item_Id', Item_Id);
             request.input('Rate', Rate);
+            request.input('Max_Rate', MaxRate);
             request.input('Is_Active_Decative', Is_Active_Decative);
             const result = await request.query(`
                 UPDATE tbl_Pos_Rate_Master
                 SET Rate = @Rate,
+                Max_Rate=@Max_Rate,
                 Pos_Brand_Id=@Pos_Brand_Id,
                 Rate_Date=@Rate_Date,
                 Item_Id=@Item_Id,
@@ -200,9 +203,10 @@ const posBranchController = () => {
             request6.input('Rate_Date', Rate_Date);
             request6.input('Item_Id', Item_Id);
             request6.input('Rate', Rate);
+            request6.input('Max_Rate',MaxRate)
             request6.input('Is_Active_Decative', Is_Active_Decative);
 
-            const query6 = `update tbl_Product_Master SET Product_Rate=@Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id`;
+            const query6 = `update tbl_Product_Master SET Product_Rate=@Rate,Max_Rate=@Max_Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id`;
 
             const result6 = await request6.query(query6);
 
@@ -367,11 +371,12 @@ const posBranchController = () => {
             requestInsert.input("Pos_Brand_Id", record.Pos_Brand_Id);
             requestInsert.input("Item_Id",  record.Item_Id);
             requestInsert.input("Rate",  record.Rate);
+            requestInsert.input("Max_Rate",  record.Max_Rate);
             requestInsert.input("Is_Active_Decative",  record.Is_Active_Decative);
     
             await requestInsert.query(`
-                INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Is_Active_Decative)
-                VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate, @Is_Active_Decative)
+                INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,Max_Rate,Is_Active_Decative)
+                VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate,@Max_Rate, @Is_Active_Decative)
             `);
     
             // const requestProInsert = new sql.Request(transaction);
@@ -535,11 +540,9 @@ const posBranchController = () => {
             const response = await fetch("https://smtraders.posbill.in/api/interproductapi.php");
             const data = await response.json();
     
-            if (data && Array.isArray(data.data) && data.data.length > 0) {
+         
                 success(res, data.data);
-            } else if(data.data.length <=0){
-                success(res, []);
-            }
+            
     
         } catch (error) {
         
@@ -547,89 +550,6 @@ const posBranchController = () => {
         }
     };
     
-
-// const posProductList = async (req, res) => {
-//     const { FromDate, ToDate } = req.query;
-
-//     try {
-      
-//         const response = await fetch(`https://smtraders.posbill.in/api/fetchbilldata.php?from=${FromDate}&to=${ToDate}`);
-//         const data = await response.json();
-      
-//         if (!data || !data.invoice_data) {
-//             return failed(res, "Failed to sync POS products");
-//         }
-
-//         const PosSyncData = data?.invoice_data;
-     
-//         const result = await new sql.Request()
-//         .input("FromDate", sql.Date, FromDate)
-//         .input("ToDate", sql.Date, ToDate)
-//         .query(`
-//             SELECT 
-//                 i.Pre_Id AS Pre_Id,
-//                 i.Pos_Id AS invoiceno,
-//                 i.Pre_Date AS edate,
-//                 i.Custome_Id AS cusid,
-//                 i.Total_Invoice_Value AS namount,
-//                 rm.Retailer_Name,
-//                 (
-//                     SELECT 
-//                         ii.Item_Id AS icode,
-//                         pm.product_name,
-//                         ii.Unit_Id AS uom,
-//                         ii.Bill_Qty AS qty,
-//                         ii.Rate AS sell
-//                     FROM tbl_Pre_Sales_Order_Stock_Info ii
-//                     LEFT JOIN tbl_Product_Master pm ON ii.Item_Id = pm.Product_Id
-//                     WHERE ii.Pre_Id = i.Pre_Id
-//                     FOR JSON PATH
-//                 ) AS stock_info
-//             FROM tbl_Pre_Sales_Order_Gen_Info i
-//             LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = i.Custome_Id
-//             WHERE i.Pre_Date BETWEEN @FromDate AND @ToDate
-//             ORDER BY i.Pre_Id
-//         `);
-
-//     const invoices = {};
-    
-//     result.recordset.forEach(row => {
-//         if (!invoices[row.invoiceno]) {
-//             invoices[row.invoiceno] = {
-//                 Pre_Id:row.Pre_Id,
-//                 invoiceno: row.invoiceno,
-//                 edate: row.edate,
-//                 cusid: row.cusid,
-//                 namount: row.namount,
-//                 Retailer_Name:row.Retailer_Name,
-             
-//                 items: row.stock_info ? JSON.parse(row.stock_info) : [] 
-//             };
-//         }
-//         invoices[row.invoiceno].items.push({
-//             product_name:row.product_name,
-//             icode: row.icode,
-//             uom: row.uom ,
-//             qty: row.qty,
-//             sell: row.sell
-//         });
-//     });
-
-    
-//     const invoiceData = Object.values(invoices);
-
-     
-      
-//        return dataFound(res, PosSyncData, 'dataFound', {
-//             tallyResult:invoiceData
-//         });
-
-//     } catch (error) {
-       
-//         servError(res, "Internal server error");
-//     } 
-// };
- 
 
 
 

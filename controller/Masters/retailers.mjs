@@ -21,93 +21,108 @@ const RetailerControll = () => {
     const domain = process.env.domain;
 
     const getSFCustomers = async (req, res) => {
-        const { isRetailer = 1, isVendor = 0 } = req.query;
-
+        const {
+            isRetailer = 1,
+            isVendor = 0,
+            Retailer_Id,
+            PhoneNumber,
+            ContactPerson_Name,
+            Route_Id,
+            Area_Id,
+            City,
+        
+    
+        } = req.query;
+    
         try {
-
-            const request = new sql.Request()
-                .input('isRetailer', isRetailer)
-                .input('isVendor', isVendor)
-                .query(`
-                    SELECT 
-                        rm.*,
-                        COALESCE(rom.Route_Name, '') AS RouteGet,
-                        COALESCE(am.Area_Name, '') AS AreaGet,
-                        COALESCE(sm.State_Name, '') AS StateGet,
-                        COALESCE(cm.Company_Name, '') AS Company_Name,
-                        COALESCE(modify.Name, '') AS lastModifiedBy,
-                        COALESCE(created.Name, '') AS createdBy,
-                        COALESCE((
-                            SELECT 
-                                TOP (1) *
-                            FROM 
-                                tbl_Retailers_Locations
-                            WHERE
-                                Retailer_Id = rm.Retailer_Id
-                                AND
-                                isActiveLocation = 1
-                            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-                        ), '{}') AS VERIFIED_LOCATION,
-                        COALESCE((
-                            SELECT
-                            	TOP (5) 
-                                ml.*,
-                                COALESCE((
-                                    SELECT NAME FROM tbl_Users WHERE UserId = ml.EntryBy
-                                ), 'unknown') AS EntryByGet
-                            FROM
-                            	tbl_Retailers_Locations AS ml
-                            WHERE
-                                rm.Retailer_Id = ml.Retailer_Id
-                            ORDER BY
-                                CONVERT(DATETIME, EntryAt) DESC
-                            FOR JSON PATH
-                        ), '[]') AS AllLocations
-                    FROM
-                        tbl_Retailers_Master AS rm
-                    LEFT JOIN
-                        tbl_Route_Master AS rom
-                        ON rom.Route_Id = rm.Route_Id
-                    LEFT JOIN
-                        tbl_Area_Master AS am
-                        ON am.Area_Id = rm.Area_Id
-                    LEFT JOIN
-                        tbl_State_Master AS sm
-                        ON sm.State_Id = rm.State_Id
-                    LEFT JOIN
-                        tbl_Company_Master AS cm
-                        ON cm.Company_id = rm.Company_Id
-                    LEFT JOIN
-                        tbl_Users AS modify
-                        ON modify.UserId = rm.Updated_By
-                    LEFT JOIN
-                        tbl_Users AS created
-                        ON created.UserId = rm.Created_By
-                    WHERE
-                        isRetailer = @isRetailer
-                        AND
-                        isVendor = @isVendor
-                    ORDER BY 
-                        rm.Retailer_Name`
-                )
-
-            const result = await request;
-
+            let query = `
+                SELECT 
+                    rm.*,
+                    COALESCE(rom.Route_Name, '') AS RouteGet,
+                    COALESCE(am.Area_Name, '') AS AreaGet,
+                    COALESCE(sm.State_Name, '') AS StateGet,
+                    COALESCE(cm.Company_Name, '') AS Company_Name,
+                    COALESCE(modify.Name, '') AS lastModifiedBy,
+                    COALESCE(created.Name, '') AS createdBy,
+                    COALESCE((
+                        SELECT TOP (1) *
+                        FROM tbl_Retailers_Locations
+                        WHERE Retailer_Id = rm.Retailer_Id AND isActiveLocation = 1
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ), '{}') AS VERIFIED_LOCATION,
+                    COALESCE((
+                        SELECT TOP (5) ml.*,
+                            COALESCE((SELECT NAME FROM tbl_Users WHERE UserId = ml.EntryBy), 'unknown') AS EntryByGet
+                        FROM tbl_Retailers_Locations AS ml
+                        WHERE rm.Retailer_Id = ml.Retailer_Id
+                        ORDER BY CONVERT(DATETIME, EntryAt) DESC
+                        FOR JSON PATH
+                    ), '[]') AS AllLocations
+                FROM tbl_Retailers_Master AS rm
+                LEFT JOIN tbl_Route_Master AS rom ON rom.Route_Id = rm.Route_Id
+                LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+                LEFT JOIN tbl_State_Master AS sm ON sm.State_Id = rm.State_Id
+                LEFT JOIN tbl_Company_Master AS cm ON cm.Company_id = rm.Company_Id
+                LEFT JOIN tbl_Users AS modify ON modify.UserId = rm.Updated_By
+                LEFT JOIN tbl_Users AS created ON created.UserId = rm.Created_By
+                WHERE rm.isVendor = @isVendor AND rm.isRetailer = @isRetailer
+            `;
+    
+            const request = new sql.Request();
+            request.input('isRetailer', isRetailer);
+            request.input('isVendor', isVendor);
+    
+            if (Retailer_Id) {
+                query += ` AND rm.Retailer_Id = @Retailer_Id`;
+                request.input('Retailer_Id', Retailer_Id);
+            }
+    
+            if (PhoneNumber) {
+                query += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
+                request.input('PhoneNumber', PhoneNumber);
+            }
+    
+            if (ContactPerson_Name) {
+                query += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
+                request.input('ContactPerson_Name', ContactPerson_Name);
+            }
+    
+            if (Route_Id && Route_Id !== 'ALL') {
+                query += ` AND rm.Route_Id = @Route_Id`;
+                request.input('Route_Id', Route_Id);
+            }
+    
+            if (Area_Id && Area_Id !== 'ALL') {
+                query += ` AND rm.Area_Id = @Area_Id`;
+                request.input('Area_Id', Area_Id);
+            }
+    
+            if (City && City !== 'ALL') {
+                query += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
+                request.input('City', City);
+            }
+    
+       
+            query += ` ORDER BY rm.Retailer_Id DESC`;
+    
+            const result = await request.query(query);
+    
             if (result.recordset.length) {
                 const parsed = result.recordset.map(o => ({
                     ...o,
-                    VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION),
-                    AllLocations: JSON.parse(o.AllLocations),
+                    VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
+                    AllLocations: JSON.parse(o.AllLocations || '[]'),
                     imageUrl: getImage('retailers', o?.ImageName)
                 }));
-                dataFound(res, parsed)
+                dataFound(res, parsed);
             } else {
-                noData(res)
+                noData(res);
             }
         } catch (e) {
-            servError(e, res)
+            servError(e, res);
         }
-    }
+    };
+    
 
     const getRetailerDropDown = async (req, res) => {
         const { isRetailer = 1, isVendor = 0 } = req.query;
@@ -847,8 +862,8 @@ const RetailerControll = () => {
         } catch (error) {
             console.error("Error fetching POS product data:", error);
             servError(res, "Internal server error")
-        }
-    }
+        }
+    }
 
 
     

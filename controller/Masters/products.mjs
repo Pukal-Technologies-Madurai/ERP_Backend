@@ -33,46 +33,126 @@ const deleteCurrentProductImage = async (productId) => {
 
 const sfProductController = () => {
 
+    // const getProducts = async (req, res) => {
+    //     const { IS_Sold = 1 } = req.query;
+
+    //     try {
+
+    //         const request = new sql.Request()
+    //             .input('IS_Sold', IS_Sold)
+    //             .query(`
+    //                 SELECT 
+    //                 	p.*,
+    //                 	COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
+    //                 	COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
+    //                     COALESCE(u.Units, 'NOT FOUND') AS Units,
+    //                     COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
+    //                     COALESCE((
+    //                         SELECT 
+    //                             TOP (1) Product_Rate 
+    //                         FROM 
+    //                             tbl_Pro_Rate_Master 
+    //                         WHERE 
+    //                             Product_Id = p.Product_Id
+    //                         ORDER BY
+    //                             CONVERT(DATETIME, Rate_Date) DESC
+    //                     ), 0) AS Item_Rate
+    //                 FROM 
+    //                 	tbl_Product_Master AS p
+    //                 	LEFT JOIN tbl_Brand_Master AS b
+    //                 	ON b.Brand_Id = p.Brand
+    //                 	LEFT JOIN tbl_Product_Group AS pg
+    //                 	ON pg.Pro_Group_Id = p.Product_Group
+    //                     LEFT JOIN tbl_UOM AS u
+    //                     ON u.Unit_Id = p.UOM_Id
+    //                     LEFT JOIN tbl_Pack_Master AS pck
+    //                     ON pck.Pack_Id = p.Pack_Id
+    //                 WHERE
+    //                     IS_Sold = @IS_Sold`
+    //             )
+
+    //         const result = await request;
+
+    //         if (result.recordset.length) {
+    //             const withPic = result.recordset.map(o => ({
+    //                 ...o,
+    //                 productImageUrl: getImage('products', o?.Product_Image_Name)
+    //             }));
+    //             dataFound(res, withPic);
+    //         } else {
+    //             noData(res)
+    //         }
+    //     } catch (e) {
+    //         servError(e, res)
+    //     }
+    // }
+
+
     const getProducts = async (req, res) => {
-        const { IS_Sold = 1 } = req.query;
-
+        const {
+            IS_Sold = 1,
+            Products,
+            ShortName,
+            PosBrand,
+            ProductGroup,
+            Brand
+        } = req.query;
+    
         try {
-
-            const request = new sql.Request()
-                .input('IS_Sold', IS_Sold)
-                .query(`
-                    SELECT 
-                    	p.*,
-                    	COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
-                    	COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
-                        COALESCE(u.Units, 'NOT FOUND') AS Units,
-                        COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
-                        COALESCE((
-                            SELECT 
-                                TOP (1) Product_Rate 
-                            FROM 
-                                tbl_Pro_Rate_Master 
-                            WHERE 
-                                Product_Id = p.Product_Id
-                            ORDER BY
-                                CONVERT(DATETIME, Rate_Date) DESC
-                        ), 0) AS Item_Rate
-                    FROM 
-                    	tbl_Product_Master AS p
-                    	LEFT JOIN tbl_Brand_Master AS b
-                    	ON b.Brand_Id = p.Brand
-                    	LEFT JOIN tbl_Product_Group AS pg
-                    	ON pg.Pro_Group_Id = p.Product_Group
-                        LEFT JOIN tbl_UOM AS u
-                        ON u.Unit_Id = p.UOM_Id
-                        LEFT JOIN tbl_Pack_Master AS pck
-                        ON pck.Pack_Id = p.Pack_Id
-                    WHERE
-                        IS_Sold = @IS_Sold`
-                )
-
-            const result = await request;
-
+            let query = `
+                SELECT 
+                    p.*,
+                    COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
+                    COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
+                    COALESCE(u.Units, 'NOT FOUND') AS Units,
+                    COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
+                    COALESCE((
+                        SELECT TOP (1) Product_Rate 
+                        FROM tbl_Pro_Rate_Master 
+                        WHERE Product_Id = p.Product_Id
+                        ORDER BY CONVERT(DATETIME, Rate_Date) DESC
+                    ), 0) AS Item_Rate
+                FROM 
+                    tbl_Product_Master AS p
+                    LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
+                    LEFT JOIN tbl_Product_Group AS pg ON pg.Pro_Group_Id = p.Product_Group
+                    LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
+                    LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                WHERE IS_Sold = @IS_Sold
+            `;
+    
+            const request = new sql.Request();
+            request.input('IS_Sold', IS_Sold);
+    
+            if (Products && Products !== 'ALL') {
+                query += ` AND p.Product_Id = @Products`;
+                request.input('Products', Products);
+            }
+    
+            if (ShortName && ShortName !== 'ALL') {
+                query += ` AND p.Short_Name LIKE '%' + @ShortName + '%'`;
+                request.input('ShortName', ShortName);
+            }
+    
+            if (PosBrand && PosBrand !== 'ALL') {
+                query += ` AND p.Pos_Brand_Id= @PosBrand`;
+                request.input('PosBrand', PosBrand);
+            }
+    
+            if (ProductGroup && ProductGroup !== 'ALL') {
+                query += ` AND p.Product_Group = @ProductGroup`;
+                request.input('ProductGroup', ProductGroup);
+            }
+    
+            if (Brand && Brand !== 'ALL') {
+                query += ` AND p.Brand = @Brand`;
+                request.input('Brand', Brand);
+            }
+    
+            query += ` ORDER BY p.Product_Id DESC`;
+    
+            const result = await request.query(query);
+    
             if (result.recordset.length) {
                 const withPic = result.recordset.map(o => ({
                     ...o,
@@ -80,12 +160,13 @@ const sfProductController = () => {
                 }));
                 dataFound(res, withPic);
             } else {
-                noData(res)
+                noData(res);
             }
         } catch (e) {
-            servError(e, res)
+            servError(e, res);
         }
-    }
+    };
+    
 
     const productDropDown = async (req, res) => {
 
@@ -96,6 +177,7 @@ const sfProductController = () => {
                     SELECT 
                     	p.Product_Id,
                         p.Product_Name,
+                        p.Short_Name,
                         p.ERP_Id,
                         p.Product_Image_Name,
                         p.UOM_Id,

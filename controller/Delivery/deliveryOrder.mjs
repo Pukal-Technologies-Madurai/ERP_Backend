@@ -694,7 +694,7 @@ const DeliveryOrder = () => {
             const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
             
             let query = `
-                                    WITH SALES_DETAILS AS (
+                        WITH SALES_DETAILS AS (
                           SELECT
                               oi.*,
                               pm.Product_Id,
@@ -1499,9 +1499,6 @@ FROM TRIP_MASTER AS tm
         }
     };
 
-
-
-
     const salesMultipleDelivery = async (req, res) => {
 
         const {
@@ -1718,7 +1715,6 @@ FROM TRIP_MASTER AS tm
         }
     };
 
-
     const getDeliveryDetails = async (req, res) => {
         const { Sales_Person_Id } = req.query;
 
@@ -1817,8 +1813,6 @@ FROM TRIP_MASTER AS tm
 
         }
     };
-
-
 
     const getDeliveryDetailsListing = async (req, res) => {
         const { Sales_Person_Id } = req.query;
@@ -1920,7 +1914,6 @@ FROM TRIP_MASTER AS tm
 
         }
     };
-
 
     const tripDetails = async (req, res) => {
         const { Trip_Id } = req.body;
