@@ -23,7 +23,8 @@ DeliveryRouter.get('/deliveryDetailsList',deliverOrder.getDeliveryDetailsListing
 
 DeliveryRouter.delete('/tripDetails',deliveryOrder.tripDetails)
 
-
+DeliveryRouter.get('/getRetailersWhoHasBills', paymentCollection.getRetailersWhoHasBills);
+DeliveryRouter.get('/retailerPendingBills', paymentCollection.getRetailerBills);
 DeliveryRouter.get('/paymentCollection', paymentCollection.getPayments);
 DeliveryRouter.post('/paymentCollection', paymentCollection.PaymentEntry);
 
