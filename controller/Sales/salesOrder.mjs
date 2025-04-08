@@ -753,7 +753,9 @@ const SaleOrder = () => {
                     	COALESCE(uom.Units, 'Not Found') AS Units,
                     	st.Bill_Qty,
                     	st.Rate AS Item_Rate,
-                    	st.Amount
+                    	st.Amount,
+                        COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18, 2)), 0) AS PackValue,
+                        COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18, 2)) * st.Bill_Qty, 0) AS Tonnage
                     FROM tbl_Pre_Sales_Order_Gen_Info AS gt
                     JOIN tbl_Pre_Sales_Order_Stock_Info AS st
                         ON st.Pre_Id = gt.Pre_Id
@@ -765,6 +767,8 @@ const SaleOrder = () => {
                         ON p.Product_Id = st.Item_Id
                     LEFT JOIN tbl_UOM AS uom
                         ON uom.Unit_Id = st.Unit_Id
+                    LEFT JOIN tbl_Pack_Master AS pck
+                        ON pck.Pack_Id = p.Pack_Id  
                     WHERE 
                     	CONVERT(DATE, gt.Pre_Date) BETWEEN @Fromdate AND @Todate
                     	AND gt.Custome_Id = @Retailer_Id
