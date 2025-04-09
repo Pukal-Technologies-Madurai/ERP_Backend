@@ -573,9 +573,14 @@ const SaleOrder = () => {
 
         try {
             const { Retailer_Id, Cancel_status, Created_by, Sales_Person_Id, Route_Id, Area_Id } = req.query;
-            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-            
+            const Fromdate = req.query.Fromdate && !isNaN(new Date(req.query.Fromdate))
+                ? ISOString(req.query.Fromdate)
+                : ISOString();
+
+            const Todate = req.query.Todate && !isNaN(new Date(req.query.Todate))
+                ? ISOString(req.query.Todate)
+                : ISOString();
+
             let query = `
                 WITH SALES_DETAILS AS (
                     SELECT
@@ -787,7 +792,7 @@ const SaleOrder = () => {
     const getRetailerNameForSearch = async (req, res) => {
         try {
             const request = new sql.Request()
-               .query(`
+                .query(`
                     SELECT 
                         so.Retailer_Id,  
                         r.Retailer_Name,

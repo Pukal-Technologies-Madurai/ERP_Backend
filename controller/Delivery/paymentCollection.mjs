@@ -1,6 +1,8 @@
 import { dataFound, invalidInput, noData, sentData, servError, success } from "../../res.mjs";
-import { Addition, checkIsNumber, filterableText, ISOString } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, createPadString, filterableText, ISOString } from '../../helper_functions.mjs';
 import sql from 'mssql';
+import { getNextId } from '../../middleware/miniAPIs.mjs';
+
 
 const collectionGeneralInfo = [
     'collection_id',
@@ -36,6 +38,7 @@ const collectionDetailsInfo = [
     'verified_at'
 ];
 
+const paymentMethods = ['CASH', 'UPI', 'CHECK', 'BANK TRANSFER'];
 
 const Payments = () => {
 
@@ -130,7 +133,7 @@ const Payments = () => {
     }
 
     const PaymentEntry = async (req, res) => {
-        const transaction = sql.Transaction();
+        const transaction = new sql.Transaction();
         try {
             const {
                 retailer_id,
@@ -141,11 +144,15 @@ const Payments = () => {
                 longitude = null,
                 collected_by,
                 created_by,
-                Collections = []
+                Collections = [],
+                verify_status = 0,
+                payment_status,
+                narration = null,
+                verified_by = null
             } = req.body;
 
             const collection_date = req.body?.collection_date ? ISOString(req.body.collection_date) : ISOString();
-            const paymentMethods = ['CASH', 'UPI', 'CHECK'];
+            const bank_date = req.body?.bank_date ? ISOString(req.body.bank_date) : null;
 
             const validation = {
                 isArray: !Array.isArray(Collections),
@@ -162,14 +169,14 @@ const Payments = () => {
 
             if (isError) {
                 console.log('Validation failed:', validation); // Helpful for debugging
-                return invalidInput('Invalid or missing data provided.');
+                return invalidInput(res, 'Invalid or missing data provided.', validation);
             }
 
             // unique id
 
             const getCollectionId = await getNextId({ table: 'tbl_Sales_Receipt_General_Info', column: 'collection_id' });
             if (!getCollectionId.status || !checkIsNumber(getCollectionId.MaxId)) throw new Error('Failed to get collection_id');
-            const collection_id = collection_id.MaxId;
+            const collection_id = getCollectionId.MaxId;
 
             // year and desc
 
@@ -230,21 +237,28 @@ const Payments = () => {
                 .input(`retailer_id`, retailer_id)
                 .input(`payed_by`, payed_by)
                 .input(`collection_date`, collection_date)
+                .input(`bank_date`, bank_date)
                 .input(`collection_type`, collection_type)
                 .input(`total_amount`, total_amount)
                 .input(`collected_by`, collected_by)
                 .input(`latitude`, latitude)
                 .input(`longitude`, longitude)
                 .input(`created_by`, created_by)
+                .input(`verify_status`, verify_status)
+                .input(`payment_status`, payment_status)
+                .input(`narration`, narration)
+                .input(`verified_by`, verified_by)
                 .query(`
                     INSERT INTO tbl_Sales_Receipt_General_Info (
                         collection_id, collection_inv_no, voucher_id, collection_no, year_id, 
-                        retailer_id, payed_by, collection_date, collection_type, total_amount, 
-                        collected_by, latitude, longitude, created_by
+                        retailer_id, payed_by, collection_date, bank_date, collection_type, total_amount, 
+                        collected_by, latitude, longitude, created_by, 
+                        verify_status, payment_status, narration, verified_by
                     ) VALUES (
                         @collection_id, @collection_inv_no, @voucher_id, @collection_no, @year_id, 
-                        @retailer_id, @payed_by, @collection_date, @collection_type, @total_amount, 
-                        @collected_by, @latitude, @longitude, @created_by
+                        @retailer_id, @payed_by, @collection_date, @bank_date, @collection_type, @total_amount, 
+                        @collected_by, @latitude, @longitude, @created_by,
+                        @verify_status, @payment_status, @narration, @verified_by
                     )
                 `);
 
@@ -264,19 +278,11 @@ const Payments = () => {
                     .input(`bill_id`, bill_id)
                     .input(`bill_amount`, bill_amount)
                     .input(`collected_amount`,  collected_amount)
-                    .input(`verify_status`, checkIsNumber(verified_by) ? 1 : 0)
-                    .input(`payment_status`, payment_status)
-                    .input(`bank_date`, bank_date ? bank_date : null)
-                    .input(`narration`, narration)
-                    .input(`verified_by`, verified_by)
-                    .input(`verified_at`, checkIsNumber(verified_by) ? new Date() : null)
                     .query(`
                         INSERT INTO tbl_Sales_Receipt_Details_Info (
-                            collection_id, bill_id, bill_amount, collected_amount,
-                            verify_status, payment_status, bank_date, narration, verified_by, verified_at
+                            collection_id, bill_id, bill_amount, collected_amount
                         ) VALUES (
-                            @collection_id, @bill_id, @bill_amount, @collected_amount, 
-                            @verify_status, @payment_status, @bank_date, @narration, @verified_by, @verified_at
+                            @collection_id, @bill_id, @bill_amount, @collected_amount
                         ); `
                     );
 
@@ -362,22 +368,33 @@ const Payments = () => {
                             ON b.Brand_Id = pm.Brand
                         WHERE
                             oi.Delivery_Order_Id IN (SELECT Do_Id FROM DeliveryGI)
-                    ), PaymentsDI AS (
-                        SELECT di.*
+                    ), Payments AS (
+                        SELECT 
+                            di.*,
+                            COALESCE(col.Name, 'not found') AS CollectedByGet,
+                            COALESCE(cre.Name, 'not found') AS CreatedByGet,
+                    		COALESCE(upd.Name, 'not found') AS UpdatedByGet,
+                            gi.payed_by,
+                            gi.collection_date,
+                            gi.collection_type,
+                            gi.latitude,
+                            gi.longitude,
+                            gi.verify_status,
+                            gi.payment_status,
+                            gi.narration,
+                            gi.bank_date
                     	FROM tbl_Sales_Receipt_Details_Info AS di
-                    	WHERE di.collection_id IN (SELECT Do_Id FROM DeliveryGI)
-                    ), PaymentGI AS (
-                        SELECT
-                    		gi.*,
-                    		COALESCE(cre.Name, 'not found') AS CreatedByGet,
-                    		COALESCE(upd.Name, 'not found') AS UpdatedByGet
-                    	FROM tbl_Sales_Receipt_General_Info AS gi
-                    	LEFT JOIN tbl_Users AS cre
+                        LEFT JOIN tbl_Sales_Receipt_General_Info AS gi
+                            ON di.collection_id = gi.collection_id
+                        LEFT JOIN tbl_Users AS verify
+                    		ON verify.UserId = gi.verified_by
+                        LEFT JOIN tbl_Users AS col
+                    		ON col.UserId = gi.collected_by
+                        LEFT JOIN tbl_Users AS cre
                     		ON cre.UserId = gi.created_by
                     	LEFT JOIN tbl_Users AS upd
                     		ON upd.UserId = gi.updated_by
-                        WHERE
-                            gi.collection_id IN (SELECT collection_id FROM PaymentsDI)
+                    	WHERE di.bill_id IN (SELECT Do_Id FROM DeliveryGI)
                     )
                     SELECT 
                         gi.*,
@@ -392,15 +409,14 @@ const Payments = () => {
                         ), '[]') AS Products_List,
                         COALESCE((
                             SELECT 
-                                pdi.*,
-                                pgi.collection_date, pgi.collection_type
-                            FROM PaymentsDI AS pdi
-                            JOIN PaymentGI AS pgi
-                            ON pdi.bill_id = gi.Do_Id
-                            WHERE pgi.collection_id = pdi.collection_id
+                                pgi.*
+                            FROM Payments AS pgi
+                            WHERE pgi.bill_id = gi.Do_Id
+                            ORDER BY pgi.collection_date
                             FOR JSON PATH
                         ), '[]') AS Payments
-                    FROM DeliveryGI AS gi`
+                    FROM DeliveryGI AS gi
+                    ORDER BY gi.Do_Date ASC`
                 );
 
             const result = await request;
