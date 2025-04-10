@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { dataFound, invalidInput, noData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString,Addition } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getProducts, getNextId } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -36,7 +36,7 @@ const DeliveryOrder = () => {
         const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
         const isIGST = isEqualNumber(IS_IGST, 1);
         const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-        if (!Do_Date || !Retailer_Id || !Delivery_Person_Id || !Created_by || !VoucherType|| !Array.isArray(Product_Array) || Product_Array.length === 0) {
+        if (!Do_Date || !Retailer_Id || !Delivery_Person_Id || !Created_by || !VoucherType || !Array.isArray(Product_Array) || Product_Array.length === 0) {
             return invalidInput(res, 'Please select Required Fields')
         }
 
@@ -139,46 +139,46 @@ const DeliveryOrder = () => {
             const Do_Id = getDo_Id.MaxId;
 
             const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
-                         const itemRate = RoundNumber(item?.Item_Rate);
-                         const billQty = RoundNumber(item?.Bill_Qty);
-                         const Amount = Multiplication(billQty, itemRate);
-         
-                         if (isNotTaxableBill) return Addition(acc, Amount);
-         
-                         const product = findProductDetails(productsData, item.Item_Id);
-                         const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-         
-                         if (isInclusive) {
-                             return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-                         } else {
-                             return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-                         }
-                     }, 0))
-         
-                     const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                         const itemRate = RoundNumber(item?.Item_Rate);
-                         const billQty = RoundNumber(item?.Bill_Qty);
-                         const Amount = Multiplication(billQty, itemRate);
-         
-                         if (isNotTaxableBill) return {
-                             TotalValue: Addition(acc.TotalValue, Amount),
-                             TotalTax: 0
-                         }
-         
-                         const product = findProductDetails(productsData, item.Item_Id);
-                         const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-         
-                         const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                         const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
-                         const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
-         
-                         return {
-                             TotalValue, TotalTax
-                         };
-                     }, {
-                         TotalValue: 0,
-                         TotalTax: 0
-                     });
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
+
+                if (isNotTaxableBill) return Addition(acc, Amount);
+
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                if (isInclusive) {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                } else {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                }
+            }, 0))
+
+            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
+
+                if (isNotTaxableBill) return {
+                    TotalValue: Addition(acc.TotalValue, Amount),
+                    TotalTax: 0
+                }
+
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+                return {
+                    TotalValue, TotalTax
+                };
+            }, {
+                TotalValue: 0,
+                TotalTax: 0
+            });
 
             // await transaction.begin();
 
@@ -251,23 +251,23 @@ const DeliveryOrder = () => {
 
 
             for (let i = 0; i < Product_Array.length; i++) {
-               const product = Product_Array[i];
-                              const productDetails = findProductDetails(productsData, product.Item_Id)
-              
-                              const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
-                              const Taxble = gstPercentage > 0 ? 1 : 0;
-                              const Bill_Qty = Number(product.Bill_Qty);
-                              const Item_Rate = RoundNumber(product.Item_Rate);
-                              const Amount = Multiplication(Bill_Qty, Item_Rate);
-              
-                              const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
-                              const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
-              
-                              const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
-                              const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
-                              const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
-                              const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
-              
+                const product = Product_Array[i];
+                const productDetails = findProductDetails(productsData, product.Item_Id)
+
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
+                const Taxble = gstPercentage > 0 ? 1 : 0;
+                const Bill_Qty = Number(product.Bill_Qty);
+                const Item_Rate = RoundNumber(product.Item_Rate);
+                const Amount = Multiplication(Bill_Qty, Item_Rate);
+
+                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
+
 
                 const request2 = new sql.Request(transaction)
                     .input('Do_Date', Do_Date)
@@ -276,7 +276,7 @@ const DeliveryOrder = () => {
                     .input('Item_Id', product.Item_Id)
                     .input('Bill_Qty', Bill_Qty)
                     .input('Item_Rate', Item_Rate)
-                    .input('GoDown_Id',1)
+                    .input('GoDown_Id', 1)
                     .input('Amount', Amount)
                     .input('Free_Qty', 0)
                     .input('Total_Qty', Bill_Qty)
@@ -293,7 +293,7 @@ const DeliveryOrder = () => {
                     .input('Sgst_Amo', Cgst_Amo)
                     .input('Igst', igstPer ?? 0)
                     .input('Igst_Amo', Igst_Amo)
-                    .input('Final_Amo',Math.round(Total_Invoice_value))
+                    .input('Final_Amo', Math.round(Total_Invoice_value))
                     .input('Created_on', new Date())
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Stock_Info (
@@ -343,7 +343,7 @@ const DeliveryOrder = () => {
         if (
             !checkIsNumber(Do_Id)
             || !checkIsNumber(Retailer_Id)
-           
+
             || !checkIsNumber(Created_by)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
         ) {
@@ -356,47 +356,47 @@ const DeliveryOrder = () => {
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
 
-           const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
-                      const itemRate = RoundNumber(item?.Item_Rate);
-                      const billQty = RoundNumber(item?.Bill_Qty);
-                      const Amount = Multiplication(billQty, itemRate);
-      
-                      if (isNotTaxableBill) return Addition(acc, Amount);
-      
-                      const product = findProductDetails(productsData, item.Item_Id);
-                      const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-      
-                      if (isInclusive) {
-                          return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-                      } else {
-                          return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-                      }
-                  }, 0))
-      
-                  const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                      const itemRate = RoundNumber(item?.Item_Rate);
-                      const billQty = RoundNumber(item?.Bill_Qty);
-                      const Amount = Multiplication(billQty, itemRate);
-      
-                      if (isNotTaxableBill) return {
-                          TotalValue: Addition(acc.TotalValue, Amount),
-                          TotalTax: 0
-                      }
-      
-                      const product = findProductDetails(productsData, item.Item_Id);
-                      const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-      
-                      const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                      const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
-                      const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
-      
-                      return {
-                          TotalValue, TotalTax
-                      };
-                  }, {
-                      TotalValue: 0,
-                      TotalTax: 0
-                  });
+            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
+
+                if (isNotTaxableBill) return Addition(acc, Amount);
+
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                if (isInclusive) {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                } else {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                }
+            }, 0))
+
+            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
+
+                if (isNotTaxableBill) return {
+                    TotalValue: Addition(acc.TotalValue, Amount),
+                    TotalTax: 0
+                }
+
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+                return {
+                    TotalValue, TotalTax
+                };
+            }, {
+                TotalValue: 0,
+                TotalTax: 0
+            });
 
             await transaction.begin();
 
@@ -478,23 +478,23 @@ const DeliveryOrder = () => {
                 .query(`DELETE FROM tbl_Sales_Delivery_Stock_Info WHERE Delivery_Order_Id = @doid`);
 
             for (let i = 0; i < Product_Array.length; i++) {
-                     const product = Product_Array[i];
-                               const productDetails = findProductDetails(productsData, product.Item_Id)
-               
-                               const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
-                               const Taxble = gstPercentage > 0 ? 1 : 0;
-                               const Bill_Qty = Number(product.Bill_Qty);
-                               const Item_Rate = RoundNumber(product.Item_Rate);
-                               const Amount = Multiplication(Bill_Qty, Item_Rate);
-               
-                               const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
-                               const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
-               
-                               const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
-                               const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
-                               const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
-                               const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
-               
+                const product = Product_Array[i];
+                const productDetails = findProductDetails(productsData, product.Item_Id)
+
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
+                const Taxble = gstPercentage > 0 ? 1 : 0;
+                const Bill_Qty = Number(product.Bill_Qty);
+                const Item_Rate = RoundNumber(product.Item_Rate);
+                const Amount = Multiplication(Bill_Qty, Item_Rate);
+
+                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
+
                 const request2 = new sql.Request(transaction)
                     .input('Do_Date', Do_Date ? Do_Date : new Date())
                     .input('Delivery_Order_Id', Do_Id)
@@ -508,7 +508,7 @@ const DeliveryOrder = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('GoDown_Id',1)
+                    .input('GoDown_Id', 1)
                     .input('Unit_Id', product.UOM ?? '')
                     .input('Unit_Name', product.Units ?? '')
                     .input('Taxable_Amount', gstInfo.base_amount)
@@ -681,7 +681,7 @@ const DeliveryOrder = () => {
 
             const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-            
+
             let query = `
                         WITH SALES_DETAILS AS (
                           SELECT
@@ -819,51 +819,55 @@ const DeliveryOrder = () => {
         }
 
         try {
-            const request = new sql.Request()
-                .input('Order_No', sql.Int, Order_Id)
+
+            const getSoNoRequest = new sql.Request()
                 .input('Do_Id', sql.Int, Do_Id);
-           
-                // const seletDeliverySoId = await request.query(`
-                //     select So_No FROM tbl_Sales_Delivery_Gen_Info
-                //     WHERE Do_Id = @Do_Id;
-                // `);
-                //      const So_No=seletDeliverySoId.recordset[0].So_No;
-                //      const request1 = new sql.Request()
-                //      .input('So_No',  So_No);
 
-
-                // const updateSalesOrder = await request1.query(`
-                //     update  tbl_Sales_Order_Gen_Info set isConverted=0   
-                //     WHERE So_Id= @So_No;
-                // `);
-
-
-            const deleteDeliveryResult = await request.query(`
-                DELETE FROM tbl_Sales_Delivery_Gen_Info
+            const selectDeliverySoId = await getSoNoRequest.query(`
+                SELECT So_No 
+                FROM tbl_Sales_Delivery_Gen_Info 
                 WHERE Do_Id = @Do_Id;
             `);
 
-            if (deleteDeliveryResult.rowsAffected[0] > 0) {
+            if (selectDeliverySoId.recordset.length === 0) {
+                return noData(res, 'No delivery order found with the given Do_Id.');
+            }
 
-                const deleteStockInfoResult = await request.query(`
-                    DELETE FROM tbl_Sales_Delivery_Stock_Info
-                    WHERE Delivery_Order_Id = @Do_Id;
+            const So_No = selectDeliverySoId.recordset[0].So_No;
+
+            await new sql.Request()
+                .input('So_No', sql.Int, So_No)
+                .query(`
+                    UPDATE tbl_Sales_Order_Gen_Info 
+                    SET isConverted = 0 
+                    WHERE So_Id = @So_No;
                 `);
 
-                if (deleteStockInfoResult.rowsAffected[0] > 0) {
-                  
-      
-                    success(res, 'Delivery Order deleted successfully.');
-                } else {
-                    noData(res, 'Failed to delete the Sales Order from tbl_Sales_Delivery_Stock_Info.');
-                }
-            } else {
+            const deleteDeliveryResult = await new sql.Request()
+                .input('Do_Id', sql.Int, Do_Id)
+                .query(`
+                    DELETE FROM tbl_Sales_Delivery_Gen_Info 
+                    WHERE Do_Id = @Do_Id;
+                `);
 
+            if (deleteDeliveryResult.rowsAffected[0] === 0) {
                 return failed(res, 'Failed to delete the Delivery Order from tbl_Sales_Delivery_Gen_Info.');
             }
 
+            const deleteStockResult = await new sql.Request()
+                .input('Do_Id', sql.Int, Do_Id)
+                .query(`
+                    DELETE FROM tbl_Sales_Delivery_Stock_Info 
+                    WHERE Delivery_Order_Id = @Do_Id;
+                `);
+
+            if (deleteStockResult.rowsAffected[0] === 0) {
+                return noData(res, 'Failed to delete the Sales Order from tbl_Sales_Delivery_Stock_Info.');
+            }
+
+            return success(res, 'Delivery Order deleted successfully.');
         } catch (e) {
-            servError(e, res);
+            return servError(e, res);
         }
     };
 
@@ -1510,7 +1514,7 @@ FROM TRIP_MASTER AS tm
             DeliveryList = [],
             EmployeesInvolved = [],
             Branch_Id,
-        
+
             Created_by,
             GST_Inclusive = 1
         } = req.body;
@@ -1518,7 +1522,7 @@ FROM TRIP_MASTER AS tm
 
 
         const Do_Date = ISOString(req?.body?.Do_Date);
-        const GoDown_Id=req?.body?.GoDown_Id;
+        const GoDown_Id = req?.body?.GoDown_Id;
         const Trip_Date = req.body.Trip_Date;
 
 
@@ -1662,7 +1666,7 @@ FROM TRIP_MASTER AS tm
                         stockRequest.input('Delivery_Order_Id', sql.Int, Do_Id);
                         stockRequest.input('S_No', sql.Int, j + 1);
                         stockRequest.input('Item_Id', sql.Int, subProduct.Item_Id || 0);
-                        stockRequest.input('GoDown_Id', sql.Int,Number(GoDown_Id) || 0);
+                        stockRequest.input('GoDown_Id', sql.Int, Number(GoDown_Id) || 0);
                         stockRequest.input('Bill_Qty', sql.Decimal(18, 2), subProduct?.Bill_Qty || 0);
                         stockRequest.input('Item_Rate', sql.Decimal(18, 2), subProduct?.Item_Rate || 0);
                         stockRequest.input('Amount', sql.Decimal(18, 2), subProduct?.Amount || 0);
@@ -1711,12 +1715,12 @@ FROM TRIP_MASTER AS tm
             if (transaction._aborted === false) {
 
                 try {
-                    
+
                     await transaction.rollback();
                     servError('Transaction rolled back successfully');
 
                 } catch (rollbackError) {
-                  
+
                     servError(rollbackError, res);
                 }
             }
@@ -1962,82 +1966,48 @@ FROM TRIP_MASTER AS tm
         }
     };
 
-
-
     const getClosingStock = async (req, res) => {
         const { fromDate, toDate, godownId } = req.query;
     
-    
-        let whereClause = "1=1"; 
-        const request = new sql.Request();
-        request.input('fromDate', sql.Date, fromDate);
-        request.input('toDate', sql.Date, toDate);
-    
-        if (godownId) {
-            whereClause = "GoDown_Id = @godown_Id"; 
-            request.input('godown_Id', sql.Int, parseInt(godownId)); 
-        }
-    
-    
-        const query = `
-                   SELECT 
-                  Product_Id,
-                  Product_Name,
-    
-                  SUM(CASE 
-                     WHEN Transaction_Date < @fromDate AND Source_Type = 'Arrival' THEN Quantity
-                      WHEN Transaction_Date < @fromDate AND Source_Type = 'Delivery' THEN -Quantity
-                    ELSE 0 
-                END) AS OpeningStock,
-                SUM(CASE 
-                    WHEN Transaction_Date BETWEEN @fromDate AND @toDate AND Source_Type = 'Arrival' THEN Quantity 
-                    ELSE 0 
-                  END) AS Total_Arrival,
-                SUM(CASE 
-                    WHEN Transaction_Date BETWEEN @fromDate AND @toDate AND Source_Type = 'Delivery' THEN Quantity 
-                    ELSE 0 
-                END) AS Total_Delivery,
-                SUM(CASE 
-                    WHEN Transaction_Date < @fromDate AND Source_Type = 'Arrival' THEN Quantity
-                    WHEN Transaction_Date < @fromDate AND Source_Type = 'Delivery' THEN -Quantity
-                    ELSE 0 
-                END) 
-                + 
-                SUM(CASE 
-                      WHEN Transaction_Date BETWEEN @fromDate AND @toDate AND Source_Type = 'Arrival' THEN Quantity 
-                    ELSE 0 
-                 END) 
-                - 
-                 SUM(CASE 
-                    WHEN Transaction_Date BETWEEN @fromDate AND @toDate AND Source_Type = 'Delivery' THEN Quantity 
-                    ELSE 0 
-                END) AS ClosingStock
-    
-            FROM vw_ProductStockSummary
-            WHERE ${whereClause}
-            GROUP BY Product_Id, Product_Name
-            ORDER BY Product_Id DESC
-        `;
-    
         try {
- 
+            const request = new sql.Request();
+    
+     
+            const fromDateObj = new Date(fromDate);
+            const previousDate = new Date(fromDateObj);
+            previousDate.setDate(previousDate.getDate() - 1);
+    
+            request.input('Previous_Date', sql.Date, previousDate);
+            request.input('fromDate', sql.Date, fromDate);
+            request.input('toDate', sql.Date, toDate);
+    
+            let query = `
+                SELECT Product_Id, Product_Name,OP_Qty AS OpeningStock,Arrival_Qty as Total_Arrival,Deliverd_Qty AS Total_Delivery,CL_Qty AS ClosingStock
+                FROM [dbo].[Stock_Purchase_Sales_GD_Fn_2](@Previous_Date, @fromDate, @toDate)
+                WHERE CL_QTY != 0
+            `;
+    
+            if (godownId) {
+                query += ` AND GoDown_Id = @godown_Id`;
+                request.input('godown_Id', sql.Int, parseInt(godownId));
+                query += ` ORDER BY Product_Id asc`;
+            }
+    
             const result = await request.query(query);
     
    
             if (result.recordset.length === 0) {
-                return noData(res, 'No records found.');
+                 noData(res, 'No records found.');
             }
     
-            return dataFound(res, result.recordset);
-    
+             dataFound(res, result.recordset);
         } catch (error) {
-          
-            return servError(error ,res );
+               
+            servError(error, res);
         }
     };
-    
-    
-    
+
+
     return {
         salesDeliveryCreation,
         getSaleOrder,

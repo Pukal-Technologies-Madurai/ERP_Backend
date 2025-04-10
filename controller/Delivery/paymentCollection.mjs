@@ -1,5 +1,5 @@
 import { dataFound, invalidInput, noData, sentData, servError, success } from "../../res.mjs";
-import { Addition, checkIsNumber, createPadString, filterableText, ISOString } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, createPadString, filterableText, ISOString, Subraction, toNumber } from '../../helper_functions.mjs';
 import sql from 'mssql';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 
@@ -40,6 +40,29 @@ const collectionDetailsInfo = [
 
 const paymentMethods = ['CASH', 'UPI', 'CHECK', 'BANK TRANSFER'];
 
+const payTypeAndStatus = [
+    {
+        type: 'CASH',
+        default: 'CREATED-CASH',
+        statusOptions: ['CREATED-CASH', 'CASH-PROCESSING', 'CASH-MISSING']
+    },
+    {
+        type: 'UPI',
+        default: 'CREATED-UPI',
+        statusOptions: ['CREATED-UPI', 'UPI-PROCESSING', 'UPI-NOT-RECEIVED']
+    },
+    {
+        type: 'CHECK',
+        default: 'CREATED-CHECK',
+        statusOptions: ['CREATED-CHECK', 'CHECK-PROCESSING', 'CHECK-BOUNCE']
+    },
+    {
+        type: 'BANK ACCOUNT',
+        default: 'CREATED-BANK-TRANSFER',
+        statusOptions: ['CREATED-BANK-TRANSFER', 'BANK-PROCESSING', 'BANK-NOT-RECEIVED']
+    },
+];
+
 const Payments = () => {
 
     const getPayments = async (req, res) => {
@@ -54,55 +77,55 @@ const Payments = () => {
                     WITH GENERALDETAILS AS (
                     	SELECT
                     		gi.*,
+                    		COALESCE(r.Retailer_Name, 'not found') AS RetailerGet,
+                    		COALESCE(v.Voucher_Type, 'not found') AS VoucherGet,
                     		COALESCE(cre.Name, 'not found') AS CreatedByGet,
-                    		COALESCE(upd.Name, 'not found') AS UpdatedByGet
+                    		COALESCE(upd.Name, 'not found') AS UpdatedByGet,
+                    		COALESCE(col.Name, 'not found') AS CollectedByGet,
+                    		COALESCE(verify.Name, 'not found') AS VerifiedByGet
                     	FROM tbl_Sales_Receipt_General_Info AS gi
+                        LEFT JOIN tbl_Retailers_Master AS r
+                            ON r.Retailer_Id = gi.retailer_id
+                        LEFT JOIN tbl_Voucher_Type AS v
+                            ON v.Vocher_Type_Id = gi.voucher_id
                     	LEFT JOIN tbl_Users AS cre
                     		ON cre.UserId = gi.created_by
                     	LEFT JOIN tbl_Users AS upd
                     		ON upd.UserId = gi.updated_by
+                        LEFT JOIN tbl_Users AS col
+                    		ON col.UserId = gi.collected_by
+                        LEFT JOIN tbl_Users AS verify
+                    		ON verify.UserId = gi.collected_by
                     	WHERE gi.collection_date BETWEEN @Fromdate AND @Todate
                     ), DETAILSINFO AS (
-                    	SELECT di.*
+                    	SELECT 
+                            di.*,
+                            so.Do_Inv_No, so.Do_Date,
+                            COALESCE(so.Total_Invoice_value, 0) AS Total_Invoice_value
                     	FROM tbl_Sales_Receipt_Details_Info AS di
-                    	WHERE di.collection_id IN (SELECT collection_id FROM GENERALDETAILS)
-                    ), DeliveryDI AS (
-                        SELECT
-                            oi.*,
-                            pm.Product_Id,
-                            COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                            COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                            COALESCE(u.Units, 'not available') AS UOM,
-                            COALESCE(b.Brand_Name, 'not available') AS BrandGet,
-                            COALESCE(rm.Retailer_Name, 'not available') AS RetailerGet
-                        FROM tbl_Sales_Delivery_Stock_Info AS oi
-                        LEFT JOIN tbl_Product_Master AS pm
-                            ON pm.Product_Id = oi.Item_Id
-                        LEFT JOIN tbl_UOM AS u
-                            ON u.Unit_Id = oi.Unit_Id
-                        LEFT JOIN tbl_Brand_Master AS b
-                            ON b.Brand_Id = pm.Brand
                     	LEFT JOIN tbl_Sales_Delivery_Gen_Info AS so
-                    		ON so.Do_Id = oi.Delivery_Order_Id
-                        LEFT JOIN tbl_Retailers_Master AS rm
-                            ON rm.Retailer_Id = so.Retailer_Id
-                        WHERE
-                            oi.Delivery_Order_Id IN (SELECT bill_id FROM DETAILSINFO)
+                    		ON so.Do_Id = di.bill_id
+                    	WHERE di.collection_id IN (SELECT DISTINCT collection_id FROM GENERALDETAILS)
+                    ), RECEIPTTOTALS AS (
+                        SELECT
+                            SUM(collected_amount) AS total_collected_amount, bill_id
+                        FROM tbl_Sales_Receipt_Details_Info
+                        WHERE bill_id IN (SELECT DISTINCT bill_id FROM DETAILSINFO)
+                        GROUP BY bill_id
                     )
                     SELECT 
                     	gi.*,
                     	COALESCE((
                     		SELECT di.*,
-                    			COALESCE((
-                    				SELECT dbi.*
-                    				FROM DeliveryDI AS dbi
-                    				WHERE dbi.Delivery_Order_Id = di.bill_id
-                    				FOR JSON PATH
-                    			), '[]') AS DeliveryBillDetails
+                            COALESCE((
+                                SELECT r.total_collected_amount 
+                                FROM RECEIPTTOTALS AS r
+                                WHERE r.bill_id = di.bill_id
+                            ), 0) AS total_receipt_amount
                     		FROM DETAILSINFO di
                     		WHERE di.collection_id = gi.collection_id
                     		FOR JSON PATH
-                    	), '[]') AS PAYMENTS
+                    	), '[]') AS Receipts
                     FROM GENERALDETAILS AS gi
                     ORDER BY gi.collection_date DESC`
                 );
@@ -112,18 +135,10 @@ const Payments = () => {
             if (result.recordset.length > 0) {
                 const parseData = result.recordset.map(gi => ({
                     ...gi,
-                    PAYMENTS: JSON.parse(gi.PAYMENTS)
+                    Receipts: JSON.parse(gi.Receipts)
                 }));
 
-                const parseDeliveryItems = parseData.map(gi => ({
-                    ...gi,
-                    Products_List: gi.Products_List.map(di => ({
-                        ...di,
-                        DeliveryBillDetails: JSON.parse(di.DeliveryBillDetails)
-                    }))
-                }));
-
-                dataFound(res, parseDeliveryItems);
+                dataFound(res, parseData);
             } else {
                 noData(res)
             }
@@ -228,6 +243,8 @@ const Payments = () => {
 
             await transaction.begin();
 
+            const defaultPayStatus = payTypeAndStatus.find(val => val.type === collection_type).default;
+
             const insertGI = new sql.Request(transaction)
                 .input(`collection_id`, collection_id)
                 .input(`collection_inv_no`, collection_inv_no)
@@ -245,7 +262,7 @@ const Payments = () => {
                 .input(`longitude`, longitude)
                 .input(`created_by`, created_by)
                 .input(`verify_status`, verify_status)
-                .input(`payment_status`, payment_status)
+                .input(`payment_status`, payment_status ? payment_status : defaultPayStatus)
                 .input(`narration`, narration)
                 .input(`verified_by`, verified_by)
                 .query(`
@@ -428,7 +445,15 @@ const Payments = () => {
                     Payments: JSON.parse(obj.Payments)
                 }));
 
-                dataFound(res, parseData)
+                const withPendingAmount = parseData.map(receipt => ({
+                    ...receipt,
+                    pendingAmount: Subraction(
+                        toNumber(receipt?.Total_Invoice_value), 
+                        receipt.Payments.reduce((acc, rec) => Addition(acc, toNumber(rec?.collected_amount)), 0)
+                    )
+                }))
+
+                dataFound(res, withPendingAmount)
             } else {
                 noData(res)
             }
