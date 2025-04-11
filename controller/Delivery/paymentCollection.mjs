@@ -63,16 +63,32 @@ const payTypeAndStatus = [
     },
 ];
 
+const toArr = (arr) => Array.isArray(arr) ? arr : []
+
 const Payments = () => {
 
     const getPayments = async (req, res) => {
         try {
             const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+            const {
+                retailer_id = '',
+                voucher_id = '',
+                collection_type = '',
+                verify_status = '',
+                payment_status = '',
+                collected_by = '',
+            } = req.query;
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
+                .input('retailer_id', retailer_id)
+                .input('voucher_id', voucher_id)
+                .input('collection_type', collection_type)
+                .input('verify_status', verify_status)
+                .input('payment_status', payment_status)
+                .input('collected_by', collected_by)
                 .query(`
                     WITH GENERALDETAILS AS (
                     	SELECT
@@ -96,7 +112,14 @@ const Payments = () => {
                     		ON col.UserId = gi.collected_by
                         LEFT JOIN tbl_Users AS verify
                     		ON verify.UserId = gi.collected_by
-                    	WHERE gi.collection_date BETWEEN @Fromdate AND @Todate
+                    	WHERE 
+                            gi.collection_date BETWEEN @Fromdate AND @Todate
+                            ${checkIsNumber(retailer_id)    ? ' AND gi.retailer_id = @retailer_id ' : ''}
+                            ${checkIsNumber(voucher_id)     ? ' AND gi.voucher_id = @voucher_id ' : ''}
+                            ${checkIsNumber(collected_by)   ? ' AND gi.collected_by = @collected_by ' : ''}
+                            ${collection_type               ? ' AND gi.collection_type = @collection_type ' : ''}
+                            ${verify_status                 ? ' AND gi.verify_status = @verify_status ' : ''}
+                            ${payment_status                ? ' AND gi.payment_status = @payment_status ' : ''}
                     ), DETAILSINFO AS (
                     	SELECT 
                             di.*,
@@ -487,11 +510,53 @@ const Payments = () => {
         }
     }
 
+    const getFilterValues = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    -- Voucher
+                    SELECT DISTINCT rec.voucher_id AS value, v.Voucher_Type AS label
+                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    LEFT JOIN tbl_Voucher_Type AS v
+                    ON v.Vocher_Type_Id = rec.voucher_id
+                    -- Retailer
+                    SELECT DISTINCT rec.retailer_id AS value, r.Retailer_Name AS label
+                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    LEFT JOIN tbl_Retailers_Master AS r
+                    ON r.Retailer_Id = rec.retailer_id
+                    -- Collection Type
+                    SELECT DISTINCT collection_type AS value, collection_type AS label
+                    FROM tbl_Sales_Receipt_General_Info
+                    -- Payment Status
+                    SELECT DISTINCT payment_status AS value, payment_status AS label
+                    FROM tbl_Sales_Receipt_General_Info
+                    -- Collected By
+                    SELECT DISTINCT rec.collected_by AS value, u.Name AS label
+                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    LEFT JOIN tbl_Users AS u
+                    ON u.UserId = rec.collected_by;`
+                );
+
+            const result = await request;
+            
+            dataFound(res, [], 'data found', {
+                voucherType: toArr(result.recordsets[0]),
+                retailers: toArr(result.recordsets[1]),
+                collectionType: toArr(result.recordsets[2]),
+                paymentStatus: toArr(result.recordsets[3]),
+                collectedBy: toArr(result.recordsets[4]),
+            });
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getRetailersWhoHasBills,
         getRetailerBills,
         getPayments,
         PaymentEntry,
+        getFilterValues
     }
 }
 

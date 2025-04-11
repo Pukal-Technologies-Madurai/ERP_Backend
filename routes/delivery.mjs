@@ -1,7 +1,6 @@
 import express from 'express';
 import deliverOrder from '../controller/Delivery/deliveryOrder.mjs'
 import deliveryOrder from '../controller/Delivery/deliveryOrder.mjs';
-import paymentCollection from '../controller/Delivery/paymentCollection.mjs';
 
 const DeliveryRouter = express.Router();
 
@@ -22,12 +21,7 @@ DeliveryRouter.get('/deliveryDetails',deliverOrder.getDeliveryDetails)
 DeliveryRouter.get('/deliveryDetailsList',deliverOrder.getDeliveryDetailsListing)
 
 DeliveryRouter.delete('/tripDetails',deliveryOrder.tripDetails)
-
-DeliveryRouter.get('/getRetailersWhoHasBills', paymentCollection.getRetailersWhoHasBills);
-DeliveryRouter.get('/retailerPendingBills', paymentCollection.getRetailerBills);
-DeliveryRouter.get('/paymentCollection', paymentCollection.getPayments);
-DeliveryRouter.post('/paymentCollection', paymentCollection.PaymentEntry);
-
+DeliveryRouter.get('/closingStock',deliveryOrder.getClosingStock);
 
 // DeliveryRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 
