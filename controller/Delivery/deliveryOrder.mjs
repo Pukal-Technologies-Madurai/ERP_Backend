@@ -23,44 +23,43 @@ const taxCalc = (method = 1, amount = 0, percentage = 0) => {
 const DeliveryOrder = () => {
 
     const salesDeliveryCreation = async (req, res) => {
-        const {
-            Retailer_Id, Delivery_Person_Id, Branch_Id,
-            Narration = null, Created_by, Delivery_Location, Payment_Mode, Payment_Status, Delivery_Status,
-            Payment_Ref_No = null, Delivery_Time = null, Product_Array = [], So_No, VoucherType = '',
-            GST_Inclusive = 1, IS_IGST = 0
-        } = req.body;
-
-        const Do_Date = ISOString(req?.body?.Do_Date);
-        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
-        const isInclusive = isEqualNumber(GST_Inclusive, 1);
-        const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
-        const isIGST = isEqualNumber(IS_IGST, 1);
-        const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-        if (!Do_Date || !Retailer_Id || !Delivery_Person_Id || !Created_by || !VoucherType || !Array.isArray(Product_Array) || Product_Array.length === 0) {
-            return invalidInput(res, 'Please select Required Fields')
-        }
-
-
         const transaction = new sql.Transaction();
 
         try {
+            const {
+                Retailer_Id, Delivery_Person_Id, Branch_Id,
+                Narration = null, Created_by, Delivery_Location, Payment_Mode, Payment_Status, Delivery_Status,
+                Payment_Ref_No = null, Delivery_Time = null, Product_Array = [], So_No, VoucherType = '',
+                GST_Inclusive = 1, IS_IGST = 0
+            } = req.body;
+
+            const Do_Date = ISOString(req?.body?.Do_Date);
+            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+            const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
+            if (!Do_Date || !Retailer_Id || !Delivery_Person_Id || !Created_by || !VoucherType || !Array.isArray(Product_Array) || Product_Array.length === 0) {
+                return invalidInput(res, 'Please select Required Fields')
+            }
+
             await transaction.begin();
             const requestForSoNoCheck = new sql.Request(transaction);
             requestForSoNoCheck.input('So_No', sql.Int, So_No);
             const resultForSoNoCheck = await requestForSoNoCheck.query(`
-            SELECT COUNT(*) AS count
-            FROM tbl_Sales_Delivery_Gen_Info
-            WHERE So_No = @So_No
-        `);
+                SELECT COUNT(*) AS count
+                FROM tbl_Sales_Delivery_Gen_Info
+                WHERE So_No = @So_No`
+            );
 
             if (resultForSoNoCheck.recordset[0].count > 0) {
                 const queryUpdate = new sql.Request(transaction);
                 queryUpdate.input('So_No', sql.Int, So_No);
                 await queryUpdate.query(`
-                UPDATE tbl_Sales_Delivery_Gen_Info
-                SET Cancel_Status = 0
-                WHERE So_No = @So_No
-            `);
+                    UPDATE tbl_Sales_Delivery_Gen_Info
+                    SET Cancel_Status = 0
+                    WHERE So_No = @So_No`
+                );
 
                 await transaction.commit();
                 return success(res, 'Order Moved to Sales Delivery to Sale Order.');
@@ -68,25 +67,6 @@ const DeliveryOrder = () => {
 
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
-            // const Do_Year = new Date().getFullYear();
-
-            // const Do_No = Number((await new sql.Request()
-            //     .input('Branch_Id', Branch_Id)
-            //     .input('Do_Year', Do_Year)
-            //     .query(`
-            //         SELECT
-            //             COALESCE(MAX(Do_No), 0) AS Do_No
-            //         FROM
-            //             tbl_Sales_Delivery_Gen_Info
-            //         WHERE
-            //             Branch_Id = @Branch_Id
-            //             AND
-            //             Do_Year = @Do_Year`
-            //     ))?.recordset[0]?.Do_No) + 1;
-
-            // if (!checkIsNumber(Do_No)) throw new Error('Failed to get Order Id');
-
-            // const Do_Inv_No = 'DO_' + Branch_Id + '_' + Do_Year + '_' + createPadString(Do_No, 4);
 
 
             const Do_Year_Master = await new sql.Request()
@@ -117,12 +97,12 @@ const DeliveryOrder = () => {
                 .input('Do_Year', Year_Master_Id)
                 .input('Voucher_Type', VoucherType)
                 .query(`
-                               SELECT COALESCE(MAX(Do_No), 0) AS Do_No
-                             FROM tbl_Sales_Delivery_Gen_Info
-                             WHERE Branch_Id = @Branch_Id
-                             AND Do_Year = @Do_Year
-                             AND Voucher_Type = @Voucher_Type
-                         `)).recordset[0]?.Do_No) + 1;
+                    SELECT COALESCE(MAX(Do_No), 0) AS Do_No
+                    FROM tbl_Sales_Delivery_Gen_Info
+                    WHERE Branch_Id = @Branch_Id
+                        AND Do_Year = @Do_Year
+                        AND Voucher_Type = @Voucher_Type`
+                )).recordset[0]?.Do_No) + 1;
 
             if (!checkIsNumber(Do_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
 
@@ -328,31 +308,32 @@ const DeliveryOrder = () => {
     };
 
     const editDeliveryOrder = async (req, res) => {
-        const {
-            Do_Id, Retailer_Id, Branch_Id,
-            Narration, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, Delivery_Status,
-            Delivery_Time, Delivery_Location, Delivery_Latitude, Delivery_Longitude, Collected_By, Collected_Status, Payment_Mode, Payment_Status, Payment_Ref_No
-        } = req.body;
-
-        const Do_Date = ISOString(req?.body?.Do_Date);
-        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
-        const isInclusive = isEqualNumber(GST_Inclusive, 1);
-        const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
-        const isIGST = isEqualNumber(IS_IGST, 1);
-        const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-        if (
-            !checkIsNumber(Do_Id)
-            || !checkIsNumber(Retailer_Id)
-
-            || !checkIsNumber(Created_by)
-            || (!Array.isArray(Product_Array) || Product_Array.length === 0)
-        ) {
-            return invalidInput(res, 'Do_Id, Retailer_Id, Created_by, Product_Array is Required')
-        }
 
         const transaction = new sql.Transaction();
 
         try {
+            const {
+                Do_Id, Retailer_Id, Branch_Id,
+                Narration, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, Delivery_Status,
+                Delivery_Time, Delivery_Location, Delivery_Latitude, Delivery_Longitude, Collected_By, Collected_Status, Payment_Mode, Payment_Status, Payment_Ref_No
+            } = req.body;
+
+            const Do_Date = ISOString(req?.body?.Do_Date);
+            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+            const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
+            if (
+                !checkIsNumber(Do_Id)
+                || !checkIsNumber(Retailer_Id)
+
+                || !checkIsNumber(Created_by)
+                || (!Array.isArray(Product_Array) || Product_Array.length === 0)
+            ) {
+                return invalidInput(res, 'Do_Id, Retailer_Id, Created_by, Product_Array is Required')
+            }
+
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
 
@@ -1968,41 +1949,108 @@ FROM TRIP_MASTER AS tm
 
     const getClosingStock = async (req, res) => {
         const { fromDate, toDate, godownId } = req.query;
-    
+
         try {
             const request = new sql.Request();
-    
-     
+
             const fromDateObj = new Date(fromDate);
             const previousDate = new Date(fromDateObj);
             previousDate.setDate(previousDate.getDate() - 1);
-    
-            request.input('Previous_Date', sql.Date, previousDate);
-            request.input('fromDate', sql.Date, fromDate);
-            request.input('toDate', sql.Date, toDate);
-    
-            let query = `
-                SELECT Product_Id, Product_Name,OP_Qty AS OpeningStock,Arrival_Qty as Total_Arrival,Deliverd_Qty AS Total_Delivery,CL_Qty AS ClosingStock
-                FROM [dbo].[Stock_Purchase_Sales_GD_Fn_2](@Previous_Date, @fromDate, @toDate)
-                WHERE CL_QTY != 0
+
+            request.input('Previous_Date', sql.Date, ISOString(previousDate));
+            request.input('fromDate', sql.Date, ISOString(fromDate));
+            request.input('toDate', sql.Date, ISOString(toDate));
+
+            let query = '';
+
+            if (!godownId || godownId.trim() === '') {
+                query = `
+                    SELECT 
+                        pm.Product_Group,
+                        pg.Pro_Group,
+                        (
+                            SELECT 
+                                s.Product_Id,
+                                MAX(pm2.Product_Name) AS Product_Name,
+                                SUM(s.OP_Qty) AS OpeningStock,
+                                SUM(s.Arrival_Qty) AS Total_Arrival,
+                                SUM(s.Deliverd_Qty) AS Total_Delivery,
+                                SUM(s.CL_Qty) AS ClosingStock
+                            FROM 
+                                [dbo].[Stock_Purchase_Sales_GD_Fn_2](@Previous_Date, @fromDate, @toDate) s
+                            LEFT JOIN tbl_Product_Master pm2 ON s.Product_Id = pm2.Product_Id
+                            WHERE 
+                                s.CL_Qty != 0 AND pm2.Product_Group = pm.Product_Group
+                            GROUP BY s.Product_Id
+                            FOR JSON PATH
+                        ) AS Products
+                    FROM 
+                        tbl_Product_Master pm
+                    LEFT JOIN tbl_Product_Group pg ON pg.Pro_Group_Id = pm.Product_Group
+                    WHERE EXISTS (
+                        SELECT 1 
+                        FROM [dbo].[Stock_Purchase_Sales_GD_Fn_2](@Previous_Date, @fromDate, @toDate) s
+                        WHERE s.Product_Id = pm.Product_Id AND s.CL_Qty != 0
+                    )
+                    GROUP BY pm.Product_Group, pg.Pro_Group
+                    ORDER BY pm.Product_Group;
+                `;
+            } else {
+
+                query = `
+                SELECT 
+                    pm.Product_Group,
+                    pg.Pro_Group,
+                    (
+                        SELECT 
+                            s.Product_Id,
+                            MAX(pm2.Product_Name) AS Product_Name,
+                            SUM(s.OP_Qty) AS OpeningStock,
+                            SUM(s.Arrival_Qty) AS Total_Arrival,
+                            SUM(s.Deliverd_Qty) AS Total_Delivery,
+                            SUM(s.CL_Qty) AS ClosingStock
+                        FROM 
+                            [dbo].[Stock_Purchase_Sales_GD_Fn_2](@Previous_Date, @fromDate, @toDate) s
+                        LEFT JOIN tbl_Product_Master pm2 ON s.Product_Id = pm2.Product_Id
+                        WHERE 
+                            s.CL_Qty != 0 
+                            AND s.GoDown_Id = @godown_Id
+                            AND pm2.Product_Group = pm.Product_Group
+                        GROUP BY s.Product_Id
+                        FOR JSON PATH
+                    ) AS Products
+                FROM 
+                    tbl_Product_Master pm
+                LEFT JOIN tbl_Product_Group pg ON pg.Pro_Group_Id = pm.Product_Group
+                WHERE EXISTS (
+                    SELECT 1 
+                    FROM [dbo].[Stock_Purchase_Sales_GD_Fn_2](@Previous_Date, @fromDate, @toDate) s
+                    WHERE 
+                        s.Product_Id = pm.Product_Id 
+                        AND s.CL_Qty != 0 
+                        AND s.GoDown_Id = @godown_Id
+                )
+                GROUP BY pm.Product_Group, pg.Pro_Group
+                ORDER BY pm.Product_Group;
             `;
-    
-            if (godownId) {
-                query += ` AND GoDown_Id = @godown_Id`;
+
                 request.input('godown_Id', sql.Int, parseInt(godownId));
-                query += ` ORDER BY Product_Id asc`;
             }
-    
+
             const result = await request.query(query);
-    
-   
-            if (result.recordset.length === 0) {
-                 noData(res, 'No records found.');
+
+            if (result.recordset.length > 0) {
+                const parseData = result.recordset.map(obj => ({
+                    ...obj,
+                    Products: JSON.parse(obj.Products),
+
+                }));
+
+                dataFound(res, parseData)
+            } else {
+                noData(res)
             }
-    
-             dataFound(res, result.recordset);
         } catch (error) {
-               
             servError(error, res);
         }
     };

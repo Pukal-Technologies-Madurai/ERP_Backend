@@ -278,10 +278,12 @@ const CostCenter = () => {
                     	GROUP BY d.STJ_Id, stj.Stock_Journal_date
                     ), TRIP_DETAILS AS (
                     	SELECT 
-                    		td.Trip_Id, t.Trip_Date, SUM(td.QTY) AS TotalTonnage
+                    		td.Trip_Id, t.Trip_Date, SUM(trparr.QTY) AS TotalTonnage
                     	FROM tbl_Trip_Details AS td
+                        LEFT JOIN tbl_Trip_Arrival AS trparr
+                            ON trparr.Arr_Id = td.Arrival_Id
                     	LEFT JOIN TRIPSHEET AS t
-                    	ON td.Trip_Id = t.Trip_Id
+                    	    ON td.Trip_Id = t.Trip_Id
                     	WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIPSHEET)
                     	GROUP BY td.Trip_Id, t.Trip_Date
                     ), ST_EMPLOYEES AS (

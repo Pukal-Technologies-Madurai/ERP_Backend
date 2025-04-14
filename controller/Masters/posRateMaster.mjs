@@ -265,7 +265,7 @@ const posBranchController = () => {
                 return failed(res, 'No changes were made, the Master might not exist');
             }
         } catch (e) {
-            return servError(res, e);
+            return servError(e, res);
         }
     };
     
@@ -545,8 +545,7 @@ const posBranchController = () => {
             
     
         } catch (error) {
-        
-            servError(res, error);
+            return servError(error, res);
         }
     };
     
@@ -651,8 +650,7 @@ const posProductList = async (req, res) => {
         });
 
     } catch (error) {
-      
-        servError(res, error);
+        return servError(error, res);
     }
 };
 

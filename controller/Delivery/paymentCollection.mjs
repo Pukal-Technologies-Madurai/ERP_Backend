@@ -344,7 +344,7 @@ const Payments = () => {
 
     const getRetailerBills = async (req, res) => {
         try {
-            const { retailer_id } = req.query; console.log(retailer_id)
+            const { retailer_id } = req.query;
 
             if (!checkIsNumber(retailer_id)) {
                 return invalidInput(res, 'Invalid Retailer ID');
@@ -365,7 +365,12 @@ const Payments = () => {
                             rmt.Route_Id AS Route_Id,
                             rm.Area_Id AS Area_Id,
                             st.Status AS DeliveryStatusName,
-                            sgi.SO_Date AS SaleOrderDate
+                            sgi.SO_Date AS SaleOrderDate,
+                            COALESCE((
+                                SELECT SUM(collected_amount)
+                                FROM tbl_Sales_Receipt_Details_Info
+                                WHERE bill_id = so.Do_Id
+                            ), 0) AS receiptsTotalAmount
                         FROM
                             tbl_Sales_Delivery_Gen_Info AS so
                         LEFT JOIN tbl_Retailers_Master AS rm
@@ -469,11 +474,11 @@ const Payments = () => {
                 }));
 
                 const withPendingAmount = parseData.map(receipt => ({
-                    ...receipt,
                     pendingAmount: Subraction(
                         toNumber(receipt?.Total_Invoice_value), 
                         receipt.Payments.reduce((acc, rec) => Addition(acc, toNumber(rec?.collected_amount)), 0)
-                    )
+                    ),
+                    ...receipt,
                 }))
 
                 dataFound(res, withPendingAmount)

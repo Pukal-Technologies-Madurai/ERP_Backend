@@ -4,7 +4,7 @@ import { dataFound, failed, invalidInput, noData, servError, success } from '../
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import getImage from '../../middleware/getImageIfExist.mjs';
 import fileRemoverMiddleware from '../../middleware/unSyncFile.mjs';
-import { checkIsNumber, toNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, ISOString, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 
@@ -97,8 +97,50 @@ const sfProductController = () => {
             ProductGroup,
             Brand
         } = req.query;
-    
+
+        const today = new Date();
+        const fromDate = ISOString(today);
+        const toDate = fromDate;
+
+        const previousDate = new Date(today);
+        previousDate.setDate(previousDate.getDate() - 1);
+        const previousDateStr = ISOString(previousDate).split('T')[0];
+
         try {
+            const request = new sql.Request();
+
+            request.input('IS_Sold', IS_Sold);
+            request.input('Previous_Date', previousDateStr);
+            request.input('FromDate', fromDate);
+            request.input('ToDate', toDate);
+
+            let whereClause = ` WHERE p.IS_Sold = @IS_Sold`;
+
+            if (Products && Products !== 'ALL') {
+                whereClause += ` AND p.Product_Id = @Products`;
+                request.input('Products', Products);
+            }
+
+            if (ShortName && ShortName !== 'ALL') {
+                whereClause += ` AND p.Short_Name LIKE '%' + @ShortName + '%'`;
+                request.input('ShortName', ShortName);
+            }
+
+            if (PosBrand && PosBrand !== 'ALL') {
+                whereClause += ` AND p.Pos_Brand_Id = @PosBrand`;
+                request.input('PosBrand', PosBrand);
+            }
+
+            if (ProductGroup && ProductGroup !== 'ALL') {
+                whereClause += ` AND p.Product_Group = @ProductGroup`;
+                request.input('ProductGroup', ProductGroup);
+            }
+
+            if (Brand && Brand !== 'ALL') {
+                whereClause += ` AND p.Brand = @Brand`;
+                request.input('Brand', Brand);
+            }
+
             let query = `
                 SELECT 
                     p.*,
@@ -106,53 +148,28 @@ const sfProductController = () => {
                     COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
                     COALESCE(u.Units, 'NOT FOUND') AS Units,
                     COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
-                    COALESCE((
-                        SELECT TOP (1) Product_Rate 
-                        FROM tbl_Pro_Rate_Master 
-                        WHERE Product_Id = p.Product_Id
-                        ORDER BY CONVERT(DATETIME, Rate_Date) DESC
-                    ), 0) AS Item_Rate
+                    COALESCE(p.Product_Rate, 0) AS Item_Rate,
+                    SUM(COALESCE(sps.CL_Qty, 0)) AS CL_Qty
                 FROM 
                     tbl_Product_Master AS p
                     LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
                     LEFT JOIN tbl_Product_Group AS pg ON pg.Pro_Group_Id = p.Product_Group
                     LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
                     LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
-                WHERE IS_Sold = @IS_Sold
+                    LEFT JOIN [dbo].[Stock_Purchase_Sales_GD_Fn_2](@Previous_Date, @FromDate, @ToDate) AS sps
+                        ON sps.Product_Id = p.Product_Id
+                ${whereClause}
+                GROUP BY 
+                    p.Product_Id, p.Product_Code, p.Product_Name, p.Short_Name, p.Product_Description, p.Brand, 
+                    p.Product_Group, p.Pack_Id, p.UOM_Id, p.IS_Sold, p.Display_Order_By, p.Product_Image_Name, 
+                    p.Product_Image_Path, p.HSN_Code, p.Gst_P, p.Cgst_P, p.Sgst_P, p.Igst_P, p.ERP_Id, 
+                    p.Pos_Brand_Id, p.IsActive, p.Product_Rate, p.Max_Rate, 
+                    b.Brand_Name, pg.Pro_Group, u.Units, pck.Pack
+                ORDER BY p.Product_Id DESC
             `;
-    
-            const request = new sql.Request();
-            request.input('IS_Sold', IS_Sold);
-    
-            if (Products && Products !== 'ALL') {
-                query += ` AND p.Product_Id = @Products`;
-                request.input('Products', Products);
-            }
-    
-            if (ShortName && ShortName !== 'ALL') {
-                query += ` AND p.Short_Name LIKE '%' + @ShortName + '%'`;
-                request.input('ShortName', ShortName);
-            }
-    
-            if (PosBrand && PosBrand !== 'ALL') {
-                query += ` AND p.Pos_Brand_Id= @PosBrand`;
-                request.input('PosBrand', PosBrand);
-            }
-    
-            if (ProductGroup && ProductGroup !== 'ALL') {
-                query += ` AND p.Product_Group = @ProductGroup`;
-                request.input('ProductGroup', ProductGroup);
-            }
-    
-            if (Brand && Brand !== 'ALL') {
-                query += ` AND p.Brand = @Brand`;
-                request.input('Brand', Brand);
-            }
-    
-            query += ` ORDER BY p.Product_Id DESC`;
-    
+
             const result = await request.query(query);
-    
+
             if (result.recordset.length) {
                 const withPic = result.recordset.map(o => ({
                     ...o,
@@ -166,7 +183,6 @@ const sfProductController = () => {
             servError(e, res);
         }
     };
-    
 
     const productDropDown = async (req, res) => {
 
@@ -231,16 +247,7 @@ const sfProductController = () => {
                     COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
             	    COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
                     COALESCE(u.Units, 'NOT FOUND') AS Units,
-                    COALESCE((
-                        SELECT 
-                            TOP (1) Product_Rate 
-                        FROM 
-                            RATE AS r
-                        WHERE 
-                            r.Product_Id = p.Product_Id
-                        ORDER BY
-                            CONVERT(DATETIME, r.Rate_Date) DESC
-                    ), 0) AS Item_Rate 
+                    COALESCE(p.Product_Rate, 0) AS Item_Rate
                 FROM 
                     tbl_Product_Master AS p
                     LEFT JOIN BRAND AS b
