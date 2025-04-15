@@ -1,6 +1,6 @@
 import sql from 'mssql';
-import { isEqualNumber, ISOString } from '../../helper_functions.mjs';
-import { invalidInput } from '../../res.mjs';
+import { isEqualNumber, ISOString, toNumber } from '../../helper_functions.mjs';
+import { failed, invalidInput } from '../../res.mjs';
 
 
 const SalesInvoice = () => {
@@ -13,7 +13,7 @@ const SalesInvoice = () => {
                 Retailer_Id, Delivery_Person_Id, Branch_Id,
                 Narration = null, Created_by, Delivery_Location, Payment_Mode, Payment_Status, Delivery_Status,
                 Payment_Ref_No = null, Delivery_Time = null, Product_Array = [], So_No, VoucherType = '',
-                GST_Inclusive = 1, IS_IGST = 0
+                GST_Inclusive = 1, IS_IGST = 0, Expence_Array = [], Staffs_Array = []
             } = req.body;
 
             const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -22,7 +22,12 @@ const SalesInvoice = () => {
             const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
             const isIGST = isEqualNumber(IS_IGST, 1);
             const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-            if (!Do_Date || !Retailer_Id || !Delivery_Person_Id || !Created_by || !VoucherType || !Array.isArray(Product_Array) || Product_Array.length === 0) {
+
+            if (
+                !Do_Date || !Retailer_Id || !Delivery_Person_Id 
+                || !Created_by || !VoucherType 
+                || !Array.isArray(Product_Array) || Product_Array.length === 0
+            ) {
                 return invalidInput(res, 'Please select Required Fields')
             }
 
@@ -69,7 +74,8 @@ const SalesInvoice = () => {
                     FROM tbl_Sales_Delivery_Gen_Info
                     WHERE Do_Year = @Do_Year
                     AND Voucher_Type = @Voucher_Type`
-                )).recordset[0]?.Do_No) + 1;
+                )
+            ).recordset[0]?.Do_No) + 1;
 
             if (!checkIsNumber(Do_No)) throw new Error('Failed to get Order Id');
 
@@ -175,6 +181,12 @@ const SalesInvoice = () => {
                     )`
                 );
 
+            const result = await request;
+
+            if (result.rowsAffected[0] === 0) {
+                throw new Error('Failed to create general info in sales invoice')
+            }
+
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
                 const productDetails = findProductDetails(productsData, product.Item_Id)
@@ -199,15 +211,19 @@ const SalesInvoice = () => {
                     .input('S_No', i + 1)
                     .input('Item_Id', product.Item_Id)
                     .input('Bill_Qty', Bill_Qty)
-                    .input('Item_Rate', Item_Rate)
+                    .input('Act_Qty', toNumber(product?.Act_Qty))
+                    .input('Alt_Act_Qty', toNumber(product?.Alt_Act_Qty))
+                    .input('Item_Rate', toNumber(Item_Rate))
                     .input('GoDown_Id', 1)
-                    .input('Amount', Amount)
+                    .input('Amount', toNumber(Amount))
                     .input('Free_Qty', 0)
                     .input('Total_Qty', Bill_Qty)
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
                     .input('Unit_Id', product.UOM ?? '')
+                    .input('Act_unit_Id', product.Act_unit_Id ?? '')
+                    .input('Alt_Act_Unit_Id', product.Alt_Act_Unit_Id ?? '')
                     .input('Unit_Name', product.Units ?? '')
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', gstPercentage)
@@ -221,12 +237,20 @@ const SalesInvoice = () => {
                     .input('Created_on', new Date())
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Stock_Info (
-                            Do_Date, Delivery_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate,GoDown_Id, Amount, Free_Qty, Total_Qty,
-                            Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate,
+                            Do_Date, Delivery_Order_Id, S_No, Item_Id, 
+                            Bill_Qty, Act_Qty, Alt_Act_Qty, 
+                            Item_Rate, GoDown_Id, Amount, Free_Qty, Total_Qty,
+                            Taxble, Taxable_Rate, HSN_Code, 
+                            Unit_Id, Unit_Name, Act_unit_Id, Alt_Act_Unit_Id, 
+                            Taxable_Amount, Tax_Rate,
                             Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
                         ) VALUES (
-                            @Do_Date, @DeliveryOrder, @S_No, @Item_Id, @Bill_Qty, @Item_Rate,@GoDown_Id, @Amount, @Free_Qty, @Total_Qty,
-                            @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate,
+                            @Do_Date, @DeliveryOrder, @S_No, @Item_Id,
+                            @Bill_Qty, @Act_Qty, @Alt_Act_Qty, 
+                            @Item_Rate, @GoDown_Id, @Amount, @Free_Qty, @Total_Qty,
+                            @Taxble, @Taxable_Rate, @HSN_Code, 
+                            @Unit_Id, @Unit_Name, @Act_unit_Id, @Alt_Act_Unit_Id, 
+                            @Taxable_Amount, @Tax_Rate,
                             @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
                         );`
                     )
@@ -236,6 +260,51 @@ const SalesInvoice = () => {
                 if (result2.rowsAffected[0] === 0) {
                     throw new Error('Failed to create order, Try again.');
                 }
+            }
+
+            if (Array.isArray(Expence_Array) && Expence_Array?.length > 0) {
+                Expence_Array.forEach(async (exp, expInd) => {
+                    const request = new sql.Request(transaction)
+                        .input('Do_Id', Do_Id)
+                        .input('Sno', expInd + 1)
+                        .input('Expence_Id', toNumber(exp?.Expence_Id))
+                        .input('Expence_Value', toNumber(exp?.Expence_Value))
+                        .query(`
+                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                                Do_Id, Sno, Expence_Id, Expence_Value
+                            ) VALUES (
+                                @Do_Id, @Sno, @Expence_Id, @Expence_Value
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Expence row in sales invoice creation')
+                    }
+                })
+            }
+
+            if (Array.isArray(Staffs_Array) && Staffs_Array?.length > 0) {
+                Staffs_Array.forEach(async (exp) => {
+                    const request = new sql.Request(transaction)
+                        .input('Do_Id', Do_Id)
+                        .input('Emp_Id', toNumber(exp?.Emp_Id))
+                        .input('Emp_Type_Id', toNumber(exp?.Emp_Type_Id))
+                        .query(`
+                            INSERT INTO tbl_Sales_Delivery_Staff_Info (
+                                Do_Id, Emp_Id, Emp_Type_Id
+                            ) VALUES (
+                                @Do_Id, @Emp_Id, @Emp_Type_Id
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Staff row in sales invoice creation')
+                    }
+                })
             }
 
             await transaction.commit();
