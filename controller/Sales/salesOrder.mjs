@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { dataFound, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat, createPadString, toNumber } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat, createPadString, toNumber, toArray } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -509,10 +509,8 @@ const SaleOrder = () => {
                     	    LEFT JOIN tbl_Voucher_Type AS v
                     	        ON v.Vocher_Type_Id = so.VoucherType
                         WHERE
-                            CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
-                        	AND
-                        	CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to)
-                    		${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
+                            CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @from) AND CONVERT(DATE, @to)
+                            ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
                             ${(Number(Cancel_status) === 0 || Number(Cancel_status) === 1) ? ' AND so.Cancel_status = @cancel ' : ''}
                             ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
                             ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
@@ -533,6 +531,45 @@ const SaleOrder = () => {
                             LEFT JOIN tbl_Brand_Master AS b
                             ON b.Brand_Id = pm.Brand
                     	WHERE oi.Sales_Order_Id IN (SELECT So_Id FROM SALES)
+                    ), DeliveryGI AS (
+                        SELECT 
+                            so.*,
+                            rm.Retailer_Name AS Retailer_Name,
+                            bm.BranchName AS Branch_Name,
+                            st.Status AS DeliveryStatusName,
+                            COALESCE((
+                                SELECT SUM(collected_amount)
+                                FROM tbl_Sales_Receipt_Details_Info
+                                WHERE bill_id = so.Do_Id
+                            ), 0) AS receiptsTotalAmount
+                        FROM
+                            tbl_Sales_Delivery_Gen_Info AS so
+                        LEFT JOIN tbl_Retailers_Master AS rm
+                            ON rm.Retailer_Id = so.Retailer_Id
+                        LEFT JOIN tbl_Status AS st
+                            ON st.Status_Id = so.Delivery_Status
+                        LEFT JOIN tbl_Branch_Master bm
+                            ON bm.BranchId = so.Branch_Id
+                        WHERE 
+                            so.Do_Id IN (SELECT So_No FROM SALES)
+                    ), DeliveryDI AS (
+                        SELECT
+                            oi.*,
+                            pm.Product_Id,
+                            COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                            COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                            COALESCE(u.Units, 'not available') AS UOM,
+                            COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                        FROM
+                            tbl_Sales_Delivery_Stock_Info AS oi
+                        LEFT JOIN tbl_Product_Master AS pm
+                            ON pm.Product_Id = oi.Item_Id
+                        LEFT JOIN tbl_UOM AS u
+                            ON u.Unit_Id = oi.Unit_Id
+                        LEFT JOIN tbl_Brand_Master AS b
+                            ON b.Brand_Id = pm.Brand
+                        WHERE
+                            oi.Delivery_Order_Id IN (SELECT Do_Id FROM DeliveryGI)
                     )
                     SELECT 
                     	sg.*,
@@ -541,7 +578,23 @@ const SaleOrder = () => {
                     		FROM SALES_DETAILS
                     		WHERE Sales_Order_Id = sg.So_Id
                             FOR JSON PATH
-                    	), '[]') AS Products_List
+                    	), '[]') AS Products_List,
+                    	COALESCE((
+                    		SELECT 
+                                gi.*,
+                                COALESCE((
+                                    SELECT
+                                        sd.*
+                                    FROM
+                                        DeliveryDI AS sd
+                                    WHERE
+                                        sd.Delivery_Order_Id = gi.Do_Id
+                                    FOR JSON PATH
+                                ), '[]') AS InvoicedProducts
+                            FROM DeliveryGI AS gi
+                            ORDER BY gi.Do_Date ASC
+                            FOR JSON PATH
+                    	), '[]') AS ConvertedInvoice
                     FROM SALES AS sg
                     ORDER BY CONVERT(DATETIME, sg.So_Id) DESC`
                 )
@@ -549,18 +602,25 @@ const SaleOrder = () => {
             const result = await request
 
             if (result.recordset.length > 0) {
-                const parsed = result.recordset.map(o => ({
+                const parseFistLeverl = result.recordset.map(o => ({
                     ...o,
-                    Products_List: JSON.parse(o?.Products_List)
-                }))
-                const withImage = parsed.map(o => ({
+                    Products_List: JSON.parse(o?.Products_List),
+                    ConvertedInvoice: JSON.parse(o?.ConvertedInvoice)
+                }));
+
+                const parsed = parseFistLeverl.map(o => ({
                     ...o,
                     Products_List: o?.Products_List.map(oo => ({
                         ...oo,
                         ProductImageUrl: getImage('products', oo?.Product_Image_Name)
+                    })),
+                    ConvertedInvoice: toArray(o?.ConvertedInvoice).map(oo => ({
+                        ...oo,
+                        InvoicedProducts: JSON.parse(oo?.InvoicedProducts),
                     }))
                 }));
-                dataFound(res, withImage);
+
+                dataFound(res, parsed);
             } else {
                 noData(res)
             }
@@ -650,8 +710,6 @@ const SaleOrder = () => {
                 LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sdgi
                     ON sdgi.So_No = so.So_Id
                 WHERE
-              
-             
                     CONVERT(DATE, so.So_Date) >= CONVERT(DATE, @from)
                     AND
                     CONVERT(DATE, so.So_Date) <= CONVERT(DATE, @to)

@@ -2,6 +2,27 @@ import sql from 'mssql';
 import { dataFound, noData, invalidInput, servError } from '../../res.mjs';
 import { isEqualNumber, ISOString } from '../../helper_functions.mjs';
 
+const toArray = (data) => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (typeof data === 'object') return [data];
+    return [];
+};
+
+const cleanArray = (arr) => {
+    console.log(arr)
+
+    if (
+        arr.length === 1 &&
+        typeof arr[0] === 'object' &&
+        Object.keys(arr[0]).length === 0
+    ) {
+        return [];
+    }
+
+    return arr;
+};
+
 const StockAndPurchaseReport = () => {
 
     const stockReport = async (req, res) => {
@@ -110,18 +131,18 @@ const StockAndPurchaseReport = () => {
                 const dayWiseSales = Array.isArray(result.recordsets[2]) ? result.recordsets[2] : [];
 
                 const uniqueKeys = dayWiseSales[0] ? Object.keys(dayWiseSales[0]).map(keys => ({
-                    Column_Name: keys, 
-                    Data_Type: 'number', 
+                    Column_Name: keys,
+                    Data_Type: 'number',
                 })) : [];
-                
+
                 const mergeDataType = [...columnDataTypes, ...uniqueKeys]
 
                 const mergeData = (Array.isArray(result.recordsets[0]) ? result.recordsets[0] : []).map(o => ({
                     ...o,
                     ...dayWiseSales.find(daySales => isEqualNumber(daySales?.sales_party_ledger_id, o?.Ledger_Tally_Id))
                 }))
-                dataFound(res, mergeData, 'dataFound', { 
-                    dataTypeInfo: mergeDataType, 
+                dataFound(res, mergeData, 'dataFound', {
+                    dataTypeInfo: mergeDataType,
                     // daysTransactions: dayWiseSales
                 })
             } else {
@@ -186,7 +207,7 @@ const StockAndPurchaseReport = () => {
                     }
                 })
 
-                dataFound(res, mergedItemWithDayBasedSales, 'dataFound', { 
+                dataFound(res, mergedItemWithDayBasedSales, 'dataFound', {
                     LOSAbstract: losAbs,
                     dateWiseSales: dayBasedSales
                 })
@@ -283,8 +304,14 @@ const StockAndPurchaseReport = () => {
 
             const result = await request;
             if (result.recordset.length > 0) {
-                const stockjournal = JSON.parse(result.recordset[0]?.Stock)
-                dataFound(res, stockjournal)
+                const stockjournal = JSON.parse(result.recordset[0]?.Stock);
+                const removeCurlyBrase = toArray(stockjournal?.Stock_Journal).map(journal => ({
+                    ...journal,
+                    SOURCEENTRIES: cleanArray(toArray(journal?.SOURCEENTRIES)),
+                    DESTINATIONENTRIES: cleanArray(toArray(journal?.DESTINATIONENTRIES))
+                }));
+
+                dataFound(res, { Stock_Journal: removeCurlyBrase });
             } else {
                 noData(res)
             }

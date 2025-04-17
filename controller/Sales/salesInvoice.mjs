@@ -1,6 +1,12 @@
 import sql from 'mssql';
-import { isEqualNumber, ISOString, toNumber } from '../../helper_functions.mjs';
-import { failed, invalidInput } from '../../res.mjs';
+import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Multiplication, RoundNumber, toArray, toNumber } from '../../helper_functions.mjs';
+import { failed, invalidInput, servError, dataFound, noData, sentData, success } from '../../res.mjs';
+import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
+import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
+
+
+
+const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
 
 const SalesInvoice = () => {
@@ -10,10 +16,9 @@ const SalesInvoice = () => {
 
         try {
             const {
-                Retailer_Id, Delivery_Person_Id, Branch_Id,
-                Narration = null, Created_by, Delivery_Location, Payment_Mode, Payment_Status, Delivery_Status,
-                Payment_Ref_No = null, Delivery_Time = null, Product_Array = [], So_No, VoucherType = '',
-                GST_Inclusive = 1, IS_IGST = 0, Expence_Array = [], Staffs_Array = []
+                Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
+                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, 
+                Product_Array = [],  Expence_Array = [], Staffs_Array = []
             } = req.body;
 
             const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -24,8 +29,7 @@ const SalesInvoice = () => {
             const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
 
             if (
-                !Do_Date || !Retailer_Id || !Delivery_Person_Id 
-                || !Created_by || !VoucherType 
+                !checkIsNumber(Retailer_Id) || !checkIsNumber(Created_by) || !checkIsNumber(Voucher_Type)
                 || !Array.isArray(Product_Array) || Product_Array.length === 0
             ) {
                 return invalidInput(res, 'Please select Required Fields')
@@ -53,7 +57,7 @@ const SalesInvoice = () => {
             // GETTING VOUCHER CODE
 
             const voucherData = await new sql.Request()
-                .input('Voucher_Type', VoucherType)
+                .input('Voucher_Type', Voucher_Type)
                 .query(`
                     SELECT Voucher_Code 
                     FROM tbl_Voucher_Type 
@@ -68,7 +72,7 @@ const SalesInvoice = () => {
 
             const Do_No = Number((await new sql.Request()
                 .input('Do_Year', Year_Id)
-                .input('Voucher_Type', VoucherType)
+                .input('Voucher_Type', Voucher_Type)
                 .query(`
                     SELECT COALESCE(MAX(Do_No), 0) AS Do_No
                     FROM tbl_Sales_Delivery_Gen_Info
@@ -89,22 +93,31 @@ const SalesInvoice = () => {
 
             const Do_Id = getDo_Id.MaxId;
 
-            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+            const TotalExpences = toNumber(RoundNumber(
+                toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+            ));
 
-                if (isNotTaxableBill) return Addition(acc, Amount);
-
-                const product = findProductDetails(productsData, item.Item_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-
-                if (isInclusive) {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-                } else {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-                }
-            }, 0))
+            const Total_Invoice_value = RoundNumber(
+                Addition(
+                    TotalExpences,
+                    Product_Array.reduce((acc, item) => {
+                        const itemRate = RoundNumber(item?.Item_Rate);
+                        const billQty = RoundNumber(item?.Bill_Qty);
+                        const Amount = Multiplication(billQty, itemRate);
+        
+                        if (isNotTaxableBill) return Addition(acc, Amount);
+        
+                        const product = findProductDetails(productsData, item.Item_Id);
+                        const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+        
+                        if (isInclusive) {
+                            return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                        } else {
+                            return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                        }
+                    }, 0)
+                )
+            );
 
             const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
@@ -135,49 +148,47 @@ const SalesInvoice = () => {
 
             const request = new sql.Request(transaction)
                 .input('Do_Id', Do_Id)
+                .input('Do_Inv_No', Do_Inv_No)
+                .input('Voucher_Type', Voucher_Type)
                 .input('Do_No', Do_No)
                 .input('Do_Year', Year_Id)
-                .input('Voucher_Type', VoucherType)
-                .input('Do_Inv_No', Do_Inv_No)
+                
                 .input('Do_Date', Do_Date)
-                .input('Retailer_Id', sql.Int, Retailer_Id)
-                .input('Delivery_Person_Id', sql.Int, Number(Delivery_Person_Id) || 0)
                 .input('Branch_Id', sql.Int, Branch_Id)
+                .input('Retailer_Id', Retailer_Id)
+                .input('Delivery_Person_Id', 0)
+                .input('Narration', Narration)
+                .input('So_No', So_No)
+                .input('Cancel_status', toNumber(Cancel_status))
+                
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
+                .input('IS_IGST', isIGST ? 1 : 0)
                 .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
                 .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
                 .input('IGST_Total', isIGST ? totalValueBeforeTax.TotalTax : 0)
-                .input('IS_IGST', isIGST ? 1 : 0)
+                .input('Total_Expences', TotalExpences)
                 .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
-                .input('Total_Invoice_value', Math.round(Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
-                .input('Narration', Narration)
-                .input('Cancel_status', 0)
-                .input('So_No', So_No)
-                .input('Delivery_Status', sql.Int, Delivery_Status)
-                .input('Delivery_Time', sql.NVarChar(50), Delivery_Time)
-                .input('Delivery_Location', sql.NVarChar(250), Delivery_Location)
-                .input('Payment_Ref_No', sql.NVarChar(255), Payment_Ref_No)
-                .input('Payment_Mode', sql.Int, Payment_Mode)
-                .input('Payment_Status', sql.Int, Payment_Status)
+                .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+                
+                .input('Trans_Type', 'INSERT')
                 .input('Alter_Id', sql.BigInt, Alter_Id)
                 .input('Created_by', sql.BigInt, Created_by)
                 .input('Created_on', sql.DateTime, new Date())
-                .input('Trans_Type', 'INSERT')
                 .query(`
                     INSERT INTO tbl_Sales_Delivery_Gen_Info (
-                        Do_Id, Do_No, Do_Inv_No, Voucher_Type, Do_Date, Do_Year, Retailer_Id, Delivery_Person_Id, Branch_Id,
-                        GST_Inclusive, CSGT_Total, SGST_Total, IGST_Total, Round_off,
-                        Total_Before_Tax, Total_Tax, Total_Invoice_value, Narration,
-                        Cancel_status, So_No, Delivery_Status, Delivery_Time, Delivery_Location,
-                        Trans_Type, Payment_Mode, Payment_Ref_No, Payment_Status, Alter_Id, Created_by, Created_on
+                        Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year,
+                        Do_Date, Branch_Id, Retailer_Id, Delivery_Person_Id, Narration, So_No, Cancel_status,
+                        GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
+                        Total_Before_Tax, Total_Tax, Total_Invoice_value,
+                        Trans_Type, Alter_Id, Created_by, Created_on
                     ) VALUES (
-                        @Do_Id, @Do_No, @Do_Inv_No, @Voucher_Type, @Do_Date, @Do_Year, @Retailer_Id, @Delivery_Person_Id, @Branch_Id,
-                        @GST_Inclusive, @CSGT_Total, @SGST_Total, @IGST_Total, @Round_off,
-                        @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Narration,
-                        @Cancel_status, @So_No, @Delivery_Status, @Delivery_Time, @Delivery_Location,
-                        @Trans_Type, @Payment_Mode, @Payment_Ref_No, @Payment_Status, @Alter_Id, @Created_by, @Created_on
+                        @Do_Id, @Do_Inv_No, @Voucher_Type, @Do_No, @Do_Year,
+                        @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
+                        @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
+                        @Total_Before_Tax, @Total_Tax, @Total_Invoice_value,
+                        @Trans_Type, @Alter_Id, @Created_by, @Created_on
                     )`
                 );
 
@@ -187,8 +198,7 @@ const SalesInvoice = () => {
                 throw new Error('Failed to create general info in sales invoice')
             }
 
-            for (let i = 0; i < Product_Array.length; i++) {
-                const product = Product_Array[i];
+            for (const [index, product] of Product_Array.entries()) {
                 const productDetails = findProductDetails(productsData, product.Item_Id)
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
@@ -208,7 +218,7 @@ const SalesInvoice = () => {
                 const request2 = new sql.Request(transaction)
                     .input('Do_Date', Do_Date)
                     .input('DeliveryOrder', Do_Id)
-                    .input('S_No', i + 1)
+                    .input('S_No', index + 1)
                     .input('Item_Id', product.Item_Id)
                     .input('Bill_Qty', Bill_Qty)
                     .input('Act_Qty', toNumber(product?.Act_Qty))
@@ -262,8 +272,10 @@ const SalesInvoice = () => {
                 }
             }
 
-            if (Array.isArray(Expence_Array) && Expence_Array?.length > 0) {
-                Expence_Array.forEach(async (exp, expInd) => {
+            if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
+                for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
+                    const exp = Expence_Array[expInd];
+
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)
                         .input('Sno', expInd + 1)
@@ -280,17 +292,17 @@ const SalesInvoice = () => {
                     const result = await request;
 
                     if (result.rowsAffected[0] === 0) {
-                        throw new Error('Failed to insert Expence row in sales invoice creation')
+                        throw new Error('Failed to insert Expence row in sales invoice creation');
                     }
-                })
+                }
             }
 
-            if (Array.isArray(Staffs_Array) && Staffs_Array?.length > 0) {
-                Staffs_Array.forEach(async (exp) => {
+            if (Array.isArray(Staffs_Array) && Staffs_Array.length > 0) {
+                for (const staff of Staffs_Array) {
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)
-                        .input('Emp_Id', toNumber(exp?.Emp_Id))
-                        .input('Emp_Type_Id', toNumber(exp?.Emp_Type_Id))
+                        .input('Emp_Id', toNumber(staff?.Emp_Id))
+                        .input('Emp_Type_Id', toNumber(staff?.Emp_Type_Id))
                         .query(`
                             INSERT INTO tbl_Sales_Delivery_Staff_Info (
                                 Do_Id, Emp_Id, Emp_Type_Id
@@ -302,9 +314,9 @@ const SalesInvoice = () => {
                     const result = await request;
 
                     if (result.rowsAffected[0] === 0) {
-                        throw new Error('Failed to insert Staff row in sales invoice creation')
+                        throw new Error('Failed to insert Staff row in sales invoice creation');
                     }
-                })
+                }
             }
 
             await transaction.commit();

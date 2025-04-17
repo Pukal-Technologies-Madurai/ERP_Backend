@@ -30,6 +30,9 @@ export const decryptPasswordFun = (str) => {
 // };
 
 
+export const toArray = (array) => Array.isArray(array) ? array : [];
+
+export const isArray = (array) => Array.isArray(array);
 
 export const isValidDate = (dateString) => {
     const timestamp = Date.parse(dateString);
