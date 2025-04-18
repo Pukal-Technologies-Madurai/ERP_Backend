@@ -1716,8 +1716,8 @@ FROM TRIP_MASTER AS tm
         const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
         try {
-            let query =
-                `WITH DELIVERY_DETAILS AS (
+            let query =`
+                WITH DELIVERY_DETAILS AS (
                     SELECT
                         oi.*,
                         pm.Product_Id,
@@ -1730,9 +1730,9 @@ FROM TRIP_MASTER AS tm
                     LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
                     LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
                      WHERE
-                                        CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
-                                        AND
-                                        CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
+                        CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
+                        AND
+                        CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
                 )
                 SELECT 
                     sdgi.*,
@@ -1746,8 +1746,7 @@ FROM TRIP_MASTER AS tm
                     COALESCE((
                         SELECT 
                             sd.*,
-                            	 COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name
-                        
+                            COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name
                         FROM DELIVERY_DETAILS AS sd
                         WHERE sd.Delivery_Order_Id = sdgi.Do_Id
                         FOR JSON PATH
@@ -1762,27 +1761,21 @@ FROM TRIP_MASTER AS tm
                 LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
                 LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
                 WHERE 
-                      CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
-                                        AND
-                                        CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)`;
-
-
+                    CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
+                    AND
+                    CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)`;
 
             if (checkIsNumber(Sales_Person_Id)) {
-                query += `
-                                    AND
-                                    sogi.Sales_Person_Id = @salesPerson`
+                query += `AND sogi.Sales_Person_Id = @salesPerson`
             }
 
 
-            query += `
-                ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
+            query += `ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
 
             const request = new sql.Request();
             request.input('from', Fromdate);
             request.input('to', Todate);
             request.input('salesPerson', Sales_Person_Id)
-
 
             const result = await request.query(query);
 

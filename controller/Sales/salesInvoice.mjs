@@ -17,8 +17,8 @@ const SalesInvoice = () => {
         try {
             const {
                 Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
-                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, 
-                Product_Array = [],  Expence_Array = [], Staffs_Array = []
+                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0,
+                Product_Array = [], Expence_Array = [], Staffs_Array = []
             } = req.body;
 
             const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -104,12 +104,12 @@ const SalesInvoice = () => {
                         const itemRate = RoundNumber(item?.Item_Rate);
                         const billQty = RoundNumber(item?.Bill_Qty);
                         const Amount = Multiplication(billQty, itemRate);
-        
+
                         if (isNotTaxableBill) return Addition(acc, Amount);
-        
+
                         const product = findProductDetails(productsData, item.Item_Id);
                         const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-        
+
                         if (isInclusive) {
                             return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
                         } else {
@@ -152,7 +152,7 @@ const SalesInvoice = () => {
                 .input('Voucher_Type', Voucher_Type)
                 .input('Do_No', Do_No)
                 .input('Do_Year', Year_Id)
-                
+
                 .input('Do_Date', Do_Date)
                 .input('Branch_Id', sql.Int, Branch_Id)
                 .input('Retailer_Id', Retailer_Id)
@@ -160,7 +160,7 @@ const SalesInvoice = () => {
                 .input('Narration', Narration)
                 .input('So_No', So_No)
                 .input('Cancel_status', toNumber(Cancel_status))
-                
+
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
                 .input('IS_IGST', isIGST ? 1 : 0)
                 .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
@@ -171,7 +171,7 @@ const SalesInvoice = () => {
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
-                
+
                 .input('Trans_Type', 'INSERT')
                 .input('Alter_Id', sql.BigInt, Alter_Id)
                 .input('Created_by', sql.BigInt, Created_by)
@@ -280,12 +280,20 @@ const SalesInvoice = () => {
                         .input('Do_Id', Do_Id)
                         .input('Sno', expInd + 1)
                         .input('Expence_Id', toNumber(exp?.Expence_Id))
+                        .input('Cgst', isIGST ? 0 : toNumber(exp?.Cgst))
+                        .input('Cgst_Amo', isIGST ? 0 :  toNumber(exp?.Cgst_Amo))
+                        .input('Sgst', isIGST ? 0 :  toNumber(exp?.Sgst))
+                        .input('Sgst_Amo', isIGST ? 0 :  toNumber(exp?.Sgst_Amo))
+                        .input('Igst', isIGST ? toNumber(exp?.Igst) : 0)
+                        .input('Igst_Amo', isIGST ? toNumber(exp?.Igst_Amo) : 0)
                         .input('Expence_Value', toNumber(exp?.Expence_Value))
                         .query(`
                             INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                                Do_Id, Sno, Expence_Id, Expence_Value
+                                Do_Id, Sno, Expence_Id, Cgst, Cgst_Amo, Sgst, Sgst_Amo, 
+                                Igst, Igst_Amo, Expence_Value
                             ) VALUES (
-                                @Do_Id, @Sno, @Expence_Id, @Expence_Value
+                                @Do_Id, @Sno, @Expence_Id, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, 
+                                @Igst, @Igst_Amo, @Expence_Value
                             )`
                         );
 
@@ -330,8 +338,120 @@ const SalesInvoice = () => {
         }
     }
 
+    const getSalesInvoice = async (req, res) => {
+        try {
+            const
+                Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+                Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    WITH DELIVERY_DETAILS AS (
+                        SELECT
+                            oi.*,
+                            pm.Product_Id,
+                            COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                            COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                            COALESCE(u.Units, 'not available') AS UOM,
+                            COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                        FROM tbl_Sales_Delivery_Stock_Info AS oi
+                        LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                        LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                        LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                        WHERE CONVERT(DATE, oi.Do_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                    )
+                    SELECT 
+                        sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                        sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                        sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
+                        sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                        sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on,
+                        COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                        COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                        COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                        COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
+                        COALESCE((
+                            SELECT sd.*
+                            FROM DELIVERY_DETAILS AS sd
+                            WHERE sd.Delivery_Order_Id = sdgi.Do_Id
+                            FOR JSON PATH
+                        ), '[]') AS Products_List
+                    FROM 
+                        tbl_Sales_Delivery_Gen_Info AS sdgi
+                    LEFT JOIN tbl_Retailers_Master AS rm 
+                        ON rm.Retailer_Id = sdgi.Retailer_Id
+                    LEFT JOIN tbl_Branch_Master AS bm 
+                        ON bm.BranchId = sdgi.Branch_Id
+                    LEFT JOIN tbl_Users AS cb 
+                        ON cb.UserId = sdgi.Created_by
+                    WHERE sdgi.Do_Date BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)`
+                );
+
+            const result = await request;
+
+            if (result.recordset?.length > 0) {
+                const parsed = result.recordset.map(
+                    sales => ({
+                        ...sales,
+                        Products_List: toArray(JSON.parse(sales?.Products_List))
+                    })
+                )
+                dataFound(res, parsed);
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getFilterValues = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    -- Voucher
+                    SELECT DISTINCT rec.voucher_id AS value, v.Voucher_Type AS label
+                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    LEFT JOIN tbl_Voucher_Type AS v
+                    ON v.Vocher_Type_Id = rec.voucher_id
+                    -- Retailer
+                    SELECT DISTINCT rec.retailer_id AS value, r.Retailer_Name AS label
+                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    LEFT JOIN tbl_Retailers_Master AS r
+                    ON r.Retailer_Id = rec.retailer_id
+                    -- Collection Type
+                    SELECT DISTINCT collection_type AS value, collection_type AS label
+                    FROM tbl_Sales_Receipt_General_Info
+                    -- Payment Status
+                    SELECT DISTINCT payment_status AS value, payment_status AS label
+                    FROM tbl_Sales_Receipt_General_Info
+                    -- Collected By
+                    SELECT DISTINCT rec.collected_by AS value, u.Name AS label
+                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    LEFT JOIN tbl_Users AS u
+                    ON u.UserId = rec.collected_by;`
+                );
+
+            const result = await request;
+
+            dataFound(res, [], 'data found', {
+                voucherType: toArray(result.recordsets[0]),
+                retailers: toArray(result.recordsets[1]),
+                collectionType: toArray(result.recordsets[2]),
+                paymentStatus: toArray(result.recordsets[3]),
+                collectedBy: toArray(result.recordsets[4]),
+            });
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createSalesInvoice,
+        getSalesInvoice,
     }
 }
 

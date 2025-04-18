@@ -13,6 +13,7 @@ SalesRouter.get('/saleDelivery', salesOrder.getDeliveryorder);
 SalesRouter.get('/saleOrder/importPosOrders', salesOrder.importFromPos);
 SalesRouter.get('/saleOrder/retailers', salesOrder.getRetailerNameForSearch);
 
+SalesRouter.get('/salesInvoice', salesInvoice.getSalesInvoice);
 SalesRouter.post('/salesInvoice', salesInvoice.createSalesInvoice);
 
 
