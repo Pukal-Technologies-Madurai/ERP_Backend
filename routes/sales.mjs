@@ -13,8 +13,14 @@ SalesRouter.get('/saleDelivery', salesOrder.getDeliveryorder);
 SalesRouter.get('/saleOrder/importPosOrders', salesOrder.importFromPos);
 SalesRouter.get('/saleOrder/retailers', salesOrder.getRetailerNameForSearch);
 
+
+
+SalesRouter.get('/stockInGodown', salesInvoice.getStockInHandGodownWise);
+SalesRouter.get('/salesInvoice/filterValues', salesInvoice.getFilterValues);
+
 SalesRouter.get('/salesInvoice', salesInvoice.getSalesInvoice);
 SalesRouter.post('/salesInvoice', salesInvoice.createSalesInvoice);
+
 
 
 SalesRouter.get('/partyWiseReport', dbconnect, salesEntry.partyWiseSalesReport);

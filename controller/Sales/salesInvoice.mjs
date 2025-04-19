@@ -119,30 +119,44 @@ const SalesInvoice = () => {
                 )
             );
 
-            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+            const totalValueBeforeTax = () => {
+                const productTax = Product_Array.reduce((acc, item) => {
+                    const itemRate = RoundNumber(item?.Item_Rate);
+                    const billQty = RoundNumber(item?.Bill_Qty);
+                    const Amount = Multiplication(billQty, itemRate);
 
-                if (isNotTaxableBill) return {
-                    TotalValue: Addition(acc.TotalValue, Amount),
+                    if (isNotTaxableBill) return {
+                        TotalValue: Addition(acc.TotalValue, Amount),
+                        TotalTax: 0
+                    }
+
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                    const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                    const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                    const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+                    return {
+                        TotalValue, TotalTax
+                    };
+                }, {
+                    TotalValue: 0,
                     TotalTax: 0
-                }
+                });
 
-                const product = findProductDetails(productsData, item.Item_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-
-                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
-                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+                const invoiceExpencesTaxTotal = toArray(Expence_Array).reduce((acc, exp) => Addition(
+                    acc,
+                    IS_IGST ? exp?.Igst_Amo : Addition(exp?.Cgst_Amo, exp?.Sgst_Amo)
+                ), 0);
 
                 return {
-                    TotalValue, TotalTax
-                };
-            }, {
-                TotalValue: 0,
-                TotalTax: 0
-            });
+                    TotalValue: productTax.TotalValue,
+                    TotalTax: Addition(productTax.TotalTax, invoiceExpencesTaxTotal),
+                }
+            };
+
+            const totalValueBeforeTaxValues = totalValueBeforeTax();
 
             await transaction.begin();
 
@@ -163,13 +177,13 @@ const SalesInvoice = () => {
 
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('IGST_Total', isIGST ? totalValueBeforeTax.TotalTax : 0)
+                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2)
+                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2)
+                .input('IGST_Total', isIGST ? totalValueBeforeTaxValues.TotalTax : 0)
                 .input('Total_Expences', TotalExpences)
                 .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
-                .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
-                .input('Total_Tax', totalValueBeforeTax.TotalTax)
+                .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
+                .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
 
                 .input('Trans_Type', 'INSERT')
@@ -281,9 +295,9 @@ const SalesInvoice = () => {
                         .input('Sno', expInd + 1)
                         .input('Expence_Id', toNumber(exp?.Expence_Id))
                         .input('Cgst', isIGST ? 0 : toNumber(exp?.Cgst))
-                        .input('Cgst_Amo', isIGST ? 0 :  toNumber(exp?.Cgst_Amo))
-                        .input('Sgst', isIGST ? 0 :  toNumber(exp?.Sgst))
-                        .input('Sgst_Amo', isIGST ? 0 :  toNumber(exp?.Sgst_Amo))
+                        .input('Cgst_Amo', isIGST ? 0 : toNumber(exp?.Cgst_Amo))
+                        .input('Sgst', isIGST ? 0 : toNumber(exp?.Sgst))
+                        .input('Sgst_Amo', isIGST ? 0 : toNumber(exp?.Sgst_Amo))
                         .input('Igst', isIGST ? toNumber(exp?.Igst) : 0)
                         .input('Igst_Amo', isIGST ? toNumber(exp?.Igst_Amo) : 0)
                         .input('Expence_Value', toNumber(exp?.Expence_Value))
@@ -449,9 +463,32 @@ const SalesInvoice = () => {
         }
     }
 
+    const getStockInHandGodownWise = async (req, res) => {
+        try {
+            const { Godown_Id, Item_Id } = req.query;
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', sql.Date, Fromdate)
+                .input('Todate', sql.Date, Todate)
+                .input('Godown_Id', sql.Int, toNumber(Godown_Id))
+                .input('Item_Id', sql.Int, toNumber(Item_Id))
+                .execute('Stock_Summarry_Search_Godown_New');
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createSalesInvoice,
         getSalesInvoice,
+        getFilterValues,
+        getStockInHandGodownWise,
     }
 }
 
