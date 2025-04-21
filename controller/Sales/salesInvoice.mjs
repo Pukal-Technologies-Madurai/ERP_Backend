@@ -289,11 +289,15 @@ const SalesInvoice = () => {
             if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
                 for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                     const exp = Expence_Array[expInd];
+                    const percentage = isIGST ? toNumber(exp?.Igst) : Addition(exp?.Cgst, exp?.Sgst);
+                    const taxCalc = calculateGSTDetails(exp?.Expence_Value, percentage, taxType);
 
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)
                         .input('Sno', expInd + 1)
-                        .input('Expence_Id', toNumber(exp?.Expence_Id))
+                        .input('Expense_Id', toNumber(exp?.Expense_Id))
+                        .input('Taxable_Amo', toNumber(taxCalc.without_tax))
+                        .input('Gst_P', toNumber(percentage))
                         .input('Cgst', isIGST ? 0 : toNumber(exp?.Cgst))
                         .input('Cgst_Amo', isIGST ? 0 : toNumber(exp?.Cgst_Amo))
                         .input('Sgst', isIGST ? 0 : toNumber(exp?.Sgst))
@@ -303,10 +307,10 @@ const SalesInvoice = () => {
                         .input('Expence_Value', toNumber(exp?.Expence_Value))
                         .query(`
                             INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                                Do_Id, Sno, Expence_Id, Cgst, Cgst_Amo, Sgst, Sgst_Amo, 
+                                Do_Id, Sno, Expense_Id, Taxable_Amo, Gst_P, Cgst, Cgst_Amo, Sgst, Sgst_Amo, 
                                 Igst, Igst_Amo, Expence_Value
                             ) VALUES (
-                                @Do_Id, @Sno, @Expence_Id, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, 
+                                @Do_Id, @Sno, @Expense_Id, @Taxable_Amo, @Gst_P, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, 
                                 @Igst, @Igst_Amo, @Expence_Value
                             )`
                         );
@@ -354,6 +358,7 @@ const SalesInvoice = () => {
 
     const getSalesInvoice = async (req, res) => {
         try {
+            const { Retailer_Id, Cancel_status = 0, Created_by, VoucherType } = req.query;
             const
                 Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
                 Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -361,8 +366,36 @@ const SalesInvoice = () => {
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
+                .input('retailer', Retailer_Id)
+                .input('cancel', Cancel_status)
+                .input('creater', Created_by)
+                .input('VoucherType', VoucherType)
                 .query(`
-                    WITH DELIVERY_DETAILS AS (
+                    WITH DELIVERY_INVOICE_DETAILS AS (
+                        SELECT 
+                            sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                            sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                            sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
+                            sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                            sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on,
+                            COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                            COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                            COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+                        FROM 
+                            tbl_Sales_Delivery_Gen_Info AS sdgi
+                        LEFT JOIN tbl_Retailers_Master AS rm 
+                            ON rm.Retailer_Id = sdgi.Retailer_Id
+                        LEFT JOIN tbl_Branch_Master AS bm 
+                            ON bm.BranchId = sdgi.Branch_Id
+                        LEFT JOIN tbl_Users AS cb 
+                            ON cb.UserId = sdgi.Created_by
+                        WHERE 
+                            sdgi.Do_Date BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                            ${checkIsNumber(Retailer_Id) ? ' AND sdgi.Retailer_Id = @retailer ' : ''}
+                            ${checkIsNumber(Cancel_status) ? ' AND sdgi.Cancel_status = @cancel ' : ''}
+                            ${checkIsNumber(Created_by) ? ' AND sdgi.Created_by = @creater ' : ''}
+                            ${checkIsNumber(VoucherType) ? ' AND sdgi.Voucher_Type = @VoucherType ' : ''}
+                    ), DELIVERY_DETAILS AS (
                         SELECT
                             oi.*,
                             pm.Product_Id,
@@ -374,33 +407,47 @@ const SalesInvoice = () => {
                         LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
                         LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
                         LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-                        WHERE CONVERT(DATE, oi.Do_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                        WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
+                    ), EXPENCE_DETAILS AS (
+                        SELECT exp.*, em.Expence_Name
+                        FROM tbl_Sales_Delivery_Expence_Info AS exp
+                        LEFT JOIN tbl_ERP_Expence_Master AS em
+                            ON em.Id = exp.Expense_Id
+                        WHERE exp.Do_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
+                    ), STAFF_DETAILS AS (
+                        SELECT 
+                            stf.*,
+                            e.Cost_Center_Name AS Involved_Emp_Name,
+                            cc.Cost_Category AS Involved_Emp_Type
+                        FROM tbl_Sales_Delivery_Staff_Info AS stf
+                        LEFT JOIN tbl_ERP_Cost_Center AS e
+                            ON e.Cost_Center_Id = stf.Emp_Id
+                        LEFT JOIN tbl_ERP_Cost_Category AS cc
+                            ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                        WHERE stf.Do_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
                     )
                     SELECT 
-                        sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
-                        sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
-                        sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
-                        sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
-                        sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on,
-                        COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                        COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                        COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                        COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
+                        gi.*,
                         COALESCE((
                             SELECT sd.*
                             FROM DELIVERY_DETAILS AS sd
-                            WHERE sd.Delivery_Order_Id = sdgi.Do_Id
+                            WHERE sd.Delivery_Order_Id = gi.Do_Id
                             FOR JSON PATH
-                        ), '[]') AS Products_List
-                    FROM 
-                        tbl_Sales_Delivery_Gen_Info AS sdgi
-                    LEFT JOIN tbl_Retailers_Master AS rm 
-                        ON rm.Retailer_Id = sdgi.Retailer_Id
-                    LEFT JOIN tbl_Branch_Master AS bm 
-                        ON bm.BranchId = sdgi.Branch_Id
-                    LEFT JOIN tbl_Users AS cb 
-                        ON cb.UserId = sdgi.Created_by
-                    WHERE sdgi.Do_Date BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)`
+                        ), '[]') AS Products_List,
+                        COALESCE((
+                            SELECT exp.*
+                            FROM EXPENCE_DETAILS AS exp
+                            WHERE exp.Do_Id = gi.Do_Id
+                            FOR JSON PATH
+                        ), '[]') AS Expence_Array,
+                        COALESCE((
+                            SELECT stf.*
+                            FROM STAFF_DETAILS AS stf
+                            WHERE stf.Do_Id = gi.Do_Id
+                            FOR JSON PATH
+                        ), '[]') AS Staffs_Array
+                    FROM DELIVERY_INVOICE_DETAILS AS gi
+                    `
                 );
 
             const result = await request;
