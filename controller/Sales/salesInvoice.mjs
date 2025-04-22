@@ -784,26 +784,20 @@ const SalesInvoice = () => {
             const request = new sql.Request()
                 .query(`
                     -- Voucher
-                    SELECT DISTINCT rec.voucher_id AS value, v.Voucher_Type AS label
-                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    SELECT DISTINCT rec.Voucher_Type AS value, v.Voucher_Type AS label
+                    FROM tbl_Sales_Delivery_Gen_Info AS rec
                     LEFT JOIN tbl_Voucher_Type AS v
-                    ON v.Vocher_Type_Id = rec.voucher_id
+                    ON v.Vocher_Type_Id = rec.Voucher_Type
                     -- Retailer
-                    SELECT DISTINCT rec.retailer_id AS value, r.Retailer_Name AS label
-                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    SELECT DISTINCT rec.Retailer_Id AS value, r.Retailer_Name AS label
+                    FROM tbl_Sales_Delivery_Gen_Info AS rec
                     LEFT JOIN tbl_Retailers_Master AS r
-                    ON r.Retailer_Id = rec.retailer_id
-                    -- Collection Type
-                    SELECT DISTINCT collection_type AS value, collection_type AS label
-                    FROM tbl_Sales_Receipt_General_Info
-                    -- Payment Status
-                    SELECT DISTINCT payment_status AS value, payment_status AS label
-                    FROM tbl_Sales_Receipt_General_Info
-                    -- Collected By
-                    SELECT DISTINCT rec.collected_by AS value, u.Name AS label
-                    FROM tbl_Sales_Receipt_General_Info AS rec
+                    ON r.Retailer_Id = rec.Retailer_Id
+                    -- Created By
+                    SELECT DISTINCT rec.Created_by AS value, u.Name AS label
+                    FROM tbl_Sales_Delivery_Gen_Info AS rec
                     LEFT JOIN tbl_Users AS u
-                    ON u.UserId = rec.collected_by;`
+                    ON u.UserId = rec.Created_by;`
                 );
 
             const result = await request;
@@ -811,9 +805,7 @@ const SalesInvoice = () => {
             dataFound(res, [], 'data found', {
                 voucherType: toArray(result.recordsets[0]),
                 retailers: toArray(result.recordsets[1]),
-                collectionType: toArray(result.recordsets[2]),
-                paymentStatus: toArray(result.recordsets[3]),
-                collectedBy: toArray(result.recordsets[4]),
+                createdBy: toArray(result.recordsets[2])
             });
         } catch (e) {
             servError(e, res);
