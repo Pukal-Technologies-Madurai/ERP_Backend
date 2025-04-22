@@ -385,7 +385,6 @@ const DeliveryOrder = () => {
                 .input('doid', Do_Id)
                 .input('date', Do_Date)
                 .input('retailer', Retailer_Id)
-                .input('deliveryperson', 0)
                 .input('branch', Branch_Id)
                 .input('GST_Inclusive', GST_Inclusive)
                 .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
@@ -417,7 +416,6 @@ const DeliveryOrder = () => {
                     SET
                         Do_Date = @date,
                         Retailer_Id = @retailer,
-                        Delivery_Person_Id = @deliveryperson,
                         Branch_Id = @branch,
                         GST_Inclusive = @GST_Inclusive,
                         IS_IGST = @IS_IGST,
@@ -1716,7 +1714,7 @@ FROM TRIP_MASTER AS tm
         const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
         try {
-            let query =`
+            let query = `
                 WITH DELIVERY_DETAILS AS (
                     SELECT
                         oi.*,
