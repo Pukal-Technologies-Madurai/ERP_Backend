@@ -20,6 +20,7 @@ SalesRouter.get('/salesInvoice/filterValues', salesInvoice.getFilterValues);
 
 SalesRouter.get('/salesInvoice', salesInvoice.getSalesInvoice);
 SalesRouter.post('/salesInvoice', salesInvoice.createSalesInvoice);
+SalesRouter.put('/salesInvoice', salesInvoice.updateSalesInvoice);
 
 SalesRouter.get('/presaleOrder/getList',salesOrder.getPresaleOrder)
 SalesRouter.post('/presaleOrder/saleOrderCreationWithPso',salesOrder.saleOrderCreationWithPso)
