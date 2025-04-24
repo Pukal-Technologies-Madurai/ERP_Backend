@@ -17,8 +17,8 @@ const SalesInvoice = () => {
         try {
             const {
                 Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
-                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0,
-                Product_Array = [], Expence_Array = [], Staffs_Array = []
+                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, 
+                Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
             } = req.body;
 
             const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -185,6 +185,7 @@ const SalesInvoice = () => {
                 .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
                 .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+                .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
 
                 .input('Trans_Type', 'INSERT')
                 .input('Alter_Id', sql.BigInt, Alter_Id)
@@ -192,16 +193,16 @@ const SalesInvoice = () => {
                 .input('Created_on', sql.DateTime, new Date())
                 .query(`
                     INSERT INTO tbl_Sales_Delivery_Gen_Info (
-                        Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year,
+                        Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year, 
                         Do_Date, Branch_Id, Retailer_Id, Delivery_Person_Id, Narration, So_No, Cancel_status,
                         GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
-                        Total_Before_Tax, Total_Tax, Total_Invoice_value,
+                        Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name,
                         Trans_Type, Alter_Id, Created_by, Created_on
                     ) VALUES (
                         @Do_Id, @Do_Inv_No, @Voucher_Type, @Do_No, @Do_Year,
                         @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
                         @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
-                        @Total_Before_Tax, @Total_Tax, @Total_Invoice_value,
+                        @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Stock_Item_Ledger_Name,
                         @Trans_Type, @Alter_Id, @Created_by, @Created_on
                     )`
                 );
@@ -377,7 +378,7 @@ const SalesInvoice = () => {
                             sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
                             sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
                             sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
-                            sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on,
+                            sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
                             COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                             COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                             COALESCE(cb.Name, 'unknown') AS Created_BY_Name
@@ -479,7 +480,7 @@ const SalesInvoice = () => {
             const {
                 Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
                 Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0,
-                Product_Array = [], Expence_Array = [], Staffs_Array = []
+                Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name =''
             } = req.body;
 
             const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -588,6 +589,7 @@ const SalesInvoice = () => {
                 .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
                 .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+                .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
                 .input('Trans_Type', 'UPDATE')
                 .input('Alter_Id', sql.BigInt, Alter_Id)
                 .input('Altered_by', sql.BigInt, Altered_by)
@@ -612,6 +614,7 @@ const SalesInvoice = () => {
                         Total_Before_Tax = @Total_Before_Tax,
                         Total_Tax = @Total_Tax,
                         Total_Invoice_value = @Total_Invoice_value,
+                        Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
                         Trans_Type = @Trans_Type,
                         Alter_Id = @Alter_Id,
                         Altered_by = @Altered_by

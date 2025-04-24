@@ -6,9 +6,12 @@ const ReceiptsRouter = express.Router();
 ReceiptsRouter.get('/getRetailersWhoHasBills', paymentCollection.getRetailersWhoHasBills);
 ReceiptsRouter.get('/retailerBills', paymentCollection.getRetailerBills);
 ReceiptsRouter.get('/filterValues', paymentCollection.getFilterValues);
+ReceiptsRouter.get('/creditAccounts', paymentCollection.getCreditAccounts);
 
 ReceiptsRouter.get('/collectionReceipts', paymentCollection.getPayments);
 ReceiptsRouter.post('/collectionReceipts', paymentCollection.PaymentEntry);
+ReceiptsRouter.put('/collectionReceipts', paymentCollection.editCollectionGeneralInfo);
+ReceiptsRouter.delete('/collectionReceipts', paymentCollection.deleteReceiptEntry);
 
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 

@@ -351,6 +351,8 @@ export const filterableText = (text) => {
     }
 }
 
+export const stringCompare = (str1, str2) => filterableText(str1) === filterableText(str2);
+
 export const validValue = (val) => {
     return Boolean(val) ? val : ''
 }

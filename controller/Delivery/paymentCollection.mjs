@@ -1,5 +1,5 @@
-import { dataFound, invalidInput, noData, sentData, servError, success } from "../../res.mjs";
-import { Addition, checkIsNumber, createPadString, filterableText, ISOString, Subraction, toNumber } from '../../helper_functions.mjs';
+import { dataFound, failed, invalidInput, noData, sentData, servError, success } from "../../res.mjs";
+import { Addition, checkIsNumber, createPadString, filterableText, ISOString, Subraction, toNumber, stringCompare } from '../../helper_functions.mjs';
 import sql from 'mssql';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 
@@ -38,7 +38,7 @@ const collectionDetailsInfo = [
     'verified_at'
 ];
 
-const paymentMethods = ['CASH', 'UPI', 'CHECK', 'BANK TRANSFER'];
+const paymentMethods = ['CASH', 'UPI', 'CHEQUE', 'BANK'];
 
 const payTypeAndStatus = [
     {
@@ -114,12 +114,12 @@ const Payments = () => {
                     		ON verify.UserId = gi.collected_by
                     	WHERE 
                             gi.collection_date BETWEEN @Fromdate AND @Todate
-                            ${checkIsNumber(retailer_id)    ? ' AND gi.retailer_id = @retailer_id ' : ''}
-                            ${checkIsNumber(voucher_id)     ? ' AND gi.voucher_id = @voucher_id ' : ''}
-                            ${checkIsNumber(collected_by)   ? ' AND gi.collected_by = @collected_by ' : ''}
-                            ${collection_type               ? ' AND gi.collection_type = @collection_type ' : ''}
-                            ${verify_status                 ? ' AND gi.verify_status = @verify_status ' : ''}
-                            ${payment_status                ? ' AND gi.payment_status = @payment_status ' : ''}
+                            ${checkIsNumber(retailer_id) ? ' AND gi.retailer_id = @retailer_id ' : ''}
+                            ${checkIsNumber(voucher_id) ? ' AND gi.voucher_id = @voucher_id ' : ''}
+                            ${checkIsNumber(collected_by) ? ' AND gi.collected_by = @collected_by ' : ''}
+                            ${collection_type ? ' AND gi.collection_type = @collection_type ' : ''}
+                            ${verify_status ? ' AND gi.verify_status = @verify_status ' : ''}
+                            ${payment_status ? ' AND gi.payment_status = @payment_status ' : ''}
                     ), DETAILSINFO AS (
                     	SELECT 
                             di.*,
@@ -177,6 +177,7 @@ const Payments = () => {
                 retailer_id,
                 payed_by = null,
                 collection_type = 'CASH',
+                collection_account,
                 voucher_id,
                 latitude = null,
                 longitude = null,
@@ -279,6 +280,7 @@ const Payments = () => {
                 .input(`collection_date`, collection_date)
                 .input(`bank_date`, bank_date)
                 .input(`collection_type`, collection_type)
+                .input(`collection_account`, collection_account)
                 .input(`total_amount`, total_amount)
                 .input(`collected_by`, collected_by)
                 .input(`latitude`, latitude)
@@ -291,12 +293,12 @@ const Payments = () => {
                 .query(`
                     INSERT INTO tbl_Sales_Receipt_General_Info (
                         collection_id, collection_inv_no, voucher_id, collection_no, year_id, 
-                        retailer_id, payed_by, collection_date, bank_date, collection_type, total_amount, 
+                        retailer_id, payed_by, collection_date, bank_date, collection_type, collection_account, total_amount, 
                         collected_by, latitude, longitude, created_by, 
                         verify_status, payment_status, narration, verified_by
                     ) VALUES (
                         @collection_id, @collection_inv_no, @voucher_id, @collection_no, @year_id, 
-                        @retailer_id, @payed_by, @collection_date, @bank_date, @collection_type, @total_amount, 
+                        @retailer_id, @payed_by, @collection_date, @bank_date, @collection_type, @collection_account, @total_amount, 
                         @collected_by, @latitude, @longitude, @created_by,
                         @verify_status, @payment_status, @narration, @verified_by
                     )
@@ -317,7 +319,7 @@ const Payments = () => {
                     .input(`collection_id`, collection_id)
                     .input(`bill_id`, bill_id)
                     .input(`bill_amount`, bill_amount)
-                    .input(`collected_amount`,  collected_amount)
+                    .input(`collected_amount`, collected_amount)
                     .query(`
                         INSERT INTO tbl_Sales_Receipt_Details_Info (
                             collection_id, bill_id, bill_amount, collected_amount
@@ -338,6 +340,96 @@ const Payments = () => {
             if (transaction._aborted === false) {
                 await transaction.rollback();
             }
+            servError(e, res);
+        }
+    }
+
+    const editCollectionGeneralInfo = async (req, res) => {
+        try {
+            const {
+                collection_id,
+                collection_type = 'CASH',
+                verify_status = 0,
+                payment_status,
+                collection_account,
+                narration = null,
+                verified_by = null
+            } = req.body;
+
+            const collection_date = req.body?.collection_date ? ISOString(req.body.collection_date) : ISOString();
+            const bank_date = req.body?.bank_date ? ISOString(req.body.bank_date) : null;
+
+            const validation = {
+                collection_id: !checkIsNumber(collection_id),
+                collection_type: !paymentMethods.some(method => stringCompare(method, collection_type)),
+            };
+            const isError = Object.entries(validation).some(([key, value]) => value === true)
+
+            if (isError) {
+                console.log('Validation failed:', validation); // Helpful for debugging
+                return invalidInput(res, 'Invalid or missing data provided.', validation);
+            }
+
+            const request = new sql.Request()
+                .input('collection_id', collection_id)
+                .input('collection_date', collection_date)
+                .input('bank_date', bank_date)
+                .input('collection_type', collection_type)
+                .input('collection_account', collection_account)
+                .input('verify_status', verify_status)
+                .input('payment_status', payment_status)
+                .input('narration', narration)
+                .input('verified_by', checkIsNumber(verified_by) ? verified_by : null)
+                .query(`
+                    UPDATE tbl_Sales_Receipt_General_Info
+                    SET 
+                        collection_date = @collection_date,
+                        bank_date = @bank_date,
+                        collection_type = @collection_type,
+                        collection_account = @collection_account,
+                        verify_status = @verify_status,
+                        payment_status = @payment_status,
+                        narration = @narration,
+                        verified_by = @verified_by
+                    WHERE
+                        collection_id = @collection_id;`
+                );
+
+            const result = await request;
+
+            if (result.rowsAffected[0] > 0) {
+                success(res, 'Changes Saved');
+            } else {
+                failed(res, 'Failed to save changes')
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const deleteReceiptEntry = async (req, res) => {
+        try {
+            const { collection_id } = req.body;
+
+            if (!checkIsNumber(collection_id)) return invalidInput(res, 'collection_id is required');
+
+            const request = new sql.Request()
+                .input('collection_id', collection_id)
+                .query(`
+                    DELETE FROM tbl_Sales_Receipt_General_Info WHERE collection_id = @collection_id;
+                    DELETE FROM tbl_Sales_Receipt_Details_Info WHERE collection_id = @collection_id; 
+                    `);
+
+            const result = await request;
+
+            if (result.rowsAffected[0] > 0) {
+                success(res, 'Receipt deleted successfully');
+            } else {
+                failed(res, 'Failed to delete receipt.')
+            }
+
+        } catch (e) {
             servError(e, res);
         }
     }
@@ -475,7 +567,7 @@ const Payments = () => {
 
                 const withPendingAmount = parseData.map(receipt => ({
                     pendingAmount: Subraction(
-                        toNumber(receipt?.Total_Invoice_value), 
+                        toNumber(receipt?.Total_Invoice_value),
                         receipt.Payments.reduce((acc, rec) => Addition(acc, toNumber(rec?.collected_amount)), 0)
                     ),
                     ...receipt,
@@ -543,7 +635,7 @@ const Payments = () => {
                 );
 
             const result = await request;
-            
+
             dataFound(res, [], 'data found', {
                 voucherType: toArr(result.recordsets[0]),
                 retailers: toArr(result.recordsets[1]),
@@ -556,12 +648,35 @@ const Payments = () => {
         }
     }
 
+    const getCreditAccounts = async (req, res) => {
+        try {
+            const { Type } = req.query;
+
+            const request = new sql.Request()
+                .input('Type', Type)
+                .query(`
+                    SELECT * 
+                    FROM tbl_Bank_Details
+                    ${Type ? ' WHERE Type = @Type; ' : ''}`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
-        getRetailersWhoHasBills,
-        getRetailerBills,
         getPayments,
         PaymentEntry,
-        getFilterValues
+        editCollectionGeneralInfo,
+        deleteReceiptEntry,
+        getRetailersWhoHasBills,
+        getRetailerBills,
+        getFilterValues,
+        getCreditAccounts
     }
 }
 

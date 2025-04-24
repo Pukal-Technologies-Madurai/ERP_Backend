@@ -873,7 +873,7 @@ const SaleOrder = () => {
     const saleOrderCreationWithPso = async (req, res) => {
         const {
             Retailer_Id, Pre_Id,
-            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = 0,
+            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 2, IS_IGST = 0, VoucherType = 0,
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -1042,7 +1042,7 @@ const SaleOrder = () => {
                 const productDetails = findProductDetails(productsData, product.Item_Id)
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
-                const Taxble = gstPercentage > 0 ? 1 : 0;
+                const Taxble = 0;
                 const Bill_Qty = Number(product.Bill_Qty);
                 const Item_Rate = RoundNumber(product.Item_Rate);
                 const Amount = Multiplication(Bill_Qty, Item_Rate);
@@ -1069,10 +1069,10 @@ const SaleOrder = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('Unit_Id', product.UOM ?? '')
-                    .input('Unit_Name', product.Units ?? '')
+                    .input('Unit_Id', 6)
+                    .input('Unit_Name', 'kg')
                     .input('Taxable_Amount', gstInfo.base_amount)
-                    .input('Tax_Rate', gstPercentage)
+                    .input('Tax_Rate', 0)
                     .input('Cgst', cgstPer ?? 0)
                     .input('Cgst_Amo', Cgst_Amo)
                     .input('Sgst', cgstPer ?? 0)
@@ -1129,7 +1129,7 @@ const SaleOrder = () => {
     const updatesaleOrderWithPso = async (req, res) => {
         const {
             Retailer_Id, Pre_Id,
-            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = 0,
+            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 2, IS_IGST = 0, VoucherType = 0,
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -1289,7 +1289,7 @@ const SaleOrder = () => {
                 const productDetails = findProductDetails(productsData, product.Item_Id)
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
-                const Taxble = gstPercentage > 0 ? 1 : 0;
+                const Taxble = 0;
                 const Bill_Qty = Number(product.Bill_Qty);
                 const Item_Rate = RoundNumber(product.Item_Rate);
                 const Amount = Multiplication(Bill_Qty, Item_Rate);
@@ -1316,10 +1316,10 @@ const SaleOrder = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('Unit_Id', product.UOM ?? '')
-                    .input('Unit_Name', product.Units ?? '')
+                    .input('Unit_Id', 6)
+                    .input('Unit_Name', 'kg')
                     .input('Taxable_Amount', gstInfo.base_amount)
-                    .input('Tax_Rate', gstPercentage)
+                    .input('Tax_Rate', 0)
                     .input('Cgst', cgstPer ?? 0)
                     .input('Cgst_Amo', Cgst_Amo)
                     .input('Sgst', cgstPer ?? 0)
@@ -1372,6 +1372,7 @@ const SaleOrder = () => {
             servError(e, res)
         }
     }
+
 
     return {
         saleOrderCreation,
