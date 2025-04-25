@@ -10,7 +10,6 @@ const toArray = (data) => {
 };
 
 const cleanArray = (arr) => {
-    console.log(arr)
 
     if (
         arr.length === 1 &&

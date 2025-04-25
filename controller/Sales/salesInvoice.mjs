@@ -640,6 +640,8 @@ const SalesInvoice = () => {
 
             await deleteDetailsRows; 
 
+            const isSO = checkIsNumber(So_No)
+
             for (const [index, product] of Product_Array.entries()) {
                 const productDetails = findProductDetails(productsData, product.Item_Id)
 
@@ -664,7 +666,7 @@ const SalesInvoice = () => {
                     .input('Item_Id', product.Item_Id)
                     .input('Bill_Qty', Bill_Qty)
                     .input('Act_Qty', toNumber(product?.Act_Qty))
-                    .input('Alt_Act_Qty', toNumber(product?.Alt_Act_Qty))
+                    .input('Alt_Act_Qty', isSO ? toNumber(product?.Alt_Act_Qty) : toNumber(product?.Act_Qty))
                     .input('Item_Rate', toNumber(Item_Rate))
                     .input('GoDown_Id', 1)
                     .input('Amount', toNumber(Amount))
@@ -673,9 +675,9 @@ const SalesInvoice = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('Unit_Id', product.UOM ?? '')
-                    .input('Act_unit_Id', product.Act_unit_Id ?? '')
-                    .input('Alt_Act_Unit_Id', product.Alt_Act_Unit_Id ?? '')
+                    .input('Unit_Id', product.Unit_Id ?? '')
+                    .input('Act_unit_Id', isSO ? product.Act_unit_Id : product.Unit_Id)
+                    .input('Alt_Act_Unit_Id', isSO ? product.Alt_Act_Unit_Id : product.Unit_Id)
                     .input('Unit_Name', product.Units ?? '')
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', gstPercentage)
@@ -685,7 +687,7 @@ const SalesInvoice = () => {
                     .input('Sgst_Amo', Cgst_Amo)
                     .input('Igst', igstPer ?? 0)
                     .input('Igst_Amo', Igst_Amo)
-                    .input('Final_Amo', Math.round(Total_Invoice_value))
+                    .input('Final_Amo', gstInfo.with_tax)
                     .input('Created_on', new Date())
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Stock_Info (
