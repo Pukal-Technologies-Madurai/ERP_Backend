@@ -668,6 +668,49 @@ const Payments = () => {
         }
     }
 
+    const getOutStanding = async (req, res) => {
+        try {
+            const getValidDate = (dateString) => {
+                if (!dateString) return new Date();
+                const date = new Date(dateString);
+                return isNaN(date.getTime()) ? new Date() : date;
+            };
+
+            const fromDate = getValidDate(req.query.Fromdate);
+            const toDate = getValidDate(req.query.Todate);
+
+            const previousDate = new Date(fromDate);
+            previousDate.setDate(previousDate.getDate() - 1);
+
+            const retailer_id = req.query.Retailer_Id ? parseInt(req.query.Retailer_Id) : '';
+            const area_id = req.query.Area_Id ? parseInt(req.query.Area_Id) : '';
+            const route_id = req.query.Route_Id ? parseInt(req.query.Route_Id) : '';
+
+            const request = new sql.Request()
+                .input('PreviousDate', sql.Date, previousDate)
+                .input('Fromdate', sql.Date, fromDate)
+                .input('Todate', sql.Date, toDate)
+                .input('Retailer_Id', sql.VarChar(50), retailer_id.toString())
+                .input('Area_Id', sql.Int, parseInt(area_id) || 0)
+                .input('Route_Id', sql.Int, parseInt(route_id) || 0);
+
+            const result = await request.execute('GetRetailerOutstandingTotals');
+
+            if (result.recordset.length > 0) {
+                const parseData = result.recordset.map(obj => ({
+                    ...obj
+
+                }));
+
+                dataFound(res, parseData);
+            } else {
+                noData(res);
+            }
+        } catch (error) {
+            servError(error, res);
+        }
+    };
+
     return {
         getPayments,
         PaymentEntry,
@@ -676,7 +719,8 @@ const Payments = () => {
         getRetailersWhoHasBills,
         getRetailerBills,
         getFilterValues,
-        getCreditAccounts
+        getCreditAccounts,
+        getOutStanding
     }
 }
 

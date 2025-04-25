@@ -827,11 +827,14 @@ const SaleOrder = () => {
                         st.Bill_Qty,
                         st.Rate AS Item_Rate,
                         st.Amount,
+                        	p.UOM_Id as Unit_Id,
+						uom.Units AS Unit_Name,
                         COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18, 2)), 0) AS PackValue,
                         COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18, 2)) * st.Bill_Qty, 0) AS Tonnage
                     FROM tbl_Pre_Sales_Order_Stock_Info AS st
                     LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = st.Item_Id
                     LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                    LEFT JOIN tbl_UOM AS uom ON uom.Unit_Id=p.UOM_Id
                     WHERE st.Pre_Id = gt.Pre_Id
                     FOR JSON PATH
                 ) AS ProductList,
@@ -1069,8 +1072,8 @@ const SaleOrder = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('Unit_Id', 6)
-                    .input('Unit_Name', 'kg')
+                    .input('Unit_Id', product?.Unit_Id)
+                    .input('Unit_Name', product?.Unit_Name)
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', 0)
                     .input('Cgst', cgstPer ?? 0)
@@ -1316,8 +1319,8 @@ const SaleOrder = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('Unit_Id', 6)
-                    .input('Unit_Name', 'kg')
+                    .input('Unit_Id', product?.Unit_Id)
+                    .input('Unit_Name', product?.Unit_Name)
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', 0)
                     .input('Cgst', cgstPer ?? 0)

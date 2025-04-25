@@ -13,6 +13,8 @@ ReceiptsRouter.post('/collectionReceipts', paymentCollection.PaymentEntry);
 ReceiptsRouter.put('/collectionReceipts', paymentCollection.editCollectionGeneralInfo);
 ReceiptsRouter.delete('/collectionReceipts', paymentCollection.deleteReceiptEntry);
 
+
+ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 
 export default ReceiptsRouter;
