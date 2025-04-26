@@ -14,7 +14,7 @@ const PurchaseOrder = () => {
         const {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
-            Voucher_Type = 0, Stock_Item_Ledger_Name = '',
+            Voucher_Type = 0, Stock_Item_Ledger_Name = '', Round_off
         } = req.body;
 
         const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();
@@ -156,7 +156,7 @@ const PurchaseOrder = () => {
                 .input('SGST_Total', isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2))
                 .input('IGST_Total', isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
+                .input('Round_off', checkIsNumber(Round_off) ? Round_off : RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
                 .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
                 .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
