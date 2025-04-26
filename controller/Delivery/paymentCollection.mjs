@@ -1,5 +1,5 @@
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from "../../res.mjs";
-import { Addition, checkIsNumber, createPadString, filterableText, ISOString, Subraction, toNumber, stringCompare } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, createPadString, filterableText, ISOString, Subraction, toNumber, stringCompare, toArray } from '../../helper_functions.mjs';
 import sql from 'mssql';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 
@@ -345,6 +345,8 @@ const Payments = () => {
     }
 
     const editCollectionGeneralInfo = async (req, res) => {
+        const transaction = new sql.Transaction();
+
         try {
             const {
                 collection_id,
@@ -353,7 +355,8 @@ const Payments = () => {
                 payment_status,
                 collection_account,
                 narration = null,
-                verified_by = null
+                verified_by = null,
+                Receipts = []
             } = req.body;
 
             const collection_date = req.body?.collection_date ? ISOString(req.body.collection_date) : ISOString();
@@ -370,7 +373,9 @@ const Payments = () => {
                 return invalidInput(res, 'Invalid or missing data provided.', validation);
             }
 
-            const request = new sql.Request()
+            await transaction.begin();
+
+            const request = new sql.Request(transaction)
                 .input('collection_id', collection_id)
                 .input('collection_date', collection_date)
                 .input('bank_date', bank_date)
@@ -397,13 +402,37 @@ const Payments = () => {
 
             const result = await request;
 
-            if (result.rowsAffected[0] > 0) {
-                success(res, 'Changes Saved');
-            } else {
-                failed(res, 'Failed to save changes')
+            if (result.rowsAffected[0] === 0) throw new Error('Failed to update receipt general info');
+
+            for (const [index, receipt] of toArray(Receipts).entries()) {
+                const request = new sql.Request(transaction)
+                    .input('collection_id', receipt?.collection_id)
+                    .input('bill_id', receipt?.bill_id)
+                    .input('collected_amount', toNumber(receipt?.collected_amount))
+                    .input('auto_id', receipt?.auto_id)
+                    .query(`
+                        UPDATE tbl_Sales_Receipt_Details_Info
+                        SET 
+                            collected_amount = @collected_amount
+                        WHERE
+                            collection_id = @collection_id
+                            AND bill_id = @bill_id
+                            AND auto_id = @auto_id
+                        `);
+
+                const result = await request;
+
+                if (result.rowsAffected[0] === 0) throw new Error('Failed to update receipt details info');
             }
 
+            await transaction.commit();
+
+            success(res, 'Changes Saved');
+
         } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
             servError(e, res);
         }
     }
