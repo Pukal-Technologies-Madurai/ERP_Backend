@@ -105,9 +105,8 @@ const TallyModules = () => {
                     	p.debit_ledger, ISNULL(dl.ledger_name, '') AS  DebitLedger, 
                         p.debit_amount AS DebitAmt, 
                     	v.voucher_name AS VoucherName
-                    FROM payment_geninfo_ob AS p
-                    LEFT JOIN ledger_ob AS dl
-                    ON dl.tally_id = p.debit_ledger
+                    FROM paymLEFT JOIN ledger_ob AS dl
+                    ON dl.tally_id = p.debit_ledgerent_geninfo_ob AS p
                     LEFT JOIN ledger_ob AS cl
                     ON cl.tally_id = p.credit_ledger_party
                     LEFT JOIN voucher_type_ob AS v

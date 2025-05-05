@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, invalidInput, sentData } from '../../res.mjs';
-import { checkIsNumber, groupData, ISOString } from '../../helper_functions.mjs';
+import { checkIsNumber, groupData, ISOString, toArray } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 import dotenv from 'dotenv';
 
@@ -835,26 +835,7 @@ LEFT JOIN
                     WITH ERP_VOUCHERS AS (
                         SELECT * 
                         FROM tbl_Voucher_Type
-                    ), STOCKJOURNAL AS (
-                    	SELECT 
-                    		COUNT(STJ_Id) AS VoucherBreakUpCount,
-                    		Stock_Journal_Voucher_type AS Voucher_Type,
-                    		'StockJournal' AS ModuleName,
-                    		0 AS Amount,
-                            '/erp/inventory/stockJournal' AS navLink
-                    	FROM tbl_Stock_Journal_Gen_Info
-                    	WHERE Stock_Journal_date BETWEEN @Fromdate AND @Todate
-                    	GROUP BY Stock_Journal_Voucher_type
-                    ), SALEORDER AS (
-                    	SELECT 
-                    		COUNT(So_Id) AS VoucherBreakUpCount,
-                    		'ERP_Voucher' AS Voucher_Type,
-                    		'SaleOrder' AS ModuleName,
-                    		ISNULL(SUM(Total_Invoice_value), 0) AS Amount,
-                            '/erp/sales/saleOrder' AS navLink
-                    	FROM tbl_Sales_Order_Gen_Info 
-                    	WHERE So_Date BETWEEN @Fromdate AND @Todate
-                    ), PURCHASEORDERDETAILS AS (
+                    ), PURCHASE_ORDER_DETAILS AS (
                     	SELECT 
                     		SUM(Weight * Rate) AS OrderAmount,
                     		OrderId
@@ -863,126 +844,297 @@ LEFT JOIN
                     		SELECT Sno
                     		FROM tbl_PurchaseOrderGeneralDetails
                     		WHERE TradeConfirmDate BETWEEN @Fromdate AND @Todate
-                    	)
+                    	) 
                     	GROUP BY OrderId
-                    ), PURCHASEORDER AS (
+                    ), PURCHASE_ORDER AS (
                     	SELECT
                     		COUNT(po.Sno) AS VoucherBreakUpCount,
                     		'ERP_Voucher' AS Voucher_Type,
                     		'PurchaseOrder' AS ModuleName,
                     		SUM(pod.OrderAmount) AS Amount,
-                            '/dataEntry/purchaseOrder' AS navLink
+                            '/erp/purchase/purchaseOrder' AS navLink,
+                    		'ERP' AS dataSource
                     	FROM tbl_PurchaseOrderGeneralDetails AS po
-                    	LEFT JOIN PURCHASEORDERDETAILS AS pod
+                    	LEFT JOIN PURCHASE_ORDER_DETAILS AS pod
                     	ON pod.OrderId = po.Sno
-                    	WHERE TradeConfirmDate BETWEEN @Fromdate AND @Todate
-                    ), PURCHASE AS (
+                    	WHERE 
+                    		po.TradeConfirmDate BETWEEN @Fromdate AND @Todate
+                    		AND po.OrderStatus <> 'Canceled'
+                    ), PURCHASE_INVOICE AS (
                     	SELECT 
-                    		COUNT(PIN_Id) AS VoucherBreakUpCount,
-                    		Voucher_Type AS Voucher_Type,
-                    		'Purchase' AS ModuleName,
-                    		SUM(Total_Invoice_value) AS Amount,
-                            '/erp/purchase/invoice' AS navLink
-                    	FROM tbl_Purchase_Order_Inv_Gen_Info
-                    	WHERE Po_Inv_Date BETWEEN @Fromdate AND @Todate
-                    	GROUP BY Voucher_Type
+                    		COUNT(P.PIN_Id) AS VoucherBreakUpCount,
+                    		V.Voucher_Type AS Voucher_Type,
+                    		'PurchaseInvoice' AS ModuleName,
+                    		SUM(P.Total_Invoice_value) AS Amount,
+                            '/erp/purchase/invoice' AS navLink,
+                    		'ERP' AS dataSource
+                    	FROM tbl_Purchase_Order_Inv_Gen_Info AS P
+                    	LEFT JOIN ERP_VOUCHERS AS V
+                    	ON V.Vocher_Type_Id =  P.Voucher_Type
+                    	WHERE 
+                    		P.Po_Inv_Date BETWEEN @Fromdate AND @Todate
+                    		AND P.Cancel_status = 0
+                    	GROUP BY V.Voucher_Type
+                    ), SALE_ORDER AS (
+                    	SELECT 
+                    		COUNT(S.So_Id) AS VoucherBreakUpCount,
+                    		V.Voucher_Type AS Voucher_Type,
+                    		'SaleOrder' AS ModuleName,
+                    		ISNULL(SUM(Total_Invoice_value), 0) AS Amount,
+                            '/erp/sales/saleOrder' AS navLink,
+                    		'ERP' AS dataSource
+                    	FROM tbl_Sales_Order_Gen_Info AS S
+                    	LEFT JOIN ERP_VOUCHERS AS V
+                    	ON V.Vocher_Type_Id =  S.VoucherType
+                    	WHERE 
+                    		S.So_Date BETWEEN @Fromdate AND @Todate
+                    		AND S.Cancel_status = 0
+                    	GROUP BY V.Voucher_Type
+                    ), SALES_INVOICE AS (
+                    	SELECT 
+                    		COUNT(S.Do_Id) AS VoucherBreakUpCount,
+                    		V.Voucher_Type AS Voucher_Type,
+                    		'SalesInvoice' AS ModuleName,
+                    		ISNULL(SUM(Total_Invoice_value), 0) AS Amount,
+                            '/erp/sales/salesInvoice' AS navLink,
+                    		'ERP' AS dataSource
+                    	FROM tbl_Sales_Delivery_Gen_Info AS S
+                    	LEFT JOIN ERP_VOUCHERS AS V
+                    	ON V.Vocher_Type_Id =  S.Voucher_Type
+                    	WHERE S.Do_Date BETWEEN @Fromdate AND @Todate
+                    	AND S.Cancel_status <> 0
+                    	GROUP BY V.Voucher_Type
+                    ), RECEIPT AS (
+                    	SELECT 
+                    		COUNT(R.collection_id) AS VoucherBreakUpCount,
+                    		V.Voucher_Type AS Voucher_Type,
+                    		'Receipt' AS ModuleName,
+                    		ISNULL(SUM(total_amount), 0) AS Amount,
+                            '/erp/receipts/listReceipts' AS navLink,
+                    		'ERP' AS dataSource
+                    	FROM tbl_Sales_Receipt_General_Info AS R
+                    	LEFT JOIN ERP_VOUCHERS AS V
+                    	ON V.Vocher_Type_Id =  R.voucher_id
+                    	WHERE R.collection_date BETWEEN @Fromdate AND @Todate
+                    	AND R.payment_status <> 'Canceled'
+                    	GROUP BY V.Voucher_Type
+                    ), STOCK_JOURNAL AS (
+                    	SELECT 
+                    		COUNT(TM.Trip_Id) AS VoucherBreakUpCount,
+                    		V.Voucher_Type AS Voucher_Type,
+                    		'StockJournal' AS ModuleName,
+                    		0 AS Amount,
+                            '/erp/inventory/tripSheet' AS navLink,
+                    		'ERP' AS dataSource
+                    	FROM tbl_Trip_Master AS TM
+                    	LEFT JOIN ERP_VOUCHERS AS V
+                    	ON V.Vocher_Type_Id =  TM.VoucherType
+                    	WHERE 
+                    		TM.Trip_Date BETWEEN @Fromdate AND @Todate
+                    		AND TM.TripStatus <> 'Canceled'
+                    	GROUP BY V.Voucher_Type
+                    ), PROCESSING_STOCK_JOURNAL AS (
+                    	SELECT 
+                    		COUNT(P.PR_Id) AS VoucherBreakUpCount,
+                    		V.Voucher_Type AS Voucher_Type,
+                    		'StockJournal' AS ModuleName,
+                    		0 AS Amount,
+                            '/erp/inventory/stockProcessing' AS navLink,
+                    		'ERP' AS dataSource
+                    	FROM tbl_Processing_Gen_Info AS P
+                    	LEFT JOIN ERP_VOUCHERS AS V
+                    	ON V.Vocher_Type_Id =  P.VoucherType
+                    	WHERE 
+                    		P.Process_date BETWEEN @Fromdate AND @Todate
+                    		AND P.PR_Status <> 'Canceled'
+                    	GROUP BY V.Voucher_Type
                     )
-                    SELECT * FROM STOCKJOURNAL
+                    SELECT * FROM PURCHASE_ORDER
+                    UNION ALL 
+                    SELECT * FROM PURCHASE_INVOICE
                     UNION ALL
-                    SELECT * FROM SALEORDER
+                    SELECT * FROM SALE_ORDER
+                    UNION ALL
+                    SELECT * FROM SALES_INVOICE
+                    UNION ALL
+                    SELECT * FROM RECEIPT
                     UNION ALL 
-                    SELECT * FROM PURCHASEORDER
-                    UNION ALL 
-                    SELECT * FROM PURCHASE
-                    `);
+                    SELECT * FROM STOCK_JOURNAL
+                    UNION ALL
+                    SELECT * FROM PROCESSING_STOCK_JOURNAL;`
+                );
 
             const tallyModuleRequest = new sql.Request(req.db)
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
-                    WITH JOURNAL AS (
+                    WITH VoucherType AS (
                     	SELECT 
-                        	COUNT(distinct j.tally_id) AS VoucherBreakUpCount,
-                        	v.voucher_name AS Voucher_Type,
-                        	'Journal' AS ModuleName,
-                            SUM(j.debit_amount) AS Amount,
-                            '/erp/dayBook/details' AS navLink
-                        FROM journal_geninfo_ob AS j
-                        LEFT JOIN voucher_type_ob AS v
-                        ON v.tally_id = j.journal_type_id
+                    		tally_id AS VoucherTypeId,
+                    		voucher_name AS Voucher
+                    	FROM voucher_type_ob
+                    ), PURCHASE_ORDER AS (
+                    	SELECT
+                    		COUNT(po.po_id) AS VoucherBreakUpCount,
+                    		v.Voucher AS Voucher_Type,
+                    		'PurchaseOrder' AS ModuleName,
+                    		SUM(po.total_invoice_value) AS Amount,
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
+                    	FROM purchase_order_geninfo_ob AS po
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = po.purchase_voucher_type_id
+                    	WHERE 
+                    		po.po_date BETWEEN @Fromdate AND @Todate
+                    		AND po.cancel_status = 'No'
+                    	GROUP BY v.Voucher
+                    ), PURCHASE_INVOICE AS (
+                    	SELECT
+                    		COUNT(pui.pur_id) AS VoucherBreakUpCount,
+                    		v.Voucher AS Voucher_Type,
+                    		'PurchaseInvoice' AS ModuleName,
+                    		SUM(pui.total_invoice_value) AS Amount,
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
+                    	FROM purchase_inv_geninfo_ob AS pui
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = pui.purchase_voucher_type_id
+                    	WHERE 
+                    		pui.invoice_date BETWEEN @Fromdate AND @Todate
+                    		AND pui.cancel_status = 'No'
+                    	GROUP BY v.Voucher
+                    ), SALE_ORDER AS (
+                    	SELECT
+                    		COUNT(so.so_id) AS VoucherBreakUpCount,
+                    		v.Voucher AS Voucher_Type,
+                    		'SaleOrder' AS ModuleName,
+                    		SUM(so.total_invoice_value) AS Amount,
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
+                    	FROM sales_order_geninfo_ob AS so
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = so.sales_voucher_type_id
+                    	WHERE 
+                    		so.so_date BETWEEN @Fromdate AND @Todate
+                    		AND so.cancel_status = 'No'
+                    	GROUP BY v.Voucher
+                    ), SALES_INVOICE AS (
+                    	SELECT 
+                        	COUNT(s.tally_id) AS VoucherBreakUpCount,
+                        	Voucher AS Voucher_Type,
+                        	'SalesInvoice' AS ModuleName,
+                            SUM(total_invoice_value) AS Amount,
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
+                        FROM sales_inv_geninfo_ob AS s
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = s.sales_voucher_type_id
                         WHERE 
-                    		j.journal_date BETWEEN @Fromdate AND @Todate
-                    		AND j.credit_amount = 0
-                    	GROUP BY v.voucher_name
+                    		s.invoice_date BETWEEN @Fromdate AND @Todate
+                    		AND s.cancel_status = 'No'
+                        GROUP BY Voucher
                     ), PAYMENT AS (
                     	SELECT 
                         	COUNT(distinct p.tally_id) AS VoucherBreakUpCount,
-                        	v.voucher_name AS Voucher_Type,
+                        	v.Voucher AS Voucher_Type,
                         	'Payment' AS ModuleName,
                             SUM(p.debit_amount) AS Amount,
-                            '/erp/dayBook/details' AS navLink
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
                         FROM payment_geninfo_ob AS p
-                        LEFT JOIN voucher_type_ob AS v
-                        ON v.tally_id = p.payment_type_id
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = p.payment_type_id
                         WHERE 
                     		p.payment_date BETWEEN @Fromdate AND @Todate
                     		AND p.credit_amount = 0
-                    	GROUP BY v.voucher_name
-                    ), CONTRA AS (
-                    	SELECT 
-                        	COUNT(distinct c.tally_id) AS VoucherBreakUpCount,
-                        	v.voucher_name AS Voucher_Type,
-                        	'Contra' AS ModuleName,
-                            SUM(c.debit_amount) AS Amount,
-                            '/erp/dayBook/details' AS navLink
-                        FROM contra_geninfo_ob AS c
-                        LEFT JOIN voucher_type_ob AS v
-                        ON v.tally_id = c.contra_type_id
-                        WHERE 
-                    		c.contra_date BETWEEN @Fromdate AND @Todate
-                    		AND c.credit_amount = 0
-                    	GROUP BY v.voucher_name
+                    		AND p.cancel_status = 'No'
+                    	GROUP BY v.Voucher
                     ), RECEIPT AS (
                     	SELECT 
                         	COUNT(distinct r.tally_id) AS VoucherBreakUpCount,
-                        	v.voucher_name AS Voucher_Type,
+                        	v.Voucher AS Voucher_Type,
                         	'Receipt' AS ModuleName,
                             SUM(r.debit_amount) AS Amount,
-                            '/erp/dayBook/details' AS navLink
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
                         FROM receipt_geninfo_ob AS r
-                        LEFT JOIN voucher_type_ob AS v
-                        ON v.tally_id = r.rcpt_type_id
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = r.rcpt_type_id
                         WHERE 
                     		r.receipt_date BETWEEN @Fromdate AND @Todate
                     		AND r.credit_amount = 0
-                    	GROUP BY v.voucher_name
-                    ), SALES AS (
+                    		AND r.cancel_status = 'No'
+                    	GROUP BY v.Voucher
+                    ), JOURNAL AS (
                     	SELECT 
-                        	COUNT(s.tally_id) AS VoucherBreakUpCount,
-                        	voucher_name AS Voucher_Type,
-                        	'Sales' AS ModuleName,
-                            SUM(total_invoice_value) AS Amount,
-                            '/erp/dayBook/details' AS navLink
-                        FROM sales_inv_geninfo_ob AS s
-                        LEFT JOIN voucher_type_ob AS v
-                        ON v.tally_id = s.sales_voucher_type_id
-                        WHERE invoice_date BETWEEN @Fromdate AND @Todate
-                        GROUP BY voucher_name
+                        	COUNT(distinct j.tally_id) AS VoucherBreakUpCount,
+                        	v.Voucher AS Voucher_Type,
+                        	'Journal' AS ModuleName,
+                            SUM(j.debit_amount) AS Amount,
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
+                        FROM journal_geninfo_ob AS j
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = j.journal_type_id
+                        WHERE 
+                    		j.journal_date BETWEEN @Fromdate AND @Todate
+                    		AND j.credit_amount = 0
+                    		AND j.cancel_status = 'No'
+                    	GROUP BY v.Voucher
+                    ), STOCK_JOURNAL AS (
+                    	SELECT 
+                        	COUNT(sj.stock_jou_id) AS VoucherBreakUpCount,
+                        	v.Voucher AS Voucher_Type,
+                        	'StockJournal' AS ModuleName,
+                            0 AS Amount,
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
+                        FROM stock_journal_geninfo_ob AS sj
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = sj.stock_journal_type_id
+                        WHERE 
+                    		sj.stock_journal_date BETWEEN @Fromdate AND @Todate
+                    		AND sj.cancel_status = 'No'
+                    	GROUP BY v.Voucher
+                    ), CONTRA AS (
+                    	SELECT 
+                        	COUNT(distinct c.tally_id) AS VoucherBreakUpCount,
+                        	v.Voucher AS Voucher_Type,
+                        	'Contra' AS ModuleName,
+                            SUM(c.debit_amount) AS Amount,
+                            '/erp/dayBook/details' AS navLink,
+                    		'TALLY' AS dataSource
+                        FROM contra_geninfo_ob AS c
+                        LEFT JOIN VoucherType AS v
+                        ON v.VoucherTypeId = c.contra_type_id
+                        WHERE 
+                    		c.contra_date BETWEEN @Fromdate AND @Todate
+                    		AND c.credit_amount = 0
+                    		AND c.cancel_status = 'No'
+                    	GROUP BY v.Voucher
                     )
-                    SELECT * FROM SALES
+                    SELECT * FROM PURCHASE_ORDER
                     UNION ALL
-                    SELECT * FROM JOURNAL
+                    SELECT * FROM PURCHASE_INVOICE
+                    UNION ALL
+                    SELECT * FROM SALE_ORDER
+                    UNION ALL
+                    SELECT * FROM SALES_INVOICE
                     UNION ALL
                     SELECT * FROM PAYMENT
                     UNION ALL 
-                    SELECT * FROM CONTRA
-                    UNION ALL
                     SELECT * FROM RECEIPT
-                    `);
+                    UNION ALL
+                    SELECT * FROM JOURNAL
+                    UNION ALL
+                    SELECT * FROM STOCK_JOURNAL
+                    UNION ALL
+                    SELECT * FROM CONTRA;`
+                );
 
             const ERP_Modules = await erpModuleRequest;
             const Tally_Modults = await tallyModuleRequest;
-            const moduleSortList = ['Sales', 'SaleOrder', 'Purchase', 'PurchaseOrder', 'StockJournal', 'Payment', 'Receipt', 'Journal', 'Contra'];
+            const moduleSortList = ['PurchaseOrder', 'PurchaseInvoice', 'SaleOrder', 'SalesInvoice', 'Payment', 'Receipt', 'Journal', 'StockJournal', 'Contra'];
             const mergedArray = [...ERP_Modules.recordset, ...Tally_Modults.recordset];
             const knownModules = mergedArray.filter(m => moduleSortList.includes(m.ModuleName));
             const unknownModules = mergedArray.filter(m => !moduleSortList.includes(m.ModuleName));

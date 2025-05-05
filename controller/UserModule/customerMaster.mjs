@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
+import { servError, dataFound, noData, success, failed, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber } from '../../helper_functions.mjs';
 
 
@@ -40,6 +40,21 @@ const CustomerMaster = () => {
             } else {
                 noData(res);
             }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getCustomerDropDown = async (req, res) => {
+        try {
+            const result = await sql.query(`
+                SELECT Cust_Id AS value, Customer_name AS label, User_Mgt_Id AS UserId
+                FROM tbl_Customer_Master 
+                ORDER BY label ASC`
+            );
+
+            sentData(res, result.recordset);
+
         } catch (e) {
             servError(e, res);
         }
@@ -331,6 +346,7 @@ const CustomerMaster = () => {
 
     return {
         getCustomer,
+        getCustomerDropDown,
         postCustomer,
         editCustomer,
         isCustomer,

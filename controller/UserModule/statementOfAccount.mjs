@@ -112,7 +112,6 @@ const CustomerAPIs = () => {
                 const getPaymentDetails = new sql.Request();
                 getPaymentDetails.input('Cust_Id', obj.Cust_Id);
                 getPaymentDetails.input('Acc_Id', obj.Customer_Ledger_Id);
-                getPaymentDetails.input('Company_Id', obj.Company_Id);
 
                 try {
                     const ResData = await getPaymentDetails.execute('Online_Payment_Invoice_List');

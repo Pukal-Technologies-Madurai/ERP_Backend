@@ -7,6 +7,7 @@ import customerPayments from '../controller/UserModule/payments.mjs'
 const UserModule = express.Router();
 
 UserModule.get('/customer', customerMaster.getCustomer);
+UserModule.get('/customer/dropDown', customerMaster.getCustomerDropDown);
 UserModule.post('/customer', customerMaster.postCustomer);
 UserModule.put('/customer', customerMaster.editCustomer);
 UserModule.get('/customer/isCustomer', customerMaster.isCustomer);

@@ -47,9 +47,9 @@ export function invalidInput(res, message = 'Invalid request', others = {}) {
     })
 }
 
-export const sentData = (res, data = []) => {
+export const sentData = (res, data = [], others = {}) => {
     if (data.length > 0) {
-        dataFound(res, data);
+        dataFound(res, data, 'data found', others);
     } else {
         noData(res);
     }
