@@ -16,11 +16,20 @@ DashboardRouter.get('/usernewEmployeeAbstract', DashboardController.usergetnewEm
 DashboardRouter.get('/dayBook', dbconnect, DashboardController.getDayBookOfERP);
 DashboardRouter.get('/lastSyncedTime', dbconnect, DashboardController.getLastSyncedTime);
 
-DashboardRouter.get('/dayBook/sales', dbconnect, tallyModules.getTallySalesDetails);
-DashboardRouter.get('/dayBook/journal', dbconnect, tallyModules.getTallyJournalDetails);
-DashboardRouter.get('/dayBook/payment', dbconnect, tallyModules.getTallyPaymentDetails);
-DashboardRouter.get('/dayBook/receipt', dbconnect, tallyModules.getTallyReceiptDetails);
-DashboardRouter.get('/dayBook/contra', dbconnect, tallyModules.getTallyContraDetails);
+
+// Day book api
+
+DashboardRouter.get('/dayBook/PurchaseOrder', dbconnect, tallyModules.getTallyPurchaseOrderDetails);
+DashboardRouter.get('/dayBook/PurchaseInvoice', dbconnect, tallyModules.getTallyPurchaseInvoiceDetails);
+
+DashboardRouter.get('/dayBook/SaleOrder', dbconnect, tallyModules.getTallySalesOrderDetails);
+DashboardRouter.get('/dayBook/SalesInvoice', dbconnect, tallyModules.getTallySalesInvoiceDetails);
+
+DashboardRouter.get('/dayBook/StockJournal', dbconnect, tallyModules.getTallyStockJournalDetails);
+DashboardRouter.get('/dayBook/Journal', dbconnect, tallyModules.getTallyJournalDetails);
+DashboardRouter.get('/dayBook/Payment', dbconnect, tallyModules.getTallyPaymentDetails);
+DashboardRouter.get('/dayBook/Receipt', dbconnect, tallyModules.getTallyReceiptDetails);
+DashboardRouter.get('/dayBook/Contra', dbconnect, tallyModules.getTallyContraDetails);
 
 
 export default DashboardRouter;

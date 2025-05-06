@@ -1,7 +1,7 @@
 
 import sql from 'mssql';
-import { invalidInput, dataFound, noData, servError, failed } from '../../res.mjs';
-import { checkIsNumber } from '../../helper_functions.mjs'
+import { invalidInput, dataFound, noData, servError, failed, sentData } from '../../res.mjs';
+import { checkIsNumber, ISOString, toArray } from '../../helper_functions.mjs'
 
 const CustomerAPIs = () => {
 
@@ -83,9 +83,10 @@ const CustomerAPIs = () => {
     }
 
     const paymentInvoiceList = async (req, res) => {
-        const { UserId } = req.query;
-
         try {
+            const { UserId } = req.query;
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+
             if (!checkIsNumber(UserId)) {
                 return invalidInput(res, 'UserId is required')
             }
@@ -112,9 +113,60 @@ const CustomerAPIs = () => {
                 const getPaymentDetails = new sql.Request();
                 getPaymentDetails.input('Cust_Id', obj.Cust_Id);
                 getPaymentDetails.input('Acc_Id', obj.Customer_Ledger_Id);
+                // getPaymentDetails.input('Fromdate', Fromdate);
 
                 try {
                     const ResData = await getPaymentDetails.execute('Online_Payment_Invoice_List');
+                    return ResData.recordset;
+                } catch (e) {
+                    console.error(e);
+                    return [];
+                }
+            }));
+
+            const flattenedArray = recordsetArray.flat();
+            res.status(200).json({ data: flattenedArray, success: true, message: '', isCustomer: true });
+
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
+    const getLOLDropDown = async (req, res) => {
+        try {
+            const request = new sql.query(`
+                SELECT 
+                	Ledger_Tally_Id, 
+                	Ledger_Name,
+                	Actual_Party_Name_with_Brokers
+                FROM tbl_Ledger_LOL
+                ORDER BY Ledger_Name`
+            );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const paymentInvoiceListByFilters = async (req, res) => {
+        try {
+            const { ledgerId } = req.body;
+            const reqDate = req.body?.reqDate ? ISOString(req.body?.reqDate) : ISOString();
+
+            const LedgerArray = toArray(ledgerId);
+
+            if (LedgerArray.length === 0) return invalidInput(res, 'Select Ledger');
+
+            const recordsetArray = await Promise.all(LedgerArray.map(async (obj) => {
+                const getPaymentDetails = new sql.Request();
+                getPaymentDetails.input('Acc_Id', obj.Ledger_Tally_Id);
+                getPaymentDetails.input('Fromdate', reqDate);
+
+                try {
+                    const ResData = await getPaymentDetails.execute('Online_Payment_Invoice_List_TALLY');
                     return ResData.recordset;
                 } catch (e) {
                     console.error(e);
@@ -252,6 +304,8 @@ const CustomerAPIs = () => {
         getBalance,
         StatementOfAccound,
         paymentInvoiceList,
+        getLOLDropDown,
+        paymentInvoiceListByFilters,
         invoiceDetails,
         customerSalesReport,
         salesInfo,

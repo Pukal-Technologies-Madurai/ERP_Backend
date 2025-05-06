@@ -17,9 +17,14 @@ UserModule.get('/customer/payment', customerPayments.PaymentHistory);
 UserModule.post('/customer/payment', customerPayments.manualPayment);
 UserModule.post('/customer/payment/verification', customerPayments.manualPaymentVerification);
 
+UserModule.get('/customer/lol/dropDown', statementOfAccount.getLOLDropDown);
+
 UserModule.get('/customer/getBalance', statementOfAccount.getBalance);
 UserModule.get('/customer/StatementOfAccound', statementOfAccount.StatementOfAccound);
+
 UserModule.get('/customer/paymentInvoiceList', statementOfAccount.paymentInvoiceList);
+UserModule.post('/customer/paymentInvoiceList/filters', statementOfAccount.paymentInvoiceListByFilters);
+
 UserModule.get('/customer/invoiceDetails', statementOfAccount.invoiceDetails);
 UserModule.get('/customer/customerSalesReport', statementOfAccount.customerSalesReport);
 UserModule.get('/customer/salesInfo', statementOfAccount.salesInfo);

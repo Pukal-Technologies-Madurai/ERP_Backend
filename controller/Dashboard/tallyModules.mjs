@@ -4,7 +4,112 @@ import { ISOString } from '../../helper_functions.mjs';
 
 const TallyModules = () => {
 
-    const getTallySalesDetails = async (req, res) => {
+    const getTallyPurchaseOrderDetails = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request(req.db)
+                .input('Fromdate', sql.Date, Fromdate)
+                .input('Todate', sql.Date, Todate)
+                .query(`
+                    SELECT
+                        COALESCE(l.ledger_name, 'Not found') as Purticular,
+                    	p.po_no AS ModuleID, 
+                        p.po_date AS EventDate, 
+                    	v.voucher_name AS VoucherName,
+                    	p.invoice_value_before_tax, p.invoice_value_after_tax, p.round_off, 
+                        p.total_invoice_value, p.narration
+                    FROM purchase_order_geninfo_ob AS p
+                    LEFT JOIN ledger_ob AS l
+                    ON l.tally_id = p.purchase_party_ledger_id
+                    LEFT JOIN voucher_type_ob AS v
+                    ON v.tally_id = p.purchase_voucher_type_id
+                    WHERE 
+                        p.po_date BETWEEN @Fromdate AND @Todate
+                        AND p.cancel_status <> 'Yes'
+                    ORDER BY p.po_date`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getTallyPurchaseInvoiceDetails = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request(req.db)
+                .input('Fromdate', sql.Date, Fromdate)
+                .input('Todate', sql.Date, Todate)
+                .query(`
+                    SELECT
+                        COALESCE(l.ledger_name, 'Not found') as Purticular,
+                    	p.invoice_no AS ModuleID, 
+                        p.invoice_date AS EventDate, 
+                    	v.voucher_name AS VoucherName,
+                    	p.invoice_value_before_tax, p.invoice_value_after_tax, p.round_off, 
+                        p.total_invoice_value, p.narration
+                    FROM purchase_inv_geninfo_ob AS p
+                    LEFT JOIN ledger_ob AS l
+                    ON l.tally_id = p.purchase_party_ledger_id
+                    LEFT JOIN voucher_type_ob AS v
+                    ON v.tally_id = p.purchase_voucher_type_id
+                    WHERE 
+                        p.invoice_date BETWEEN @Fromdate AND @Todate
+                        AND p.cancel_status <> 'Yes'
+                    ORDER BY p.invoice_date`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getTallySalesOrderDetails = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request(req.db)
+                .input('Fromdate', sql.Date, Fromdate)
+                .input('Todate', sql.Date, Todate)
+                .query(`
+                    SELECT
+                        COALESCE(l.ledger_name, 'Not found') as Purticular,
+                    	s.so_no AS ModuleID, 
+                        s.so_date AS EventDate, 
+                    	v.voucher_name AS VoucherName,
+                    	s.invoice_value_before_tax, s.invoice_value_after_tax, s.round_off, 
+                        s.total_invoice_value, s.narration
+                    FROM sales_order_geninfo_ob AS s
+                    LEFT JOIN ledger_ob AS l
+                    ON l.tally_id = s.sales_party_ledger_id
+                    LEFT JOIN voucher_type_ob AS v
+                    ON v.tally_id = s.sales_voucher_type_id
+                    WHERE 
+                        s.so_date BETWEEN @Fromdate AND @Todate
+                        AND s.cancel_status <> 'Yes'
+                    ORDER BY s.so_date`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getTallySalesInvoiceDetails = async (req, res) => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
@@ -29,6 +134,38 @@ const TallyModules = () => {
                         s.invoice_date BETWEEN @Fromdate AND @Todate
                         AND s.cancel_status <> 'Yes'
                     ORDER BY s.invoice_date`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getTallyStockJournalDetails = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request(req.db)
+                .input('Fromdate', sql.Date, Fromdate)
+                .input('Todate', sql.Date, Todate)
+                .query(`
+                    SELECT
+                    	sj.tally_id, 
+                        sj.journal_no AS ModuleID, 
+                        sj.stock_journal_date AS EventDate,
+                    	sj.invoice_no AS TransactionID, 
+                    	v.voucher_name AS VoucherName
+                    FROM stock_journal_geninfo_ob AS sj
+                    LEFT JOIN voucher_type_ob AS v
+                    ON v.tally_id = sj.stock_journal_type_id
+                    WHERE 
+                        sj.stock_journal_date BETWEEN @Fromdate AND @Todate
+                        AND sj.cancel_status <> 'Yes'
+                    ORDER BY sj.tally_id`
                 );
 
             const result = await request;
@@ -226,7 +363,14 @@ const TallyModules = () => {
     }
 
     return {
-        getTallySalesDetails,
+
+        getTallyPurchaseOrderDetails,
+        getTallyPurchaseInvoiceDetails,
+        
+        getTallySalesOrderDetails,
+        getTallySalesInvoiceDetails,
+        
+        getTallyStockJournalDetails,
         getTallyJournalDetails,
         getTallyPaymentDetails,
         getTallyReceiptDetails,
