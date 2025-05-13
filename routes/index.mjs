@@ -15,6 +15,7 @@ import PurchaseRouter from './purchase.mjs'
 import inventoryRouter from './inventory.mjs';
 import DeliveryRouter from './delivery.mjs';
 import ReceiptsRouter from './receipts.mjs';
+import PaymentRouter from './payment.mjs';
 const indexRouter = express.Router();
 
 indexRouter.use('/empAttendance', AttendanceRouter);
@@ -31,7 +32,7 @@ indexRouter.use('/reports', ReportRouter)
 indexRouter.use('/userModule', UserModule);
 indexRouter.use('/delivery', DeliveryRouter);
 indexRouter.use('/receipt', ReceiptsRouter);
-
+indexRouter.use('/payment', PaymentRouter);
 
 
 export default indexRouter;

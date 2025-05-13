@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { dataFound, invalidInput, noData, servError, success } from '../../res.mjs';
+import { dataFound, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
 import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
@@ -778,12 +778,59 @@ const PurchaseOrder = () => {
         }
     }
 
+    const getPendingPayments = async (req, res) => {
+        try {
+            const { Retailer_Id, reqDate, Fromdate, Todate } = req.query;
+
+            const request = new sql.Request()
+                .input('Retailer_Id', Retailer_Id)
+                .input('reqDate', reqDate)
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    SELECT *
+                    FROM (
+                        SELECT 
+                            pig.PIN_Id,
+                            pig.Po_Inv_No,
+                            pig.Po_Inv_Date,
+                            pig.Retailer_Id,
+                            pig.Total_Before_Tax,
+                            pig.Total_Tax, 
+                            pig.Total_Invoice_value,
+                            COALESCE((
+                                SELECT SUM(pb.bill_amount) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                LEFT JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = pb.payment_id
+                                WHERE 
+                                    pb.pay_bill_id = pig.PIN_Id
+                                    AND pb.bill_name = pig.Po_Inv_No
+                                    AND pgi.status <> 0
+                            ), 0) AS Paid_Amount
+                        FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
+                        WHERE 
+                            pig.Cancel_status = 0
+                            ${checkIsNumber(Retailer_Id) ? ' pig.Retailer_Id = @Retailer_Id ' : ''}
+                    ) AS inv
+                    WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         purchaseOrderCreation,
         editPurchaseOrder,
         getPurchaseOrder,
         getVoucherType,
         getStockItemLedgerName,
+        getPendingPayments
     }
 }
 
