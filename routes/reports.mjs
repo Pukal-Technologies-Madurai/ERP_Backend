@@ -4,6 +4,7 @@ import stockAndPurchase from '../controller/Reports/stockAndPurchase.mjs';
 import template from '../controller/Reports/template.mjs';
 import tallyReport from '../controller/Reports/tallyReport.mjs';
 import tripReports from '../controller/Reports/tripReports.mjs';
+import collectionReport from '../controller/Reports/collectionReport.mjs';
 
 const ReportRouter = express.Router();
 
@@ -39,7 +40,11 @@ ReportRouter.post('/tallyReports/qpay/columnVisiblity', tallyReport.postColumnVi
 ReportRouter.get('/tallyReports/qPay/salesTransaction', tallyReport.getSalesData);
 ReportRouter.get('/tallyLOL', tallyReport.getTallyLOLData);
 ReportRouter.get('/tallyLOS', tallyReport.getTallyLOSData);
-ReportRouter.get('/tripReports',tripReports.getReports)
+
+ReportRouter.get('/tripReports', tripReports.getReports);
+ReportRouter.get('/collectionReport',collectionReport.getPayments)
+
+ReportRouter.get('/cummulativeReport',collectionReport.getCummulative)
 
 
 export default ReportRouter;
