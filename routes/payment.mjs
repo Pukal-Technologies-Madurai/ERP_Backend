@@ -8,6 +8,9 @@ PaymentRouter.get('/paymentMaster', paymentMaster.getPayments);
 PaymentRouter.post('/paymentMaster', paymentMaster.createGeneralInfoPayments);
 PaymentRouter.put('/paymentMaster', paymentMaster.updateGeneralInfoPayments);
 
+PaymentRouter.get('/paymentMaster/againstRef', paymentDependency.getPaymentInvoiceBillInfo);
+PaymentRouter.post('/paymentMaster/againstRef', paymentMaster.addAgainstRef);
+
 PaymentRouter.get('/paymentMaster/search', paymentDependency.searchPaymentInvoice);
 PaymentRouter.get('/accountGroup', paymentDependency.getAccountGroups);
 PaymentRouter.get('/accounts', paymentDependency.getAccounts);

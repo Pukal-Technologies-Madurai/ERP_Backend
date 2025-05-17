@@ -211,64 +211,59 @@ const LoginController = () => {
         }
     }
 
-
     const mobileApplogin = async (req, res) => {
         const Auth = req.header('Authorization')
-    
+
         try {
             const query = `
-               SELECT
-                u.UserTypeId,
-                u.UserId,
-                u.UserName,
-                u.Password,
-                u.BranchId,
-                b.BranchName,
-                u.Name,
-                ut.UserType,
-                u.Autheticate_Id,
-                u.Company_Id AS Company_id,
-                c.Company_Name,
-
-                (
-                    SELECT 
-                        TOP (1)
-                        UserId,
-                        SessionId,
-                        InTime
-                    FROM
-                        tbl_User_Log
-                    WHERE
-                        UserId = u.UserId
-                    ORDER BY
-                        InTime DESC
-                        FOR JSON PATH
-                )  AS session
-
-            FROM tbl_Users AS u
-
-            LEFT JOIN tbl_Branch_Master AS b
-            ON b.BranchId = u.BranchId
-
-            LEFT JOIN tbl_User_Type AS ut
-            ON ut.Id = u.UserTypeId
-
-            LEFT JOIN tbl_Company_Master AS c
-            ON c.Company_id = u.Company_Id
-
+             SELECT
+               u.UserTypeId,
+               u.UserId,
+               u.UserName,
+               u.Password,
+               u.BranchId,
+               b.BranchName,
+               u.Name,
+               ut.UserType,
+               u.Autheticate_Id,
+               u.Company_Id AS Company_id,
+               c.Company_Name,
+               cc.Cost_Center_Id,
+               (
+                   SELECT 
+                       TOP (1)
+                       UserId,
+                       SessionId,
+                       InTime
+                   FROM
+                       tbl_User_Log
+                   WHERE
+                       UserId = u.UserId
+                   ORDER BY
+                       InTime DESC
+                   FOR JSON PATH
+               ) AS session
+           FROM tbl_Users AS u
+           LEFT JOIN tbl_Branch_Master AS b
+               ON b.BranchId = u.BranchId
+           LEFT JOIN tbl_User_Type AS ut
+               ON ut.Id = u.UserTypeId
+           LEFT JOIN tbl_Company_Master AS c
+               ON c.Company_id = u.Company_Id
+           LEFT JOIN tbl_ERP_Cost_Center AS cc
+               ON cc.User_Id = u.UserId
             WHERE u.Autheticate_Id = @auth AND UDel_Flag= 0`;
 
-    
             const request = new sql.Request();
             request.input('auth', Auth);
-    
+
             const result = await request.query(query);
-    
+
             if (result.recordset.length > 0) {
                 const userInfo = result.recordset[0];
-             
+
                 const ssid = `${Math.floor(100000 + Math.random() * 900000)}${new Date().toISOString().trim()}`;
-    
+
                 try {
                     const sessionSP = new sql.Request()
                         .input('Id', 0)
@@ -277,12 +272,12 @@ const LoginController = () => {
                         .input('LogStatus', 1)
                         .input('APP_Type', 2)
                         .execute('UserLogSP');
-    
+
                     await sessionSP;
                 } catch (err) {
                     console.error('Error while creating login session:', err);
                 }
-    
+
                 return res.status(200).json({
                     user: userInfo,
                     sessionInfo: {
@@ -296,16 +291,12 @@ const LoginController = () => {
             } else {
                 return failed(res, 'Invalid username or password');
             }
-    
+
         } catch (e) {
             console.error('Error:', e);
             servError(e, res);
         }
     };
-    
-
-
-
 
     return {
         getAccountsInUserPortal,
@@ -313,7 +304,7 @@ const LoginController = () => {
         login,
         getUserByAuth,
         mobileApplogin
-        
+
     }
 }
 

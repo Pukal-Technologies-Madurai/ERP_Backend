@@ -1,33 +1,33 @@
-import { dataFound, noData,servError } from "../../res.mjs";
-import {  checkIsNumber,  ISOString } from '../../helper_functions.mjs';
+import { dataFound, noData, servError } from "../../res.mjs";
+import { checkIsNumber, ISOString } from '../../helper_functions.mjs';
 import sql from 'mssql';
 
 
 
 const TripReports = () => {
     const getPayments = async (req, res) => {
-         try {
-             const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
-             const {
-                 retailer_id = '',
-                 voucher_id = '',
-                 collection_type = '',
-                 verify_status = '',
-                 payment_status = '',
-                 collected_by = '',
-             } = req.query;
- 
-             const request = new sql.Request()
-                 .input('Fromdate', Fromdate)
-                 .input('Todate', Todate)
-                 .input('retailer_id', retailer_id)
-                 .input('voucher_id', voucher_id)
-                 .input('collection_type', collection_type)
-                 .input('verify_status', verify_status)
-                 .input('payment_status', payment_status)
-                 .input('collected_by', collected_by)
-                 .query(`
+        try {
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+            const {
+                retailer_id = '',
+                voucher_id = '',
+                collection_type = '',
+                verify_status = '',
+                payment_status = '',
+                collected_by = '',
+            } = req.query;
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('retailer_id', retailer_id)
+                .input('voucher_id', voucher_id)
+                .input('collection_type', collection_type)
+                .input('verify_status', verify_status)
+                .input('payment_status', payment_status)
+                .input('collected_by', collected_by)
+                .query(`
                      WITH GENERALDETAILS AS (
                         SELECT
                             gi.*,
@@ -89,47 +89,47 @@ const TripReports = () => {
                         ), '[]') AS Receipts
                      FROM GENERALDETAILS AS gi
                      ORDER BY gi.collection_date DESC`
-                 );
- 
-             const result = await request;
- 
-             if (result.recordset.length > 0) {
-                 const parseData = result.recordset.map(gi => ({
-                     ...gi,
-                     Receipts: JSON.parse(gi.Receipts)
-                 }));
- 
-                 dataFound(res, parseData);
-             } else {
-                 noData(res)
-             }
-         } catch (e) {
-             servError(e, res);
-         }
-     }
-     const getCummulative = async (req, res) => {
-         try {
-             const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
-             const {
-                 retailer_id = '',
-                 voucher_id = '',
-                 collection_type = '',
-                 verify_status = '',
-                 payment_status = '',
-                 collected_by = '',
-             } = req.query;
- 
-             const request = new sql.Request()
-                 .input('Fromdate', Fromdate)
-                 .input('Todate', Todate)
-                 .input('retailer_id', retailer_id)
-                 .input('voucher_id', voucher_id)
-                 .input('collection_type', collection_type)
-                 .input('verify_status', verify_status)
-                 .input('payment_status', payment_status)
-                 .input('collected_by', collected_by)
-                 .query(`
+                );
+
+            const result = await request;
+
+            if (result.recordset.length > 0) {
+                const parseData = result.recordset.map(gi => ({
+                    ...gi,
+                    Receipts: JSON.parse(gi.Receipts)
+                }));
+
+                dataFound(res, parseData);
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+    const getCummulative = async (req, res) => {
+        try {
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+            const {
+                retailer_id = '',
+                voucher_id = '',
+                collection_type = '',
+                verify_status = '',
+                payment_status = '',
+                collected_by = '',
+            } = req.query;
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('retailer_id', retailer_id)
+                .input('voucher_id', voucher_id)
+                .input('collection_type', collection_type)
+                .input('verify_status', verify_status)
+                .input('payment_status', payment_status)
+                .input('collected_by', collected_by)
+                .query(`
                     WITH GENERALDETAILS AS (
     SELECT
         gi.*,
@@ -191,31 +191,31 @@ JOIN DETAILSINFO AS receipt ON receipt.collection_id = outergi.collection_id
 GROUP BY collection_type
 ORDER BY collection_type;
 `
-                 );
- 
-           const result = await request;
+                );
 
-if (result.recordset.length > 0) {
-    const parsedData = result.recordset.map(row => {
-      
-        const parsedReceipts = row.retailers ? JSON.parse(row.retailers) : [];
+            const result = await request;
 
-        return {
-            ...row, 
-            retailers: parsedReceipts 
-        };
-    });
-    
-    dataFound(res, parsedData); 
-} else {
-    noData(res);
-}
+            if (result.recordset.length > 0) {
+                const parsedData = result.recordset.map(row => {
+
+                    const parsedReceipts = row.retailers ? JSON.parse(row.retailers) : [];
+
+                    return {
+                        ...row,
+                        retailers: parsedReceipts
+                    };
+                });
+
+                dataFound(res, parsedData);
+            } else {
+                noData(res);
+            }
 
 
-    } catch (e) {
-        servError(e, res);
-    }
-};
+        } catch (e) {
+            servError(e, res);
+        }
+    };
     return {
         getPayments,
         getCummulative

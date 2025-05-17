@@ -22,7 +22,7 @@ DeliveryRouter.get('/deliveryDetailsList',deliverOrder.getDeliveryDetailsListing
 
 DeliveryRouter.delete('/tripDetails',deliveryOrder.tripDetails)
 DeliveryRouter.get('/closingStock',deliveryOrder.getClosingStock);
-
+DeliveryRouter.get('/deliveryOrderListData',deliverOrder.getDeliveryorderList)
 // DeliveryRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 
 export default DeliveryRouter;

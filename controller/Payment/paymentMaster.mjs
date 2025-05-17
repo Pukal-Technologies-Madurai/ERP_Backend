@@ -1,5 +1,5 @@
 import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString } from '../../helper_functions.mjs';
+import { ISOString, checkIsNumber, createPadString, isArray, toArray } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql'
 
@@ -190,7 +190,7 @@ const PaymentMaster = () => {
         try {
 
             const {
-                pay_id, pay_bill_type, remarks, status, 
+                pay_id, pay_bill_type, remarks, status,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount, altered_by
@@ -258,7 +258,57 @@ const PaymentMaster = () => {
     }
 
     const addAgainstRef = async (req, res) => {
+        const transaction = new sql.Transaction();
 
+        try {
+            const { payment_id, payment_no, payment_date, bill_type,  BillsDetails } = req.body;
+
+            if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
+
+            await transaction.begin();
+
+            await new sql.Request(transaction)
+                .input('payment_id', payment_id)
+                .query('DELETE FROM tbl_Payment_Bill_Info WHERE payment_id = @payment_id')
+
+            for (let i = 0; i < BillsDetails.length; i++) {
+                const CurrentBillDetails = BillsDetails[i];
+
+                const request = new sql.Request(transaction)
+                    .input('payment_id', payment_id)
+                    .input('payment_no', payment_no)
+                    .input('payment_date', payment_date)
+                    .input('bill_type', bill_type)
+                    .input('pay_bill_id', CurrentBillDetails?.pay_bill_id)
+                    .input('bill_name', CurrentBillDetails?.bill_name)
+                    .input('bill_amount', CurrentBillDetails?.bill_amount)
+                    .input('DR_CR_Acc_Id', CurrentBillDetails?.DR_CR_Acc_Id)
+                    .input('Debit_Amo', CurrentBillDetails?.Debit_Amo)
+                    .query(`
+                        INSERT INTO tbl_Payment_Bill_Info (
+                            payment_id, payment_no, payment_date, bill_type, pay_bill_id, 
+                            bill_name, bill_amount, DR_CR_Acc_Id, Debit_Amo, Credit_Amo
+                        ) VALUES (
+                            @payment_id, @payment_no, @payment_date, @bill_type, @pay_bill_id, 
+                            @bill_name, @bill_amount, @DR_CR_Acc_Id, @Debit_Amo, 0
+                        );`
+                    );
+                
+                const result = await request;
+
+                if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Payment Bill Details');
+            }
+
+            await transaction.commit();
+
+            success(res, 'Against Reference Saved');
+
+        } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
+            servError(e, res);
+        }
     }
 
     // const get 
@@ -267,6 +317,7 @@ const PaymentMaster = () => {
         getPayments,
         createGeneralInfoPayments,
         updateGeneralInfoPayments,
+        addAgainstRef,
     }
 }
 

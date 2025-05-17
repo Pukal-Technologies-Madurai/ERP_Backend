@@ -790,7 +790,7 @@ const PurchaseOrder = () => {
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
-                    SELECT *
+                    SELECT inv.*
                     FROM (
                         SELECT 
                             pig.PIN_Id,
@@ -801,13 +801,12 @@ const PurchaseOrder = () => {
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,
                             COALESCE((
-                                SELECT SUM(pb.bill_amount) 
+                                SELECT SUM(pb.Debit_Amo) 
                                 FROM tbl_Payment_Bill_Info AS pb
-                                LEFT JOIN tbl_Payment_General_Info AS pgi
+                                JOIN tbl_Payment_General_Info AS pgi
                                     ON pgi.pay_id = pb.payment_id
                                 WHERE 
                                     pb.pay_bill_id = pig.PIN_Id
-                                    AND pb.bill_name = pig.Po_Inv_No
                                     AND pgi.status <> 0
                             ), 0) AS Paid_Amount
                         FROM tbl_Purchase_Order_Inv_Gen_Info AS pig

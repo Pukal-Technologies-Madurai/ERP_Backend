@@ -1493,27 +1493,28 @@ FROM TRIP_MASTER AS tm
             DeliveryList = [],
             EmployeesInvolved = [],
             Branch_Id,
-
+            Do_Date: rawDoDate,
             Created_by,
             GST_Inclusive = 1
         } = req.body;
 
-
-
-        const Do_Date = ISOString(req?.body?.Do_Date);
         const GoDown_Id = req?.body?.GoDown_Id;
         const Trip_Date = req.body.Trip_Date;
-
-
         const transaction = new sql.Transaction();
 
         try {
 
-            if (!Do_Date || !GoDown_Id) {
+            if (!rawDoDate || !GoDown_Id) {
                 return invalidInput(res, 'Please Select Required Fields');
             }
-            await transaction.begin();
 
+            const Do_Date = ISOString(rawDoDate);
+
+            if (!Do_Date || Do_Date === 'Invalid Date') {
+                return invalidInput(res, 'Invalid Do_Date format');
+            }
+
+            await transaction.begin();
 
 
             const yearData = await new sql.Request(transaction).query(
@@ -1622,14 +1623,12 @@ FROM TRIP_MASTER AS tm
 
                 createdDeliveryIds.push(Do_Id);
 
-
                 if (product?.So_Id) {
 
                     await new sql.Request(transaction)
                         .input('So_Id', sql.Int, product.So_Id)
                         .query("UPDATE tbl_Sales_Order_Gen_Info SET isConverted = 2 WHERE So_Id = @So_Id");
                 }
-
 
                 if (product.Products_List && Array.isArray(product.Products_List)) {
 
@@ -1638,7 +1637,6 @@ FROM TRIP_MASTER AS tm
                             console.warn(`Skipping invalid subProduct at index ${j} in delivery ${i}`);
                             continue;
                         }
-
 
                         const stockRequest = new sql.Request(transaction);
                         stockRequest.input('Do_Date', sql.DateTime, new Date(Do_Date));
@@ -1685,21 +1683,16 @@ FROM TRIP_MASTER AS tm
                 }
             }
 
-
             await transaction.commit();
             success(res, 'Delivery Created!')
 
         } catch (error) {
 
             if (transaction._aborted === false) {
-
                 try {
-
                     await transaction.rollback();
                     servError('Transaction rolled back successfully');
-
                 } catch (rollbackError) {
-
                     servError(rollbackError, res);
                 }
             }
@@ -2046,6 +2039,145 @@ FROM TRIP_MASTER AS tm
         }
     };
 
+    const getDeliveryorderList = async (req, res) => {
+        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id } = req.query;
+
+        try {
+
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            let query = `              
+                        WITH SALES_DETAILS AS (
+                            SELECT
+                                oi.*,
+                                pm.Product_Id,
+                                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                                COALESCE(u.Units, 'not available') AS UOM,
+                                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                            FROM tbl_Sales_Delivery_Stock_Info AS oi
+                            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                        ),
+                        SALES_ORDER_COUNT_SAME_DAY AS (
+                            SELECT
+                                SO_Date,
+                                COUNT(*) AS Order_Count
+                            FROM tbl_Sales_Order_Gen_Info
+                            GROUP BY SO_Date
+                        ),
+                        PENDING_SALES_ORDERS AS (
+                            SELECT
+                                SO_Date,
+                                COUNT(*) AS PendingSalesOrderCount
+                            FROM tbl_Sales_Order_Gen_Info
+                            WHERE isConverted = 1
+                            GROUP BY SO_Date
+                        ),
+                        PREVIOUS_DAY_SALES_ORDER_COUNT AS (
+                            SELECT COUNT(*) AS PreviousDaySalesOrderCount
+                            FROM tbl_Sales_Order_Gen_Info
+                            WHERE CAST(SO_Date AS DATE) = (
+                                SELECT MAX(CAST(SO_Date AS DATE))
+                                FROM tbl_Sales_Order_Gen_Info
+                                WHERE CAST(SO_Date AS DATE) < CAST(@from AS DATE)
+                            )
+                        )
+                        SELECT DISTINCT
+                            so.Do_Id AS Delivery_Order_id,
+                            so.*,
+                            rm.Retailer_Name,
+                            erpUser.Name AS Delivery_Person_Name,
+                            bm.BranchName AS Branch_Name,
+                            cb.Name AS Created_BY_Name,
+                            rmt.Route_Name AS Routename,
+                            am.Area_Name AS AreaName,
+                            rmt.Route_Id,
+                            rm.Area_Id,
+                            st.Status AS DeliveryStatusName,
+                            sgi.SO_Date AS SalesDate,
+                            soc.Order_Count AS SameDaySalesOrderCount,
+                            pso.PendingSalesOrderCount,
+                            pdsoc.PreviousDaySalesOrderCount,
+                            COALESCE((
+                                SELECT sd.*
+                                FROM SALES_DETAILS AS sd
+                                WHERE sd.Delivery_Order_Id = so.Do_Id
+                                FOR JSON PATH
+                            ), '[]') AS Products_List
+                        FROM tbl_Sales_Delivery_Gen_Info AS so
+                        LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+                        LEFT JOIN tbl_Status AS st ON st.Status_Id = so.Delivery_Status
+                        LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Delivery_Person_Id
+                        LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+                        LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+                        LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
+                        LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+                        LEFT JOIN tbl_Sales_Order_Gen_Info AS sgi ON sgi.So_Id = so.So_No
+                        LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = so.Do_Id
+                        LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = so.Delivery_Person_Id
+                        LEFT JOIN tbl_Users AS erpUser ON erpUser.UserId = ecc.User_Id
+                        LEFT JOIN SALES_ORDER_COUNT_SAME_DAY soc ON soc.SO_Date = CAST(so.Do_Date AS DATE)
+                        LEFT JOIN PENDING_SALES_ORDERS pso ON pso.SO_Date = CAST(so.Do_Date AS DATE)
+                        LEFT JOIN PREVIOUS_DAY_SALES_ORDER_COUNT pdsoc ON 1 = 1
+                        WHERE CAST(so.Do_Date AS DATE) = @from
+                                  `;
+
+            // Add optional filters
+            if (Retailer_Id) {
+                query += ` AND so.Retailer_Id = @retailer`;
+            }
+            if (Created_by) {
+                query += ` AND so.Created_by = @creater`;
+            }
+            if (Delivery_Person_Id) {
+                query += ` AND erpUser.UserId = @Delivery_Person_Id`;
+            }
+            if (Route_Id) {
+                query += ` AND rmt.Route_Id = @Route_Id`;
+            }
+            if (Area_Id) {
+                query += ` AND rm.Area_Id = @Area_Id`;
+            }
+
+
+            query += ` ORDER BY so.Do_Id DESC`;
+
+            const request = new sql.Request();
+            request.input('from', Fromdate);
+            request.input('to', Todate);
+            request.input('retailer', Retailer_Id);
+            request.input('cancel', Cancel_status);
+            request.input('creater', Created_by);
+            request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
+            request.input('Route_Id', sql.Int, Route_Id);
+            request.input('Area_Id', sql.Int, Area_Id);
+
+            const result = await request.query(query);
+
+            if (result.recordset.length > 0) {
+                const parsed = result.recordset.map(o => ({
+                    ...o,
+                    Products_List: o?.Products_List ? JSON.parse(o.Products_List) : []
+                }));
+                const withImage = parsed.map(o => ({
+                    ...o,
+                    Products_List: o?.Products_List.map(oo => ({
+                        ...oo,
+                        ProductImageUrl: getImage('products', oo?.Product_Image_Name)
+                    }))
+                }));
+                dataFound(res, withImage);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
 
     return {
         salesDeliveryCreation,
@@ -2061,7 +2193,8 @@ FROM TRIP_MASTER AS tm
         getDeliveryDetails,
         getDeliveryDetailsListing,
         tripDetails,
-        getClosingStock
+        getClosingStock,
+        getDeliveryorderList
     }
 }
 
