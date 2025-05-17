@@ -780,10 +780,12 @@ const PurchaseOrder = () => {
 
     const getPendingPayments = async (req, res) => {
         try {
-            const { Retailer_Id, reqDate, Fromdate, Todate } = req.query;
+            const { Acc_Id, reqDate, Fromdate, Todate } = req.query;
+
+            if (!checkIsNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
 
             const request = new sql.Request()
-                .input('Retailer_Id', Retailer_Id)
+                .input('Acc_Id', Acc_Id)
                 .input('reqDate', reqDate)
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
@@ -809,9 +811,13 @@ const PurchaseOrder = () => {
                                     AND pgi.status <> 0
                             ), 0) AS Paid_Amount
                         FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
+                        JOIN tbl_Retailers_Master AS r
+                        ON r.Retailer_Id = pig.Retailer_Id
+                        JOIN tbl_Account_Master AS a
+                        ON a.ERP_Id = R.ERP_Id
                         WHERE 
                             pig.Cancel_status = 0
-                            ${checkIsNumber(Retailer_Id) ? ' pig.Retailer_Id = @Retailer_Id ' : ''}
+                            ${checkIsNumber(Acc_Id) ? ' AND a.Acc_Id = @Acc_Id ' : ''}
                     ) AS inv
                     WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
                 );
