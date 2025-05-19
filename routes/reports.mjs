@@ -19,6 +19,8 @@ ReportRouter.get('/tally-test-api-sales', stockAndPurchase.externalAPI);
 ReportRouter.get('/tally-test-api-purchase', stockAndPurchase.externalAPIPurchase);
 ReportRouter.get('/tally-test-api-saleOrder', stockAndPurchase.externalAPISaleOrder);
 ReportRouter.get('/tally-test-api-stockJournal', stockAndPurchase.externalAPIStockJournal);
+ReportRouter.get('/tally-test-api-receipt', stockAndPurchase.externalAPIReceipt);
+ReportRouter.get('/tally-test-api-payment', stockAndPurchase.externalAPIPayment);
 
 
 ReportRouter.get('/template', template.getTemplates);

@@ -319,6 +319,53 @@ const StockAndPurchaseReport = () => {
         }
     }
 
+    const externalAPIReceipt = async (req, res) => {
+        try {
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', req.query.Fromdate)
+                .input('Todate', req.query.Todate)
+                .execute('Online_Receipt_API');
+
+            const result = await request;
+
+            if (result.recordset.length > 0) {
+                const receipt = JSON.parse(result.recordset[0]?.Receipt);
+
+                dataFound(res, toArray(receipt.Receipt));
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
+    const externalAPIPayment = async (req, res) => {
+        try {
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', req.query.Fromdate)
+                .input('Todate', req.query.Todate)
+                .execute('Online_Payment_API')
+
+            const result = await request;
+            if (result.recordset.length > 0) {
+                const payment = JSON.parse(result.recordset[0]?.Receipt);
+
+                dataFound(res, toArray(payment?.Payment));
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
     return {
         stockReport,
         liveStockReport,
@@ -330,6 +377,8 @@ const StockAndPurchaseReport = () => {
         externalAPIPurchase,
         externalAPISaleOrder,
         externalAPIStockJournal,
+        externalAPIReceipt,
+        externalAPIPayment,
     }
 }
 

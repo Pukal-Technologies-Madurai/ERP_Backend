@@ -114,7 +114,7 @@ const PaymentDataDependency = () => {
                     FROM tbl_Payment_Bill_Info
                     GROUP BY pay_bill_id
                 ) AS pb ON pb.pay_bill_id = pbi.pay_bill_id
-                WHERE pbi.payment_id = 1;`
+                WHERE pbi.payment_id = @payment_id;`
 
             const request = new sql.Request()
                 .input('payment_id', payment_id)

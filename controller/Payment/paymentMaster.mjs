@@ -6,7 +6,7 @@ import sql from 'mssql'
 const validations = (obj) => {
     return {
         payment_voucher_type_id: checkIsNumber(obj.payment_voucher_type_id),
-        pay_bill_type: typeof obj.pay_bill_type === 'string' && obj.pay_bill_type.trim() !== '',
+        pay_bill_type: checkIsNumber(obj.pay_bill_type) ? obj.pay_bill_type > 0 && obj.pay_bill_type < 5 : false,
         created_by: checkIsNumber(obj?.created_by),
         credit_ledger: checkIsNumber(obj?.credit_ledger),
         debit_amount: checkIsNumber(obj?.debit_amount),
@@ -261,7 +261,7 @@ const PaymentMaster = () => {
         const transaction = new sql.Transaction();
 
         try {
-            const { payment_id, payment_no, payment_date, bill_type,  BillsDetails } = req.body;
+            const { payment_id, payment_no, payment_date, bill_type, BillsDetails } = req.body;
 
             if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
 
@@ -293,7 +293,7 @@ const PaymentMaster = () => {
                             @bill_name, @bill_amount, @DR_CR_Acc_Id, @Debit_Amo, 0
                         );`
                     );
-                
+
                 const result = await request;
 
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Payment Bill Details');
