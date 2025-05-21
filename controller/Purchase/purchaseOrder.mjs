@@ -806,8 +806,10 @@ const PurchaseOrder = () => {
                                 JOIN tbl_Payment_General_Info AS pgi
                                     ON pgi.pay_id = pb.payment_id
                                 WHERE 
-                                    pb.pay_bill_id = pig.PIN_Id
-                                    AND pgi.status <> 0
+                                    pgi.status <> 0
+                                    AND pgi.pay_bill_type = 1
+                                    AND pb.pay_bill_id = pig.PIN_Id
+                                    AND pb.bill_name = pig.Po_Inv_No
                             ), 0) AS Paid_Amount
                         FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
                         JOIN tbl_Retailers_Master AS r

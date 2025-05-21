@@ -10,6 +10,7 @@ PaymentRouter.put('/paymentMaster', paymentMaster.updateGeneralInfoPayments);
 
 PaymentRouter.get('/paymentMaster/againstRef', paymentDependency.getPaymentInvoiceBillInfo);
 PaymentRouter.post('/paymentMaster/againstRef', paymentMaster.addAgainstRef);
+PaymentRouter.post('/paymentMaster/searchStockJournal', paymentDependency.searchStockJournal);
 
 PaymentRouter.get('/paymentMaster/search', paymentDependency.searchPaymentInvoice);
 PaymentRouter.get('/accountGroup', paymentDependency.getAccountGroups);

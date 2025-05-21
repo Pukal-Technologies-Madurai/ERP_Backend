@@ -1,8 +1,22 @@
-import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isEqualNumber } from '../../helper_functions.mjs';
+import { servError, success, failed, sentData, invalidInput, dataFound, noData, } from '../../res.mjs';
+import { ISOString, checkIsNumber, createPadString, isEqualNumber, toArray } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql';
 
+const stockJournalTypes = [
+    {
+        label: 'MATERIAL INWARD',
+        value: 1
+    },
+    {
+        label: 'OTHER GODOWN',
+        value: 2
+    },
+    {
+        label: 'PROCESSING',
+        value: 3
+    },
+];
 
 const PaymentDataDependency = () => {
 
@@ -128,11 +142,238 @@ const PaymentDataDependency = () => {
         }
     }
 
+    const searchStockJournal = async (req, res) => {
+        try {
+            const { stockJournalType = 1, filterItems = [] } = req.body;
+            const reqDate = req.body?.reqDate ? ISOString(req.body?.reqDate) : ISOString();
+
+            if (stockJournalType < 1 || stockJournalType > 3) return invalidInput(res, `Invalid journal type: ${stockJournalType}`);
+
+            const getStockJournalTypeString = stockJournalTypes.find(
+                type => isEqualNumber(type.value, stockJournalType)
+            ).label;
+
+            const getTypeOneAndTwo = `
+                WITH FilteredProducts AS (
+                    SELECT 
+                        TRY_CAST(value AS INT) AS Product_Id
+                    FROM STRING_SPLIT(@filterItems, ',')
+                    WHERE TRY_CAST(value AS INT) IS NOT NULL
+                ), FINDTRIP AS (
+                	SELECT
+                        DISTINCT td.Trip_Id AS journalId
+                    FROM
+                        tbl_Trip_Details AS td
+                    LEFT JOIN tbl_Trip_Arrival as ta
+                        ON ta.Arr_Id = td.Arrival_Id
+                	LEFT JOIN tbl_Trip_Master AS tm
+                		ON td.Trip_Id = tm.Trip_Id
+                    WHERE 
+                		(
+                            @filterItems IS NULL 
+                            OR LTRIM(RTRIM(@filterItems)) = '' 
+                            OR ta.Product_Id IN (SELECT DISTINCT Product_Id FROM FilteredProducts)
+                        )
+                		AND tm.Trip_Date = @reqDate
+                		AND tm.BillType = @BillType
+                		AND tm.TripStatus <> 'Canceled'
+                ), TRIP_DETAILS AS (
+                    SELECT
+                        td.Trip_Id AS journalId,
+                		ta.Arr_Id,
+                		ta.Arrival_Date AS journalDate,
+                		ta.From_Location,
+                		ta.To_Location,
+                		ta.BatchLocation,
+                		ta.Product_Id AS productId,
+                		ta.HSN_Code,
+                		ta.QTY AS quantity,
+                		ta.KGS,
+                		ta.Unit_Id,
+                		ta.Units AS unitsGet,
+                		ta.Gst_Rate AS itemRate,
+                		ta.Total_Value AS amount,
+                        COALESCE(pm.Product_Name, 'unknown') AS productNameGet,
+                        COALESCE(gm_from.Godown_Name, 'Unknown') AS fromLocationGet,
+                        COALESCE(gm_to.Godown_Name, 'Unknown') AS toLocationGet
+                    FROM
+                        tbl_Trip_Details AS td
+                    LEFT JOIN tbl_Trip_Arrival as ta
+                        ON ta.Arr_Id = td.Arrival_Id
+                    LEFT JOIN tbl_Product_Master AS pm
+                        ON pm.Product_Id = ta.Product_Id
+                    LEFT JOIN tbl_Godown_Master AS gm_from
+                        ON gm_from.Godown_Id = ta.From_Location
+                    LEFT JOIN tbl_Godown_Master AS gm_to
+                        ON gm_to.Godown_Id = ta.To_Location
+                	LEFT JOIN tbl_Trip_Master AS tm
+                		ON td.Trip_Id = tm.Trip_Id
+                    WHERE 
+                		td.Trip_Id IN (SELECT journalId FROM FINDTRIP)
+                ), TRIP_MASTER AS (
+                    SELECT
+                        tm.Trip_Id AS journalId,
+                		tm.TR_INV_ID AS journalVoucherNo,
+                		tm.Branch_Id,
+                		tm.VoucherType,
+                		tm.Vehicle_No,
+                		tm.Trip_Date AS journalDate,
+                		tm.Godownlocation,
+                		tm.BillType,
+                		tm.Narration AS narration,
+                		COALESCE(bm.BranchName, 'unknown') AS branchGet,
+                		COALESCE(v.Voucher_Type, 'unknown') AS voucherTypeGet
+                    FROM tbl_Trip_Master AS tm
+                	LEFT JOIN tbl_Branch_Master AS bm
+                	ON bm.BranchId = tm.Branch_Id
+                    LEFT JOIN tbl_Voucher_Type AS v
+                    ON v.Vocher_Type_Id = tm.VoucherType
+                    WHERE 
+                		tm.Trip_Id IN (SELECT journalId FROM FINDTRIP)
+                )
+                SELECT 
+                    tm.*,
+                    COALESCE((
+                        SELECT td.* 
+                        FROM TRIP_DETAILS AS td
+                        WHERE td.journalId = tm.journalId
+                        FOR JSON PATH
+                    ), '[]') AS Products_List
+                FROM 
+                    TRIP_MASTER AS tm; `;
+
+            const getProcessing = `
+                WITH FilteredProducts AS (
+                    SELECT 
+                        TRY_CAST(value AS INT) AS Product_Id
+                    FROM STRING_SPLIT(@filterItems, ',')
+                    WHERE TRY_CAST(value AS INT) IS NOT NULL
+                ), FINDJOURNAL AS (
+                	SELECT 
+                		DISTINCT d.PR_Id AS journalId
+                    FROM tbl_Processing_Destin_Details AS d
+                	LEFT JOIN tbl_Processing_Gen_Info AS pgi
+                	ON pgi.PR_Id = d.PR_Id
+                    WHERE 
+                		(
+                            @filterItems IS NULL 
+                            OR LTRIM(RTRIM(@filterItems)) = '' 
+                			OR d.Dest_Item_Id IN (SELECT DISTINCT Product_Id FROM FilteredProducts)
+                		)
+                		AND pgi.Process_date = @reqDate
+                		AND pgi.PR_Status <> 'Canceled'
+                ), Destination AS (
+                    SELECT 
+                		d.PR_Id AS journalId,
+                		d.Dest_Item_Id AS productId,
+                		d.Dest_Goodown_Id,
+                		d.Dest_Batch_Lot_No,
+                		d.Dest_Qty AS quantity,
+                		d.Dest_Unit_Id,
+                		d.Dest_Unit AS unitsGet,
+                		d.Dest_Rate AS itemRate,
+                		d.Dest_Amt AS amount,
+                        p.Product_Name AS productNameGet,
+                        g.Godown_Name AS toLocationGet
+                    FROM tbl_Processing_Destin_Details AS d
+                    LEFT JOIN tbl_Product_Master AS p
+                    ON d.Dest_Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Godown_Master AS g
+                    ON d.Dest_Goodown_Id = g.Godown_Id
+                	LEFT JOIN tbl_Processing_Gen_Info AS pgi
+                	ON pgi.PR_Id = d.PR_Id
+                    WHERE 
+                		d.PR_Id IN (SELECT journalId FROM FINDJOURNAL)
+                ), SJ_Main AS (
+                    SELECT 
+                		pgi.PR_Id AS journalId,
+                		pgi.PR_Inv_Id AS journalVoucherNo,
+                		pgi.Branch_Id,
+                		pgi.VoucherType,
+                		pgi.Process_date AS journalDate,
+                		pgi.Machine_No,
+                		pgi.Godownlocation,
+                		pgi.Narration AS narration,
+                		pgi.Created_At,
+                		br.BranchName AS branchGet,
+                		COALESCE(v.Voucher_Type, 'Not found') AS voucherTypeGet,
+                		g.Godown_Name AS GodownNameGet
+                	FROM tbl_Processing_Gen_Info AS pgi
+                	LEFT JOIN tbl_Branch_Master AS br
+                	ON br.BranchId = pgi.Branch_Id
+                	LEFT JOIN tbl_Voucher_Type AS v
+                	ON v.Vocher_Type_Id = pgi.VoucherType
+                	LEFT JOIN tbl_Godown_Master AS g
+                	ON g.Godown_Id = pgi.Godownlocation
+                    WHERE pgi.PR_Id IN (SELECT journalId FROM FINDJOURNAL)
+                ), Source AS (
+                    SELECT s.*,
+                        p.Product_Name,
+                        g.Godown_Name
+                    FROM tbl_Processing_Source_Details AS s
+                    LEFT JOIN tbl_Product_Master AS p
+                    ON s.Sour_Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Godown_Master AS g
+                    ON s.Sour_Goodown_Id = g.Godown_Id
+                    WHERE s.PR_Id IN (SELECT journalId FROM FINDJOURNAL)
+                )
+                SELECT 
+                    main.*,
+                    'PROCESSING' AS BillType,
+                    COALESCE(( 
+                        SELECT source.*
+                        FROM Source AS source
+                        WHERE source.PR_Id = main.journalId
+                        FOR JSON PATH
+                    ), '[]') AS SourceDetails,
+                    COALESCE((
+                        SELECT destination.*
+                        FROM Destination AS destination
+                        WHERE destination.journalId = main.journalId
+                        FOR JSON PATH
+                    ), '[]') AS Products_List
+                FROM SJ_Main AS main
+                ORDER BY main.journalId; `;
+
+            const request = new sql.Request()
+                .input('reqDate', reqDate)
+                .input('BillType', getStockJournalTypeString)
+                .input('filterItems', toArray(filterItems).map(item => item).join(', '))
+                .query(
+                    isEqualNumber(stockJournalType, 3) ? getProcessing : getTypeOneAndTwo
+                );
+
+            const result = await request;
+
+            if (result.recordset.length > 0) {
+                const parseJsonData = isEqualNumber(
+                    stockJournalType, 3
+                ) ? result.recordset.map(journal => ({
+                    ...journal,
+                    SourceDetails: JSON.parse(journal.SourceDetails),
+                    Products_List: JSON.parse(journal.Products_List),
+                }))
+                : result.recordset.map(journal => ({
+                    ...journal,
+                    Products_List: JSON.parse(journal.Products_List)
+                }));
+
+                dataFound(res, parseJsonData)
+            } else {
+                noData(res)
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getAccountGroups,
         getAccounts,
         searchPaymentInvoice,
-        getPaymentInvoiceBillInfo
+        getPaymentInvoiceBillInfo,
+        searchStockJournal,
     }
 }
 

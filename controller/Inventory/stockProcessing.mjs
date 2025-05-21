@@ -4,7 +4,6 @@ import { checkIsNumber, createPadString, ISOString, Subraction, toNumber } from 
 
 const StockManagement = () => {
 
-
     const createStockProcessing = async (req, res) => {
         const transaction = new sql.Transaction();
 
