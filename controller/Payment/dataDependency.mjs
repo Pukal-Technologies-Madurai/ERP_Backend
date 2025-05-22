@@ -106,33 +106,245 @@ const PaymentDataDependency = () => {
         }
     }
 
+    // const getPaymentInvoiceBillInfo = async (req, res) => {
+    //     try {
+    //         const { payment_id, pay_bill_type = 1 } = req.query;
+
+    //         if (!checkIsNumber(payment_id)) return invalidInput(res, 'payment_id is required');
+
+    //         const purchaseInvoiceBillType = `
+    //             SELECT 
+    //                 pbi.*,
+    //                 pogi.Po_Inv_Date AS PurchaseInvoiceDate,
+    //                 ISNULL(pb.TotalPaidAmount, 0) AS TotalPaidAmount,
+    //                 pogi.Total_Invoice_value - ISNULL(pb.TotalPaidAmount, 0) AS PendingAmount
+    //             FROM tbl_Payment_Bill_Info AS pbi
+    //             LEFT JOIN tbl_Purchase_Order_Inv_Gen_Info AS pogi
+    //                 ON pogi.PIN_Id = pbi.pay_bill_id
+    //             LEFT JOIN (
+    //                 SELECT 
+    //                     pay_bill_id,
+    //                     SUM(Debit_Amo) AS TotalPaidAmount
+    //                 FROM tbl_Payment_Bill_Info
+    //                 GROUP BY pay_bill_id
+    //             ) AS pb ON pb.pay_bill_id = pbi.pay_bill_id
+    //             WHERE pbi.payment_id = @payment_id;`
+
+    //         const request = new sql.Request()
+    //             .input('payment_id', payment_id)
+    //             .query(isEqualNumber(pay_bill_type, 1) ? purchaseInvoiceBillType : '');
+
+    //         const result = await request;
+
+    //         sentData(res, result.recordset)
+    //     } catch (e) {
+    //         servError(e, res);
+    //     }
+    // }
+
     const getPaymentInvoiceBillInfo = async (req, res) => {
         try {
             const { payment_id, pay_bill_type = 1 } = req.query;
 
             if (!checkIsNumber(payment_id)) return invalidInput(res, 'payment_id is required');
 
-            const purchaseInvoiceBillType = `
-                SELECT 
-                    pbi.*,
-                    pogi.Po_Inv_Date AS PurchaseInvoiceDate,
-                    ISNULL(pb.TotalPaidAmount, 0) AS TotalPaidAmount,
-                    pogi.Total_Invoice_value - ISNULL(pb.TotalPaidAmount, 0) AS PendingAmount
-                FROM tbl_Payment_Bill_Info AS pbi
-                LEFT JOIN tbl_Purchase_Order_Inv_Gen_Info AS pogi
-                    ON pogi.PIN_Id = pbi.pay_bill_id
-                LEFT JOIN (
+            const request = new sql.Request()
+                .input('payment_id', payment_id)
+                .query(`
+                    WITH PAYMENT_BILL_INFO AS (
+                    	SELECT 
+                    		pbi.*
+                    	FROM tbl_Payment_Bill_Info AS pbi
+                    	WHERE pbi.payment_id = @payment_id
+                    ), 
+                    -- CTE for Purchase Invoice
+                    PURCHASE_INVOICE_DATE AS (
+                    	SELECT 
+                    		PIN_Id AS pay_bill_id, 
+                    		Po_Inv_Date AS PurchaseInvoiceDate,
+                    		COALESCE((
+                    			SELECT SUM(Debit_Amo)
+                    			FROM tbl_Payment_Bill_Info AS refAmount
+                    			WHERE 
+                    				ref.PIN_Id = refAmount.pay_bill_id
+                    				AND refAmount.JournalBillType = 'PURCHASE INVOICE'
+                    		), 0) AS TotalPaidAmount
+                    	FROM tbl_Purchase_Order_Inv_Gen_Info AS ref
+                    	WHERE PIN_Id IN (
+                    		SELECT DISTINCT pay_bill_id 
+                    		FROM PAYMENT_BILL_INFO 
+                    		WHERE bill_type = 1 AND JournalBillType = 'PURCHASE INVOICE'
+                    	)
+                    ), 
+                    -- CTE for Material Inward
+                    MATERIAL_INWARD_DATE AS (
+                    	SELECT 
+                    		Trip_Id AS pay_bill_id, 
+                    		Trip_Date AS TripDate,
+                    		COALESCE((
+                    			SELECT SUM(Debit_Amo)
+                    			FROM tbl_Payment_Bill_Info AS refAmount
+                    			WHERE 
+                    				refAmount.pay_bill_id = tm.Trip_Id
+                    				AND refAmount.JournalBillType = 'MATERIAL INWARD'
+                    		), 0) AS TotalPaidAmount
+                    	FROM tbl_Trip_Master AS tm
+                    	WHERE Trip_Id IN (
+                    		SELECT pay_bill_id 
+                    		FROM PAYMENT_BILL_INFO 
+                    		WHERE bill_type = 3 AND JournalBillType = 'MATERIAL INWARD'
+                    	)
+                    ), 
+                    -- CTE for Other Godown
+                    OTHER_GODOWN_TRANSFER_DATE AS (
+                    	SELECT 
+                    		Trip_Id AS pay_bill_id, 
+                    		Trip_Date AS TripDate,
+                    		COALESCE((
+                    			SELECT SUM(Debit_Amo)
+                    			FROM tbl_Payment_Bill_Info AS refAmount
+                    			WHERE 
+                    				refAmount.pay_bill_id = tm.Trip_Id
+                    				AND refAmount.JournalBillType = 'OTHER GODOWN'
+                    		), 0) AS TotalPaidAmount
+                    	FROM tbl_Trip_Master AS tm
+                    	WHERE Trip_Id IN (
+                    		SELECT pay_bill_id 
+                    		FROM PAYMENT_BILL_INFO 
+                    		WHERE bill_type = 3 AND JournalBillType = 'OTHER GODOWN'
+                    	)
+                    ), 
+                    -- CTE for Processing
+                    PROCESSING_DATE AS (
+                    	SELECT 
+                    		PR_Id AS pay_bill_id, 
+                    		Process_date AS ProcessDate,
+                    		COALESCE((
+                    			SELECT SUM(Debit_Amo)
+                    			FROM tbl_Payment_Bill_Info AS refAmount
+                    			WHERE 
+                    				refAmount.pay_bill_id = pg.PR_Id
+                    				AND refAmount.JournalBillType = 'PROCESSING'
+                    		), 0) AS TotalPaidAmount
+                    	FROM tbl_Processing_Gen_Info AS pg
+                    	WHERE PR_Id IN (
+                    		SELECT pay_bill_id 
+                    		FROM PAYMENT_BILL_INFO 
+                    		WHERE bill_type = 3 AND JournalBillType = 'PROCESSING'
+                    	)
+                    )
+                    -- Final Select
                     SELECT 
-                        pay_bill_id,
-                        SUM(Debit_Amo) AS TotalPaidAmount
-                    FROM tbl_Payment_Bill_Info
-                    GROUP BY pay_bill_id
-                ) AS pb ON pb.pay_bill_id = pbi.pay_bill_id
-                WHERE pbi.payment_id = @payment_id;`
+                    	pbi.*,
+                    	-- Resolve the referenceBillDate
+                    	CASE 
+                    		WHEN pbi.bill_type = 1 AND pbi.JournalBillType = 'PURCHASE INVOICE' THEN pid.PurchaseInvoiceDate
+                    		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'MATERIAL INWARD' THEN mid.TripDate
+                    		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'OTHER GODOWN' THEN ogd.TripDate
+                    		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'PROCESSING' THEN pr.ProcessDate
+                    		ELSE NULL
+                    	END AS referenceBillDate,
+                    	-- Resolve the TotalPaidAmount per type
+                    	CASE 
+                    		WHEN pbi.bill_type = 1 AND pbi.JournalBillType = 'PURCHASE INVOICE' THEN pid.TotalPaidAmount
+                    		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'MATERIAL INWARD' THEN mid.TotalPaidAmount
+                    		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'OTHER GODOWN' THEN ogd.TotalPaidAmount
+                    		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'PROCESSING' THEN pr.TotalPaidAmount
+                    		ELSE NULL
+                    	END AS totalPaidAmount
+                    FROM PAYMENT_BILL_INFO AS pbi
+                    LEFT JOIN PURCHASE_INVOICE_DATE AS pid ON pbi.pay_bill_id = pid.pay_bill_id
+                    LEFT JOIN MATERIAL_INWARD_DATE AS mid ON pbi.pay_bill_id = mid.pay_bill_id
+                    LEFT JOIN OTHER_GODOWN_TRANSFER_DATE AS ogd ON pbi.pay_bill_id = ogd.pay_bill_id
+                    LEFT JOIN PROCESSING_DATE AS pr ON pbi.pay_bill_id = pr.pay_bill_id;`
+            );
+
+            const result = await request;
+
+            sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getPaymentInvoiceCostingInfo = async (req, res) => {
+        try {
+            const { payment_id } = req.query;
+
+            if (!checkIsNumber(payment_id)) return invalidInput(res, 'payment_id is required');
 
             const request = new sql.Request()
                 .input('payment_id', payment_id)
-                .query(isEqualNumber(pay_bill_type, 1) ? purchaseInvoiceBillType : '');
+                .query(`
+                    WITH PAYMENT_COSTING_INFO AS (
+                    	SELECT pci.*
+                    	FROM tbl_Payment_Costing_Info pci
+                    	WHERE pci.payment_id = @payment_id
+                    ), TRIP_DETAILS_INFO_QUANTITY AS (
+                    	SELECT 
+                    		td.Trip_Id AS pay_bill_id,
+                    		ta.Product_Id AS item_id,
+                    		ta.QTY AS itemQuantity,
+                    		tm.BillType AS JournalBillType, -- MATERIAL INWARD OR OTHER GODOWN
+                    		COALESCE((
+                    			SELECT SUM(expence_value)
+                    			FROM tbl_Payment_Costing_Info 
+                    			WHERE 
+                    				pay_bill_id = td.Trip_Id
+                    				AND item_id = ta.Product_Id
+                    				AND (JournalBillType = 'MATERIAL INWARD' OR JournalBillType = 'OTHER GODOWN')
+                    		), 0) AS PaidAmount
+                    	FROM tbl_Trip_Details AS td
+                    	JOIN tbl_Trip_Arrival AS ta
+                    		ON ta.Arr_Id = td.Arrival_Id
+                    	JOIN tbl_Trip_Master AS tm
+                    		ON tm.Trip_Id = td.Trip_Id
+                    	WHERE td.Trip_Id IN (
+                    		SELECT DISTINCT pay_bill_id 
+                    		FROM PAYMENT_COSTING_INFO 
+                    		WHERE 
+                    			JournalBillType = 'MATERIAL INWARD' 
+                    			OR JournalBillType = 'OTHER GODOWN'
+                    	) AND tm.BillType IN ('MATERIAL INWARD', 'OTHER GODOWN')
+                    ), TRIP_PROCESSING_DESTINATION_QUANTITY AS (
+                    	SELECT 
+                    		pdi.PR_Id AS pay_bill_id, 
+                    		pdi.Dest_Item_Id AS item_id,
+                    		pdi.Dest_Qty AS itemQuantity,
+                    		'PROCESSING' AS JournalBillType,
+                    		COALESCE((
+                    			SELECT SUM(expence_value)
+                    			FROM tbl_Payment_Costing_Info 
+                    			WHERE 
+                    				pay_bill_id = pdi.PR_Id
+                    				AND item_id = pdi.Dest_Item_Id
+                    				AND JournalBillType = 'PROCESSING'
+                    		), 0) AS PaidAmount
+                    	FROM tbl_Processing_Destin_Details AS pdi
+                    	WHERE pdi.PR_Id IN (
+                    		SELECT DISTINCT pay_bill_id 
+                    		FROM PAYMENT_COSTING_INFO 
+                    		WHERE JournalBillType = 'PROCESSING' 
+                    	)
+                    )
+                    SELECT 
+                    	pci.*,
+                    	CASE 
+                    		WHEN pci.JournalBillType IN ('MATERIAL INWARD', 'OTHER GODOWN') THEN tdq.itemQuantity
+                    		WHEN pci.JournalBillType = 'PROCESSING' THEN pdq.itemQuantity
+                    		ELSE 0
+                    	END AS itemQuantity,
+                    	CASE 
+                    		WHEN pci.JournalBillType IN ('MATERIAL INWARD', 'OTHER GODOWN') THEN tdq.PaidAmount
+                    		WHEN pci.JournalBillType = 'PROCESSING' THEN pdq.PaidAmount
+                    		ELSE 0
+                    	END AS PaidAmount
+                    FROM PAYMENT_COSTING_INFO pci
+                    LEFT JOIN TRIP_DETAILS_INFO_QUANTITY tdq 
+                    	ON pci.pay_bill_id = tdq.pay_bill_id AND pci.item_id = tdq.item_id
+                    LEFT JOIN TRIP_PROCESSING_DESTINATION_QUANTITY pdq 
+                    	ON pci.pay_bill_id = pdq.pay_bill_id AND pci.item_id = pdq.item_id;`
+                );
 
             const result = await request;
 
@@ -353,10 +565,10 @@ const PaymentDataDependency = () => {
                     SourceDetails: JSON.parse(journal.SourceDetails),
                     Products_List: JSON.parse(journal.Products_List),
                 }))
-                : result.recordset.map(journal => ({
-                    ...journal,
-                    Products_List: JSON.parse(journal.Products_List)
-                }));
+                    : result.recordset.map(journal => ({
+                        ...journal,
+                        Products_List: JSON.parse(journal.Products_List)
+                    }));
 
                 dataFound(res, parseJsonData)
             } else {
@@ -373,6 +585,7 @@ const PaymentDataDependency = () => {
         getAccounts,
         searchPaymentInvoice,
         getPaymentInvoiceBillInfo,
+        getPaymentInvoiceCostingInfo,
         searchStockJournal,
     }
 }

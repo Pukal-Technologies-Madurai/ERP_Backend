@@ -1,5 +1,5 @@
 import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isArray, toArray } from '../../helper_functions.mjs';
+import { ISOString, checkIsNumber, createPadString, isArray, toArray, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql'
 
@@ -26,6 +26,15 @@ const editValidations = (obj) => {
 
 const PaymentMaster = () => {
 
+    const add = (a, b) => toNumber(a) + toNumber(b);
+    const subtract = (a, b) => toNumber(a) - toNumber(b);
+    const multiply = (a, b) => toNumber(a) * toNumber(b);
+    const divide = (a, b) => b !== 0 ? toNumber(a) / toNumber(b) : 0;
+    const roundNumber = (num, precision = 2) => Number(toNumber(num).toFixed(precision));
+    const isEqualNumber = (a, b) => toNumber(a) === toNumber(b);
+    const numberFormat = (num) => new Intl.NumberFormat().format(toNumber(num));
+    const localDate = (dateStr) => new Date(dateStr).toLocaleDateString();
+
     const getPayments = async (req, res) => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
@@ -38,12 +47,20 @@ const PaymentMaster = () => {
                     SELECT 
                     	pgi.*,
                     	vt.Voucher_Type,
-                    	r.Retailer_Name AS DebitAccountGet
+                    	debAcc.Account_name AS DebitAccountGet,
+                    	creAcc.Account_name AS CreditAccountGet,
+						COALESCE((
+							SELECT SUM(Debit_Amo)
+							FROM tbl_Payment_Bill_Info AS pbi
+							WHERE pbi.payment_id = pgi.pay_id
+						), 0) AS TotalReferencedAmount
                     FROM tbl_Payment_General_Info AS pgi
-                        LEFT JOIN tbl_Voucher_Type AS vt
+                    LEFT JOIN tbl_Voucher_Type AS vt
                         ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
-                        LEFT JOIN tbl_Retailers_Master AS r
-                        ON r.Retailer_Id = pgi.debit_ledger
+                    LEFT JOIN tbl_Account_Master AS debAcc
+                        ON debAcc.Acc_Id = pgi.debit_ledger
+					LEFT JOIN tbl_Account_Master AS creAcc
+                        ON creAcc.Acc_Id = pgi.credit_ledger
                     WHERE
                         pgi.payment_date BETWEEN @Fromdate AND @Todate
                     ORDER BY 
@@ -261,15 +278,26 @@ const PaymentMaster = () => {
         const transaction = new sql.Transaction();
 
         try {
-            const { payment_id, payment_no, payment_date, bill_type, BillsDetails } = req.body;
+            const { payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
 
             if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
+
+            const isPurchasePayment = isEqualNumber(bill_type, 1);
+
+            const calcTotalDebitAmount = (bill_id) => {
+                return toArray(CostingDetails).filter(
+                    fil => isEqualNumber(bill_id, fil.pay_bill_id)
+                ).reduce((acc, item) => add(acc, item?.expence_value), 0)
+            }
 
             await transaction.begin();
 
             await new sql.Request(transaction)
                 .input('payment_id', payment_id)
-                .query('DELETE FROM tbl_Payment_Bill_Info WHERE payment_id = @payment_id')
+                .query(`
+                    DELETE FROM tbl_Payment_Bill_Info WHERE payment_id = @payment_id;
+                    DELETE FROM tbl_Payment_Costing_Info WHERE payment_id = @payment_id;`
+                );
 
             for (let i = 0; i < BillsDetails.length; i++) {
                 const CurrentBillDetails = BillsDetails[i];
@@ -279,24 +307,56 @@ const PaymentMaster = () => {
                     .input('payment_no', payment_no)
                     .input('payment_date', payment_date)
                     .input('bill_type', bill_type)
+                    .input('DR_CR_Acc_Id', DR_CR_Acc_Id)
                     .input('pay_bill_id', CurrentBillDetails?.pay_bill_id)
+                    .input('JournalBillType', isPurchasePayment ? 'PURCHASE PAYMENT' : CurrentBillDetails?.JournalBillType)
                     .input('bill_name', CurrentBillDetails?.bill_name)
                     .input('bill_amount', CurrentBillDetails?.bill_amount)
-                    .input('DR_CR_Acc_Id', CurrentBillDetails?.DR_CR_Acc_Id)
-                    .input('Debit_Amo', CurrentBillDetails?.Debit_Amo)
+                    .input('Debit_Amo', isPurchasePayment ? CurrentBillDetails?.Debit_Amo : calcTotalDebitAmount(CurrentBillDetails?.pay_bill_id))
                     .query(`
                         INSERT INTO tbl_Payment_Bill_Info (
-                            payment_id, payment_no, payment_date, bill_type, pay_bill_id, 
-                            bill_name, bill_amount, DR_CR_Acc_Id, Debit_Amo, Credit_Amo
+                            payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id,
+                            pay_bill_id, bill_name, bill_amount, JournalBillType, Debit_Amo, Credit_Amo
                         ) VALUES (
-                            @payment_id, @payment_no, @payment_date, @bill_type, @pay_bill_id, 
-                            @bill_name, @bill_amount, @DR_CR_Acc_Id, @Debit_Amo, 0
+                            @payment_id, @payment_no, @payment_date, @bill_type, @DR_CR_Acc_Id,
+                            @pay_bill_id, @bill_name, @bill_amount, @JournalBillType, @Debit_Amo, 0
                         );`
                     );
 
                 const result = await request;
 
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Payment Bill Details');
+            }
+
+            if (isArray(CostingDetails) && CostingDetails.length > 0) {
+                for (let i = 0; i < CostingDetails.length; i++) {
+                    const itemDetails = CostingDetails[i];
+
+                    const request = new sql.Request(transaction)
+                        .input('payment_id', payment_id)
+                        .input('payment_no', payment_no)
+                        .input('payment_date', payment_date)
+                        .input('bill_type', bill_type)
+                        .input('Debit_Ledger_Id', DR_CR_Acc_Id)
+                        .input('pay_bill_id', itemDetails?.pay_bill_id)
+                        .input('JournalBillType', itemDetails?.JournalBillType)
+                        .input('item_id', itemDetails?.item_id)
+                        .input('item_name', itemDetails?.item_name)
+                        .input('expence_value', itemDetails?.expence_value)
+                        .query(`
+                        INSERT INTO tbl_Payment_Costing_Info (
+                            payment_id, payment_no, payment_date, bill_type, Debit_Ledger_Id, 
+                            pay_bill_id, JournalBillType, item_id, item_name, expence_value
+                        ) VALUES (
+                            @payment_id, @payment_no, @payment_date, @bill_type, @Debit_Ledger_Id, 
+                            @pay_bill_id, @JournalBillType, @item_id, @item_name, @expence_value
+                        );`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Payment Costing Details');
+                }
             }
 
             await transaction.commit();

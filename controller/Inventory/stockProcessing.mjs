@@ -30,6 +30,10 @@ const StockManagement = () => {
                 return invalidInput(res, 'Select Branch');
             }
 
+            if (!checkIsNumber(VoucherType)) {
+                return invalidInput(res, 'Select Voucher')
+            }
+
             if (StartDateTime && EndDateTime && (new Date(StartDateTime) > new Date(EndDateTime))) {
                 return invalidInput(res, 'Start Time cannot be greater than End Time');
             }
@@ -263,6 +267,10 @@ const StockManagement = () => {
 
             if (!checkIsNumber(Branch_Id) || !checkIsNumber(PR_Id)) {
                 return invalidInput(res, 'Select Branch, PR_Id');
+            }
+
+            if (!checkIsNumber(VoucherType)) {
+                return invalidInput(res, 'Select Voucher')
             }
 
             if (StartDateTime && EndDateTime && (new Date(StartDateTime) > new Date(EndDateTime))) {

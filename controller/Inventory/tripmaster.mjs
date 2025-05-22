@@ -19,7 +19,7 @@ const tripActivities = () => {
             UnloadingEmpty = 0,
             Godownlocation = 0,
             BillType = '',
-            VoucherType = 0,
+            VoucherType = '',
             Narration = '',
             TripStatus = 'New',
             Product_Array = [],
@@ -218,7 +218,7 @@ const tripActivities = () => {
             UnloadingEmpty = 0,
             Godownlocation = 0,
             BillType = 0,
-            VoucherType = 0,
+            VoucherType = '',
             Narration = '',
             Updated_By = '',
             TripStatus = 'New',
@@ -229,9 +229,10 @@ const tripActivities = () => {
         const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null,
             EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
 
-        if (!checkIsNumber(Branch_Id) || Trip_Date === '' || Vehicle_No === '' || Trip_Id == '' || Trip_Id == null) {
+        if (!checkIsNumber(Branch_Id) || Trip_Date === '' || !checkIsNumber(Trip_Id)) {
             return invalidInput(res, 'Check values ');
         }
+        if (!checkIsNumber(VoucherType)) return invalidInput(res, 'Select Voucher');
         if (StartTime && EndTime && new Date(StartTime) > new Date(EndTime)) {
             return invalidInput(res, 'Start Time cannot be greater than End Time');
         }

@@ -14,7 +14,7 @@ const PurchaseOrder = () => {
         const {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
-            Voucher_Type = 0, Stock_Item_Ledger_Name = '', Round_off
+            Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off
         } = req.body;
 
         const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();

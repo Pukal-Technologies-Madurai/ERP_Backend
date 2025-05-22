@@ -14,7 +14,7 @@ const SaleOrder = () => {
     const saleOrderCreation = async (req, res) => {
         const {
             Retailer_Id, Sales_Person_Id, Branch_Id,
-            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = 0,
+            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = '',
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -29,8 +29,9 @@ const SaleOrder = () => {
             || !checkIsNumber(Sales_Person_Id)
             || !checkIsNumber(Created_by)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
+            || !checkIsNumber(VoucherType)
         ) {
-            return invalidInput(res, 'Retailer_Id, Sales_Person_Id, Created_by, Product_Array is Required')
+            return invalidInput(res, 'Retailer_Id, Sales_Person_Id, VoucherType, Items is Required')
         }
 
         const transaction = new sql.Transaction();
@@ -269,7 +270,7 @@ const SaleOrder = () => {
     const editSaleOrder = async (req, res) => {
         const {
             So_Id, Retailer_Id, Sales_Person_Id, Branch_Id,
-            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, VoucherType = 0
+            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, VoucherType = ''
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -284,9 +285,10 @@ const SaleOrder = () => {
             || !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Sales_Person_Id)
             || !checkIsNumber(Created_by)
+            || !checkIsNumber(VoucherType)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
         ) {
-            return invalidInput(res, 'So_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array is Required')
+            return invalidInput(res, 'Retailer_Id, Sales_Person_Id, VoucherType, Product_Array is Required')
         }
 
         const transaction = new sql.Transaction();
