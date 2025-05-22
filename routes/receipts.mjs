@@ -12,7 +12,7 @@ ReceiptsRouter.get('/collectionReceipts', paymentCollection.getPayments);
 ReceiptsRouter.post('/collectionReceipts', paymentCollection.PaymentEntry);
 ReceiptsRouter.put('/collectionReceipts', paymentCollection.editCollectionGeneralInfo);
 ReceiptsRouter.delete('/collectionReceipts', paymentCollection.deleteReceiptEntry);
-
+ReceiptsRouter.put('/verifyStatus',paymentCollection.verifyStatus);
 
 ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);

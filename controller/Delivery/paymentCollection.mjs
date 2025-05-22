@@ -660,7 +660,17 @@ const Payments = () => {
                     SELECT DISTINCT rec.collected_by AS value, u.Name AS label
                     FROM tbl_Sales_Receipt_General_Info AS rec
                     LEFT JOIN tbl_Users AS u
-                    ON u.UserId = rec.collected_by;`
+                    ON u.UserId = rec.collected_by;
+                    --Verify_Status
+                    SELECT DISTINCT 
+                    rec.verify_status AS value,
+                    CASE 
+                        WHEN rec.verify_status = 1 THEN 'Verified'
+                        WHEN rec.verify_status = 0 THEN 'Pending'
+                        ELSE 'Unknown'
+                    END AS label
+                    FROM tbl_Sales_Receipt_General_Info AS rec;
+                    `
                 );
 
             const result = await request;
@@ -671,6 +681,7 @@ const Payments = () => {
                 collectionType: toArr(result.recordsets[2]),
                 paymentStatus: toArr(result.recordsets[3]),
                 collectedBy: toArr(result.recordsets[4]),
+                verifyStatus: toArr(result.recordsets[5])
             });
         } catch (e) {
             servError(e, res);
@@ -740,6 +751,48 @@ const Payments = () => {
         }
     };
 
+    const verifyStatus = async (req, res) => {
+        const { collectionIdToUpdate = [] } = req.body;
+
+        if (!Array.isArray(collectionIdToUpdate)) {
+            return res.status(400).json({ message: 'No collection IDs provided' });
+        }
+
+        const transaction = new sql.Transaction();
+
+        try {
+            await transaction.begin();
+
+            for (const collection_id of collectionIdToUpdate) {
+                const request = new sql.Request(transaction);
+
+                request
+                    .input('collection_id', sql.Int, collection_id)
+                    .input('verify_status', sql.Int, 1)
+                    .input('verified_by', sql.Int, 1);
+
+                const result = await request.query(`
+                    UPDATE tbl_Sales_Receipt_General_Info
+                    SET 
+                        verify_status = @verify_status,
+                        verified_by = @verified_by
+                    WHERE
+                        collection_id = @collection_id;`
+                );
+
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error(`Failed to update collection_id: ${collection_id}`);
+                }
+            }
+
+            await transaction.commit();
+            return success(res, 'Collections verified successfully!');
+        } catch (e) {
+            await transaction.rollback();
+            return servError(e, res);
+        }
+    };
+
     return {
         getPayments,
         PaymentEntry,
@@ -749,7 +802,8 @@ const Payments = () => {
         getRetailerBills,
         getFilterValues,
         getCreditAccounts,
-        getOutStanding
+        getOutStanding,
+        verifyStatus
     }
 }
 

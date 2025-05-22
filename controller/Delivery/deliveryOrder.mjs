@@ -654,7 +654,7 @@ const DeliveryOrder = () => {
     }
 
     const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id } = req.query;
+        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Sales_Person_Id } = req.query;
 
         try {
 
@@ -662,74 +662,73 @@ const DeliveryOrder = () => {
             const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
             let query = `
-                        WITH SALES_DETAILS AS (
-                          SELECT
-                              oi.*,
-                              pm.Product_Id,
-                              COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                              COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                              COALESCE(u.Units, 'not available') AS UOM,
-                              COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                          FROM
-                              tbl_Sales_Delivery_Stock_Info AS oi
-                          LEFT JOIN tbl_Product_Master AS pm
-                              ON pm.Product_Id = oi.Item_Id
-                          LEFT JOIN tbl_UOM AS u
-                              ON u.Unit_Id = oi.Unit_Id
-                          LEFT JOIN tbl_Brand_Master AS b
-                              ON b.Brand_Id = pm.Brand
-                          WHERE
-                              CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
-                              AND CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
-                      )
-                      SELECT DISTINCT
-                          so.Do_Id AS Delivery_Order_id,
-                          so.*,
-                          rm.Retailer_Name AS Retailer_Name,
-                         erpUser.Name AS Delivery_Person_Name, -- Get name from tbl_Users instead
+                                          WITH SALES_DETAILS AS (
+                         SELECT
+                             oi.*,
+                             pm.Product_Id,
+                             COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                             COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                             COALESCE(u.Units, 'not available') AS UOM,
+                             COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                         FROM
+                             tbl_Sales_Delivery_Stock_Info AS oi
+                         LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                         LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                         LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                                               WHERE
+                                                   CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
+                                                   AND CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
+                                           )
+                                   SELECT DISTINCT
+                         so.Do_Id AS Delivery_Order_id,
+                         so.*,
+                         rm.Retailer_Name AS Retailer_Name,
+                         bm.BranchName AS Branch_Name,
+                         cb.Name AS Created_BY_Name,
+                         rmt.Route_Name AS Routename,
+                         am.Area_Name AS AreaName,
+                         rmt.Route_Id AS Route_Id,
+                         rm.Area_Id AS Area_Id,
+                         st.Status AS DeliveryStatusName,
+                         sgi.SO_Date AS SalesDate,
+                     
                         
-                          bm.BranchName AS Branch_Name,
-                          cb.Name AS Created_BY_Name,
-                          rmt.Route_Name AS Routename,
-                          am.Area_Name AS AreaName,
-                          rmt.Route_Id AS Route_Id,
-                          rm.Area_Id AS Area_Id,
-                          st.Status AS DeliveryStatusName,
-                          sgi.SO_Date AS SalesDate,
-                          COALESCE((
-                              SELECT
-                                  sd.*
-                              FROM
-                                  SALES_DETAILS AS sd
-                              WHERE
-                                  sd.Delivery_Order_Id = so.Do_Id
-                              FOR JSON PATH
-                          ), '[]') AS Products_List
-                      FROM
-                          tbl_Sales_Delivery_Gen_Info AS so
-                      LEFT JOIN tbl_Retailers_Master AS rm
-                          ON rm.Retailer_Id = so.Retailer_Id
-                      LEFT JOIN tbl_Status AS st
-                          ON st.Status_Id = so.Delivery_Status
-                      LEFT JOIN tbl_Users AS sp
-                          ON sp.UserId = so.Delivery_Person_Id
-                      LEFT JOIN tbl_Branch_Master bm
-                          ON bm.BranchId = so.Branch_Id
-                      LEFT JOIN tbl_Users AS cb
-                          ON cb.UserId = so.Created_by
-                      LEFT JOIN tbl_Route_Master AS rmt
-                          ON rmt.Route_Id = rm.Route_Id
-                      LEFT JOIN tbl_Area_Master AS am
-                          ON am.Area_Id = rm.Area_Id
-                      LEFT JOIN tbl_Sales_Order_Gen_Info AS sgi
-                          ON sgi.So_Id = so.So_No
-                      LEFT JOIN tbl_Trip_Details AS td
-                          ON td.Delivery_Id = so.Do_Id
-                          LEFT JOIN tbl_ERP_Cost_Center AS ecc
-        ON ecc.Cost_Center_Id = so.Delivery_Person_Id 
-    LEFT JOIN tbl_Users AS erpUser
-        ON erpUser.UserId = ecc.User_Id
-                      
+                         COALESCE(spUser.Name, 'not available') AS Sales_Person_Name,
+                     
+                        
+                         COALESCE(dpUser.Name, 'not available') AS Delivery_Person_Name,
+                     
+                         
+                         COALESCE((
+                             SELECT
+                                 sd.*
+                             FROM
+                                 SALES_DETAILS AS sd
+                             WHERE
+                                 sd.Delivery_Order_Id = so.Do_Id
+                             FOR JSON PATH
+                         ), '[]') AS Products_List
+                     
+                     FROM
+                         tbl_Sales_Delivery_Gen_Info AS so
+                     LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+                     LEFT JOIN tbl_Status AS st ON st.Status_Id = so.Delivery_Status
+                     LEFT JOIN tbl_ERP_Cost_Center AS sp ON sp.User_Id = so.Delivery_Person_Id
+                     LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = so.Branch_Id
+                     LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+                     LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
+                     LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+                     LEFT JOIN tbl_Sales_Order_Gen_Info AS sgi ON sgi.So_Id = so.So_No
+                     
+                  
+                     LEFT JOIN tbl_Users AS spUser ON spUser.UserId = sgi.Sales_Person_Id
+                     
+                     
+                     LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = so.Delivery_Person_Id
+                     LEFT JOIN tbl_Users AS dpUser ON dpUser.UserId = ecc.User_Id
+                     
+                     LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = so.Do_Id
+                                           
                       WHERE
                           CONVERT(DATE, so.Do_Date) >= CONVERT(DATE, @from)
                           AND CONVERT(DATE, so.Do_Date) <= CONVERT(DATE, @to)
@@ -743,7 +742,10 @@ const DeliveryOrder = () => {
                 query += ` AND so.Created_by = @creater`;
             }
             if (Delivery_Person_Id) {
-                query += ` AND erpUser.UserId = @Delivery_Person_Id`;
+                query += ` AND dpUser.UserId = @Delivery_Person_Id`;
+            }
+            if (Sales_Person_Id) {
+                query += ` AND spUser.UserId = @Sales_Person_Id`;
             }
             if (Route_Id) {
                 query += ` AND rmt.Route_Id = @Route_Id`;
@@ -762,6 +764,7 @@ const DeliveryOrder = () => {
             request.input('cancel', Cancel_status);
             request.input('creater', Created_by);
             request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
+            request.input('Sales_Person_Id', sql.Int, Sales_Person_Id);
             request.input('Route_Id', sql.Int, Route_Id);
             request.input('Area_Id', sql.Int, Area_Id);
 
