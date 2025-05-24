@@ -355,9 +355,12 @@ const StockAndPurchaseReport = () => {
 
             const result = await request;
             if (result.recordset.length > 0) {
-                const payment = JSON.parse(result.recordset[0]?.Receipt);
+                const payment = result.recordset;
 
-                dataFound(res, toArray(payment?.Payment));
+                dataFound(res, payment.map(pay => ({
+                    ...pay,
+                    BILL_REFERENCE: JSON.parse(pay.BILL_REFERENCE)
+                })));
             } else {
                 noData(res)
             }

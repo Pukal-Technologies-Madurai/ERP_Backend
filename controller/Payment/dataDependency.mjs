@@ -165,9 +165,12 @@ const PaymentDataDependency = () => {
                     		COALESCE((
                     			SELECT SUM(Debit_Amo)
                     			FROM tbl_Payment_Bill_Info AS refAmount
+                                LEFT JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = refAmount.payment_id
                     			WHERE 
                     				ref.PIN_Id = refAmount.pay_bill_id
                     				AND refAmount.JournalBillType = 'PURCHASE INVOICE'
+                                    AND pgi.status <> 0
                     		), 0) AS TotalPaidAmount
                     	FROM tbl_Purchase_Order_Inv_Gen_Info AS ref
                     	WHERE PIN_Id IN (
@@ -184,9 +187,12 @@ const PaymentDataDependency = () => {
                     		COALESCE((
                     			SELECT SUM(Debit_Amo)
                     			FROM tbl_Payment_Bill_Info AS refAmount
+                                LEFT JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = refAmount.payment_id
                     			WHERE 
                     				refAmount.pay_bill_id = tm.Trip_Id
                     				AND refAmount.JournalBillType = 'MATERIAL INWARD'
+                                    AND pgi.status <> 0
                     		), 0) AS TotalPaidAmount
                     	FROM tbl_Trip_Master AS tm
                     	WHERE Trip_Id IN (
@@ -203,9 +209,12 @@ const PaymentDataDependency = () => {
                     		COALESCE((
                     			SELECT SUM(Debit_Amo)
                     			FROM tbl_Payment_Bill_Info AS refAmount
+                                LEFT JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = refAmount.payment_id
                     			WHERE 
                     				refAmount.pay_bill_id = tm.Trip_Id
                     				AND refAmount.JournalBillType = 'OTHER GODOWN'
+                                    AND pgi.status <> 0
                     		), 0) AS TotalPaidAmount
                     	FROM tbl_Trip_Master AS tm
                     	WHERE Trip_Id IN (
@@ -222,9 +231,12 @@ const PaymentDataDependency = () => {
                     		COALESCE((
                     			SELECT SUM(Debit_Amo)
                     			FROM tbl_Payment_Bill_Info AS refAmount
+                                LEFT JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = refAmount.payment_id
                     			WHERE 
                     				refAmount.pay_bill_id = pg.PR_Id
                     				AND refAmount.JournalBillType = 'PROCESSING'
+                                    AND pgi.status <> 0
                     		), 0) AS TotalPaidAmount
                     	FROM tbl_Processing_Gen_Info AS pg
                     	WHERE PR_Id IN (
@@ -257,7 +269,7 @@ const PaymentDataDependency = () => {
                     LEFT JOIN MATERIAL_INWARD_DATE AS mid ON pbi.pay_bill_id = mid.pay_bill_id
                     LEFT JOIN OTHER_GODOWN_TRANSFER_DATE AS ogd ON pbi.pay_bill_id = ogd.pay_bill_id
                     LEFT JOIN PROCESSING_DATE AS pr ON pbi.pay_bill_id = pr.pay_bill_id;`
-            );
+                );
 
             const result = await request;
 
@@ -356,7 +368,7 @@ const PaymentDataDependency = () => {
 
     const searchStockJournal = async (req, res) => {
         try {
-            const { stockJournalType = 1, filterItems = [] } = req.body;
+            const { stockJournalType = 1, filterItems = [], voucher } = req.body;
             const reqDate = req.body?.reqDate ? ISOString(req.body?.reqDate) : ISOString();
 
             if (stockJournalType < 1 || stockJournalType > 3) return invalidInput(res, `Invalid journal type: ${stockJournalType}`);
@@ -389,6 +401,7 @@ const PaymentDataDependency = () => {
                 		AND tm.Trip_Date = @reqDate
                 		AND tm.BillType = @BillType
                 		AND tm.TripStatus <> 'Canceled'
+                        ${checkIsNumber(voucher) ? ' AND tm.VoucherType = @voucher ' : ''}
                 ), TRIP_DETAILS AS (
                     SELECT
                         td.Trip_Id AS journalId,
@@ -474,6 +487,7 @@ const PaymentDataDependency = () => {
                 		)
                 		AND pgi.Process_date = @reqDate
                 		AND pgi.PR_Status <> 'Canceled'
+                        ${checkIsNumber(voucher) ? ' AND pgi.VoucherType = @voucher ' : ''}
                 ), Destination AS (
                     SELECT 
                 		d.PR_Id AS journalId,
@@ -550,6 +564,7 @@ const PaymentDataDependency = () => {
             const request = new sql.Request()
                 .input('reqDate', reqDate)
                 .input('BillType', getStockJournalTypeString)
+                .input('voucher', voucher)
                 .input('filterItems', toArray(filterItems).map(item => item).join(', '))
                 .query(
                     isEqualNumber(stockJournalType, 3) ? getProcessing : getTypeOneAndTwo
@@ -580,6 +595,45 @@ const PaymentDataDependency = () => {
         }
     }
 
+    const getFilterValues = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    -- Voucher
+                    SELECT DISTINCT pgi.payment_voucher_type_id AS value, v.Voucher_Type AS label
+                    FROM tbl_Payment_General_Info AS pgi
+                    LEFT JOIN tbl_Voucher_Type AS v
+                    ON v.Vocher_Type_Id = pgi.payment_voucher_type_id
+                    -- Debit Account
+                    SELECT DISTINCT pgi.debit_ledger AS value, a.Account_name AS label
+                    FROM tbl_Payment_General_Info AS pgi
+                    LEFT JOIN tbl_Account_Master AS a
+                    ON a.Acc_Id = pgi.debit_ledger
+                    -- Credit Account
+                    SELECT DISTINCT pgi.credit_ledger AS value, a.Account_name AS label
+                    FROM tbl_Payment_General_Info AS pgi
+                    LEFT JOIN tbl_Account_Master AS a
+                    ON a.Acc_Id = pgi.credit_ledger
+                    -- Created By
+                    SELECT DISTINCT pgi.created_by AS value, u.Name AS label
+                    FROM tbl_Payment_General_Info AS pgi
+                    LEFT JOIN tbl_Users AS u
+                    ON u.UserId = pgi.created_by;`
+                );
+
+            const result = await request;
+
+            dataFound(res, [], 'data found', {
+                voucherType: toArray(result.recordsets[0]),
+                debit_accounts: toArray(result.recordsets[1]),
+                credit_accounts: toArray(result.recordsets[2]),
+                created_by: toArray(result.recordsets[3])
+            });
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getAccountGroups,
         getAccounts,
@@ -587,6 +641,7 @@ const PaymentDataDependency = () => {
         getPaymentInvoiceBillInfo,
         getPaymentInvoiceCostingInfo,
         searchStockJournal,
+        getFilterValues
     }
 }
 

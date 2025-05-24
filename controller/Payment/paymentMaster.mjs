@@ -39,10 +39,17 @@ const PaymentMaster = () => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+            const { voucher, debit, credit, payment_type, createdBy, status } = req.query
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
+                .input('voucher', voucher)
+                .input('debit', debit)
+                .input('credit', credit)
+                .input('payment_type', payment_type)
+                .input('createdBy', createdBy)
+                .input('status', status)
                 .query(`
                     SELECT 
                     	pgi.*,
@@ -63,6 +70,12 @@ const PaymentMaster = () => {
                         ON creAcc.Acc_Id = pgi.credit_ledger
                     WHERE
                         pgi.payment_date BETWEEN @Fromdate AND @Todate
+                        ${checkIsNumber(voucher) ? ' AND pgi.payment_voucher_type_id = @voucher ' : ''}
+                        ${checkIsNumber(debit) ? ' AND pgi.debit_ledger = @debit ' : ''}
+                        ${checkIsNumber(credit) ? ' AND pgi.credit_ledger = @credit ' : ''}
+                        ${checkIsNumber(payment_type) ? ' AND pgi.pay_bill_type = @payment_type ' : ''}
+                        ${checkIsNumber(createdBy) ? ' AND pgi.created_by = @createdBy ' : ''}
+                        ${checkIsNumber(status) ? ' AND pgi.status = @status ' : ''}
                     ORDER BY 
                         pgi.payment_date DESC, pgi.created_on DESC;`
                 );
@@ -83,6 +96,7 @@ const PaymentMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount,
+                check_no, check_date, bank_name, bank_date
             } = req.body;
 
             const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
@@ -174,18 +188,24 @@ const PaymentMaster = () => {
                 .input('debit_ledger_name', debit_ledger_name)
                 .input('debit_amount', debit_amount)
                 .input('remarks', remarks)
+                .input('check_no', check_no ? check_no : null)
+                .input('check_date', check_date ? check_date : null)
+                .input('bank_name', bank_name ? bank_name : null)
+                .input('bank_date', bank_date ? bank_date : null)
                 .input('status', status)
                 .input('created_by', created_by)
                 .query(`
                     INSERT INTO tbl_Payment_General_Info (
                         pay_id, year_id, payment_sno, payment_invoice_no, payment_voucher_type_id, payment_date, pay_bill_type, 
                         credit_ledger, credit_ledger_name, credit_amount, 
-                        debit_ledger, debit_ledger_name, debit_amount, 
+                        debit_ledger, debit_ledger_name, debit_amount,
+                        check_no, check_date, bank_name, bank_date, 
                         remarks, status, created_by, created_on
                     ) VALUES (
                         @pay_id, @year_id, @payment_sno, @payment_invoice_no, @payment_voucher_type_id, @payment_date, @pay_bill_type, 
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
+                        @check_no, @check_date, @bank_name, @bank_date,
                         @remarks, @status, @created_by, GETDATE() 
                     )`
                 );
@@ -193,7 +213,38 @@ const PaymentMaster = () => {
             const result = await request;
 
             if (result.rowsAffected[0] > 0) {
-                success(res, 'Payment Created')
+
+                const isReference = isEqualNumber(pay_bill_type, 1) || isEqualNumber(pay_bill_type, 3);
+
+                if (!isReference) return success(res, 'Payment Created');
+
+                const getInsertedValues = new sql.Request()
+                    .input('pay_id', pay_id)
+                    .query(`
+                        SELECT 
+                        	pgi.*,
+                        	vt.Voucher_Type,
+                        	debAcc.Account_name AS DebitAccountGet,
+                        	creAcc.Account_name AS CreditAccountGet,
+					    	COALESCE((
+					    		SELECT SUM(Debit_Amo)
+					    		FROM tbl_Payment_Bill_Info AS pbi
+					    		WHERE pbi.payment_id = pgi.pay_id
+					    	), 0) AS TotalReferencedAmount
+                        FROM tbl_Payment_General_Info AS pgi
+                        LEFT JOIN tbl_Voucher_Type AS vt
+                            ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
+                        LEFT JOIN tbl_Account_Master AS debAcc
+                            ON debAcc.Acc_Id = pgi.debit_ledger
+					    LEFT JOIN tbl_Account_Master AS creAcc
+                            ON creAcc.Acc_Id = pgi.credit_ledger
+                        WHERE pay_id = @pay_id;`
+                    );
+
+                const insertedRow = await getInsertedValues;
+
+                success(res, 'Payment Created', insertedRow.recordset);
+
             } else {
                 failed(res)
             }
@@ -210,7 +261,8 @@ const PaymentMaster = () => {
                 pay_id, pay_bill_type, remarks, status,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
-                debit_amount, altered_by
+                debit_amount, altered_by,
+                check_no, check_date, bank_name, bank_date
             } = req.body;
 
             const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
@@ -240,6 +292,10 @@ const PaymentMaster = () => {
                 .input('debit_ledger', debit_ledger)
                 .input('debit_ledger_name', debit_ledger_name)
                 .input('debit_amount', debit_amount)
+                .input('check_no', check_no ? check_no : null)
+                .input('check_date', check_date ? check_date : null)
+                .input('bank_name', bank_name ? bank_name : null)
+                .input('bank_date', bank_date ? bank_date : null)
                 .input('remarks', remarks)
                 .input('status', status)
                 .input('altered_by', altered_by)
@@ -254,6 +310,10 @@ const PaymentMaster = () => {
                         debit_ledger = @debit_ledger,
                         debit_ledger_name = @debit_ledger_name,
                         debit_amount = @debit_amount,
+                        check_no = @check_no,
+                        check_date = @check_date,
+                        bank_name = @bank_name,
+                        bank_date = @bank_date,
                         remarks = @remarks,
                         status = @status,
                         altered_by = @altered_by
