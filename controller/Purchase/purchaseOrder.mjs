@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { dataFound, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
+import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
 import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
@@ -626,6 +626,31 @@ const PurchaseOrder = () => {
         }
     }
 
+    const cancelPurchaseOrder = async (req, res) => {
+        try {
+            const { PIN_Id } = req.query;
+
+            if (!checkIsNumber(PIN_Id)) return invalidInput(res);
+
+            const request = new sql.Request()
+                .input('PIN_Id', PIN_Id)
+                .query(`
+                    UPDATE tbl_Purchase_Order_Inv_Gen_Info
+                    SET Cancel_status = CASE WHEN Cancel_status = 1 THEN 0 ELSE 1 END
+                    WHERE PIN_Id = @PIN_Id`);
+
+            const result = await request;
+
+            if (result.rowsAffected[0] > 0) {
+                return success(res, 'Purchase invoice canceled');
+            } else {
+                failed(res);
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     const getPurchaseOrder = async (req, res) => {
 
         try {
@@ -834,6 +859,7 @@ const PurchaseOrder = () => {
     return {
         purchaseOrderCreation,
         editPurchaseOrder,
+        cancelPurchaseOrder,
         getPurchaseOrder,
         getVoucherType,
         getStockItemLedgerName,
