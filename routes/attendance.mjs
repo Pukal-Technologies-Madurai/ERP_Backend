@@ -17,4 +17,6 @@ AttendanceRouter.get('/fingerPrintAttendance', fingerPrintAttendance.getAttendan
 AttendanceRouter.get('/visitLogs', salesPersonVisitLogs.getVisitedLogs);
 AttendanceRouter.post('/visitLogs', salesPersonVisitLogs.postVisitLogs);
 
+AttendanceRouter.get('/department',newAttendance.getDepartment);
+
 export default AttendanceRouter;

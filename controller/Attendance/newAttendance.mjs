@@ -201,11 +201,34 @@ const newAttendance = () => {
         }
     }
 
+    const getDepartment = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                  
+                    SELECT DISTINCT Department AS value, Department AS label
+                    FROM tbl_Employee_Master
+                     
+                    
+                    `
+                );
+
+            const result = await request;
+
+            dataFound(res, [], 'data found', {
+                department: toArr(result.recordsets[0])
+            });
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         addAttendance,
         getMyLastAttendance,
         closeAttendance,
         getAttendanceHistory,
+        getDepartment
     }
 }
 
