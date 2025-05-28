@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { invalidInput, servError, dataFound, noData, success } from '../../res.mjs';
+import { invalidInput, servError, dataFound, noData, success, sentData } from '../../res.mjs';
 import { checkIsNumber } from '../../helper_functions.mjs';
 
 
@@ -79,36 +79,26 @@ const ClosingStockControll = () => {
         }
 
         try {
-            const query = `
-            SELECT 
-                pre.*,
-                pm.Product_Name,
-                COALESCE((
-                    SELECT 
-                        TOP (1) Product_Rate 
-                    FROM 
-                        tbl_Pro_Rate_Master 
-                    WHERE 
-                        Product_Id = pre.Item_Id
-                    ORDER BY
-                        CONVERT(DATETIME, Rate_Date) DESC
-                ), 0) AS Item_Rate 
-            FROM 
-                Previous_Stock_Fn_1(CONVERT(DATE, @day), @retID) AS pre
-                LEFT JOIN tbl_Product_Master AS pm
-                ON pm.Product_Id = pre.Item_Id`;
 
-            const request = new sql.Request();
-            request.input('day', reqDate || new Date());
-            request.input('retID', Retailer_Id);
+            const request = new sql.Request()
+                .input('day', reqDate || new Date())
+                .input('retID', Retailer_Id);
 
-            const result = await request.query(query);
+            const result = await request.query(`
+                SELECT 
+                    pre.*,
+                    pm.Product_Name,
+                    COALESCE((
+                        pm.Product_Rate
+                    ), 0) AS Item_Rate 
+                FROM 
+                    Previous_Stock_Fn_1(CONVERT(DATE, @day), @retID) AS pre
+                    LEFT JOIN tbl_Product_Master AS pm
+                    ON pm.Product_Id = pre.Item_Id`
+            );
 
-            if (result.recordset.length > 0) {
-                dataFound(res, result.recordset)
-            } else {
-                noData(res)
-            }
+            sentData(res, result.recordset);
+            
         } catch (e) {
             servError(e, res);
         }
@@ -228,117 +218,157 @@ const ClosingStockControll = () => {
         try {
 
             const request = new sql.Request()
-                .input('comp', Company_id)
                 .query(`
                     WITH AreasList AS (
                     	SELECT * FROM tbl_Area_Master
                     ), RetailerList As (
                     	SELECT * FROM tbl_Retailers_Master
-                    ), ProductRateList AS (
-                        SELECT * FROM tbl_Pro_Rate_Master
+                    ), ClosingStock AS (
+                        SELECT 
+                        	a.*,
+                        	COALESCE((
+                                SELECT
+                                    r.Retailer_Id,
+                                    r.Retailer_Name,
+                                    r.Reatailer_Address,
+                                    r.Mobile_No,
+                                    r.Latitude,
+                                    r.Longitude,
+                                    COALESCE((
+                                        SELECT 
+                                            pre.*,
+                                            pm.Product_Name,
+                                            pm.Brand,
+                                            pb.Brand_Name,
+                                            COALESCE((
+                                                pm.Product_Rate
+                                            ), 0) AS Item_Rate 
+                                        FROM 
+                                            Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
+                                            LEFT JOIN tbl_Product_Master AS pm
+                                            ON pm.Product_Id = pre.Item_Id
+                                            LEFT JOIN tbl_Brand_Master AS pb
+                                            ON pb.Brand_Id = pm.Brand
+                                        WHERE 
+                                            pre.Previous_Balance * COALESCE((
+                                                pm.Product_Rate
+                                            ), 0) > 0
+                                        FOR JSON PATH
+                                    ), '[]') AS Closing_Stock
+                                FROM RetailerList AS r
+                                WHERE a.Area_Id = r.Area_Id
+                                FOR JSON PATH
+                            ), '[]') AS Retailer
+                        FROM 
+                        	AreasList AS a
                     )
-                    SELECT 
-                    	a.*,
-                    	COALESCE((
-                            SELECT
-                                r.Retailer_Id,
-                                r.Retailer_Name,
-                                r.Reatailer_Address,
-                                r.Mobile_No,
-                                r.Latitude,
-                                r.Longitude,
-                                COALESCE((
-                                    SELECT 
-                                        pre.*,
-                                        pm.Product_Name,
-                                        pm.Brand,
-                                        pb.Brand_Name,
-                                        COALESCE((
-                                            SELECT 
-                                                TOP (1) Product_Rate 
-                                            FROM 
-                                                ProductRateList 
-                                            WHERE 
-                                                Product_Id = pre.Item_Id
-                                            ORDER BY
-                                                CONVERT(DATETIME, Rate_Date) DESC
-                                        ), 0) AS Item_Rate 
-                                    FROM 
-                                        Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
-                                        LEFT JOIN tbl_Product_Master AS pm
-                                        ON pm.Product_Id = pre.Item_Id
-                                        LEFT JOIN tbl_Brand_Master AS pb
-                                        ON pb.Brand_Id = pm.Brand
-                                    WHERE 
-                                        pre.Previous_Balance * COALESCE((
-                                            SELECT 
-                                                TOP (1) Product_Rate 
-                                            FROM 
-                                                ProductRateList 
-                                            WHERE 
-                                                Product_Id = pre.Item_Id
-                                            ORDER BY
-                                                CONVERT(DATETIME, Rate_Date) DESC
-                                        ), 0) > 0
-                                    FOR JSON PATH
-                                ), '[]') AS Closing_Stock
-                            FROM
-                                tbl_Retailers_Master AS r
-                            WHERE
-                                a.Area_Id = r.Area_Id
-                                AND EXISTS (
-                                    SELECT 1
-                                    FROM 
-                                        Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
-                                    WHERE 
-                                        pre.Previous_Balance * COALESCE((
-                                            SELECT 
-                                                TOP (1) Product_Rate 
-                                            FROM 
-                                                ProductRateList 
-                                            WHERE 
-                                                Product_Id = pre.Item_Id
-                                            ORDER BY
-                                                CONVERT(DATETIME, Rate_Date) DESC
-                                        ), 0) > 0
-                                )
-                            FOR JSON PATH
-                        ), '[]') AS Retailer
-                    FROM 
-                    	AreasList AS a
-                    WHERE
-                    	EXISTS (
-                            SELECT 1
-                            FROM
-                                RetailerList AS r
-                            WHERE
-                                a.Area_Id = r.Area_Id
-                                AND EXISTS (
-                                    SELECT 1
-                                    FROM 
-                                        Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
-                                    WHERE 
-                                        pre.Previous_Balance * COALESCE((
-                                            SELECT 
-                                                TOP (1) Product_Rate 
-                                            FROM 
-                                                ProductRateList 
-                                            WHERE 
-                                                Product_Id = pre.Item_Id
-                                            ORDER BY
-                                                CONVERT(DATETIME, Rate_Date) DESC
-                                        ), 0) > 0
-                                )
-                        )
-                    `)
-
-                    // 277
-                    // AND
-                    // r.Company_Id = @comp
-
-                    // 304
-                    // AND
-                    // r.Company_Id = @comp
+                    SELECT *
+                    FROM ClosingStock
+                    WHERE Retailer <> '[]'`
+                );
+            // .input('comp', Company_id)
+            // .query(`
+            //     WITH AreasList AS (
+            //     	SELECT * FROM tbl_Area_Master
+            //     ), RetailerList As (
+            //     	SELECT * FROM tbl_Retailers_Master
+            //     ), ProductRateList AS (
+            //         SELECT * FROM tbl_Pro_Rate_Master
+            //     )
+            //     SELECT 
+            //     	a.*,
+            //     	COALESCE((
+            //             SELECT
+            //                 r.Retailer_Id,
+            //                 r.Retailer_Name,
+            //                 r.Reatailer_Address,
+            //                 r.Mobile_No,
+            //                 r.Latitude,
+            //                 r.Longitude,
+            //                 COALESCE((
+            //                     SELECT 
+            //                         pre.*,
+            //                         pm.Product_Name,
+            //                         pm.Brand,
+            //                         pb.Brand_Name,
+            //                         COALESCE((
+            //                             SELECT 
+            //                                 TOP (1) Product_Rate 
+            //                             FROM 
+            //                                 ProductRateList 
+            //                             WHERE 
+            //                                 Product_Id = pre.Item_Id
+            //                             ORDER BY
+            //                                 CONVERT(DATETIME, Rate_Date) DESC
+            //                         ), 0) AS Item_Rate 
+            //                     FROM 
+            //                         Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
+            //                         LEFT JOIN tbl_Product_Master AS pm
+            //                         ON pm.Product_Id = pre.Item_Id
+            //                         LEFT JOIN tbl_Brand_Master AS pb
+            //                         ON pb.Brand_Id = pm.Brand
+            //                     WHERE 
+            //                         pre.Previous_Balance * COALESCE((
+            //                             SELECT 
+            //                                 TOP (1) Product_Rate 
+            //                             FROM 
+            //                                 ProductRateList 
+            //                             WHERE 
+            //                                 Product_Id = pre.Item_Id
+            //                             ORDER BY
+            //                                 CONVERT(DATETIME, Rate_Date) DESC
+            //                         ), 0) > 0
+            //                     FOR JSON PATH
+            //                 ), '[]') AS Closing_Stock
+            //             FROM
+            //                 tbl_Retailers_Master AS r
+            //             WHERE
+            //                 a.Area_Id = r.Area_Id
+            //                 AND EXISTS (
+            //                     SELECT 1
+            //                     FROM 
+            //                         Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
+            //                     WHERE 
+            //                         pre.Previous_Balance * COALESCE((
+            //                             SELECT 
+            //                                 TOP (1) Product_Rate 
+            //                             FROM 
+            //                                 ProductRateList 
+            //                             WHERE 
+            //                                 Product_Id = pre.Item_Id
+            //                             ORDER BY
+            //                                 CONVERT(DATETIME, Rate_Date) DESC
+            //                         ), 0) > 0
+            //                 )
+            //             FOR JSON PATH
+            //         ), '[]') AS Retailer
+            //     FROM 
+            //     	AreasList AS a
+            //     WHERE
+            //     	EXISTS (
+            //             SELECT 1
+            //             FROM
+            //                 RetailerList AS r
+            //             WHERE
+            //                 a.Area_Id = r.Area_Id
+            //                 AND EXISTS (
+            //                     SELECT 1
+            //                     FROM 
+            //                         Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), r.Retailer_Id) AS pre
+            //                     WHERE 
+            //                         pre.Previous_Balance * COALESCE((
+            //                             SELECT 
+            //                                 TOP (1) Product_Rate 
+            //                             FROM 
+            //                                 ProductRateList 
+            //                             WHERE 
+            //                                 Product_Id = pre.Item_Id
+            //                             ORDER BY
+            //                                 CONVERT(DATETIME, Rate_Date) DESC
+            //                         ), 0) > 0
+            //                 )
+            //         )
+            //     `)
 
             const result = await request;
 

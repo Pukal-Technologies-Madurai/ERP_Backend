@@ -1,6 +1,7 @@
 import express from 'express';
 import paymentMaster from '../controller/Payment/paymentMaster.mjs';
 import paymentDependency from '../controller/Payment/dataDependency.mjs';
+import paymentReport from '../controller/Payment/paymentReport.mjs';
 
 const PaymentRouter = express.Router();
 
@@ -17,6 +18,9 @@ PaymentRouter.post('/paymentMaster/searchStockJournal', paymentDependency.search
 PaymentRouter.get('/paymentMaster/search', paymentDependency.searchPaymentInvoice);
 PaymentRouter.get('/accountGroup', paymentDependency.getAccountGroups);
 PaymentRouter.get('/accounts', paymentDependency.getAccounts);
+
+PaymentRouter.get('/reports/pendingReference', paymentReport.getPendingPaymentReference);
+PaymentRouter.get('/reports/accountsTransaction', paymentReport.getAccountsTransaction);
 
 
 export default PaymentRouter;
