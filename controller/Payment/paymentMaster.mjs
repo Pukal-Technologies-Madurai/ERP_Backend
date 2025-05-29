@@ -16,7 +16,6 @@ const validations = (obj) => {
 
 const editValidations = (obj) => {
     return {
-        pay_bill_type: typeof obj.pay_bill_type === 'string' && obj.pay_bill_type.trim() !== '',
         altered_by: checkIsNumber(obj?.altered_by),
         credit_ledger: checkIsNumber(obj?.credit_ledger),
         debit_amount: checkIsNumber(obj?.debit_amount),
@@ -255,10 +254,12 @@ const PaymentMaster = () => {
     }
 
     const updateGeneralInfoPayments = async (req, res) => {
+        const transaction = new sql.Transaction();
+
         try {
 
             const {
-                pay_id, pay_bill_type, remarks, status,
+                pay_id, remarks, status,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount, altered_by,
@@ -282,10 +283,9 @@ const PaymentMaster = () => {
 
             // update values
 
-            const request = new sql.Request()
+            const request = new sql.Request(transaction)
                 .input('pay_id', pay_id)
                 .input('payment_date', payment_date)
-                .input('pay_bill_type', pay_bill_type)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
                 .input('credit_amount', debit_amount)
@@ -303,7 +303,6 @@ const PaymentMaster = () => {
                     UPDATE tbl_Payment_General_Info
                     SET 
                         payment_date = @payment_date,
-                        pay_bill_type = @pay_bill_type,
                         credit_ledger = @credit_ledger,
                         credit_ledger_name = @credit_ledger_name,
                         credit_amount = @credit_amount,
@@ -321,13 +320,27 @@ const PaymentMaster = () => {
                         pay_id = @pay_id;`
                 );
 
-            const result = await request;
+            await request;
 
-            if (result.rowsAffected[0] > 0) {
-                success(res, 'Payment Created')
-            } else {
-                failed(res)
-            }
+            const updateChildTables = new sql.Request(transaction)
+                .input('payment_id', pay_id)
+                .input('payment_date', payment_date)
+                .input('Debit_Ledger_Id', debit_ledger_name)
+                .query(`
+                    UPDATE tbl_Payment_Bill_Info 
+                    SET 
+                        payment_date = @payment_date,
+                        DR_CR_Acc_Id = @Debit_Ledger_Id
+                    WHERE payment_id = @payment_id;
+
+                    UPDATE tbl_Payment_Costing_Info 
+                    SET 
+                        payment_date = @payment_date,
+                        Debit_Ledger_Id = @Debit_Ledger_Id
+                    WHERE payment_id = @payment_id;`
+                );
+
+            await updateChildTables;
 
         } catch (e) {
             servError(e, res)

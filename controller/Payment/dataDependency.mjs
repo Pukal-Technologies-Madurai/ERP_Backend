@@ -32,9 +32,10 @@ const PaymentDataDependency = () => {
 
     const getAccounts = async (req, res) => {
         try {
-            const { GroupId, GroupName } = req.query;
+            const { Acc_Id, GroupId, GroupName } = req.query;
 
             const request = new sql.Request()
+                .input('Acc_Id', Acc_Id)
                 .input('GroupId', GroupId)
                 .input('GroupName', GroupName)
                 .query(`
@@ -48,9 +49,10 @@ const PaymentDataDependency = () => {
                     LEFT JOIN tbl_Accounting_Group AS ag
                     ON ag.Group_Id = am.Group_Id
                     WHERE am.Acc_Id IS NOT NULL
+                    ${checkIsNumber(Acc_Id) ? ' AND a.Acc_Id = @Acc_Id ' : ''}
                     ${checkIsNumber(GroupId) ? ' AND am.Group_Id = @Group_Id ' : ''}
                     ${GroupName ? ' AND ag.Group_Name = @GroupName ' : ''}
-                    ORDER BY am.Account_name `
+                    ORDER BY am.Account_name;`
                 );
 
             const result = await request;

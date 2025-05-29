@@ -17,7 +17,8 @@ import voucherType from '../controller/Masters/voucherType.mjs';
 import branchPos from '../controller/Masters/pos.mjs';
 import uom  from '../controller/Masters/uom.mjs';
 import posRateMaster from '../controller/Masters/posRateMaster.mjs';
-import expenceMaster from '../controller/Masters/expences.mjs'
+import expenceMaster from '../controller/Masters/expences.mjs';
+import accountMaster from '../controller/Masters/accountMaster.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 
 const MastersRouter = express.Router();
@@ -176,5 +177,8 @@ MastersRouter.get('/syncPOSData',posRateMaster.valuesSync)
 MastersRouter.get('/posproductSync',posRateMaster.posProductSync);
 MastersRouter.get('/posRetailersSync', retailers.posRetailesSync);
 MastersRouter.get('/posProductList', posRateMaster.posProductList);
+
+MastersRouter.get('/accounts', accountMaster.getAccounts);
+MastersRouter.get('/accountGroups', accountMaster.getAccountGroups);
 
 export default MastersRouter;

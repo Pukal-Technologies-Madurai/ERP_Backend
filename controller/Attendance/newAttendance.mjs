@@ -7,6 +7,7 @@ import getImageIfExist from '../../middleware/getImageIfExist.mjs';
 import fileRemoverMiddleware from '../../middleware/unSyncFile.mjs'
 
 const newAttendance = () => {
+    const toArr = (arr) => Array.isArray(arr) ? arr : []
 
     const addAttendance = async (req, res) => {
 
