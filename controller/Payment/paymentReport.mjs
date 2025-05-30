@@ -138,9 +138,51 @@ const PaymentReports = () => {
         }
     }
 
+    const itemTotalExpenceWithStockGroup = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    SELECT 
+                    	pci.item_id,
+                    	COALESCE(pm.Product_Name, 'Not found') Product_Name,
+                    	COALESCE(sl.Stock_Group, 'Not grouped') Stock_Group,
+                    	COALESCE(sl.Grade_Item_Group, 'Not grouped') Grade_Item_Group,
+                    	SUM(pci.expence_value) AS total_expense_value,
+                    	COUNT(pci.auto_id) AS payment_count
+                    FROM tbl_Payment_Costing_Info AS pci
+                    JOIN tbl_Payment_General_Info AS pgi
+                    	ON pgi.pay_id = pci.payment_id
+                    LEFT JOIN tbl_Product_Master AS pm
+                    	ON pm.Product_Id = pci.item_id
+                    LEFT JOIN tbl_Stock_LOS AS sl
+                    	ON sl.Stock_Tally_Id = pm.ERP_Id
+                    WHERE 
+                    	pgi.payment_date BETWEEN @Fromdate AND @Todate
+                    	AND pgi.status <> 0
+                    GROUP BY 
+                    	pci.item_id,
+                    	pm.Product_Name,
+                    	sl.Stock_Group,
+                    	sl.Grade_Item_Group;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getPendingPaymentReference,
         getAccountsTransaction,
+        itemTotalExpenceWithStockGroup,
     }
 }
 

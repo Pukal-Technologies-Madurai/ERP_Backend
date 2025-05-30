@@ -21,6 +21,7 @@ PaymentRouter.get('/accounts', paymentDependency.getAccounts);
 
 PaymentRouter.get('/reports/pendingReference', paymentReport.getPendingPaymentReference);
 PaymentRouter.get('/reports/accountsTransaction', paymentReport.getAccountsTransaction);
+PaymentRouter.get('/reports/itemExpences', paymentReport.itemTotalExpenceWithStockGroup);
 
 
 export default PaymentRouter;
