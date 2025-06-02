@@ -5,8 +5,8 @@ import sql from 'mssql'
 
 const validations = (obj) => {
     return {
-        payment_voucher_type_id: checkIsNumber(obj.payment_voucher_type_id),
-        pay_bill_type: checkIsNumber(obj.pay_bill_type) ? obj.pay_bill_type > 0 && obj.pay_bill_type < 5 : false,
+        receipt_voucher_type_id: checkIsNumber(obj.receipt_voucher_type_id),
+        receipt_bill_type: checkIsNumber(obj.receipt_bill_type) ? obj.receipt_bill_type > 0 && obj.receipt_bill_type < 4 : false,
         created_by: checkIsNumber(obj?.created_by),
         credit_ledger: checkIsNumber(obj?.credit_ledger),
         debit_amount: checkIsNumber(obj?.debit_amount),
@@ -23,7 +23,7 @@ const editValidations = (obj) => {
     }
 }
 
-const PaymentMaster = () => {
+const ReceiptMaster = () => {
 
     const add = (a, b) => toNumber(a) + toNumber(b);
     const subtract = (a, b) => toNumber(a) - toNumber(b);
@@ -34,7 +34,7 @@ const PaymentMaster = () => {
     const numberFormat = (num) => new Intl.NumberFormat().format(toNumber(num));
     const localDate = (dateStr) => new Date(dateStr).toLocaleDateString();
 
-    const getPayments = async (req, res) => {
+    const getReceipts = async (req, res) => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
@@ -51,32 +51,32 @@ const PaymentMaster = () => {
                 .input('status', status)
                 .query(`
                     SELECT 
-                    	pgi.*,
-                    	vt.Voucher_Type,
-                    	debAcc.Account_name AS DebitAccountGet,
-                    	creAcc.Account_name AS CreditAccountGet,
-						COALESCE((
-							SELECT SUM(Debit_Amo)
-							FROM tbl_Payment_Bill_Info AS pbi
-							WHERE pbi.payment_id = pgi.pay_id
-						), 0) AS TotalReferencedAmount
-                    FROM tbl_Payment_General_Info AS pgi
+                        pgi.*,
+                        vt.Voucher_Type,
+                        debAcc.Account_name AS DebitAccountGet,
+                        creAcc.Account_name AS CreditAccountGet,
+                        COALESCE((
+                            SELECT SUM(Debit_Amo)
+                            FROM tbl_Receipt_Bill_Info AS pbi
+                            WHERE pbi.receipt_id = pgi.receipt_id
+                        ), 0) AS TotalReferencedAmount
+                    FROM tbl_Receipt_General_Info AS pgi
                     LEFT JOIN tbl_Voucher_Type AS vt
-                        ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
+                        ON vt.Vocher_Type_Id = pgi.receipt_voucher_type_id
                     LEFT JOIN tbl_Account_Master AS debAcc
                         ON debAcc.Acc_Id = pgi.debit_ledger
-					LEFT JOIN tbl_Account_Master AS creAcc
+                    LEFT JOIN tbl_Account_Master AS creAcc
                         ON creAcc.Acc_Id = pgi.credit_ledger
                     WHERE
-                        pgi.payment_date BETWEEN @Fromdate AND @Todate
-                        ${checkIsNumber(voucher) ? ' AND pgi.payment_voucher_type_id = @voucher ' : ''}
+                        pgi.receipt_date BETWEEN @Fromdate AND @Todate
+                        ${checkIsNumber(voucher) ? ' AND pgi.receipt_voucher_type_id = @voucher ' : ''}
                         ${checkIsNumber(debit) ? ' AND pgi.debit_ledger = @debit ' : ''}
                         ${checkIsNumber(credit) ? ' AND pgi.credit_ledger = @credit ' : ''}
-                        ${checkIsNumber(payment_type) ? ' AND pgi.pay_bill_type = @payment_type ' : ''}
+                        ${checkIsNumber(payment_type) ? ' AND pgi.receipt_bill_type = @payment_type ' : ''}
                         ${checkIsNumber(createdBy) ? ' AND pgi.created_by = @createdBy ' : ''}
                         ${checkIsNumber(status) ? ' AND pgi.status = @status ' : ''}
                     ORDER BY 
-                        pgi.payment_date DESC, pgi.created_on DESC;`
+                        pgi.receipt_date DESC, pgi.created_on DESC;`
                 );
 
             const result = await request;
@@ -87,18 +87,18 @@ const PaymentMaster = () => {
         }
     }
 
-    const createGeneralInfoPayments = async (req, res) => {
+    const createReceipt = async (req, res) => {
         try {
 
             const {
-                payment_voucher_type_id, pay_bill_type, remarks, status, created_by,
+                receipt_voucher_type_id, receipt_bill_type, remarks, status, created_by,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount,
                 check_no, check_date, bank_name, bank_date
             } = req.body;
 
-            const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
+            const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
 
             // validations
 
@@ -115,21 +115,21 @@ const PaymentMaster = () => {
 
             // // get unique Purchase invoice id
 
-            const get_pay_id = await getNextId({ table: 'tbl_Payment_General_Info', column: 'pay_id' });
-            if (!get_pay_id.status || !checkIsNumber(get_pay_id.MaxId)) throw new Error('Failed to get pay_id');
+            const receipt_id_get = await getNextId({ table: 'tbl_Receipt_General_Info', column: 'receipt_id' });
+            if (!receipt_id_get.status || !checkIsNumber(receipt_id_get.MaxId)) throw new Error('Failed to get receipt_id');
 
-            const pay_id = get_pay_id.MaxId;
+            const receipt_id = receipt_id_get.MaxId;
 
             // getting year id
 
             const get_year_id = await new sql.Request()
-                .input('payment_date', payment_date)
+                .input('receipt_date', receipt_date)
                 .query(`
                     SELECT Id AS Year_Id, Year_Desc
                     FROM tbl_Year_Master
                     WHERE 
-                        Fin_Start_Date <= @payment_date 
-                        AND Fin_End_Date >= @payment_date`
+                        Fin_Start_Date <= @receipt_date 
+                        AND Fin_End_Date >= @receipt_date`
                 );
 
             if (get_year_id.recordset.length === 0) throw new Error('Year_Id not found');
@@ -138,26 +138,26 @@ const PaymentMaster = () => {
 
             // get Voucher and year based invoice count
 
-            const payment_sno = Number((await new sql.Request()
+            const receipt_sno = Number((await new sql.Request()
                 .input('Year_Id', Year_Id)
-                .input('payment_voucher_type_id', payment_voucher_type_id)
+                .input('receipt_voucher_type_id', receipt_voucher_type_id)
                 .query(`
                     SELECT 
-                        COALESCE(MAX(payment_sno), 0) AS payment_sno
+                        COALESCE(MAX(receipt_sno), 0) AS receipt_sno
                     FROM 
-                        tbl_Payment_General_Info
+                        tbl_Receipt_General_Info
                     WHERE
                         year_id = @Year_Id
                         AND
-                        payment_voucher_type_id = @payment_voucher_type_id`
-                ))?.recordset[0]?.payment_sno) + 1;
+                        receipt_voucher_type_id = @receipt_voucher_type_id`
+                ))?.recordset[0]?.receipt_sno) + 1;
 
-            if (!checkIsNumber(payment_sno)) throw new Error('Failed to get voucher Based unique id');
+            if (!checkIsNumber(receipt_sno)) throw new Error('Failed to get voucher Based unique id');
 
             // get Voucher Code
 
             const VoucherCodeGet = await new sql.Request()
-                .input('Vocher_Type_Id', payment_voucher_type_id)
+                .input('Vocher_Type_Id', receipt_voucher_type_id)
                 .query(`
                     SELECT Voucher_Code
                     FROM tbl_Voucher_Type
@@ -170,16 +170,16 @@ const PaymentMaster = () => {
 
             // get invoice code
 
-            const payment_invoice_no = Voucher_Code + "/" + createPadString(payment_sno, 6) + '/' + Year_Desc;
+            const receipt_invoice_no = Voucher_Code + "/" + createPadString(receipt_sno, 6) + '/' + Year_Desc;
 
             const request = new sql.Request()
-                .input('pay_id', pay_id)
+                .input('receipt_id', receipt_id)
                 .input('year_id', Year_Id)
-                .input('payment_sno', payment_sno)
-                .input('payment_invoice_no', payment_invoice_no)
-                .input('payment_voucher_type_id', payment_voucher_type_id)
-                .input('payment_date', payment_date)
-                .input('pay_bill_type', pay_bill_type)
+                .input('receipt_sno', receipt_sno)
+                .input('receipt_invoice_no', receipt_invoice_no)
+                .input('receipt_voucher_type_id', receipt_voucher_type_id)
+                .input('receipt_date', receipt_date)
+                .input('receipt_bill_type', receipt_bill_type)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
                 .input('credit_amount', debit_amount)
@@ -194,14 +194,16 @@ const PaymentMaster = () => {
                 .input('status', status)
                 .input('created_by', created_by)
                 .query(`
-                    INSERT INTO tbl_Payment_General_Info (
-                        pay_id, year_id, payment_sno, payment_invoice_no, payment_voucher_type_id, payment_date, pay_bill_type, 
+                    INSERT INTO tbl_Receipt_General_Info (
+                        receipt_id, year_id, receipt_sno, receipt_invoice_no, 
+                        receipt_voucher_type_id, receipt_date, receipt_bill_type, 
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
                         check_no, check_date, bank_name, bank_date, 
                         remarks, status, created_by, created_on
                     ) VALUES (
-                        @pay_id, @year_id, @payment_sno, @payment_invoice_no, @payment_voucher_type_id, @payment_date, @pay_bill_type, 
+                        @receipt_id, @year_id, @receipt_sno, @receipt_invoice_no, 
+                        @receipt_voucher_type_id, @receipt_date, @receipt_bill_type, 
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
                         @check_no, @check_date, @bank_name, @bank_date,
@@ -213,31 +215,31 @@ const PaymentMaster = () => {
 
             if (result.rowsAffected[0] > 0) {
 
-                const isReference = isEqualNumber(pay_bill_type, 1) || isEqualNumber(pay_bill_type, 3);
+                const isReference = isEqualNumber(receipt_bill_type, 1) || isEqualNumber(receipt_bill_type, 3);
 
                 if (!isReference) return success(res, 'Payment Created');
 
                 const getInsertedValues = new sql.Request()
-                    .input('pay_id', pay_id)
+                    .input('receipt_id', receipt_id)
                     .query(`
                         SELECT 
-                        	pgi.*,
-                        	vt.Voucher_Type,
-                        	debAcc.Account_name AS DebitAccountGet,
-                        	creAcc.Account_name AS CreditAccountGet,
-					    	COALESCE((
-					    		SELECT SUM(Debit_Amo)
-					    		FROM tbl_Payment_Bill_Info AS pbi
-					    		WHERE pbi.payment_id = pgi.pay_id
-					    	), 0) AS TotalReferencedAmount
-                        FROM tbl_Payment_General_Info AS pgi
+                            pgi.*,
+                            vt.Voucher_Type,
+                            debAcc.Account_name AS DebitAccountGet,
+                            creAcc.Account_name AS CreditAccountGet,
+                            COALESCE((
+                                SELECT SUM(Debit_Amo)
+                                FROM tbl_Receipt_Bill_Info AS pbi
+                                WHERE pbi.receipt_id = pgi.receipt_id
+                            ), 0) AS TotalReferencedAmount
+                        FROM tbl_Receipt_General_Info AS pgi
                         LEFT JOIN tbl_Voucher_Type AS vt
-                            ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
+                            ON vt.Vocher_Type_Id = pgi.receipt_voucher_type_id
                         LEFT JOIN tbl_Account_Master AS debAcc
                             ON debAcc.Acc_Id = pgi.debit_ledger
-					    LEFT JOIN tbl_Account_Master AS creAcc
+                        LEFT JOIN tbl_Account_Master AS creAcc
                             ON creAcc.Acc_Id = pgi.credit_ledger
-                        WHERE pay_id = @pay_id;`
+                        WHERE receipt_id = @receipt_id;`
                     );
 
                 const insertedRow = await getInsertedValues;
@@ -253,20 +255,20 @@ const PaymentMaster = () => {
         }
     }
 
-    const updateGeneralInfoPayments = async (req, res) => {
+    const updateReceipt = async (req, res) => {
         const transaction = new sql.Transaction();
 
         try {
 
             const {
-                pay_id, remarks, status,
+                receipt_id, remarks, status,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount, altered_by,
                 check_no, check_date, bank_name, bank_date
             } = req.body;
 
-            const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
+            const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
 
             // validations
 
@@ -286,8 +288,8 @@ const PaymentMaster = () => {
             // update values
 
             const request = new sql.Request(transaction)
-                .input('pay_id', pay_id)
-                .input('payment_date', payment_date)
+                .input('receipt_id', receipt_id)
+                .input('receipt_date', receipt_date)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
                 .input('credit_amount', debit_amount)
@@ -302,9 +304,9 @@ const PaymentMaster = () => {
                 .input('status', status)
                 .input('altered_by', altered_by)
                 .query(`
-                    UPDATE tbl_Payment_General_Info
+                    UPDATE tbl_Receipt_General_Info
                     SET 
-                        payment_date = @payment_date,
+                        receipt_date = @receipt_date,
                         credit_ledger = @credit_ledger,
                         credit_ledger_name = @credit_ledger_name,
                         credit_amount = @credit_amount,
@@ -319,27 +321,27 @@ const PaymentMaster = () => {
                         status = @status,
                         altered_by = @altered_by
                     WHERE
-                        pay_id = @pay_id;`
+                        receipt_id = @receipt_id;`
                 );
 
             await request;
 
             const updateChildTables = new sql.Request(transaction)
-                .input('payment_id', pay_id)
-                .input('payment_date', payment_date)
+                .input('receipt_id', receipt_id)
+                .input('receipt_date', receipt_date)
                 .input('Debit_Ledger_Id', debit_ledger_name)
                 .query(`
-                    UPDATE tbl_Payment_Bill_Info 
+                    UPDATE tbl_Receipt_Bill_Info 
                     SET 
-                        payment_date = @payment_date,
+                        receipt_date = @receipt_date,
                         DR_CR_Acc_Id = @Debit_Ledger_Id
-                    WHERE payment_id = @payment_id;
+                    WHERE receipt_id = @receipt_id;
 
-                    UPDATE tbl_Payment_Costing_Info 
+                    UPDATE tbl_Receipt_Costing_Info 
                     SET 
-                        payment_date = @payment_date,
+                        receipt_date = @receipt_date,
                         Debit_Ledger_Id = @Debit_Ledger_Id
-                    WHERE payment_id = @payment_id;`
+                    WHERE receipt_id = @receipt_id;`
                 );
 
             await updateChildTables;
@@ -353,48 +355,48 @@ const PaymentMaster = () => {
         const transaction = new sql.Transaction();
 
         try {
-            const { payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
+            const { receipt_id, receipt_no, receipt_date, receipt_bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
 
             if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
 
-            const isPurchasePayment = isEqualNumber(bill_type, 1);
+            const isPurchasePayment = isEqualNumber(receipt_bill_type, 1);
 
             const calcTotalDebitAmount = (bill_id) => {
                 return toArray(CostingDetails).filter(
-                    fil => isEqualNumber(bill_id, fil.pay_bill_id)
+                    fil => isEqualNumber(bill_id, fil.bill_id)
                 ).reduce((acc, item) => add(acc, item?.expence_value), 0)
             }
 
             await transaction.begin();
 
             await new sql.Request(transaction)
-                .input('payment_id', payment_id)
+                .input('receipt_id', receipt_id)
                 .query(`
-                    DELETE FROM tbl_Payment_Bill_Info WHERE payment_id = @payment_id;
-                    DELETE FROM tbl_Payment_Costing_Info WHERE payment_id = @payment_id;`
+                    DELETE FROM tbl_Receipt_Bill_Info WHERE receipt_id = @receipt_id;
+                    DELETE FROM tbl_Receipt_Costing_Info WHERE receipt_id = @receipt_id;`
                 );
 
             for (let i = 0; i < BillsDetails.length; i++) {
                 const CurrentBillDetails = BillsDetails[i];
 
                 const request = new sql.Request(transaction)
-                    .input('payment_id', payment_id)
-                    .input('payment_no', payment_no)
-                    .input('payment_date', payment_date)
-                    .input('bill_type', bill_type)
+                    .input('receipt_id', receipt_id)
+                    .input('receipt_no', receipt_no)
+                    .input('receipt_date', receipt_date)
+                    .input('receipt_bill_type', receipt_bill_type)
                     .input('DR_CR_Acc_Id', DR_CR_Acc_Id)
-                    .input('pay_bill_id', CurrentBillDetails?.pay_bill_id)
+                    .input('bill_id', CurrentBillDetails?.bill_id)
                     .input('JournalBillType', isPurchasePayment ? 'PURCHASE PAYMENT' : CurrentBillDetails?.JournalBillType)
                     .input('bill_name', CurrentBillDetails?.bill_name)
                     .input('bill_amount', CurrentBillDetails?.bill_amount)
-                    .input('Debit_Amo', isPurchasePayment ? CurrentBillDetails?.Debit_Amo : calcTotalDebitAmount(CurrentBillDetails?.pay_bill_id))
+                    .input('Debit_Amo', isPurchasePayment ? CurrentBillDetails?.Debit_Amo : calcTotalDebitAmount(CurrentBillDetails?.bill_id))
                     .query(`
-                        INSERT INTO tbl_Payment_Bill_Info (
-                            payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id,
-                            pay_bill_id, bill_name, bill_amount, JournalBillType, Debit_Amo, Credit_Amo
+                        INSERT INTO tbl_Receipt_Bill_Info (
+                            receipt_id, receipt_no, receipt_date, receipt_bill_type, DR_CR_Acc_Id,
+                            bill_id, bill_name, bill_amount, JournalBillType, Debit_Amo, Credit_Amo
                         ) VALUES (
-                            @payment_id, @payment_no, @payment_date, @bill_type, @DR_CR_Acc_Id,
-                            @pay_bill_id, @bill_name, @bill_amount, @JournalBillType, @Debit_Amo, 0
+                            @receipt_id, @receipt_no, @receipt_date, @receipt_bill_type, @DR_CR_Acc_Id,
+                            @bill_id, @bill_name, @bill_amount, @JournalBillType, @Debit_Amo, 0
                         );`
                     );
 
@@ -408,23 +410,23 @@ const PaymentMaster = () => {
                     const itemDetails = CostingDetails[i];
 
                     const request = new sql.Request(transaction)
-                        .input('payment_id', payment_id)
-                        .input('payment_no', payment_no)
-                        .input('payment_date', payment_date)
-                        .input('bill_type', bill_type)
+                        .input('receipt_id', receipt_id)
+                        .input('receipt_no', receipt_no)
+                        .input('receipt_date', receipt_date)
+                        .input('receipt_bill_type', receipt_bill_type)
                         .input('Debit_Ledger_Id', DR_CR_Acc_Id)
-                        .input('pay_bill_id', itemDetails?.pay_bill_id)
+                        .input('bill_id', itemDetails?.bill_id)
                         .input('JournalBillType', itemDetails?.JournalBillType)
                         .input('item_id', itemDetails?.item_id)
                         .input('item_name', itemDetails?.item_name)
                         .input('expence_value', itemDetails?.expence_value)
                         .query(`
-                        INSERT INTO tbl_Payment_Costing_Info (
-                            payment_id, payment_no, payment_date, bill_type, Debit_Ledger_Id, 
-                            pay_bill_id, JournalBillType, item_id, item_name, expence_value
+                        INSERT INTO tbl_Receipt_Costing_Info (
+                            receipt_id, receipt_no, receipt_date, receipt_bill_type, Debit_Ledger_Id, 
+                            bill_id, JournalBillType, item_id, item_name, expence_value
                         ) VALUES (
-                            @payment_id, @payment_no, @payment_date, @bill_type, @Debit_Ledger_Id, 
-                            @pay_bill_id, @JournalBillType, @item_id, @item_name, @expence_value
+                            @receipt_id, @receipt_no, @receipt_date, @receipt_bill_type, @Debit_Ledger_Id, 
+                            @bill_id, @JournalBillType, @item_id, @item_name, @expence_value
                         );`
                         );
 
@@ -449,12 +451,12 @@ const PaymentMaster = () => {
     // const get 
 
     return {
-        getPayments,
-        createGeneralInfoPayments,
-        updateGeneralInfoPayments,
+        getReceipts,
+        createReceipt,
+        updateReceipt,
         addAgainstRef,
     }
 }
 
 
-export default PaymentMaster();
+export default ReceiptMaster();
