@@ -1,10 +1,10 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, invalidInput, success, failed } from '../../res.mjs';
-import { checkIsNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, ISOString } from '../../helper_functions.mjs';
 import { getUserType } from '../../middleware/miniAPIs.mjs';
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import getImageIfExist from '../../middleware/getImageIfExist.mjs';
-import fileRemoverMiddleware from '../../middleware/unSyncFile.mjs'
+import fileRemoverMiddleware from '../../middleware/unSyncFile.mjs';
 
 const newAttendance = () => {
     const toArr = (arr) => Array.isArray(arr) ? arr : []
@@ -224,12 +224,291 @@ const newAttendance = () => {
         }
     }
 
+    const employeewise = async (req, res) => {
+        const FromDate = req.query?.FromDate
+            ? ISOString(req.query?.FromDate)
+            : ISOString();
+        const ToDate = req.query?.ToDate
+            ? ISOString(req.query?.ToDate)
+            : ISOString();
+
+        try {
+
+            if (!FromDate || !ToDate) {
+                return invalidInput(res, "FromDate and ToDate are required");
+            }
+
+            const request = new sql.Request();
+            request.input("FromDate", sql.DateTime, FromDate);
+            request.input("ToDate", sql.DateTime, ToDate);
+
+            let query = `
+                    WITH RankedLogs AS (
+                        SELECT 
+                            em.User_Mgt_Id,          
+                            u.Name AS username,
+                            ISNULL(NULLIF(em.Department, ''), 'Unassigned') AS Department,
+                            em.Sex,
+                            pd.EmployeeCode,        
+                            al.AttendanceDate AS LogDateTime,           
+                            CAST(al.AttendanceDate AS DATE) AS LogDate
+                        FROM 
+                            tbl_Employee_Master em
+                        LEFT JOIN 
+                            tbl_Users u ON u.UserId = em.User_Mgt_Id
+                        LEFT JOIN 
+                            etimetracklite1.dbo.Employees pd 
+                            ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+                        LEFT JOIN 
+                            etimetracklite1.dbo.AttendanceLogs al 
+                            ON al.EmployeeId = pd.EmployeeId 
+                        WHERE 
+                            CAST(al.AttendanceDate AS DATE) BETWEEN @FromDate AND @ToDate
+                            AND CAST(al.PunchRecords AS NVARCHAR(MAX)) IS NOT NULL  
+                            AND LTRIM(RTRIM(CAST(al.PunchRecords AS NVARCHAR(MAX)))) <> ''
+                    ), EmployeeCounts AS (
+                        SELECT
+                            SUM(CASE WHEN Sex = 'Male' THEN 1 ELSE 0 END) AS TotalMaleEmployees,
+                            SUM(CASE WHEN Sex = 'Female' THEN 1 ELSE 0 END) AS TotalFemaleEmployees,
+                            COUNT(*) AS TotalEmployees
+                        FROM
+                            tbl_Employee_Master
+                    ), PresentCounts AS (
+                        SELECT
+                            COUNT(DISTINCT ISNULL(NULLIF(Department, ''), 'Unassigned')) AS TotalDepartmentsPresentToday,
+                            SUM(CASE WHEN Sex = 'Male' THEN 1 ELSE 0 END) AS TotalMalePresentToday,
+                            SUM(CASE WHEN Sex = 'Female' THEN 1 ELSE 0 END) AS TotalFemalePresentToday,
+                            COUNT(DISTINCT User_Mgt_Id) AS TotalPresentToday
+                        FROM
+                            RankedLogs
+                    ), DepartmentList AS (
+                        SELECT
+                            (
+                                SELECT COUNT(DISTINCT ISNULL(NULLIF(Department, ''), 'Unassigned')) AS DepartmentCount
+                                FROM tbl_Employee_Master
+                                FOR JSON PATH
+                            ) AS DepartmentsPresentToday
+                    ), TotalDepartmentList AS (
+                        SELECT 
+                            COUNT(DISTINCT ISNULL(NULLIF(Department, ''), 'Unassigned')) AS TotalDepartments
+                        FROM 
+                            tbl_Employee_Master
+                    ), DepartmentDetails AS (
+                        SELECT
+                            ISNULL(NULLIF(Department, ''), 'Unassigned') AS Department,
+                            SUM(CASE WHEN Sex = 'Male' THEN 1 ELSE 0 END) AS TotalMaleEmployees,
+                            SUM(CASE WHEN Sex = 'Female' THEN 1 ELSE 0 END) AS TotalFemaleEmployees,
+                            COUNT(*) AS TotalEmployees
+                        FROM
+                            tbl_Employee_Master
+                        GROUP BY
+                            ISNULL(NULLIF(Department, ''), 'Unassigned')
+                    ), DepartmentPresentCounts AS (
+                        SELECT
+                            ISNULL(NULLIF(Department, ''), 'Unassigned') AS Department,
+                            SUM(CASE WHEN Sex = 'Male' THEN 1 ELSE 0 END) AS TotalMalePresentToday,
+                            SUM(CASE WHEN Sex = 'Female' THEN 1 ELSE 0 END) AS TotalFemalePresentToday,
+                            COUNT(DISTINCT User_Mgt_Id) AS TotalPresentToday
+                        FROM
+                            RankedLogs
+                        GROUP BY
+                            ISNULL(NULLIF(Department, ''), 'Unassigned')
+                    ), DepartmentEmployeeDetails AS (
+                        SELECT
+                            ISNULL(NULLIF(Department, ''), 'Unassigned') AS Department,
+                            (
+                                SELECT
+                                    em_inner.Emp_Name,
+                                    em_inner.Sex,
+                                    em_inner.Designation
+                                FROM
+                                    tbl_Employee_Master em_inner
+                                WHERE
+                                    ISNULL(NULLIF(em_inner.Department, ''), 'Unassigned') = ISNULL(NULLIF(em.Department, ''), 'Unassigned')
+                                FOR JSON PATH
+                            ) AS Employees
+                        FROM
+                            tbl_Employee_Master em
+                        GROUP BY
+                            ISNULL(NULLIF(Department, ''), 'Unassigned')
+                    ), DepartmentWiseStats AS (
+                        SELECT
+                            dd.Department,
+                            dd.TotalMaleEmployees,
+                            dd.TotalFemaleEmployees,
+                            dd.TotalEmployees,
+                            ISNULL(dpc.TotalMalePresentToday, 0) AS TotalMalePresentToday,
+                            ISNULL(dpc.TotalFemalePresentToday, 0) AS TotalFemalePresentToday,
+                            ISNULL(dpc.TotalPresentToday, 0) AS TotalPresentToday,
+                            ded.Employees
+                        FROM
+                            DepartmentDetails dd
+                        LEFT JOIN
+                            DepartmentPresentCounts dpc ON dd.Department = dpc.Department
+                        LEFT JOIN
+                            DepartmentEmployeeDetails ded ON dd.Department = ded.Department
+                    ), FinalData AS (
+                        SELECT 
+                            em.User_Mgt_Id,
+                            ISNULL(NULLIF(em.Department, ''), 'Unassigned') AS Department,
+                            u.Name AS username,
+                            CAST(al.AttendanceDate AS DATE) AS LogDate,
+                            DATENAME(MONTH, al.AttendanceDate) AS MonthName,
+                            MONTH(al.AttendanceDate) AS MonthNumber,
+                            YEAR(al.AttendanceDate) AS YearNumber
+                        FROM 
+                            tbl_Employee_Master em
+                        LEFT JOIN 
+                            tbl_Users u ON u.UserId = em.User_Mgt_Id
+                        LEFT JOIN 
+                            etimetracklite1.dbo.Employees pd ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+                        LEFT JOIN 
+                            etimetracklite1.dbo.AttendanceLogs al ON al.EmployeeId = pd.EmployeeId
+                        WHERE
+                            YEAR(al.AttendanceDate) = YEAR(@FromDate)
+                            AND CAST(al.PunchRecords AS NVARCHAR(MAX)) IS NOT NULL  
+                            AND LTRIM(RTRIM(CAST(al.PunchRecords AS NVARCHAR(MAX)))) <> ''
+                    ), MonthlyData AS (
+                        SELECT 
+                            Department,
+                            MonthName,
+                            MonthNumber,
+                            YearNumber,
+                            COUNT(DISTINCT User_Mgt_Id) AS UniqueEmployeeDays
+                        FROM 
+                            FinalData
+                        GROUP BY
+                            Department,
+                            MonthName,
+                            MonthNumber,
+                            YearNumber
+                    ), AllMonths AS (
+                        SELECT 1 AS MonthNumber, 'January' AS MonthName UNION ALL
+                        SELECT 2, 'February' UNION ALL
+                        SELECT 3, 'March' UNION ALL
+                        SELECT 4, 'April' UNION ALL
+                        SELECT 5, 'May' UNION ALL
+                        SELECT 6, 'June' UNION ALL
+                        SELECT 7, 'July' UNION ALL
+                        SELECT 8, 'August' UNION ALL
+                        SELECT 9, 'September' UNION ALL
+                        SELECT 10, 'October' UNION ALL
+                        SELECT 11, 'November' UNION ALL
+                        SELECT 12, 'December'
+                    ), MonthlyAverageAttendance AS (
+                        SELECT
+                            d.Department,
+                            (
+                                SELECT
+                                    am.MonthName,
+                                    am.MonthNumber,
+                                     y.YearNumber, 
+                                    ISNULL(md.UniqueEmployeeDays, 0) AS UniqueEmployeeDays
+                                FROM 
+                                    AllMonths am
+                                CROSS JOIN 
+                                    (SELECT DISTINCT YearNumber FROM FinalData) y
+                                LEFT JOIN 
+                                    MonthlyData md ON md.MonthNumber = am.MonthNumber 
+                                                  AND md.YearNumber = y.YearNumber 
+                                                  AND md.Department = d.Department
+                                ORDER BY 
+                                    y.YearNumber, am.MonthNumber
+                                FOR JSON PATH
+                            ) AS MonthlyAveragesJSON
+                        FROM
+                            (SELECT DISTINCT Department FROM FinalData) d
+                    )
+                    SELECT
+                        ec.TotalMaleEmployees,
+                        ec.TotalFemaleEmployees,
+                        ec.TotalEmployees,
+                        td.TotalDepartments,  
+                        pc.TotalDepartmentsPresentToday,
+                        pc.TotalMalePresentToday,
+                        pc.TotalFemalePresentToday,
+                        pc.TotalPresentToday,
+                        dl.DepartmentsPresentToday,
+                        (
+                            SELECT 
+                                dws.Department,
+                                dws.TotalMaleEmployees,
+                                dws.TotalFemaleEmployees,
+                                dws.TotalEmployees,
+                                dws.TotalMalePresentToday,
+                                dws.TotalFemalePresentToday,
+                                dws.TotalPresentToday,
+                                dws.Employees,
+                                ISNULL(maa.MonthlyAveragesJSON, '[]') AS MonthlyAverageAttendance
+                            FROM DepartmentWiseStats dws
+                            LEFT JOIN MonthlyAverageAttendance maa ON dws.Department = maa.Department
+                            FOR JSON PATH
+                        ) AS DepartmentWiseCounts
+                    FROM
+                        EmployeeCounts ec
+                    CROSS JOIN
+                        PresentCounts pc
+                    CROSS JOIN
+                        DepartmentList dl
+                    CROSS JOIN
+                        TotalDepartmentList td;`;
+
+            const result = await request.query(query);
+
+            const parsedData = result.recordset.map((row) => ({
+                ...row,
+                AttendanceDetails: row.AttendanceDetails
+                    ? JSON.parse(row.AttendanceDetails)
+                    : [],
+                DepartmentList: row.DepartmentList
+                    ? JSON.parse(row.DepartmentList)
+                    : [],
+            }));
+
+            if (parsedData.length > 0) {
+                dataFound(res, parsedData);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+    const getEmployeesByDepartment = async (req, res) => {
+        try {
+            const { department } = req.body;
+
+            if (!department) {
+                return res.status(400).json({ error: "Department is required" });
+            }
+
+            const request = new sql.Request()
+                .input("Department", sql.VarChar, department)
+                .query(`
+                    SELECT Emp_Name AS label, Emp_Id AS value
+                    FROM tbl_Employee_Master
+                    WHERE Department = @Department`
+                );
+
+            const result = await request;
+            dataFound(res, [], "data found", {
+                employees: toArr(result.recordsets[0]),
+            });
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
     return {
         addAttendance,
         getMyLastAttendance,
         closeAttendance,
         getAttendanceHistory,
-        getDepartment
+        getDepartment,
+        employeewise,
+        getEmployeesByDepartment,
     }
 }
 

@@ -353,7 +353,7 @@ const PurchaseOrder = () => {
             !checkIsNumber(PIN_Id)
             || !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Created_by)
-            || (!Array.isArray(Product_Array) || Product_Array.length === 0)
+            // || (!Array.isArray(Product_Array) || Product_Array.length === 0)
             || (!Array.isArray(StaffArray))
         ) {
             return invalidInput(res, 'PIN_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array, StaffArray is Required')
@@ -478,9 +478,11 @@ const PurchaseOrder = () => {
                     DELETE FROM tbl_Purchase_Order_Inv_Staff_Details WHERE PIN_Id = @PIN_Id
                 `);
 
-            for (let i = 0; i < Product_Array.length; i++) {
+            const itemArray = toArray(Product_Array);
 
-                const product = Product_Array[i];
+            for (let i = 0; i < itemArray.length; i++) {
+
+                const product = itemArray[i];
                 const productDetails = findProductDetails(productsData, product.Item_Id)
 
                 const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
@@ -658,7 +660,7 @@ const PurchaseOrder = () => {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
-            const { Retailer_Id, Cancel_status, VoucherType } = req?.query;
+            const { Retailer_Id, Cancel_status, VoucherType, Cost_Center_Type_Id, Involved_Emp_Id } = req?.query;
 
             const request = new sql.Request()
                 .input('from', Fromdate)
@@ -666,9 +668,23 @@ const PurchaseOrder = () => {
                 .input('Retailer_Id', Retailer_Id)
                 .input('Cancel_status', Cancel_status)
                 .input('VoucherType', VoucherType)
+                .input('Cost_Center_Type_Id', Cost_Center_Type_Id)
+                .input('Involved_Emp_Id', Involved_Emp_Id)
                 .query(`
-                    WITH Purchase AS (
-			            SELECT 
+                    WITH PurchaseIDs AS (
+                    	SELECT DISTINCT pigi.PIN_Id 
+                    	FROM tbl_Purchase_Order_Inv_Gen_Info AS pigi
+                    	LEFT JOIN tbl_Purchase_Order_Inv_Staff_Details AS pisd
+                    	ON pigi.PIN_Id = pisd.PIN_Id
+                    	WHERE 
+                    		pigi.Po_Entry_Date BETWEEN @from AND @to
+                            ${checkIsNumber(Retailer_Id) ? ' AND pigi.Retailer_Id = @Retailer_Id ' : ''}
+                            ${checkIsNumber(Cancel_status) ? ' AND pigi.Cancel_status = @Cancel_status ' : ''}
+                            ${checkIsNumber(VoucherType) ? ' AND pigi.Voucher_Type = @VoucherType ' : ''}
+                            ${checkIsNumber(Cost_Center_Type_Id) ? ' AND pisd.Cost_Center_Type_Id = @Cost_Center_Type_Id ' : ''}
+                            ${checkIsNumber(Involved_Emp_Id) ? ' AND pisd.Involved_Emp_Id = @Involved_Emp_Id ' : ''}
+                    ), Purchase AS (
+                        SELECT 
                         	so.*,
                         	COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                         	COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
@@ -684,14 +700,8 @@ const PurchaseOrder = () => {
                         	ON cb.UserId = so.Created_by
                             LEFT JOIN tbl_Voucher_Type AS v
                             ON v.Vocher_Type_Id = so.Voucher_Type
-                        WHERE
-                            CONVERT(DATE, so.Po_Entry_Date) >= CONVERT(DATE, @from)
-                        	AND
-                        	CONVERT(DATE, so.Po_Entry_Date) <= CONVERT(DATE, @to) 
-                            ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @Retailer_Id ' : ''}
-                            ${checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @Cancel_status ' : ''}
-                            ${checkIsNumber(VoucherType) ? ' AND so.Voucher_Type = @VoucherType ' : ''}
-			        ), PurchaseDetails AS (
+                        WHERE so.PIN_Id IN (SELECT PIN_Id FROM PurchaseIDs)
+                    ), PurchaseDetails AS (
                         SELECT
                     		oi.*,
                     		COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
@@ -704,10 +714,7 @@ const PurchaseOrder = () => {
                             LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS pdd
                             ON pdd.Id = oi.DeliveryId
                         WHERE
-                            oi.PIN_Id IN (
-			        			SELECT PIN_Id
-			        			FROM Purchase
-			        		)
+                            oi.PIN_Id IN (SELECT PIN_Id FROM PurchaseIDs)
                     ), StaffDetails AS (
                         SELECT 
                             s.*,
@@ -718,32 +725,23 @@ const PurchaseOrder = () => {
                             ON e.Cost_Center_Id = s.Involved_Emp_Id
                         LEFT JOIN tbl_ERP_Cost_Category AS cc
                             ON cc.Cost_Category_Id = s.Cost_Center_Type_Id
-                        WHERE s.PIN_Id IN (
-			        			SELECT PIN_Id
-			        			FROM Purchase
-			        		)
+                        WHERE s.PIN_Id IN (SELECT PIN_Id FROM PurchaseIDs)
                     )
-			        SELECT 
-			        	so.*,
-			        	COALESCE((
-			        		SELECT
-                    			sd.*
-                    		FROM
-                    			PurchaseDetails AS sd
-                    		WHERE
-                    			sd.PIN_Id = so.PIN_Id
+                    SELECT 
+                    	so.*,
+                    	COALESCE((
+                    		SELECT sd.*
+                    		FROM PurchaseDetails AS sd
+                    		WHERE sd.PIN_Id = so.PIN_Id
                     		FOR JSON PATH 
-			        	), '[]') AS Products_List,
+                    	), '[]') AS Products_List,
                         COALESCE((
-			        		SELECT
-                    			sd.*
-                    		FROM
-                    			StaffDetails AS sd
-                    		WHERE
-                    			sd.PIN_Id = so.PIN_Id
+                    		SELECT sd.*
+                    		FROM StaffDetails AS sd
+                    		WHERE sd.PIN_Id = so.PIN_Id
                     		FOR JSON PATH 
-			        	), '[]') AS Staff_List
-			        FROM Purchase AS so
+                    	), '[]') AS Staff_List
+                    FROM Purchase AS so
                     ORDER BY CONVERT(DATE, so.Po_Entry_Date) DESC;`
                 );
 
@@ -856,6 +854,40 @@ const PurchaseOrder = () => {
         }
     }
 
+    const getInvolvedStaffs = async (req, res) => {
+        try {
+
+            const request = new sql.Request()
+                .query(`
+                    --cost names
+                    SELECT 
+                        DISTINCT pisd.Involved_Emp_Id AS Emp_Id,
+                        COALESCE(c.Cost_Center_Name, 'Not found') AS Emp_Name_Get
+                    FROM tbl_Purchase_Order_Inv_Staff_Details AS pisd
+                    LEFT JOIN tbl_ERP_Cost_Center AS c
+                        ON c.Cost_Center_Id = pisd.Involved_Emp_Id;
+
+                    -- cost types
+                    SELECT 
+                    	DISTINCT pisd.Cost_Center_Type_Id AS Emp_Type_Id,
+                    	COALESCE(cc.Cost_Category, 'Not found') AS Emp_Type_Get
+                    FROM tbl_Purchase_Order_Inv_Staff_Details AS pisd
+                    LEFT JOIN tbl_ERP_Cost_Category AS cc
+                    	ON cc.Cost_Category_Id = pisd.Cost_Center_Type_Id;`
+                );
+
+            const result = await request;
+
+            dataFound(res, [], 'Data found', {
+                Employees: result.recordsets[0],
+                EmployeeTypes: result.recordsets[1]
+            });
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         purchaseOrderCreation,
         editPurchaseOrder,
@@ -863,7 +895,8 @@ const PurchaseOrder = () => {
         getPurchaseOrder,
         getVoucherType,
         getStockItemLedgerName,
-        getPendingPayments
+        getPendingPayments,
+        getInvolvedStaffs
     }
 }
 

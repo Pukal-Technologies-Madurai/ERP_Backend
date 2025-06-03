@@ -19,4 +19,8 @@ AttendanceRouter.post('/visitLogs', salesPersonVisitLogs.postVisitLogs);
 
 AttendanceRouter.get('/department',newAttendance.getDepartment);
 
+
+AttendanceRouter.get('/departmentwise',newAttendance.employeewise);
+AttendanceRouter.post('/employeesByDepartment',newAttendance.getEmployeesByDepartment);
+
 export default AttendanceRouter;
