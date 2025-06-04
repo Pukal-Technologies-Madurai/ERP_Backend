@@ -327,7 +327,7 @@ const PaymentMaster = () => {
             const updateChildTables = new sql.Request(transaction)
                 .input('payment_id', pay_id)
                 .input('payment_date', payment_date)
-                .input('Debit_Ledger_Id', debit_ledger_name)
+                .input('Debit_Ledger_Id', debit_ledger)
                 .query(`
                     UPDATE tbl_Payment_Bill_Info 
                     SET 

@@ -1,6 +1,7 @@
 import express from 'express';
 import paymentCollection from '../controller/Delivery/paymentCollection.mjs';
 import receiptMaster from '../controller/Receipts/receiptMaster.mjs';
+import dataDependency from '../controller/Receipts/dataDependency.mjs';
 
 const ReceiptsRouter = express.Router();
 
@@ -19,6 +20,12 @@ ReceiptsRouter.put('/verifyStatus',paymentCollection.verifyStatus);
 ReceiptsRouter.get('/receiptMaster', receiptMaster.getReceipts);
 ReceiptsRouter.post('/receiptMaster', receiptMaster.createReceipt);
 ReceiptsRouter.put('/receiptMaster', receiptMaster.updateReceipt);
+
+ReceiptsRouter.get('/receiptMaster/againstRef', dataDependency.getReceiptBillInfo);
+ReceiptsRouter.get('/receiptMaster/againstRef/costingInfo', dataDependency.getReceiptCostingInfo);
+ReceiptsRouter.post('/receiptMaster/againstRef', receiptMaster.addAgainstRef);
+
+ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt', dataDependency.getPendingReceipts);
 
 ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);

@@ -9,7 +9,7 @@ const validations = (obj) => {
         receipt_bill_type: checkIsNumber(obj.receipt_bill_type) ? obj.receipt_bill_type > 0 && obj.receipt_bill_type < 4 : false,
         created_by: checkIsNumber(obj?.created_by),
         credit_ledger: checkIsNumber(obj?.credit_ledger),
-        debit_amount: checkIsNumber(obj?.debit_amount),
+        credit_amount: checkIsNumber(obj?.credit_amount),
         debit_ledger: checkIsNumber(obj?.debit_ledger),
     }
 }
@@ -94,7 +94,7 @@ const ReceiptMaster = () => {
                 receipt_voucher_type_id, receipt_bill_type, remarks, status, created_by,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
-                debit_amount,
+                credit_amount,
                 check_no, check_date, bank_name, bank_date
             } = req.body;
 
@@ -182,10 +182,10 @@ const ReceiptMaster = () => {
                 .input('receipt_bill_type', receipt_bill_type)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
-                .input('credit_amount', debit_amount)
+                .input('credit_amount', credit_amount)
                 .input('debit_ledger', debit_ledger)
                 .input('debit_ledger_name', debit_ledger_name)
-                .input('debit_amount', debit_amount)
+                .input('debit_amount', 0)
                 .input('remarks', remarks)
                 .input('check_no', check_no ? check_no : null)
                 .input('check_date', check_date ? check_date : null)
@@ -264,7 +264,7 @@ const ReceiptMaster = () => {
                 receipt_id, remarks, status,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
-                debit_amount, altered_by,
+                credit_amount, altered_by,
                 check_no, check_date, bank_name, bank_date
             } = req.body;
 
@@ -292,10 +292,10 @@ const ReceiptMaster = () => {
                 .input('receipt_date', receipt_date)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
-                .input('credit_amount', debit_amount)
+                .input('credit_amount', credit_amount)
                 .input('debit_ledger', debit_ledger)
                 .input('debit_ledger_name', debit_ledger_name)
-                .input('debit_amount', debit_amount)
+                .input('debit_amount', 0)
                 .input('check_no', check_no ? check_no : null)
                 .input('check_date', check_date ? check_date : null)
                 .input('bank_name', bank_name ? bank_name : null)
@@ -329,22 +329,24 @@ const ReceiptMaster = () => {
             const updateChildTables = new sql.Request(transaction)
                 .input('receipt_id', receipt_id)
                 .input('receipt_date', receipt_date)
-                .input('Debit_Ledger_Id', debit_ledger_name)
+                .input('credit_ledger', credit_ledger)
                 .query(`
                     UPDATE tbl_Receipt_Bill_Info 
                     SET 
                         receipt_date = @receipt_date,
-                        DR_CR_Acc_Id = @Debit_Ledger_Id
+                        DR_CR_Acc_Id = @credit_ledger
                     WHERE receipt_id = @receipt_id;
 
                     UPDATE tbl_Receipt_Costing_Info 
                     SET 
                         receipt_date = @receipt_date,
-                        Debit_Ledger_Id = @Debit_Ledger_Id
+                        Credit_Ledger_Id = @credit_ledger
                     WHERE receipt_id = @receipt_id;`
                 );
 
             await updateChildTables;
+            await transaction.commit();
+            success(res, 'Changes saved')
 
         } catch (e) {
             servError(e, res)
@@ -357,9 +359,9 @@ const ReceiptMaster = () => {
         try {
             const { receipt_id, receipt_no, receipt_date, receipt_bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
 
-            if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
+            // if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
 
-            const isPurchasePayment = isEqualNumber(receipt_bill_type, 1);
+            const isSalesReceipt = isEqualNumber(receipt_bill_type, 1);
 
             const calcTotalDebitAmount = (bill_id) => {
                 return toArray(CostingDetails).filter(
@@ -386,23 +388,23 @@ const ReceiptMaster = () => {
                     .input('receipt_bill_type', receipt_bill_type)
                     .input('DR_CR_Acc_Id', DR_CR_Acc_Id)
                     .input('bill_id', CurrentBillDetails?.bill_id)
-                    .input('JournalBillType', isPurchasePayment ? 'PURCHASE PAYMENT' : CurrentBillDetails?.JournalBillType)
+                    .input('JournalBillType', isSalesReceipt ? 'SALES RECEIPT' : CurrentBillDetails?.JournalBillType)
                     .input('bill_name', CurrentBillDetails?.bill_name)
                     .input('bill_amount', CurrentBillDetails?.bill_amount)
-                    .input('Debit_Amo', isPurchasePayment ? CurrentBillDetails?.Debit_Amo : calcTotalDebitAmount(CurrentBillDetails?.bill_id))
+                    .input('Credit_Amo', isSalesReceipt ? CurrentBillDetails?.Credit_Amo : calcTotalDebitAmount(CurrentBillDetails?.bill_id))
                     .query(`
                         INSERT INTO tbl_Receipt_Bill_Info (
                             receipt_id, receipt_no, receipt_date, receipt_bill_type, DR_CR_Acc_Id,
                             bill_id, bill_name, bill_amount, JournalBillType, Debit_Amo, Credit_Amo
                         ) VALUES (
                             @receipt_id, @receipt_no, @receipt_date, @receipt_bill_type, @DR_CR_Acc_Id,
-                            @bill_id, @bill_name, @bill_amount, @JournalBillType, @Debit_Amo, 0
+                            @bill_id, @bill_name, @bill_amount, @JournalBillType, 0, @Credit_Amo
                         );`
                     );
 
                 const result = await request;
 
-                if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Payment Bill Details');
+                if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Receipt Bill Details');
             }
 
             if (isArray(CostingDetails) && CostingDetails.length > 0) {
@@ -414,7 +416,7 @@ const ReceiptMaster = () => {
                         .input('receipt_no', receipt_no)
                         .input('receipt_date', receipt_date)
                         .input('receipt_bill_type', receipt_bill_type)
-                        .input('Debit_Ledger_Id', DR_CR_Acc_Id)
+                        .input('Credit_Ledger_Id', DR_CR_Acc_Id)
                         .input('bill_id', itemDetails?.bill_id)
                         .input('JournalBillType', itemDetails?.JournalBillType)
                         .input('item_id', itemDetails?.item_id)
@@ -422,10 +424,10 @@ const ReceiptMaster = () => {
                         .input('expence_value', itemDetails?.expence_value)
                         .query(`
                         INSERT INTO tbl_Receipt_Costing_Info (
-                            receipt_id, receipt_no, receipt_date, receipt_bill_type, Debit_Ledger_Id, 
+                            receipt_id, receipt_no, receipt_date, receipt_bill_type, Credit_Ledger_Id, 
                             bill_id, JournalBillType, item_id, item_name, expence_value
                         ) VALUES (
-                            @receipt_id, @receipt_no, @receipt_date, @receipt_bill_type, @Debit_Ledger_Id, 
+                            @receipt_id, @receipt_no, @receipt_date, @receipt_bill_type, @Credit_Ledger_Id, 
                             @bill_id, @JournalBillType, @item_id, @item_name, @expence_value
                         );`
                         );
