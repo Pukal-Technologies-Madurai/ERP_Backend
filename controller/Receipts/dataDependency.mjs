@@ -35,7 +35,7 @@ const ReceiptDataDependency = () => {
                             rgi.*,
                             COALESCE((
                                 SELECT SUM(Credit_Amo)
-                                FROM tbl_Payment_Bill_Info AS pbi
+                                FROM tbl_Receipt_Bill_Info AS pbi
                                 WHERE pbi.receipt_id = rgi.receipt_id
                             ), 0) AS TotalReferenceAdded,
                             COALESCE(deb.Account_name, 'Not found') AS debitAccountGet,
@@ -54,7 +54,7 @@ const ReceiptDataDependency = () => {
                             ${checkIsNumber(receipt_bill_type) ? ' AND rgi.receipt_bill_type = @receipt_bill_type ' : ''}
                     ) as receipts
                     WHERE receipts.credit_amount > receipts.TotalReferenceAdded
-                    ORDER BY receipts.payment_date ASC, receipts.created_on ASC;`
+                    ORDER BY receipts.receipt_date ASC, receipts.created_on ASC;`
                 );
 
             const result = await request;
@@ -264,21 +264,21 @@ const ReceiptDataDependency = () => {
             const request = new sql.Request()
                 .input('receipt_id', receipt_id)
                 .query(`
-                    WITH PAYMENT_COSTING_INFO AS (
+                    WITH RECEIPT_COSTING_INFO AS (
                         SELECT pci.*
-                        FROM tbl_Payment_Costing_Info pci
+                        FROM tbl_Receipt_Costing_Info pci
                         WHERE pci.receipt_id = @receipt_id
                     ), TRIP_DETAILS_INFO_QUANTITY AS (
                         SELECT 
-                            td.Trip_Id AS pay_bill_id,
+                            td.Trip_Id AS bill_id,
                             ta.Product_Id AS item_id,
                             ta.QTY AS itemQuantity,
                             tm.BillType AS JournalBillType, -- MATERIAL INWARD OR OTHER GODOWN
                             COALESCE((
                                 SELECT SUM(expence_value)
-                                FROM tbl_Payment_Costing_Info 
+                                FROM tbl_Receipt_Costing_Info 
                                 WHERE 
-                                    pay_bill_id = td.Trip_Id
+                                    bill_id = td.Trip_Id
                                     AND item_id = ta.Product_Id
                                     AND (JournalBillType = 'MATERIAL INWARD' OR JournalBillType = 'OTHER GODOWN')
                             ), 0) AS PaidAmount
@@ -288,30 +288,30 @@ const ReceiptDataDependency = () => {
                         JOIN tbl_Trip_Master AS tm
                             ON tm.Trip_Id = td.Trip_Id
                         WHERE td.Trip_Id IN (
-                            SELECT DISTINCT pay_bill_id 
-                            FROM PAYMENT_COSTING_INFO 
+                            SELECT DISTINCT bill_id 
+                            FROM RECEIPT_COSTING_INFO 
                             WHERE 
                                 JournalBillType = 'MATERIAL INWARD' 
                                 OR JournalBillType = 'OTHER GODOWN'
                         ) AND tm.BillType IN ('MATERIAL INWARD', 'OTHER GODOWN')
                     ), TRIP_PROCESSING_DESTINATION_QUANTITY AS (
                         SELECT 
-                            pdi.PR_Id AS pay_bill_id, 
+                            pdi.PR_Id AS bill_id, 
                             pdi.Dest_Item_Id AS item_id,
                             pdi.Dest_Qty AS itemQuantity,
                             'PROCESSING' AS JournalBillType,
                             COALESCE((
                                 SELECT SUM(expence_value)
-                                FROM tbl_Payment_Costing_Info 
+                                FROM tbl_Receipt_Costing_Info 
                                 WHERE 
-                                    pay_bill_id = pdi.PR_Id
+                                    bill_id = pdi.PR_Id
                                     AND item_id = pdi.Dest_Item_Id
                                     AND JournalBillType = 'PROCESSING'
                             ), 0) AS PaidAmount
                         FROM tbl_Processing_Destin_Details AS pdi
                         WHERE pdi.PR_Id IN (
-                            SELECT DISTINCT pay_bill_id 
-                            FROM PAYMENT_COSTING_INFO 
+                            SELECT DISTINCT bill_id 
+                            FROM RECEIPT_COSTING_INFO 
                             WHERE JournalBillType = 'PROCESSING' 
                         )
                     )
@@ -327,11 +327,11 @@ const ReceiptDataDependency = () => {
                             WHEN pci.JournalBillType = 'PROCESSING' THEN pdq.PaidAmount
                             ELSE 0
                         END AS PaidAmount
-                    FROM PAYMENT_COSTING_INFO pci
+                    FROM RECEIPT_COSTING_INFO pci
                     LEFT JOIN TRIP_DETAILS_INFO_QUANTITY tdq 
-                        ON pci.pay_bill_id = tdq.pay_bill_id AND pci.item_id = tdq.item_id
+                        ON pci.bill_id = tdq.bill_id AND pci.item_id = tdq.item_id
                     LEFT JOIN TRIP_PROCESSING_DESTINATION_QUANTITY pdq 
-                        ON pci.pay_bill_id = pdq.pay_bill_id AND pci.item_id = pdq.item_id;`
+                        ON pci.bill_id = pdq.bill_id AND pci.item_id = pdq.item_id;`
                 );
 
             const result = await request;
@@ -610,13 +610,35 @@ const ReceiptDataDependency = () => {
         }
     }
 
+    const getSalesInvoicedCustomers = async (req, res) => {
+        try {
+
+            const request = new sql.Request()
+                .query(`
+                    SELECT DISTINCT sdgi.Retailer_Id, am.Acc_Id AS value, am.Account_name AS label 
+                    FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                    LEFT JOIN tbl_Retailers_Master AS rm
+                    ON rm.Retailer_Id = sdgi.Retailer_Id
+                    LEFT JOIN tbl_Account_Master AS am
+                    ON am.ERP_Id = rm.ERP_Id`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         searchReceiptInvoice,
         getPendingReceipts,
         getReceiptBillInfo,
         getReceiptCostingInfo,
         searchStockJournal,
-        getFilterValues
+        getFilterValues,
+        getSalesInvoicedCustomers
     }
 }
 

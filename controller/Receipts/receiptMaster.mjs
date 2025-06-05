@@ -56,7 +56,7 @@ const ReceiptMaster = () => {
                         debAcc.Account_name AS DebitAccountGet,
                         creAcc.Account_name AS CreditAccountGet,
                         COALESCE((
-                            SELECT SUM(Debit_Amo)
+                            SELECT SUM(Credit_Amo)
                             FROM tbl_Receipt_Bill_Info AS pbi
                             WHERE pbi.receipt_id = pgi.receipt_id
                         ), 0) AS TotalReferencedAmount
@@ -369,7 +369,11 @@ const ReceiptMaster = () => {
                 ).reduce((acc, item) => add(acc, item?.expence_value), 0)
             }
 
-            await transaction.begin();
+            try {
+                await transaction.begin();
+            } catch (beginErr) {
+                return servError(beginErr, res);
+            }
 
             await new sql.Request(transaction)
                 .input('receipt_id', receipt_id)
@@ -443,9 +447,15 @@ const ReceiptMaster = () => {
             success(res, 'Against Reference Saved');
 
         } catch (e) {
-            if (transaction._aborted === false) {
-                await transaction.rollback();
+
+            if (transaction && !transaction._aborted) {
+                try {
+                    await transaction.rollback();
+                } catch (rollbackErr) {
+                    console.error('Rollback failed:', rollbackErr);
+                }
             }
+
             servError(e, res);
         }
     }

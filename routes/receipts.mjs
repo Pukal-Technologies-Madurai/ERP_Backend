@@ -21,10 +21,12 @@ ReceiptsRouter.get('/receiptMaster', receiptMaster.getReceipts);
 ReceiptsRouter.post('/receiptMaster', receiptMaster.createReceipt);
 ReceiptsRouter.put('/receiptMaster', receiptMaster.updateReceipt);
 
+ReceiptsRouter.get('/receiptMaster/search', dataDependency.searchReceiptInvoice);
 ReceiptsRouter.get('/receiptMaster/againstRef', dataDependency.getReceiptBillInfo);
 ReceiptsRouter.get('/receiptMaster/againstRef/costingInfo', dataDependency.getReceiptCostingInfo);
 ReceiptsRouter.post('/receiptMaster/againstRef', receiptMaster.addAgainstRef);
 
+ReceiptsRouter.get('/getCustomerWhoHasBills', dataDependency.getSalesInvoicedCustomers);
 ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt', dataDependency.getPendingReceipts);
 
 ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);

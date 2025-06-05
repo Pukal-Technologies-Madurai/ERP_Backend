@@ -573,7 +573,7 @@ const sfProductController = () => {
                         tbl_Product_Master
                     SET 
                         Product_Image_Name = @img_name,
-                        Product_Image_Type = @img_type
+                        Product_Image_Path = @img_path
                     WHERE Product_Id = @Product_Id`
                 )
 
