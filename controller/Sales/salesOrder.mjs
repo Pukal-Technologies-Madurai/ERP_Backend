@@ -651,6 +651,8 @@ const SaleOrder = () => {
                     	SELECT 
                     		so.*,
                     		COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                            COALESCE(rm.Latitude, 'unknown') AS Latitude,
+							COALESCE(rm.Longitude, 'unknown') AS Longitude,
                     		COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
                     		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                     		COALESCE(cb.Name, 'unknown') AS Created_BY_Name,

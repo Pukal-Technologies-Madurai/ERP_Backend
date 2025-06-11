@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { dataFound, failed, invalidInput, noData, servError, success } from '../../res.mjs'
+import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs'
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import path from "path";
 import { fileURLToPath } from 'url';
@@ -7,7 +7,7 @@ import { dirname } from 'path';
 import copyImageMiddleware from '../../middleware/copyMiddleware.mjs';
 import getImage from '../../middleware/getImageIfExist.mjs';
 import dotenv from 'dotenv';
-import { checkIsNumber } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, ISOString, Multiplication, toArray, toNumber } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import fetch from 'node-fetch';
@@ -30,10 +30,10 @@ const RetailerControll = () => {
             Route_Id,
             Area_Id,
             City,
-        
-    
+
+
         } = req.query;
-    
+
         try {
             let query = `
                 SELECT 
@@ -67,46 +67,46 @@ const RetailerControll = () => {
                 LEFT JOIN tbl_Users AS created ON created.UserId = rm.Created_By
                 WHERE rm.isVendor = @isVendor AND rm.isRetailer = @isRetailer
             `;
-    
+
             const request = new sql.Request();
             request.input('isRetailer', isRetailer);
             request.input('isVendor', isVendor);
-    
+
             if (Retailer_Id) {
                 query += ` AND rm.Retailer_Id = @Retailer_Id`;
                 request.input('Retailer_Id', Retailer_Id);
             }
-    
+
             if (PhoneNumber) {
                 query += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
                 request.input('PhoneNumber', PhoneNumber);
             }
-    
+
             if (ContactPerson_Name) {
                 query += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
                 request.input('ContactPerson_Name', ContactPerson_Name);
             }
-    
+
             if (Route_Id && Route_Id !== 'ALL') {
                 query += ` AND rm.Route_Id = @Route_Id`;
                 request.input('Route_Id', Route_Id);
             }
-    
+
             if (Area_Id && Area_Id !== 'ALL') {
                 query += ` AND rm.Area_Id = @Area_Id`;
                 request.input('Area_Id', Area_Id);
             }
-    
+
             if (City && City !== 'ALL') {
                 query += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
                 request.input('City', City);
             }
-    
-       
+
+
             query += ` ORDER BY rm.Retailer_Id DESC`;
-    
+
             const result = await request.query(query);
-    
+
             if (result.recordset.length) {
                 const parsed = result.recordset.map(o => ({
                     ...o,
@@ -122,7 +122,6 @@ const RetailerControll = () => {
             servError(e, res);
         }
     };
-    
 
     const getRetailerDropDown = async (req, res) => {
         const { isRetailer = 1, isVendor = 0 } = req.query;
@@ -335,31 +334,31 @@ const RetailerControll = () => {
 
     const addRetailers = async (req, res) => {
         try {
-         
+
             await uploadFile(req, res, 1, 'Profile_Pic');
             const fileName = req?.file?.filename;
             const filePath = req?.file?.path;
             const filetype = req?.file?.mimetype;
             const filesize = req?.file?.size;
-    
-          
+
+
             const {
                 Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id, PinCode,
                 Retailer_Class, Route_Id, Area_Id, Reatailer_Address, Reatailer_City,
                 State_Id, Branch_Id, Gstno, Latitude, Longitude,
                 Created_By, Company_Id, isRetailer = 1, isVendor = 0
             } = req.body;
-    
-       
+
+
             const getMaxId = await getNextId({ table: 'tbl_Retailers_Master', column: 'Retailer_Id' });
-            
-         
+
+
             if (!checkIsNumber(getMaxId.MaxId)) {
                 return failed(res, 'Error generating Id');
             }
-            
+
             const MaxRetailerId = getMaxId.MaxId;
-    
+
             const request = new sql.Request()
                 .input('MaxRetailerId', sql.Int, MaxRetailerId)
                 .input('Retailer_Id', MaxRetailerId)
@@ -415,13 +414,13 @@ const RetailerControll = () => {
                     );
                     SELECT SCOPE_IDENTITY() AS Retailer_Id
                 `);
-    
-         
+
+
             const result = await request;
             const Retailer_Id = MaxRetailerId
-    
+
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0 && checkIsNumber(Retailer_Id)) {
-           
+
                 if (Latitude && Longitude) {
                     await new sql.Request()
                         .input('id', Retailer_Id)
@@ -438,20 +437,19 @@ const RetailerControll = () => {
                         );`
                         );
                 }
-    
-             
-              
-    
+
+
+
+
                 return success(res, 'New Customer Added');
             } else {
-               
+
                 return failed(res, 'Failed to create customer');
             }
         } catch (e) {
-                 servError(e, res);
+            servError(e, res);
         }
     };
-    
 
     const putRetailers = async (req, res) => {
         try {
@@ -532,7 +530,7 @@ const RetailerControll = () => {
             const result = await request;
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-               
+
                 return success(res, 'Retailer information updated successfully');
             } else {
                 return failed(res, 'Failed to update retailer information');
@@ -572,7 +570,6 @@ const RetailerControll = () => {
                 ), '{}') AS VERIFIED_LOCATION
             FROM
                 tbl_Retailers_Master AS rm
-            
             LEFT JOIN
                 tbl_Route_Master AS rom
                 ON rom.Route_Id = rm.Route_Id
@@ -591,7 +588,6 @@ const RetailerControll = () => {
             LEFT JOIN
                 tbl_Users AS created
                 ON created.UserId = rm.Created_By
-            
             WHERE
             	rm.Retailer_Id = @retail
             `;
@@ -634,9 +630,7 @@ const RetailerControll = () => {
                 COALESCE(cm.Company_Name, '') AS Company_Name,
                 COALESCE(modify.Name, '') AS lastModifiedBy,
                 COALESCE(created.Name, '') AS createdBy,
-
-                COALESCE(
-                    (
+                COALESCE((
                         SELECT 
                             TOP (1) *
                         FROM 
@@ -646,9 +640,7 @@ const RetailerControll = () => {
                             AND
                             isActiveLocation = 1
                         FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-                    ), '{}'
-                ) AS VERIFIED_LOCATION,
-            
+                ), '{}') AS VERIFIED_LOCATION,
             	COALESCE((
             		SELECT 
             			csgi.*,
@@ -677,10 +669,8 @@ const RetailerControll = () => {
                         CONVERT(DATETIME, csgi.Created_on_date) DESC
             		FOR JSON PATH
             	), '[]') AS ClosingStocks
-            
             FROM
                 tbl_Retailers_Master AS rm
-            
             LEFT JOIN
                 tbl_Route_Master AS rom
                 ON rom.Route_Id = rm.Route_Id
@@ -699,7 +689,6 @@ const RetailerControll = () => {
             LEFT JOIN
                 tbl_Users AS created
                 ON created.UserId = rm.Created_By
-            
             WHERE
             	rm.Retailer_Id = @retail
             `;
@@ -844,10 +833,7 @@ const RetailerControll = () => {
         }
     }
 
-
-
-
- const posRetailesSync = async (req, res) => {
+    const posRetailesSync = async (req, res) => {
         try {
             const response = await fetch("https://smtraders.posbill.in/api/interledgerapi.php");
             const data = await response.json();
@@ -865,8 +851,182 @@ const RetailerControll = () => {
         }
     }
 
+    const retailerSoldProduct = async (req, res) => {
+        try {
+            const { Retailer_Id } = req.query;
 
-    
+            if (!checkIsNumber(Retailer_Id)) return invalidInput(res, 'Retailer_Id is required');
+
+            const request = new sql.Request()
+                .input('Retailer_Id', Retailer_Id)
+                .query(`
+                    WITH soldProducts AS (
+                    	SELECT 
+                    		DISTINCT sdsi.Item_Id AS Product_Id,
+                            p.Product_Name,
+                            p.Short_Name,
+                            b.Brand_Id,
+                    		b.Brand_Name,
+                            COALESCE(p.Product_Rate, 0) AS Product_Rate
+                    	FROM 
+                    		tbl_Sales_Delivery_Stock_Info AS sdsi
+                    	JOIN 
+                    		tbl_Sales_Delivery_Gen_Info as sdgi
+                    		ON sdgi.Do_Id = sdsi.Delivery_Order_Id
+                    	JOIN 
+                    		tbl_Product_Master AS p
+                    		ON p.Product_Id = sdsi.Item_Id
+                    	JOIN 
+                    		tbl_Brand_Master AS b
+                    		ON b.Brand_Id = p.Brand
+                    	WHERE sdgi.Retailer_Id = @Retailer_Id
+                    ), closingStock AS (
+                    	SELECT *
+                    	FROM Previous_Stock_Fn_1(CONVERT(DATE, GETDATE()), @Retailer_Id)
+                    )
+                    SELECT 
+                    	DISTINCT pb.Brand_Id,
+                    	pb.Brand_Name,
+                    	COALESCE((
+                    		SELECT 
+			                    sp.Product_Id,
+			                    sp.Product_Name,
+			                    sp.Product_Rate,
+                                sp.Short_Name,
+                    			COALESCE((
+                    				SELECT TOP (1) CONVERT(VARCHAR(10), Cl_Date, 120)
+                    				FROM closingStock
+                    				WHERE 
+                    					Item_Id = sp.Product_Id
+                    					AND CL_Type = 'Closing QTY'
+                    				ORDER BY Cl_Date DESC
+                    			), '') AS lastclosingDate,
+                    			COALESCE((
+                    				SELECT TOP (1) Previous_Balance
+                    				FROM closingStock
+                    				WHERE 
+                    					Item_Id = sp.Product_Id
+                    					AND CL_Type = 'Closing QTY'
+                    				ORDER BY Cl_Date DESC
+                    			), 0) AS lastClosingQuanity,
+                    			COALESCE((
+                    				SELECT TOP (1) CONVERT(VARCHAR(10), Cl_Date, 120)
+                    				FROM closingStock
+                    				WHERE 
+                    					Item_Id = sp.Product_Id
+                    					AND CL_Type = 'Delivery QTY'
+                    				ORDER BY Cl_Date DESC
+                    			), '') AS lastDeliveryDate,
+                    			COALESCE((
+                    				SELECT TOP (1) Previous_Balance
+                    				FROM closingStock
+                    				WHERE 
+                    					Item_Id = sp.Product_Id
+                    					AND CL_Type = 'Delivery QTY'
+                    				ORDER BY Cl_Date DESC
+                    			), 0) AS lastDeliveryQuantity,
+                    			COALESCE((
+                    				SELECT SUM(Previous_Balance)
+                    				FROM closingStock
+                    				WHERE 
+                    					Item_Id = sp.Product_Id
+                    			), 0) AS totalQty
+                    		FROM soldProducts AS sp
+                    		WHERE sp.Brand_Id = pb.Brand_Id
+                    		FOR JSON PATH
+                    	), '[]') AS GroupedProductArray
+                    FROM soldProducts AS pb`
+                );
+
+            const result = await request;
+
+            const getEstimatedQty = (item) => {
+                const closing = new Date(item.lastclosingDate)
+                const delivery = new Date(item.lastDeliveryDate)
+
+                if (!item.lastclosingDate || !item.lastDeliveryDate) return {
+                    qty: item.totalQty,
+                    date: (item?.lastclosingDate && (closing > delivery)) ? item?.lastclosingDate : item.lastDeliveryDate
+                }
+
+                return closing > delivery ? {
+                    qty: toNumber(item.lastClosingQuanity),
+                    date: closing
+                } : {
+                    qty: item.totalQty,
+                    date: delivery
+                }
+            }
+
+            if (result.recordset.length > 0) {
+                const parsed = result.recordset.map(pg => ({
+                    ...pg,
+                    GroupedProductArray: toArray(
+                        JSON.parse(pg.GroupedProductArray)
+                    ).map(item => {
+                        const closing = getEstimatedQty(item)
+                        return {
+                            ...item,
+                            estimatedQuantity: closing.qty,
+                            lastVisitDate: String(ISOString(closing.date))
+                        }
+                    }).map(item => ({
+                        ...item,
+                        totalValue: Multiplication(item.estimatedQuantity, item.Product_Rate)
+                    }))
+                }));
+
+                const brandGroupSum = parsed.map(pb => {
+                    const groupArray = toArray(pb.GroupedProductArray).map(item => {
+                        const closing = getEstimatedQty(item);
+                        const estimatedQuantity = closing.qty;
+                        const lastVisitDate = String(ISOString(closing.date));
+                        const totalValue = Multiplication(estimatedQuantity, item.Product_Rate);
+
+                        return {
+                            ...item,
+                            estimatedQuantity,
+                            lastVisitDate,
+                            totalValue
+                        };
+                    }).sort((a, b) => b.totalValue - a.totalValue);
+
+                    const totalQty = groupArray.reduce((acc, item) => Addition(acc, item.estimatedQuantity), 0);
+                    const totalValue = groupArray.reduce((acc, item) => Addition(acc, item.totalValue), 0);
+
+                    return {
+                        Brand_Id: pb.Brand_Id,
+                        Brand_Name: pb.Brand_Name,
+                        totalQty,
+                        totalValue,
+                        GroupedProductArray: groupArray 
+                    };
+                });
+
+                dataFound(
+                    res,
+                    brandGroupSum,
+                    'Data found',
+                    {
+                        productBased: brandGroupSum.flatMap(cs =>
+                            cs.GroupedProductArray.map(product => ({
+                                ...product,
+                                Brand_Id: cs.Brand_Id,
+                                Brand_Name: cs.Brand_Name,
+                            }))
+                        ).sort((a, b) => b.totalValue - a.totalValue)
+
+                    }
+                )
+            } else {
+                noData(res)
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getSFCustomers,
         getRetailerDropDown,
@@ -879,7 +1039,8 @@ const RetailerControll = () => {
         getRetailerInfoWithClosingStock,
         convertVisitLogToRetailer,
         syncTallyLOL,
-        posRetailesSync
+        posRetailesSync,
+        retailerSoldProduct
     }
 }
 

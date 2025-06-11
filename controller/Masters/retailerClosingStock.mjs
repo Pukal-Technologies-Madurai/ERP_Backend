@@ -6,67 +6,63 @@ import { checkIsNumber } from '../../helper_functions.mjs';
 const ClosingStockControll = () => {
 
     const closeingStock = async (req, res) => {
-        const { Company_Id, ST_Date, Retailer_Id, Narration, Created_by, Product_Stock_List } = req.body;
+        const transaction = new sql.Transaction();
 
         try {
+            const { Company_Id, ST_Date, Retailer_Id, Narration, Created_by, Product_Stock_List } = req.body;
+
             if (!checkIsNumber(Company_Id) || !checkIsNumber(Retailer_Id) || !checkIsNumber(Created_by) || !Array.isArray(Product_Stock_List)) {
                 return invalidInput(res, 'Invalid input data');
             }
 
-            const transaction = new sql.Transaction();
-
             await transaction.begin();
+            const genInfoRequest = new sql.Request(transaction)
+                .input('comp', Company_Id)
+                .input('date', ST_Date ? new Date(ST_Date) : new Date())
+                .input('retailer', Retailer_Id)
+                .input('narration', Narration || '')
+                .input('created_by', Created_by)
+                .input('created_on', new Date())
+                .input('alter', Created_by)
+                .input('alterdte', new Date())
+                .query(`
+                    INSERT INTO tbl_Closing_Stock_Gen_Info (
+                        Company_Id, ST_Date, Retailer_Id, Narration, Created_by, Created_on_date, Altered_by, Alterd_date
+                    ) VALUES (
+                        @comp, @date, @retailer, @narration, @created_by, @created_on, @alter, @alterdte
+                    );
+                    SELECT SCOPE_IDENTITY() AS ST_Id`
+                )
 
-            try {
-                const genInfoQuery = `
-                    INSERT INTO 
-                        tbl_Closing_Stock_Gen_Info 
-                            (Company_Id, ST_Date, Retailer_Id, Narration, Created_by, Created_on_date, Altered_by, Alterd_date)
-                        VALUES
-                            (@comp, @date, @retailer, @narration, @created_by, @created_on, @alter, @alterdte);
-                    SELECT SCOPE_IDENTITY() AS ST_Id`;
+            const genInfoResult = await genInfoRequest;
+            const stId = genInfoResult.recordset[0].ST_Id;
 
-                const genInfoRequest = new sql.Request(transaction);
-                genInfoRequest.input('comp', Company_Id);
-                genInfoRequest.input('date', ST_Date ? new Date(ST_Date) : new Date());
-                genInfoRequest.input('retailer', Retailer_Id);
-                genInfoRequest.input('narration', Narration || '');
-                genInfoRequest.input('created_by', Created_by);
-                genInfoRequest.input('created_on', new Date());
-                genInfoRequest.input('alter', Created_by);
-                genInfoRequest.input('alterdte', new Date());
+            for (let i = 0; i < Product_Stock_List.length; i++) {
+                const product = Product_Stock_List[i];
+                const insertDetailsRequest = new sql.Request(transaction)
+                    .input('stId', stId)
+                    .input('comp', Company_Id)
+                    .input('sNo', i + 1)
+                    .input('itemId', product.Product_Id)
+                    .input('qty', product.ST_Qty)
+                    .input('pre', product.PR_Qty || 0)
+                    .input('cl_date', product.LT_CL_Date || new Date())
+                    .query(`
+                        INSERT INTO tbl_Closing_Stock_Info (
+                            ST_Id, Company_Id, S_No, Item_Id, ST_Qty, PR_Qty, LT_CL_Date
+                        ) VALUES (
+                            @stId, @comp, @sNo, @itemId, @qty, @pre, @cl_date
+                        )`
+                    )
 
-                const genInfoResult = await genInfoRequest.query(genInfoQuery);
-                const stId = genInfoResult.recordset[0].ST_Id;
-
-                const insertDetailsQuery = `
-                    INSERT INTO 
-                        tbl_Closing_Stock_Info 
-                            (ST_Id, Company_Id, S_No, Item_Id, ST_Qty, PR_Qty, LT_CL_Date)
-                        VALUES
-                            (@stId, @comp, @sNo, @itemId, @qty, @pre, @cl_date)`;
-
-                for (let i = 0; i < Product_Stock_List.length; i++) {
-                    const product = Product_Stock_List[i];
-                    const insertDetailsRequest = new sql.Request(transaction);
-                    insertDetailsRequest.input('stId', stId);
-                    insertDetailsRequest.input('comp', Company_Id);
-                    insertDetailsRequest.input('sNo', i + 1);
-                    insertDetailsRequest.input('itemId', product.Product_Id);
-                    insertDetailsRequest.input('qty', product.ST_Qty);
-                    insertDetailsRequest.input('pre', product.PR_Qty || 0);
-                    insertDetailsRequest.input('cl_date', product.LT_CL_Date || new Date());
-
-                    await insertDetailsRequest.query(insertDetailsQuery);
-                }
-
-                await transaction.commit();
-                success(res, 'Closing stock saved successfully');
-            } catch (error) {
-                await transaction.rollback();
-                throw error;
+                await insertDetailsRequest;
             }
+
+            await transaction.commit();
+            success(res, 'Closing stock saved successfully');
+
         } catch (error) {
+            await transaction.rollback();
             servError(error, res);
         }
     };
@@ -94,11 +90,12 @@ const ClosingStockControll = () => {
                 FROM 
                     Previous_Stock_Fn_1(CONVERT(DATE, @day), @retID) AS pre
                     LEFT JOIN tbl_Product_Master AS pm
-                    ON pm.Product_Id = pre.Item_Id`
+                    ON pm.Product_Id = pre.Item_Id
+                WHERE pre.Previous_Balance <> 0`
             );
 
             sentData(res, result.recordset);
-            
+
         } catch (e) {
             servError(e, res);
         }

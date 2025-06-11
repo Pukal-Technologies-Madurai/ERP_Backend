@@ -344,7 +344,18 @@ const PaymentMaster = () => {
 
             await updateChildTables;
 
+            await transaction.commit();
+
+            success(res, 'Changes Saved')
+
         } catch (e) {
+            if (transaction && !transaction._aborted) {
+                try {
+                    await transaction.rollback();
+                } catch (rollbackErr) {
+                    console.error('Rollback failed:', rollbackErr);
+                }
+            }
             servError(e, res)
         }
     }
@@ -376,6 +387,26 @@ const PaymentMaster = () => {
 
             for (let i = 0; i < BillsDetails.length; i++) {
                 const CurrentBillDetails = BillsDetails[i];
+                let bill_ref_number = '';
+
+                if (isPurchasePayment) {
+                    const getPurchaseRefNumber = new sql.Request()
+                        .input('PIN_Id', CurrentBillDetails?.pay_bill_id)
+                        .query(`
+                            SELECT TOP (1) Ref_Po_Inv_No
+                            FROM tbl_Purchase_Order_Inv_Gen_Info
+                            WHERE PIN_Id = @PIN_Id`
+                        );
+                    
+                    const result = await getPurchaseRefNumber;
+
+                    if (result.recordset.length !== 1 || !result?.recordset[0]?.Ref_Po_Inv_No) {
+                        console.log('bill_id:', CurrentBillDetails?.pay_bill_id)
+                        throw new Error('Invoice ref number not found');
+                    }
+
+                    bill_ref_number = result?.recordset[0]?.Ref_Po_Inv_No;
+                }
 
                 const request = new sql.Request(transaction)
                     .input('payment_id', payment_id)
@@ -384,6 +415,7 @@ const PaymentMaster = () => {
                     .input('bill_type', bill_type)
                     .input('DR_CR_Acc_Id', DR_CR_Acc_Id)
                     .input('pay_bill_id', CurrentBillDetails?.pay_bill_id)
+                    .input('bill_ref_number', bill_ref_number)
                     .input('JournalBillType', isPurchasePayment ? 'PURCHASE PAYMENT' : CurrentBillDetails?.JournalBillType)
                     .input('bill_name', CurrentBillDetails?.bill_name)
                     .input('bill_amount', CurrentBillDetails?.bill_amount)
@@ -391,10 +423,10 @@ const PaymentMaster = () => {
                     .query(`
                         INSERT INTO tbl_Payment_Bill_Info (
                             payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id,
-                            pay_bill_id, bill_name, bill_amount, JournalBillType, Debit_Amo, Credit_Amo
+                            pay_bill_id, bill_ref_number, bill_name, bill_amount, JournalBillType, Debit_Amo, Credit_Amo
                         ) VALUES (
                             @payment_id, @payment_no, @payment_date, @bill_type, @DR_CR_Acc_Id,
-                            @pay_bill_id, @bill_name, @bill_amount, @JournalBillType, @Debit_Amo, 0
+                            @pay_bill_id, @bill_ref_number, @bill_name, @bill_amount, @JournalBillType, @Debit_Amo, 0
                         );`
                     );
 

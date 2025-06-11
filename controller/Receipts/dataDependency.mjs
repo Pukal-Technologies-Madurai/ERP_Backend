@@ -615,12 +615,16 @@ const ReceiptDataDependency = () => {
 
             const request = new sql.Request()
                 .query(`
-                    SELECT DISTINCT sdgi.Retailer_Id, am.Acc_Id AS value, am.Account_name AS label 
+                    SELECT 
+                        DISTINCT sdgi.Retailer_Id, 
+                        am.Acc_Id AS value, 
+                        am.Account_name AS label 
                     FROM tbl_Sales_Delivery_Gen_Info AS sdgi
-                    LEFT JOIN tbl_Retailers_Master AS rm
-                    ON rm.Retailer_Id = sdgi.Retailer_Id
-                    LEFT JOIN tbl_Account_Master AS am
-                    ON am.ERP_Id = rm.ERP_Id`
+                    JOIN tbl_Retailers_Master AS rm
+                        ON rm.Retailer_Id = sdgi.Retailer_Id
+                    JOIN tbl_Account_Master AS am
+                        ON am.ERP_Id = rm.ERP_Id
+                    WHERE am.Acc_Id IS NOT NULL`
                 );
 
             const result = await request;

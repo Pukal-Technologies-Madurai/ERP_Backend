@@ -598,91 +598,92 @@ const EmployeeController = () => {
                 condition = `AND rl.User_Mgt_Id = @UserId`;
             }
 
-            let query = `
-            WITH RankedLogs AS (
-                SELECT 
-                    em.User_Mgt_Id,          
-                    u.Name AS username,  
-                    u.UDel_Flag,
-                    pd.EmployeeCode,        
-                    al.AttendanceDate AS LogDateTime,           
-                    CAST(al.AttendanceDate AS DATE) AS LogDate,  
-                    ROW_NUMBER() OVER (PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE) ORDER BY al.AttendanceDate) AS rn, 
-                    COUNT(*) OVER (PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE)) AS record_count  
-                FROM 
-                    tbl_Employee_Master em
-                LEFT JOIN 
-                    tbl_Users u ON u.UserId = em.User_Mgt_Id
-                LEFT JOIN 
-                    etimetracklite1.dbo.Employees pd 
-                    ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
-                LEFT JOIN 
-                    etimetracklite1.dbo.AttendanceLogs al 
-                    ON al.EmployeeId = pd.EmployeeId 
-                WHERE 
-                    u.UDel_Flag != 1 
-                    AND al.status != 'Resigned'
-            ), PunchDetails AS (
-                SELECT 
-                    pd.EmployeeCode, 
-                    CAST(al.AttendanceDate AS DATE) AS LogDate,
-                    STRING_AGG(
-                        CASE 
-                            WHEN al.PunchRecords LIKE '%in%' THEN 
-                                SUBSTRING(al.PunchRecords, 1, 5000) -- Extracting time 
-                            WHEN al.PunchRecords LIKE '%out%' THEN 
-                                CONCAT(CAST(al.AttendanceDate AS DATE), ' ', 
-                                SUBSTRING(al.PunchRecords, 1, 5000)) -- Extracting time
-                            ELSE ''
-                        END,
-                        ', '
-                    ) AS PunchDateTimes
-                FROM 
-                    etimetracklite1.dbo.Employees pd 
-                LEFT JOIN 
-                    etimetracklite1.dbo.AttendanceLogs al 
-                    ON al.EmployeeId = pd.EmployeeId
-                WHERE 
-                    al.status != 'Resigned'
-                    AND ISNULL(CAST(al.PunchRecords AS NVARCHAR(MAX)), '') <> ''
-                GROUP BY 
-                    pd.EmployeeCode, CAST(al.AttendanceDate AS DATE)
-            )
-            SELECT 
-                e.User_Mgt_Id, 
-                COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
-                rl.username,  
-                rl.LogDate,
-                COALESCE(ag.PunchDateTimes, '[]') AS AttendanceDetails, 
-                MAX(rl.record_count) AS TotalRecords
-            FROM 
-                tbl_Employee_Master AS e
-            LEFT JOIN 
-                tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
-            LEFT JOIN 
-                tbl_Users AS u ON e.User_Mgt_Id = u.UserId
-            LEFT JOIN 
-                RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
-            LEFT JOIN 
-                PunchDetails AS ag 
-                ON ag.EmployeeCode = rl.EmployeeCode 
-                AND ag.LogDate = rl.LogDate
-            WHERE 
-                rl.LogDate IS NOT NULL -- **Ensure only employees with attendance records are included**
-                AND rl.LogDate >= CAST(@FromDate AS DATETIME) 
-                AND rl.LogDate < CAST(@ToDate AS DATETIME)
-                AND (@UserId IS NULL OR rl.User_Mgt_Id = @UserId)  -- Properly handle UserId condition
-                AND u.UDel_Flag != 1 
-                AND COALESCE(ag.PunchDateTimes, '') <> ''  -- Exclude rows where PunchDateTimes is empty
-            GROUP BY 
-                e.User_Mgt_Id, 
-                d.Designation, 
-                rl.username,  
-                rl.LogDate, 
-                ag.PunchDateTimes
-            ORDER BY 
-                rl.LogDate DESC;`;
-                
+            let query = ` WITH RankedLogs AS ( SELECT 
+                                em.User_Mgt_Id,          
+                                u.Name AS username,  
+                                u.UDel_Flag,
+                                pd.EmployeeCode,        
+                                al.AttendanceDate AS LogDateTime,           
+                                CAST(al.AttendanceDate AS DATE) AS LogDate,  
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE) 
+                                    ORDER BY al.AttendanceDate
+                                ) AS rn, 
+                                COUNT(*) OVER (
+                                    PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE)
+                                ) AS record_count  
+                            FROM tbl_Employee_Master em
+                            LEFT JOIN tbl_Users u ON u.UserId = em.User_Mgt_Id
+                            LEFT JOIN etimetracklite1.dbo.Employees pd 
+                                ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+                            LEFT JOIN etimetracklite1.dbo.AttendanceLogs al 
+                                ON al.EmployeeId = pd.EmployeeId
+                            WHERE 
+                                u.UDel_Flag != 1 
+                                AND al.status != 'Resigned'
+                        ),  PunchDetails AS ( SELECT 
+                                pd.EmployeeCode, 
+                                CAST(al.AttendanceDate AS DATE) AS LogDate,
+                                COALESCE(
+                                    STRING_AGG(SUBSTRING(al.PunchRecords, 1, 5000), ', '), 
+                                    '[]'
+                                ) AS PunchDateTimes
+                            FROM etimetracklite1.dbo.Employees pd 
+                            LEFT JOIN etimetracklite1.dbo.AttendanceLogs al 
+                                ON al.EmployeeId = pd.EmployeeId
+                            WHERE 
+                                al.status != 'Resigned'
+                                AND ISNULL(CAST(al.PunchRecords AS NVARCHAR(MAX)), '') <> ''
+                            GROUP BY pd.EmployeeCode, CAST(al.AttendanceDate AS DATE)
+                        ), LeaveDays AS ( SELECT 
+                                lm.User_Id,
+                                DATEADD(DAY, n.number, CAST(lm.FromDate AS DATE)) AS LeaveDate
+                            FROM tbl_Leave_Master lm
+                            CROSS JOIN (
+                                SELECT number FROM master.dbo.spt_values 
+                                WHERE type = 'P' 
+                                AND number BETWEEN 0 AND 1000 
+                            ) n   WHERE 
+                                lm.Status = 'Approved'
+                                AND DATEADD(DAY, n.number, CAST(lm.FromDate AS DATE)) <= CAST(lm.ToDate AS DATE)
+                        )  SELECT 
+                            e.User_Mgt_Id, 
+                            COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+                            rl.username,  
+                            rl.LogDate,
+                            COALESCE(ag.PunchDateTimes, '[]') AS AttendanceDetails, 
+                            COALESCE(MAX(rl.record_count), 0) AS TotalRecords,
+                            CASE 
+                                WHEN DATEPART(WEEKDAY, rl.LogDate) = 1 THEN 'H'
+                                WHEN EXISTS (
+                                    SELECT 1 FROM LeaveDays ld
+                                    WHERE ld.User_Id = e.User_Mgt_Id 
+                                    AND ld.LeaveDate = rl.LogDate
+                                ) THEN 'L'
+                                WHEN COALESCE(ag.PunchDateTimes, '') <> '' THEN 'P' 
+                                ELSE 'A' 
+                            END AS AttendanceStatus
+                        FROM tbl_Employee_Master AS e
+                        LEFT JOIN tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
+                        LEFT JOIN tbl_Users AS u ON e.User_Mgt_Id = u.UserId
+                        LEFT JOIN RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
+                        LEFT JOIN PunchDetails AS ag 
+                            ON ag.EmployeeCode = rl.EmployeeCode 
+                            AND ag.LogDate = rl.LogDate
+                        WHERE 
+                            rl.LogDate IS NOT NULL 
+                            AND rl.LogDate >= CAST(@FromDate AS DATETIME) 
+                            AND rl.LogDate < CAST(@ToDate AS DATETIME)
+                            AND (@UserId IS NULL OR rl.User_Mgt_Id = @UserId)
+                            AND u.UDel_Flag != 1
+                        GROUP BY 
+                            e.User_Mgt_Id, 
+                            d.Designation, 
+                            rl.username,  
+                            rl.LogDate, 
+                            ag.PunchDateTimes
+                        ORDER BY rl.LogDate DESC;`
+
             const request = new sql.Request();
             request.input('FromDate', sql.DateTime, FromDate || '1900-01-01');
             request.input('ToDate', sql.DateTime, adjustedToDateStr);
@@ -715,8 +716,7 @@ const EmployeeController = () => {
             }
 
             const query = `
-                WITH RankedLogs AS (
-                    SELECT 
+                WITH RankedLogs AS (  SELECT 
                         em.User_Mgt_Id,          
                         u.Name AS username,  
                         pd.EmployeeCode,        
@@ -739,8 +739,7 @@ const EmployeeController = () => {
                         AND CAST(al.PunchRecords AS NVARCHAR(MAX)) IS NOT NULL  
                         AND LTRIM(RTRIM(CAST(al.PunchRecords AS NVARCHAR(MAX)))) <> ''
 
-                ),
-                AttendanceSummary AS (
+                ), AttendanceSummary AS (
                     SELECT 
                         rl.username,
                         rl.User_Mgt_Id,
@@ -750,12 +749,10 @@ const EmployeeController = () => {
                         RankedLogs rl
                     GROUP BY 
                         rl.username, rl.User_Mgt_Id, rl.LogDate
-                )
-                SELECT 
+                )  SELECT 
                     outerEA.username AS Name,
                     COUNT(outerEA.AttendanceStatus) AS TotalPresent,
-                    (
-                        SELECT 
+                    ( SELECT 
                             sub.LogDate AS Date,
                             sub.AttendanceStatus
                         FROM 

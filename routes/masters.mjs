@@ -19,6 +19,8 @@ import uom  from '../controller/Masters/uom.mjs';
 import posRateMaster from '../controller/Masters/posRateMaster.mjs';
 import expenceMaster from '../controller/Masters/expences.mjs';
 import accountMaster from '../controller/Masters/accountMaster.mjs';
+import leaveType from '../controller/Masters/leaveType.mjs';
+import leaveMaster from '../controller/Masters/leaveMaster.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 
 const MastersRouter = express.Router();
@@ -85,6 +87,7 @@ MastersRouter.get('/retailers/closingStock/myEntry', retailerClosingStock.getSal
 MastersRouter.post('/retailers/closingStock', retailerClosingStock.closeingStock);
 MastersRouter.put('/retailers/closingStock', retailerClosingStock.closeingStockUpdate);
 MastersRouter.post('/retailers/lolSync', retailers.syncTallyLOL);
+MastersRouter.get('/retailers/soldProducts', retailers.retailerSoldProduct);
 
 
 MastersRouter.get('/tallyMaster/ledger', dbconnect, TallyMasters.getTallyAndERPLOL);
@@ -180,5 +183,18 @@ MastersRouter.get('/posProductList', posRateMaster.posProductList);
 
 MastersRouter.get('/accounts', accountMaster.getAccounts);
 MastersRouter.get('/accountGroups', accountMaster.getAccountGroups);
+
+MastersRouter.post('/leaveType',leaveType.addLeaveType);
+MastersRouter.get('/leaveType',leaveType.getLeaveType);
+MastersRouter.put('/leaveType',leaveType.editLeaveType);
+MastersRouter.delete('/leaveType',leaveType.deleteLeaveType);
+MastersRouter.get('/leaveType/dropDown',leaveType.getLeaveTypeDropdown)
+
+
+MastersRouter.get('/leave',leaveMaster.getLeaveList);
+MastersRouter.post('/leave',leaveMaster.applyLeave);
+MastersRouter.put('/leave',leaveMaster.editLeave);
+MastersRouter.get('/leave',leaveMaster.deleteLeave)
+MastersRouter.get('/approveData',leaveMaster.lisitingApproveData);
 
 export default MastersRouter;

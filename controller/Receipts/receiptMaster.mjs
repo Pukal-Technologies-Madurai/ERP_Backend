@@ -228,7 +228,7 @@ const ReceiptMaster = () => {
                             debAcc.Account_name AS DebitAccountGet,
                             creAcc.Account_name AS CreditAccountGet,
                             COALESCE((
-                                SELECT SUM(Debit_Amo)
+                                SELECT SUM(Credit_Amo)
                                 FROM tbl_Receipt_Bill_Info AS pbi
                                 WHERE pbi.receipt_id = pgi.receipt_id
                             ), 0) AS TotalReferencedAmount
@@ -244,7 +244,7 @@ const ReceiptMaster = () => {
 
                 const insertedRow = await getInsertedValues;
 
-                success(res, 'Payment Created', insertedRow.recordset);
+                success(res, 'Receipt Created', insertedRow.recordset);
 
             } else {
                 failed(res)
@@ -349,6 +349,13 @@ const ReceiptMaster = () => {
             success(res, 'Changes saved')
 
         } catch (e) {
+            if (transaction && !transaction._aborted) {
+                try {
+                    await transaction.rollback();
+                } catch (rollbackErr) {
+                    console.error('Rollback failed:', rollbackErr);
+                }
+            }
             servError(e, res)
         }
     }

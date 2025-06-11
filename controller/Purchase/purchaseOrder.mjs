@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition, toArray } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
