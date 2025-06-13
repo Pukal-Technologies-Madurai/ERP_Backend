@@ -44,7 +44,7 @@ const leaveMaster = () => {
 
     const applyLeave = async (req, res) => {
         const {
-            User_Id, FromDate, ToDate, Session, NoOfDays, LeaveType_Id, 
+            User_Id, FromDate, ToDate, Session, NoOfDays, LeaveType_Id,
             Department, InCharge, Reason, Created_By,
         } = req.body;
 
@@ -196,12 +196,113 @@ const leaveMaster = () => {
         }
     };
 
+    const definedLeave = async (req, res) => {
+        const { FromDate, Description, Created_By } = req.body;
+
+        try {
+            const request = new sql.Request();
+
+            request.input("Date", sql.DateTime, new Date(FromDate));
+            request.input("Created_By", sql.BigInt, Number(Created_By));
+            request.input("Description", sql.NVarChar, Description);
+            request.input("Created_At", sql.DateTime, new Date());
+
+            const result = await request.query(`
+                INSERT INTO tbl_Default_Leave (
+                    Date, Created_By, Description, Created_At
+                ) VALUES (
+                    @Date, @Created_By, @Description, @Created_At
+                )`
+            );
+
+            if (result.rowsAffected[0] > 0) {
+                success(res, "New Leave Added");
+            } else {
+                failed(res, "Failed to Leave");
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+    const getDefaultLeave = async (req, res) => {
+        try {
+            let { FromDate, ToDate } = req.query;
+
+            const request = new sql.Request();
+            let query = `
+                SELECT *
+                FROM tbl_Default_Leave dl
+                WHERE 1 = 1`;
+
+            if (FromDate) {
+                request.input("FromDate", sql.Date, FromDate);
+                query += ` AND CAST(dl.Date AS DATE) >= @FromDate`;
+            }
+
+            if (ToDate) {
+                request.input("ToDate", sql.Date, ToDate);
+                query += ` AND CAST(dl.Date AS DATE) <= @ToDate`;
+            }
+
+            const result = await request.query(query);
+            return sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+    const updateDefaultLeave = async (req, res) => {
+        const {
+            Id,
+            FromDate,
+            Description,
+            Modified_By
+        } = req.body;
+
+        if (!checkIsNumber(Id)) {
+            return invalidInput(res, 'Valid Id is required');
+        }
+        if (!FromDate) {
+            return invalidInput(res, 'FromDate is required');
+        }
+
+        try {
+            const request = new sql.Request()
+                .input('Id', Id)
+                .input('Date', FromDate)
+                .input('Description', Description)
+                .input('Modified_By', Modified_By)
+                .input('Modified_At', new Date());
+
+            const result = await request.query(`
+                UPDATE tbl_Default_Leave
+                SET Date = @Date,
+                    Description = @Description,
+                    Modified_By = @Modified_By,
+                    Modified_At = @Modified_At
+                WHERE SNo = @Id`
+            );
+
+            if (result.rowsAffected[0] > 0) {
+                return success(res, 'Changes saved successfully');
+            } else {
+                return failed(res, 'Failed to save changes');
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getLeaveList,
         applyLeave,
         editLeave,
         deleteLeave,
-        lisitingApproveData
+        lisitingApproveData,
+        definedLeave,
+        getDefaultLeave,
+        updateDefaultLeave
     }
 }
 

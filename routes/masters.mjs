@@ -197,4 +197,8 @@ MastersRouter.put('/leave',leaveMaster.editLeave);
 MastersRouter.get('/leave',leaveMaster.deleteLeave)
 MastersRouter.get('/approveData',leaveMaster.lisitingApproveData);
 
+MastersRouter.post('/addLeave',leaveMaster.definedLeave)
+MastersRouter.get('/defaultLeave',leaveMaster.getDefaultLeave)
+MastersRouter.put('/defaultLeave',leaveMaster.updateDefaultLeave)
+
 export default MastersRouter;

@@ -44,5 +44,3 @@
        * @license MIT
        * @copyright Louis-Dominique Dubeau
        */
-
-//! moment.js

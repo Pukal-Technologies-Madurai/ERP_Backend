@@ -95,7 +95,8 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount,
-                check_no, check_date, bank_name, bank_date
+                check_no, check_date, bank_name, bank_date,
+                BillsDetails = []
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -214,10 +215,30 @@ const ReceiptMaster = () => {
             const result = await request;
 
             if (result.rowsAffected[0] > 0) {
+                const isReference = !isEqualNumber(receipt_bill_type, 3);
 
-                const isReference = isEqualNumber(receipt_bill_type, 1) || isEqualNumber(receipt_bill_type, 3);
+                if (!isReference) return success(res, 'Receipt Created');
 
-                if (!isReference) return success(res, 'Payment Created');
+                if (toArray(BillsDetails).length > 0) {
+
+                    const clonedReq = {
+                        ...req,
+                        body: {
+                            receipt_no: receipt_invoice_no,
+                            receipt_id: receipt_id,
+                            receipt_date: receipt_date,
+                            receipt_bill_type: receipt_bill_type,
+                            DR_CR_Acc_Id: credit_ledger,
+                            BillsDetails: BillsDetails
+                        }
+                    };
+
+                    const againstBillResult = await addAgainstRef(clonedReq);
+
+                    if (againstBillResult.success === true) {
+                        return success(res, 'Receipt Created');
+                    }
+                }
 
                 const getInsertedValues = new sql.Request()
                     .input('receipt_id', receipt_id)
@@ -376,11 +397,12 @@ const ReceiptMaster = () => {
                 ).reduce((acc, item) => add(acc, item?.expence_value), 0)
             }
 
-            try {
-                await transaction.begin();
-            } catch (beginErr) {
-                return servError(beginErr, res);
-            }
+            // try {
+            //     await transaction.begin();
+            // } catch (beginErr) {
+            //     return servError(beginErr, res);
+            // }
+            await transaction.begin();
 
             await new sql.Request(transaction)
                 .input('receipt_id', receipt_id)
@@ -434,13 +456,13 @@ const ReceiptMaster = () => {
                         .input('item_name', itemDetails?.item_name)
                         .input('expence_value', itemDetails?.expence_value)
                         .query(`
-                        INSERT INTO tbl_Receipt_Costing_Info (
-                            receipt_id, receipt_no, receipt_date, receipt_bill_type, Credit_Ledger_Id, 
-                            bill_id, JournalBillType, item_id, item_name, expence_value
-                        ) VALUES (
-                            @receipt_id, @receipt_no, @receipt_date, @receipt_bill_type, @Credit_Ledger_Id, 
-                            @bill_id, @JournalBillType, @item_id, @item_name, @expence_value
-                        );`
+                            INSERT INTO tbl_Receipt_Costing_Info (
+                                receipt_id, receipt_no, receipt_date, receipt_bill_type, Credit_Ledger_Id, 
+                                bill_id, JournalBillType, item_id, item_name, expence_value
+                            ) VALUES (
+                                @receipt_id, @receipt_no, @receipt_date, @receipt_bill_type, @Credit_Ledger_Id, 
+                                @bill_id, @JournalBillType, @item_id, @item_name, @expence_value
+                            );`
                         );
 
                     const result = await request;
@@ -451,7 +473,9 @@ const ReceiptMaster = () => {
 
             await transaction.commit();
 
-            success(res, 'Against Reference Saved');
+            return res ? success(res, 'Against Reference Saved') : {
+                success: true,
+            };
 
         } catch (e) {
 
@@ -463,7 +487,9 @@ const ReceiptMaster = () => {
                 }
             }
 
-            servError(e, res);
+            return res ? servError(e, res) : {
+                success: false
+            };
         }
     }
 

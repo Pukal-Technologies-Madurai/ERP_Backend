@@ -44,6 +44,7 @@ UserModule.get('/employeeActivity/maplatitude',employeeMaster.maplatitudelongitu
 
 UserModule.get('/employeActivity/trackActivitylogAttendance',employeeMaster.employeeAttendanceModule);
 UserModule.get('/employeActivity/employeeAttendanceModuledownload',employeeMaster.employeeOverallAttendance);
+UserModule.get('/employeeActivity/summary',employeeMaster.summaryLeave)
 
 
 
