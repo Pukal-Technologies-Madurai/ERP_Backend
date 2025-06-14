@@ -1027,6 +1027,33 @@ const RetailerControll = () => {
         }
     }
 
+    const getRetailersWhoHasClosingStock = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    SELECT 
+                    	DISTINCT rl.Retailer_Id,
+                    	r.Retailer_Name
+                    FROM (
+                    	SELECT sd.Retailer_Id
+                    	FROM tbl_Sales_Delivery_Gen_Info AS sd
+                    	UNION ALL
+                    	SELECT cs.Retailer_Id
+                    	FROM tbl_Closing_Stock_Gen_Info AS cs
+                    ) AS rl
+                    JOIN 
+                    	tbl_Retailers_Master AS r
+                    	ON r.Retailer_Id = rl.Retailer_Id`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getSFCustomers,
         getRetailerDropDown,
@@ -1040,7 +1067,8 @@ const RetailerControll = () => {
         convertVisitLogToRetailer,
         syncTallyLOL,
         posRetailesSync,
-        retailerSoldProduct
+        retailerSoldProduct,
+        getRetailersWhoHasClosingStock
     }
 }
 

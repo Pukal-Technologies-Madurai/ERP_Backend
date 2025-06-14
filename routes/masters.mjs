@@ -88,6 +88,7 @@ MastersRouter.post('/retailers/closingStock', retailerClosingStock.closeingStock
 MastersRouter.put('/retailers/closingStock', retailerClosingStock.closeingStockUpdate);
 MastersRouter.post('/retailers/lolSync', retailers.syncTallyLOL);
 MastersRouter.get('/retailers/soldProducts', retailers.retailerSoldProduct);
+MastersRouter.get('/retailers/whoHasClosingStock', retailers.getRetailersWhoHasClosingStock);
 
 
 MastersRouter.get('/tallyMaster/ledger', dbconnect, TallyMasters.getTallyAndERPLOL);

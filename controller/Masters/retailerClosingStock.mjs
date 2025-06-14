@@ -391,29 +391,26 @@ const ClosingStockControll = () => {
     }
 
     const closeingStockUpdate = async (req, res) => {
-        const { Company_Id, ST_Date, Retailer_Id, Narration, Created_by, Product_Stock_List, ST_Id } = req.body;
+        const transaction = new sql.Transaction();
 
         try {
+            const { Company_Id, ST_Date, Retailer_Id, Narration, Created_by, Product_Stock_List, ST_Id } = req.body;
+
             if (!checkIsNumber(Company_Id) || !checkIsNumber(Retailer_Id) || !checkIsNumber(Created_by) || !Array.isArray(Product_Stock_List)) {
                 return invalidInput(res, 'Invalid input data');
             }
 
-            const transaction = new sql.Transaction();
-
             await transaction.begin();
 
-            try {
-
-                const genInfoUpdateRequest = new sql.Request(transaction);
-                genInfoUpdateRequest.input('comp', Company_Id);
-                genInfoUpdateRequest.input('date', ST_Date ? new Date(ST_Date) : new Date());
-                genInfoUpdateRequest.input('retailer', Retailer_Id);
-                genInfoUpdateRequest.input('narration', Narration || '');
-                genInfoUpdateRequest.input('created_by', Created_by);
-                genInfoUpdateRequest.input('created_on', new Date());
-                genInfoUpdateRequest.input('stid', ST_Id);
-
-                await genInfoUpdateRequest.query(`
+            const genInfoUpdateRequest = new sql.Request(transaction)
+                .input('comp', Company_Id)
+                .input('date', ST_Date ? new Date(ST_Date) : new Date())
+                .input('retailer', Retailer_Id)
+                .input('narration', Narration || '')
+                .input('created_by', Created_by)
+                .input('created_on', new Date())
+                .input('stid', ST_Id)
+                .query(`
                     UPDATE 
                         tbl_Closing_Stock_Gen_Info 
                     SET 
@@ -424,43 +421,47 @@ const ClosingStockControll = () => {
                         Altered_by = @created_by, 
                         Alterd_date = @created_on
                     WHERE 
-                        ST_Id = @stid`);
+                        ST_Id = @stid;`
+                );
 
-                const deleteDetailsRequest = new sql.Request(transaction);
-                deleteDetailsRequest.input('stId', ST_Id);
-                await deleteDetailsRequest.query(`
-                    DELETE FROM 
-                        tbl_Closing_Stock_Info 
-                    WHERE 
-                        ST_Id = @stId`);
+            await genInfoUpdateRequest;
 
-                for (let i = 0; i < Product_Stock_List.length; i++) {
-                    const product = Product_Stock_List[i];
+            await new sql.Request(transaction)
+                .input('stId', ST_Id)
+                .query(`
+                    DELETE FROM tbl_Closing_Stock_Info 
+                    WHERE ST_Id = @stId`
+                );
 
-                    const insertDetailsRequest = new sql.Request(transaction);
-                    insertDetailsRequest.input('stId', ST_Id);
-                    insertDetailsRequest.input('comp', Company_Id);
-                    insertDetailsRequest.input('sNo', i + 1);
-                    insertDetailsRequest.input('itemId', product.Product_Id);
-                    insertDetailsRequest.input('qty', product.ST_Qty || 0);
-                    insertDetailsRequest.input('pre', product.PR_Qty || 0);
-                    insertDetailsRequest.input('cl_date', product.LT_CL_Date || new Date());
+            for (let i = 0; i < Product_Stock_List.length; i++) {
+                const product = Product_Stock_List[i];
 
-                    await insertDetailsRequest.query(`
-                    INSERT INTO 
-                        tbl_Closing_Stock_Info 
-                            (ST_Id, Company_Id, S_No, Item_Id, ST_Qty, PR_Qty, LT_CL_Date)
-                        VALUES
-                            (@stId, @comp, @sNo, @itemId, @qty, @pre, @cl_date)`);
-                }
+                const insertDetailsRequest = new sql.Request(transaction)
+                    .input('stId', ST_Id)
+                    .input('comp', Company_Id)
+                    .input('sNo', i + 1)
+                    .input('itemId', product.Product_Id)
+                    .input('qty', product.ST_Qty || 0)
+                    .input('pre', product.PR_Qty || 0)
+                    .input('cl_date', product.LT_CL_Date || new Date())
+                    .query(`
+                        INSERT INTO tbl_Closing_Stock_Info (
+                            ST_Id, Company_Id, S_No, Item_Id, ST_Qty, PR_Qty, LT_CL_Date
+                        ) VALUES (
+                            @stId, @comp, @sNo, @itemId, @qty, @pre, @cl_date
+                        )`
+                    );
 
-                await transaction.commit();
-                success(res, 'Closing stock updated successfully');
-            } catch (e) {
-                await transaction.rollback();
-                return servError(e, res)
+                await insertDetailsRequest;
             }
+
+            await transaction.commit();
+            success(res, 'Closing stock updated successfully');
+
         } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
             servError(e, res);
         }
     };

@@ -5,6 +5,7 @@ import template from '../controller/Reports/template.mjs';
 import tallyReport from '../controller/Reports/tallyReport.mjs';
 import tripReports from '../controller/Reports/tripReports.mjs';
 import collectionReport from '../controller/Reports/collectionReport.mjs';
+import tallyPullAPI from '../controller/Reports/tallyPullAPI.mjs';
 
 const ReportRouter = express.Router();
 
@@ -15,12 +16,20 @@ ReportRouter.get('/PurchaseOrderReportCard', dbconnect, stockAndPurchase.purchas
 ReportRouter.get('/salesReport/ledger', dbconnect, stockAndPurchase.salesReport);
 ReportRouter.get('/salesReport/ledger/itemDetails', dbconnect, stockAndPurchase.salesItemDetails);
 ReportRouter.get('/salesReport/products', dbconnect, stockAndPurchase.porductBasedSalesResult);
-ReportRouter.get('/tally-test-api-sales', stockAndPurchase.externalAPI);
-ReportRouter.get('/tally-test-api-purchase', stockAndPurchase.externalAPIPurchase);
-ReportRouter.get('/tally-test-api-saleOrder', stockAndPurchase.externalAPISaleOrder);
-ReportRouter.get('/tally-test-api-stockJournal', stockAndPurchase.externalAPIStockJournal);
-ReportRouter.get('/tally-test-api-receipt', stockAndPurchase.externalAPIReceipt);
-ReportRouter.get('/tally-test-api-payment', stockAndPurchase.externalAPIPayment);
+
+
+ReportRouter.get('/tally-test-api-sales', tallyPullAPI.externalAPI);
+ReportRouter.get('/tally-test-api-purchase', tallyPullAPI.externalAPIPurchase);
+ReportRouter.get('/tally-test-api-saleOrder', tallyPullAPI.externalAPISaleOrder);
+ReportRouter.get('/tally-test-api-stockJournal', tallyPullAPI.externalAPIStockJournal);
+ReportRouter.get('/tally-test-api-receipt', tallyPullAPI.externalAPIReceipt);
+ReportRouter.get('/tally-test-api-payment', tallyPullAPI.externalAPIPayment);
+
+//---- admin api -- 
+ReportRouter.get('/tally-purchase-admin-api', tallyPullAPI.tallyAdminPurchaseAPI);
+ReportRouter.get('/tally-sales-admin-api', tallyPullAPI.tallyAdminSaleAPI);
+ReportRouter.get('/tally-payment-admin-api', tallyPullAPI.tallyAdminPaymentAPI);
+ReportRouter.get('/tally-receipt-admin-api', tallyPullAPI.tallyAdminReceiptAPI);
 
 
 ReportRouter.get('/template', template.getTemplates);
