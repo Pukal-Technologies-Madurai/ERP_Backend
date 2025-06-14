@@ -7,7 +7,7 @@ const validations = (obj) => {
     return {
         payment_voucher_type_id: checkIsNumber(obj.payment_voucher_type_id),
         pay_bill_type: checkIsNumber(obj.pay_bill_type) ? obj.pay_bill_type > 0 && obj.pay_bill_type < 5 : false,
-        created_by: checkIsNumber(obj?.created_by),
+        // created_by: checkIsNumber(obj?.created_by),
         credit_ledger: checkIsNumber(obj?.credit_ledger),
         debit_amount: checkIsNumber(obj?.debit_amount),
         debit_ledger: checkIsNumber(obj?.debit_ledger),
