@@ -246,7 +246,7 @@ const tallyAdminPaymentAPI = async (req, res) => {
 
             dataFound(res, payment.map(pay => ({
                 ...pay,
-                BILL_REFERENCE: JSON.parse(pay.BILL_REFERENCE)
+                BILL_REFERENCE: [] || JSON.parse(pay.BILL_REFERENCE)
             })));
         } else {
             noData(res)

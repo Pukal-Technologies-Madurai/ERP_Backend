@@ -6,6 +6,7 @@ import tallyReport from '../controller/Reports/tallyReport.mjs';
 import tripReports from '../controller/Reports/tripReports.mjs';
 import collectionReport from '../controller/Reports/collectionReport.mjs';
 import tallyPullAPI from '../controller/Reports/tallyPullAPI.mjs';
+import customerClosingStock from '../controller/Reports/customerClosingStock.mjs';
 
 const ReportRouter = express.Router();
 
@@ -53,9 +54,12 @@ ReportRouter.get('/tallyLOL', tallyReport.getTallyLOLData);
 ReportRouter.get('/tallyLOS', tallyReport.getTallyLOSData);
 
 ReportRouter.get('/tripReports', tripReports.getReports);
-ReportRouter.get('/collectionReport',collectionReport.getPayments)
+ReportRouter.get('/collectionReport', collectionReport.getPayments)
 
-ReportRouter.get('/cummulativeReport',collectionReport.getCummulative)
+ReportRouter.get('/cummulativeReport', collectionReport.getCummulative);
+
+ReportRouter.get('/customerClosingStock/soldItems', customerClosingStock.getSoldItems);
+ReportRouter.get('/customerClosingStock/itemSearch', customerClosingStock.searchWhoHasTheItem);
 
 
 export default ReportRouter;

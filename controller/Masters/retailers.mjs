@@ -1043,7 +1043,8 @@ const RetailerControll = () => {
                     ) AS rl
                     JOIN 
                     	tbl_Retailers_Master AS r
-                    	ON r.Retailer_Id = rl.Retailer_Id`
+                    	ON r.Retailer_Id = rl.Retailer_Id
+                    ORDER BY r.Retailer_Name`
                 );
 
             const result = await request;
