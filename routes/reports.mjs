@@ -60,6 +60,7 @@ ReportRouter.get('/cummulativeReport', collectionReport.getCummulative);
 
 ReportRouter.get('/customerClosingStock/soldItems', customerClosingStock.getSoldItems);
 ReportRouter.get('/customerClosingStock/itemSearch', customerClosingStock.searchWhoHasTheItem);
+ReportRouter.get('/customerClosingStock/retailerBased', customerClosingStock.ledgerBasedClosingStock);
 
 
 export default ReportRouter;

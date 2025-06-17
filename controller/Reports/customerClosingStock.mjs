@@ -143,8 +143,128 @@ const searchWhoHasTheItem = async (req, res) => {
 	}
 }
 
+const ledgerBasedClosingStock = async (req, res) => {
+	try {
+
+		const request = new sql.Request()
+			.query(`
+                WITH LatestDeliveryPerItem AS (
+					SELECT 
+						sdgi.Retailer_Id,
+						sdi.Item_Id,
+						sdgi.Do_Id,
+						sdgi.Do_Date,
+						sdi.Bill_Qty,
+						P.Product_Name,
+						P.Product_Rate,
+						ROW_NUMBER() OVER (
+							PARTITION BY sdgi.Retailer_Id, sdi.Item_Id
+							ORDER BY sdgi.Do_Date DESC
+						) AS rn
+					FROM tbl_Sales_Delivery_Stock_Info sdi
+					JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdi.Delivery_Order_Id = sdgi.Do_Id
+					JOIN tbl_Product_Master P ON P.Product_Id = sdi.Item_Id
+					WHERE sdi.Bill_Qty > 0 
+				), LatestClosingPerItem AS (
+					SELECT 
+						csgi.Retailer_Id,
+						csi.Item_Id,
+						csgi.ST_Id,
+						csgi.ST_Date,
+						csi.ST_Qty,
+						P.Product_Name,
+						P.Product_Rate,
+						ROW_NUMBER() OVER (
+							PARTITION BY csgi.Retailer_Id, csi.Item_Id
+							ORDER BY csgi.ST_Date DESC
+						) AS rn
+					FROM tbl_Closing_Stock_Info csi
+					JOIN tbl_Closing_Stock_Gen_Info csgi ON csi.ST_Id = csgi.ST_Id
+					JOIN tbl_Product_Master P ON P.Product_Id = csi.Item_Id
+					WHERE csi.ST_Qty > 0
+				), FilteredStock AS (
+					SELECT * FROM LatestClosingPerItem WHERE rn = 1
+				), FilteredDelivery AS (
+					SELECT * FROM LatestDeliveryPerItem WHERE rn = 1
+				), RetailerClosing AS (
+					SELECT 
+						R.Retailer_Id,
+						R.Retailer_Name,
+						MAX(FS.ST_Date) AS Latest_Closing_Date,
+						MAX(FD.Do_Date) AS Latest_Delivery_Date,
+						SUM(ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0)) AS total_stock_value,
+						SUM(ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)) AS total_delivery_value,
+						MAX(FS.ST_Id) AS Latest_Closing_Id,
+						MAX(FD.Do_Id) AS Latest_Delivery_Id
+					FROM tbl_Retailers_Master R
+					LEFT JOIN FilteredStock FS ON FS.Retailer_Id = R.Retailer_Id
+					LEFT JOIN FilteredDelivery FD ON FD.Retailer_Id = R.Retailer_Id AND FD.Item_Id = FS.Item_Id
+					WHERE 
+						FS.Retailer_Id IS NOT NULL 
+						OR FD.Retailer_Id IS NOT NULL
+					GROUP BY R.Retailer_Id, R.Retailer_Name
+				)
+				SELECT 
+					rwc.*,
+					sal.UserId AS salesPersonId,
+					del.UserId AS deliveryPersonId,
+					COALESCE(sal.Name, '-') AS salesPerson,
+					COALESCE(del.Name, '-') AS deliveryPerson
+				FROM RetailerClosing AS rwc
+				LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON
+					sdgi.Do_Id = rwc.Latest_Delivery_Id
+				LEFT JOIN tbl_Users AS del ON
+					del.UserId = sdgi.Delivery_Person_Id
+				LEFT JOIN tbl_Closing_Stock_Gen_Info AS csgi ON
+					csgi.ST_Id = rwc.Latest_Closing_Id
+				LEFT JOIN tbl_Users AS sal ON
+					sal.UserId = csgi.Created_by;`
+			);
+
+		const result = await request;
+
+		const getEstimatedQty = (item) => {
+			const closing = new Date(item.Latest_Closing_Date)
+			const delivery = new Date(item.Latest_Delivery_Date);
+			const totalStockValue = Addition(item?.total_stock_value, item?.total_delivery_value)
+
+			if (!item.Latest_Closing_Date || !item.Latest_Delivery_Date) return {
+				stockValue: totalStockValue,
+				date: (item?.Latest_Closing_Date && (closing > delivery)) ? item?.Latest_Closing_Date : item.Latest_Delivery_Date
+			}
+
+			return closing > delivery ? {
+				stockValue: toNumber(item.total_stock_value),
+				date: closing
+			} : {
+				stockValue: totalStockValue,
+				date: delivery
+			}
+		}
+
+		if (result.recordset.length > 0) {
+			const withValidValues = result.recordset.map(row => {
+				const calc = getEstimatedQty(row);
+				return {
+					...row,
+					finalClosingStock: calc.stockValue,
+					recentDate: calc.date
+				}
+			});
+
+			sentData(res, withValidValues);
+		} else {
+			noData(res);
+		}
+
+	} catch (e) {
+		servError(e, res);
+	}
+}
+
 
 export default {
 	getSoldItems,
 	searchWhoHasTheItem,
+	ledgerBasedClosingStock,
 }
