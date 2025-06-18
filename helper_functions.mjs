@@ -45,6 +45,22 @@ export const LocalDate = (dateObj) => {
     return receivedDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+export const getDaysBetween = (invoiceDateStr, currentDateStr = new Date().toISOString()) => {
+    const invoiceDate = new Date(invoiceDateStr);
+    const currentDate = new Date(currentDateStr);
+
+    // Get UTC midnight for both dates to avoid timezone discrepancies
+    invoiceDate.setUTCHours(0, 0, 0, 0);
+    currentDate.setUTCHours(0, 0, 0, 0);
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+
+    const diffInMs = currentDate - invoiceDate;
+    const diffInDays = Math.floor(diffInMs / msPerDay);
+
+    return diffInDays;
+}
+
 export const LocalDateTime = () => {
     const now = new Date();
     const utcTime = now.getTime();

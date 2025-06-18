@@ -7,7 +7,7 @@ import { dirname } from 'path';
 import copyImageMiddleware from '../../middleware/copyMiddleware.mjs';
 import getImage from '../../middleware/getImageIfExist.mjs';
 import dotenv from 'dotenv';
-import { Addition, checkIsNumber, ISOString, Multiplication, toArray, toNumber } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, getDaysBetween, ISOString, isValidDate, LocalDate, Multiplication, toArray, toNumber } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import fetch from 'node-fetch';
@@ -15,6 +15,10 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const findRecentDate = (dateArray) => {
+    return new Date(Math.max(...dateArray.map(d => new Date(d))))
+}
 
 
 const RetailerControll = () => {
@@ -968,7 +972,11 @@ const RetailerControll = () => {
                         return {
                             ...item,
                             estimatedQuantity: closing.qty,
-                            lastVisitDate: String(ISOString(closing.date))
+                            lastVisitDate: String(ISOString(closing.date)),
+                            entryDate: item?.lastDeliveryDate ? LocalDate(item?.lastDeliveryDate) : '',
+                            updateDate: item?.lastclosingDate ? LocalDate(item?.lastclosingDate) : '',
+                            entryDays: item?.lastDeliveryDate ? getDaysBetween(item?.lastDeliveryDate, ISOString()) : '',
+                            updateDays: item?.lastclosingDate ? getDaysBetween(item?.lastclosingDate, ISOString()) : ''
                         }
                     }).map(item => ({
                         ...item,
@@ -994,12 +1002,30 @@ const RetailerControll = () => {
                     const totalQty = groupArray.reduce((acc, item) => Addition(acc, item.estimatedQuantity), 0);
                     const totalValue = groupArray.reduce((acc, item) => Addition(acc, item.totalValue), 0);
 
+                    const deliveryDates = groupArray
+                        .map(item => item?.lastDeliveryDate)
+                        .filter(d => isValidDate(d));
+                    const closingDates = groupArray
+                        .map(item => item?.lastclosingDate)
+                        .filter(d => isValidDate(d));
+
+                    const entryDate = deliveryDates.length
+                        ? new Date(Math.max(...deliveryDates.map(d => new Date(d))))
+                        : '';
+                    const updateDate = closingDates.length
+                        ? new Date(Math.max(...closingDates.map(d => new Date(d))))
+                        : '';
+
                     return {
                         Brand_Id: pb.Brand_Id,
                         Brand_Name: pb.Brand_Name,
+                        entryDate: entryDate ? ISOString(entryDate) : '',
+                        updateDate: updateDate ? ISOString(updateDate) : '',
+                        entryDays: entryDate ? getDaysBetween(ISOString(entryDate), ISOString()) : '',
+                        updateDays: updateDate ? getDaysBetween(ISOString(updateDate), ISOString()) : '',
                         totalQty,
                         totalValue,
-                        GroupedProductArray: groupArray 
+                        GroupedProductArray: groupArray
                     };
                 });
 
