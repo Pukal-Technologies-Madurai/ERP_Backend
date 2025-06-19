@@ -91,11 +91,12 @@ const PaymentMaster = () => {
         try {
 
             const {
-                payment_voucher_type_id, pay_bill_type, remarks, status, created_by,
+                payment_voucher_type_id, pay_bill_type, is_new_ref = 0,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount,
-                check_no, check_date, bank_name, bank_date
+                check_no, check_date, bank_name, bank_date,
+                remarks, status, created_by,
             } = req.body;
 
             const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
@@ -180,6 +181,7 @@ const PaymentMaster = () => {
                 .input('payment_voucher_type_id', payment_voucher_type_id)
                 .input('payment_date', payment_date)
                 .input('pay_bill_type', pay_bill_type)
+                .input('is_new_ref', is_new_ref)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
                 .input('credit_amount', debit_amount)
@@ -195,13 +197,13 @@ const PaymentMaster = () => {
                 .input('created_by', created_by)
                 .query(`
                     INSERT INTO tbl_Payment_General_Info (
-                        pay_id, year_id, payment_sno, payment_invoice_no, payment_voucher_type_id, payment_date, pay_bill_type, 
+                        pay_id, year_id, payment_sno, payment_invoice_no, payment_voucher_type_id, payment_date, pay_bill_type, is_new_ref,
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
                         check_no, check_date, bank_name, bank_date, 
                         remarks, status, created_by, created_on
                     ) VALUES (
-                        @pay_id, @year_id, @payment_sno, @payment_invoice_no, @payment_voucher_type_id, @payment_date, @pay_bill_type, 
+                        @pay_id, @year_id, @payment_sno, @payment_invoice_no, @payment_voucher_type_id, @payment_date, @pay_bill_type, @is_new_ref,
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
                         @check_no, @check_date, @bank_name, @bank_date,
@@ -259,7 +261,7 @@ const PaymentMaster = () => {
         try {
 
             const {
-                pay_id, remarks, status,
+                pay_id, remarks, status, is_new_ref = 0,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount, altered_by,
@@ -288,6 +290,7 @@ const PaymentMaster = () => {
             const request = new sql.Request(transaction)
                 .input('pay_id', pay_id)
                 .input('payment_date', payment_date)
+                .input('is_new_ref', is_new_ref)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
                 .input('credit_amount', debit_amount)
@@ -305,6 +308,7 @@ const PaymentMaster = () => {
                     UPDATE tbl_Payment_General_Info
                     SET 
                         payment_date = @payment_date,
+                        is_new_ref = @is_new_ref,
                         credit_ledger = @credit_ledger,
                         credit_ledger_name = @credit_ledger_name,
                         credit_amount = @credit_amount,

@@ -375,12 +375,15 @@ const Payments = () => {
 
             await transaction.begin();
 
+            const total_amount = Receipts.reduce((total, col) => Addition(total, col?.collected_amount), 0);
+
             const request = new sql.Request(transaction)
                 .input('collection_id', collection_id)
                 .input('collection_date', collection_date)
                 .input('bank_date', bank_date)
                 .input('collection_type', collection_type)
                 .input('collection_account', collection_account)
+                .input('total_amount', total_amount)
                 .input('verify_status', verify_status)
                 .input('payment_status', payment_status)
                 .input('narration', narration)
@@ -392,6 +395,7 @@ const Payments = () => {
                         bank_date = @bank_date,
                         collection_type = @collection_type,
                         collection_account = @collection_account,
+                        total_amount = @total_amount,
                         verify_status = @verify_status,
                         payment_status = @payment_status,
                         narration = @narration,
