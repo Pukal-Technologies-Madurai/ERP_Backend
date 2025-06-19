@@ -38,7 +38,7 @@ const ReceiptMaster = () => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
-            const { voucher, debit, credit, payment_type, createdBy, status } = req.query
+            const { voucher, debit, credit, receipt_type, createdBy, status } = req.query
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
@@ -46,7 +46,7 @@ const ReceiptMaster = () => {
                 .input('voucher', voucher)
                 .input('debit', debit)
                 .input('credit', credit)
-                .input('payment_type', payment_type)
+                .input('receipt_type', receipt_type)
                 .input('createdBy', createdBy)
                 .input('status', status)
                 .query(`
@@ -72,7 +72,7 @@ const ReceiptMaster = () => {
                         ${checkIsNumber(voucher) ? ' AND pgi.receipt_voucher_type_id = @voucher ' : ''}
                         ${checkIsNumber(debit) ? ' AND pgi.debit_ledger = @debit ' : ''}
                         ${checkIsNumber(credit) ? ' AND pgi.credit_ledger = @credit ' : ''}
-                        ${checkIsNumber(payment_type) ? ' AND pgi.receipt_bill_type = @payment_type ' : ''}
+                        ${checkIsNumber(receipt_type) ? ' AND pgi.receipt_bill_type = @receipt_type ' : ''}
                         ${checkIsNumber(createdBy) ? ' AND pgi.created_by = @createdBy ' : ''}
                         ${checkIsNumber(status) ? ' AND pgi.status = @status ' : ''}
                     ORDER BY 
@@ -467,7 +467,7 @@ const ReceiptMaster = () => {
 
                     const result = await request;
 
-                    if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Payment Costing Details');
+                    if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Receipt Costing Details');
                 }
             }
 

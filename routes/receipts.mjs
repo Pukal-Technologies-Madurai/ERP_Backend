@@ -21,6 +21,7 @@ ReceiptsRouter.get('/receiptMaster', receiptMaster.getReceipts);
 ReceiptsRouter.post('/receiptMaster', receiptMaster.createReceipt);
 ReceiptsRouter.put('/receiptMaster', receiptMaster.updateReceipt);
 
+ReceiptsRouter.get('/receiptMaster/filtersValues', dataDependency.getFilterValues);
 ReceiptsRouter.get('/receiptMaster/search', dataDependency.searchReceiptInvoice);
 ReceiptsRouter.get('/receiptMaster/againstRef', dataDependency.getReceiptBillInfo);
 ReceiptsRouter.get('/receiptMaster/againstRef/costingInfo', dataDependency.getReceiptCostingInfo);
