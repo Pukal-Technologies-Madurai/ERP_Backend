@@ -21,6 +21,7 @@ import expenceMaster from '../controller/Masters/expences.mjs';
 import accountMaster from '../controller/Masters/accountMaster.mjs';
 import leaveType from '../controller/Masters/leaveType.mjs';
 import leaveMaster from '../controller/Masters/leaveMaster.mjs';
+import lom from '../controller/Masters/lom.mjs'
 import dbconnect from '../middleware/otherDB.mjs';
 
 const MastersRouter = express.Router();
@@ -200,6 +201,9 @@ MastersRouter.get('/approveData',leaveMaster.lisitingApproveData);
 
 MastersRouter.post('/addLeave',leaveMaster.definedLeave)
 MastersRouter.get('/defaultLeave',leaveMaster.getDefaultLeave)
-MastersRouter.put('/defaultLeave',leaveMaster.updateDefaultLeave)
+MastersRouter.put('/defaultLeave',leaveMaster.updateDefaultLeave);
+
+MastersRouter.get('/getDetails',lom.getDetailsData)
+MastersRouter.get('/getTallyData',dbconnect,lom.getTallyDatabase)
 
 export default MastersRouter;

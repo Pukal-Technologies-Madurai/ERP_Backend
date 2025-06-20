@@ -187,13 +187,15 @@ const tallyAdminPurchaseAPI = async (req, res) => {
 
         const result = await request;
         if (result.recordset.length > 0) {
-            const purchase = result.recordset;
+            // const purchase = result.recordset;
+            const sales = JSON.parse(result.recordset[0]?.SALES)
+            dataFound(res, sales)
 
-            dataFound(res, purchase.map(pur => ({
-                ...pur,
-                ALLINVENTORYENTRIES: JSON.parse(pur.ALLINVENTORYENTRIES),
-                LEDGERENTRIES: JSON.parse(pur.LEDGERENTRIES),
-            })));
+            // dataFound(res, purchase.map(pur => ({
+            //     ...pur,
+            //     ALLINVENTORYENTRIES: JSON.parse(pur.ALLINVENTORYENTRIES),
+            //     LEDGERENTRIES: JSON.parse(pur.LEDGERENTRIES),
+            // })));
         } else {
             noData(res)
         }
@@ -246,7 +248,7 @@ const tallyAdminPaymentAPI = async (req, res) => {
 
             dataFound(res, payment.map(pay => ({
                 ...pay,
-                BILL_REFERENCE: [] || JSON.parse(pay.BILL_REFERENCE)
+                BILL_REFERENCE: JSON.parse(pay.BILL_REFERENCE)
             })));
         } else {
             noData(res)

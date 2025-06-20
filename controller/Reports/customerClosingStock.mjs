@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
+import { invalidInput, noData, sentData, servError } from '../../res.mjs';
 import { Addition, checkIsNumber, getDaysBetween, ISOString, LocalDate, toNumber } from '../../helper_functions.mjs';
 
 
@@ -198,7 +198,7 @@ const ledgerBasedClosingStock = async (req, res) => {
 						MAX(FD.Do_Id) AS Latest_Delivery_Id
 					FROM tbl_Retailers_Master R
 					LEFT JOIN FilteredStock FS ON FS.Retailer_Id = R.Retailer_Id
-					LEFT JOIN FilteredDelivery FD ON FD.Retailer_Id = R.Retailer_Id AND FD.Item_Id = FS.Item_Id
+					LEFT JOIN FilteredDelivery FD ON FD.Retailer_Id = R.Retailer_Id -- AND FD.Item_Id = FS.Item_Id
 					WHERE 
 						FS.Retailer_Id IS NOT NULL 
 						OR FD.Retailer_Id IS NOT NULL
@@ -219,6 +219,152 @@ const ledgerBasedClosingStock = async (req, res) => {
 					csgi.ST_Id = rwc.Latest_Closing_Id
 				LEFT JOIN tbl_Users AS sal ON
 					sal.UserId = csgi.Created_by;`
+			);
+
+		const result = await request;
+
+		const getEstimatedQty = (item) => {
+			const closing = new Date(item.Latest_Closing_Date)
+			const delivery = new Date(item.Latest_Delivery_Date);
+			const totalStockValue = Addition(item?.total_stock_value, item?.total_delivery_value)
+
+			if (!item.Latest_Closing_Date || !item.Latest_Delivery_Date) return {
+				stockValue: totalStockValue,
+				date: (item?.Latest_Closing_Date && (closing > delivery)) ? item?.Latest_Closing_Date : item.Latest_Delivery_Date
+			}
+
+			return closing > delivery ? {
+				stockValue: toNumber(item.total_stock_value),
+				date: closing
+			} : {
+				stockValue: totalStockValue,
+				date: delivery
+			}
+		}
+
+		if (result.recordset.length > 0) {
+			const withValidValues = result.recordset.map(row => {
+				const calc = getEstimatedQty(row);
+				return {
+					...row,
+					finalClosingStock: calc.stockValue,
+					recentDate: calc.date,
+					deliveryDisplayDate: row?.Latest_Delivery_Date ? LocalDate(row?.Latest_Delivery_Date) : '',
+					closingDisplayDate: row?.Latest_Closing_Date ? LocalDate(row?.Latest_Closing_Date) : '',
+					entryDays: row?.Latest_Delivery_Date ? getDaysBetween(row?.Latest_Delivery_Date, ISOString()) : '',
+					updateDays: row?.Latest_Closing_Date ? getDaysBetween(row?.Latest_Closing_Date, ISOString()) : ''
+				}
+			});
+
+			sentData(res, withValidValues);
+		} else {
+			noData(res);
+		}
+
+	} catch (e) {
+		servError(e, res);
+	}
+}
+
+const ledgerBasedClosingStockWithLOL = async (req, res) => {
+	try {
+
+		const request = new sql.Request()
+			.query(`
+                WITH LatestDeliveryPerItem AS (
+					SELECT 
+						sdgi.Retailer_Id,
+						sdi.Item_Id,
+						sdgi.Do_Id,
+						sdgi.Do_Date,
+						sdi.Bill_Qty,
+						P.Product_Name,
+						P.Product_Rate,
+						ROW_NUMBER() OVER (
+							PARTITION BY sdgi.Retailer_Id, sdi.Item_Id
+							ORDER BY sdgi.Do_Date DESC
+						) AS rn
+					FROM tbl_Sales_Delivery_Stock_Info sdi
+					JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdi.Delivery_Order_Id = sdgi.Do_Id
+					JOIN tbl_Product_Master P ON P.Product_Id = sdi.Item_Id
+					WHERE sdi.Bill_Qty > 0 
+				), LatestClosingPerItem AS (
+					SELECT 
+						csgi.Retailer_Id,
+						csi.Item_Id,
+						csgi.ST_Id,
+						csgi.ST_Date,
+						csi.ST_Qty,
+						P.Product_Name,
+						P.Product_Rate,
+						ROW_NUMBER() OVER (
+							PARTITION BY csgi.Retailer_Id, csi.Item_Id
+							ORDER BY csgi.ST_Date DESC
+						) AS rn
+					FROM tbl_Closing_Stock_Info csi
+					JOIN tbl_Closing_Stock_Gen_Info csgi ON csi.ST_Id = csgi.ST_Id
+					JOIN tbl_Product_Master P ON P.Product_Id = csi.Item_Id
+					WHERE csi.ST_Qty > 0
+				), FilteredStock AS (
+					SELECT * FROM LatestClosingPerItem WHERE rn = 1
+				), FilteredDelivery AS (
+					SELECT * FROM LatestDeliveryPerItem WHERE rn = 1
+				), RetailerClosing AS (
+					SELECT 
+						R.Retailer_Id,
+						R.Retailer_Name,
+						R.ERP_Id,
+						MAX(FS.ST_Date) AS Latest_Closing_Date,
+						MAX(FD.Do_Date) AS Latest_Delivery_Date,
+						SUM(ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0)) AS total_stock_value,
+						SUM(ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)) AS total_delivery_value,
+						MAX(FS.ST_Id) AS Latest_Closing_Id,
+						MAX(FD.Do_Id) AS Latest_Delivery_Id
+					FROM tbl_Retailers_Master R
+					LEFT JOIN FilteredStock FS ON FS.Retailer_Id = R.Retailer_Id
+					LEFT JOIN FilteredDelivery FD ON FD.Retailer_Id = R.Retailer_Id -- AND FD.Item_Id = FS.Item_Id
+					WHERE 
+						FS.Retailer_Id IS NOT NULL 
+						OR FD.Retailer_Id IS NOT NULL
+					GROUP BY R.Retailer_Id, R.Retailer_Name, R.ERP_Id
+				), RetailerWithSalesPerson AS (
+					SELECT 
+						rwc.*,
+						sal.UserId AS salesPersonId,
+						del.UserId AS deliveryPersonId,
+						COALESCE(sal.Name, '-') AS salesPerson,
+						COALESCE(del.Name, '-') AS deliveryPerson
+					FROM RetailerClosing AS rwc
+					LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON
+						sdgi.Do_Id = rwc.Latest_Delivery_Id
+					LEFT JOIN tbl_Users AS del ON
+						del.UserId = sdgi.Delivery_Person_Id
+					LEFT JOIN tbl_Closing_Stock_Gen_Info AS csgi ON
+						csgi.ST_Id = rwc.Latest_Closing_Id
+					LEFT JOIN tbl_Users AS sal ON
+						sal.UserId = csgi.Created_by
+				)
+				SELECT 
+					rws.*,
+					lol.Ledger_Tally_Id,
+				    lol.Ledger_Name,
+				    lol.Ledger_Alias,
+				    lol.Actual_Party_Name_with_Brokers,
+				    lol.Party_Name,
+				    lol.Party_Location,
+				    lol.Party_Nature,
+				    lol.Party_Group,
+				    lol.Ref_Brokers,
+				    lol.Ref_Owners,
+				    lol.Party_Mobile_1,
+				    lol.Party_Mobile_2,
+				    lol.Party_District,
+				    lol.Date_Added,
+				    lol.Party_Mailing_Name,
+				    lol.Party_Mailing_Address
+				FROM RetailerWithSalesPerson AS rws
+				LEFT JOIN tbl_Ledger_LOL AS lol
+				ON lol.Ledger_Tally_Id = rws.ERP_Id;`
 			);
 
 		const result = await request;
@@ -329,7 +475,7 @@ const ledgerSalesPersonGroupingClosingStock = async (req, res) => {
 						MAX(FD.Do_Id) AS Latest_Delivery_Id
 					FROM tbl_Retailers_Master R
 					LEFT JOIN FilteredStock FS ON FS.Retailer_Id = R.Retailer_Id
-					LEFT JOIN FilteredDelivery FD ON FD.Retailer_Id = R.Retailer_Id AND FD.Item_Id = FS.Item_Id
+					LEFT JOIN FilteredDelivery FD ON FD.Retailer_Id = R.Retailer_Id -- AND FD.Item_Id = FS.Item_Id
 					WHERE 
 						FS.Retailer_Id IS NOT NULL 
 						OR FD.Retailer_Id IS NOT NULL
@@ -402,4 +548,5 @@ export default {
 	searchWhoHasTheItem,
 	ledgerBasedClosingStock,
 	ledgerSalesPersonGroupingClosingStock,
+	ledgerBasedClosingStockWithLOL,
 }

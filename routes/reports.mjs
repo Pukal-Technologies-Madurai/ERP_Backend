@@ -62,6 +62,7 @@ ReportRouter.get('/customerClosingStock/soldItems', customerClosingStock.getSold
 ReportRouter.get('/customerClosingStock/itemSearch', customerClosingStock.searchWhoHasTheItem);
 ReportRouter.get('/customerClosingStock/retailerBased', customerClosingStock.ledgerBasedClosingStock);
 ReportRouter.get('/customerClosingStock/retailerBased/salesPersonGrouped', customerClosingStock.ledgerSalesPersonGroupingClosingStock);
+ReportRouter.get('/customerClosingStock/retailerBased/withLOL', customerClosingStock.ledgerBasedClosingStockWithLOL);
 
 
 export default ReportRouter;
