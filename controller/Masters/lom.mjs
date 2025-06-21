@@ -10,9 +10,12 @@ import {
 } from "../../res.mjs";
 
 const lom = () => {
+
     const getDetailsData = async (req, res) => {
         try {
+
             const results = [];
+
             const tables = [
                 { master: "Cost Center", table: "tbl_ERP_Cost_Center" },
                 { master: "Cost Categories", table: "tbl_ERP_Cost_Category" },
@@ -27,7 +30,6 @@ const lom = () => {
                 { master: "Brand", table: "tbl_Brand_Master" },
                 { master: "Area", table: "tbl_Area_Master" },
                 { master: "Pos Brand", table: "tbl_POS_Brand" },
-
                 { master: "Route Master", table: "tbl_Route_Master" },
                 { master: "Pos_Rate_Master", table: "tbl_Pos_Rate_Master" },
                 { master: "Stock_Los", table: "tbl_Stock_LOS" },
@@ -35,6 +37,7 @@ const lom = () => {
             ];
 
             for (const { master, table } of tables) {
+                
                 try {
                     const countRes = await new sql.Request().query(
                         `SELECT COUNT(*) AS count FROM [dbo].[${table}]`
@@ -42,12 +45,13 @@ const lom = () => {
                     const colRes = await new sql.Request().query(
                         `SELECT * FROM [dbo].[${table}]`
                     );
+
                     const columnCount = Object.keys(colRes.recordset.columns).length;
-                    const columnRes = await new sql.Request().query(`
-                                  SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
-                                  FROM INFORMATION_SCHEMA.COLUMNS
-                                  WHERE TABLE_NAME = '${table}'
-                                `);
+                    const columnRes = await new sql.Request()
+                        .query(`
+                            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+                            FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = '${table}'`);
 
                     const columnDetails = columnRes.recordset || [];
                     results.push({
@@ -56,6 +60,7 @@ const lom = () => {
                         fields: columnCount,
                         columns: columnDetails,
                     });
+
                 } catch (err) {
                     results.push({
                         master,
@@ -65,8 +70,8 @@ const lom = () => {
                     });
                 }
             }
-            const wrappedResults = { ERP: results };
-            return dataFound(res, wrappedResults, "Data Found");
+
+            return dataFound(res, results);
         } catch (e) {
             servError(e, res);
         }
@@ -99,18 +104,16 @@ const lom = () => {
             const results = [];
 
             for (const { master, table } of tables) {
+
                 try {
+                    const countRes = await request
+                    .query(`SELECT COUNT(*) AS count FROM [dbo].[${table}]`);
 
-                    const countRes = await request.query(`
-          SELECT COUNT(*) AS count FROM [dbo].[${table}]
-        `);
-
-
-                    const colMetaRes = await request.query(`
-          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
-          FROM INFORMATION_SCHEMA.COLUMNS
-          WHERE TABLE_NAME = '${table}'
-        `);
+                    const colMetaRes = await request
+                        .query(`
+                            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+                            FROM INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = '${table}' `);
 
                     const fieldsCount = colMetaRes.recordset.length;
                     const columnDetails = colMetaRes.recordset;
@@ -121,8 +124,8 @@ const lom = () => {
                         fields: fieldsCount,
                         columns: columnDetails,
                     });
-                } catch (err) {
 
+                } catch (err) {
                     results.push({
                         master,
                         error: `Error processing table '${table}': ${err.message}`,
@@ -130,7 +133,7 @@ const lom = () => {
                 }
             }
 
-            return dataFound(res, { Tally: results }, "Data Found");
+            return dataFound(res, results);
         } catch (e) {
             servError(e, res);
         }
