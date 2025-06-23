@@ -59,8 +59,10 @@ ReportRouter.get('/collectionReport', collectionReport.getPayments)
 ReportRouter.get('/cummulativeReport', collectionReport.getCummulative);
 
 ReportRouter.get('/customerClosingStock/soldItems', customerClosingStock.getSoldItems);
+ReportRouter.get('/customerClosingStock/withLOS', customerClosingStock.losBasedReport);
 ReportRouter.get('/customerClosingStock/itemSearch', customerClosingStock.searchWhoHasTheItem);
 ReportRouter.get('/customerClosingStock/retailerBased', customerClosingStock.ledgerBasedClosingStock);
+ReportRouter.get('/customerClosingStock/retailerBased/detailedInfo', customerClosingStock.ledgerClosingStock);
 ReportRouter.get('/customerClosingStock/retailerBased/salesPersonGrouped', customerClosingStock.ledgerSalesPersonGroupingClosingStock);
 ReportRouter.get('/customerClosingStock/retailerBased/withLOL', customerClosingStock.ledgerBasedClosingStockWithLOL);
 
