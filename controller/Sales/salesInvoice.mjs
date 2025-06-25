@@ -3,7 +3,7 @@ import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Mul
 import { failed, invalidInput, servError, dataFound, noData, sentData, success } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
-
+import { CGST_Acc_Id, SGST_Acc_Id, IGST_Acc_Id, Round_off_Acc_Id, defaultAccountAsArray } from '../../config/defaultAccountValues.mjs';
 
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
@@ -17,7 +17,7 @@ const SalesInvoice = () => {
         try {
             const {
                 Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
-                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, 
+                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0,
                 Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
             } = req.body;
 
@@ -158,6 +158,11 @@ const SalesInvoice = () => {
 
             const totalValueBeforeTaxValues = totalValueBeforeTax();
 
+            const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
+            const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
+
             await transaction.begin();
 
             const request = new sql.Request(transaction)
@@ -177,11 +182,11 @@ const SalesInvoice = () => {
 
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2)
-                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2)
-                .input('IGST_Total', isIGST ? totalValueBeforeTaxValues.TotalTax : 0)
+                .input('CSGT_Total', CGST)
+                .input('SGST_Total', SGST)
+                .input('IGST_Total', IGST)
+                .input('Round_off', Round_off)
                 .input('Total_Expences', TotalExpences)
-                .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
                 .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
@@ -292,29 +297,20 @@ const SalesInvoice = () => {
             if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
                 for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                     const exp = Expence_Array[expInd];
-                    const percentage = isIGST ? toNumber(exp?.Igst) : Addition(exp?.Cgst, exp?.Sgst);
-                    const taxCalc = calculateGSTDetails(exp?.Expence_Value, percentage, taxType);
+                    const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                    const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? toNumber(exp?.Expence_Value) : 0;
 
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)
                         .input('Sno', expInd + 1)
                         .input('Expense_Id', toNumber(exp?.Expense_Id))
-                        .input('Taxable_Amo', toNumber(taxCalc.without_tax))
-                        .input('Gst_P', toNumber(percentage))
-                        .input('Cgst', isIGST ? 0 : toNumber(exp?.Cgst))
-                        .input('Cgst_Amo', isIGST ? 0 : toNumber(exp?.Cgst_Amo))
-                        .input('Sgst', isIGST ? 0 : toNumber(exp?.Sgst))
-                        .input('Sgst_Amo', isIGST ? 0 : toNumber(exp?.Sgst_Amo))
-                        .input('Igst', isIGST ? toNumber(exp?.Igst) : 0)
-                        .input('Igst_Amo', isIGST ? toNumber(exp?.Igst_Amo) : 0)
-                        .input('Expence_Value', toNumber(exp?.Expence_Value))
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Math.abs(Expence_Value_CR))
                         .query(`
                             INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                                Do_Id, Sno, Expense_Id, Taxable_Amo, Gst_P, Cgst, Cgst_Amo, Sgst, Sgst_Amo, 
-                                Igst, Igst_Amo, Expence_Value
+                                Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
                             ) VALUES (
-                                @Do_Id, @Sno, @Expense_Id, @Taxable_Amo, @Gst_P, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, 
-                                @Igst, @Igst_Amo, @Expence_Value
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
                             )`
                         );
 
@@ -323,6 +319,42 @@ const SalesInvoice = () => {
                     if (result.rowsAffected[0] === 0) {
                         throw new Error('Failed to insert Expence row in sales invoice creation');
                     }
+                }
+            }
+
+            const taxTypes = [
+                { Expense_Id: CGST_Acc_Id, Value: CGST },
+                { Expense_Id: SGST_Acc_Id, Value: SGST },
+                { Expense_Id: IGST_Acc_Id, Value: IGST },
+                { Expense_Id: Round_off_Acc_Id, Value: Round_off }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            let snoOffset = toNumber(Expence_Array?.length) || 0;
+
+            for (let i = 0; i < taxTypes.length; i++) {
+                const { Expense_Id, Value } = taxTypes[i];
+                const numValue = toNumber(Value);
+
+                const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                const request = new sql.Request(transaction)
+                    .input('Do_Id', Do_Id)
+                    .input('Sno', snoOffset + i + 1)
+                    .input('Expense_Id', Expense_Id)
+                    .input('Expence_Value_DR', Expence_Value_DR)
+                    .input('Expence_Value_CR', Expence_Value_CR)
+                    .query(`
+                        INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                        ) VALUES (
+                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                        )`
+                    );
+
+                const result = await request;
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error('Failed to insert tax expense row');
                 }
             }
 
@@ -366,6 +398,8 @@ const SalesInvoice = () => {
                 Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
                 Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+            const defaultIdExclude = defaultAccountAsArray.map(a => a.id).join(',');
+
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
@@ -383,7 +417,8 @@ const SalesInvoice = () => {
                             sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
                             COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                             COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                            COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+                            COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                        	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
                         FROM 
                             tbl_Sales_Delivery_Gen_Info AS sdgi
                         LEFT JOIN tbl_Retailers_Master AS rm 
@@ -392,6 +427,8 @@ const SalesInvoice = () => {
                             ON bm.BranchId = sdgi.Branch_Id
                         LEFT JOIN tbl_Users AS cb 
                             ON cb.UserId = sdgi.Created_by
+                        LEFT JOIN tbl_Voucher_Type AS v
+                            ON v.Vocher_Type_Id = sdgi.Voucher_Type
                         WHERE 
                             sdgi.Do_Date BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
                             ${checkIsNumber(Retailer_Id) ? ' AND sdgi.Retailer_Id = @retailer ' : ''}
@@ -413,11 +450,19 @@ const SalesInvoice = () => {
                         LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
                         WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
                     ), EXPENCE_DETAILS AS (
-                        SELECT exp.*, em.Expence_Name
+                        SELECT 
+                            exp.*, 
+                            em.Account_name AS Expence_Name, 
+                        	CASE  
+                        		WHEN exp.Expence_Value_DR > 0 THEN exp.Expence_Value_DR 
+                        		ELSE -exp.Expence_Value_CR
+                        	END AS Expence_Value
                         FROM tbl_Sales_Delivery_Expence_Info AS exp
-                        LEFT JOIN tbl_ERP_Expence_Master AS em
-                            ON em.Id = exp.Expense_Id
-                        WHERE exp.Do_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
+                        LEFT JOIN tbl_Account_Master AS em
+                            ON em.Acc_Id = exp.Expense_Id
+                        WHERE 
+                            exp.Do_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
+                            ${defaultAccountAsArray.length > 0 ? ` AND exp.Expense_Id NOT IN (${defaultIdExclude}) ` : ''}
                     ), STAFF_DETAILS AS (
                         SELECT 
                             stf.*,
@@ -482,7 +527,7 @@ const SalesInvoice = () => {
             const {
                 Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
                 Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0,
-                Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name =''
+                Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
             } = req.body;
 
             const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -493,9 +538,9 @@ const SalesInvoice = () => {
             const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
 
             if (
-                !checkIsNumber(Do_Id) 
-                || !checkIsNumber(Retailer_Id) 
-                || !checkIsNumber(Altered_by) 
+                !checkIsNumber(Do_Id)
+                || !checkIsNumber(Retailer_Id)
+                || !checkIsNumber(Altered_by)
                 || !checkIsNumber(Voucher_Type)
                 || !Array.isArray(Product_Array) || Product_Array.length === 0
             ) {
@@ -570,6 +615,11 @@ const SalesInvoice = () => {
 
             const totalValueBeforeTaxValues = totalValueBeforeTax();
 
+            const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
+            const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
+
             await transaction.begin();
 
             const request = new sql.Request(transaction)
@@ -583,11 +633,11 @@ const SalesInvoice = () => {
                 .input('Cancel_status', toNumber(Cancel_status))
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2)
-                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2)
-                .input('IGST_Total', isIGST ? totalValueBeforeTaxValues.TotalTax : 0)
+                .input('CSGT_Total', CGST)
+                .input('SGST_Total', SGST)
+                .input('IGST_Total', IGST)
+                .input('Round_off', Round_off)
                 .input('Total_Expences', TotalExpences)
-                .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
                 .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
@@ -638,7 +688,7 @@ const SalesInvoice = () => {
                     DELETE FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = @Do_Id;`
                 );
 
-            await deleteDetailsRows; 
+            await deleteDetailsRows;
 
             const isSO = checkIsNumber(So_No)
 
@@ -719,29 +769,20 @@ const SalesInvoice = () => {
             if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
                 for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                     const exp = Expence_Array[expInd];
-                    const percentage = isIGST ? toNumber(exp?.Igst) : Addition(exp?.Cgst, exp?.Sgst);
-                    const taxCalc = calculateGSTDetails(exp?.Expence_Value, percentage, taxType);
+                    const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                    const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? toNumber(exp?.Expence_Value) : 0;
 
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)
                         .input('Sno', expInd + 1)
                         .input('Expense_Id', toNumber(exp?.Expense_Id))
-                        .input('Taxable_Amo', toNumber(taxCalc.without_tax))
-                        .input('Gst_P', toNumber(percentage))
-                        .input('Cgst', isIGST ? 0 : toNumber(exp?.Cgst))
-                        .input('Cgst_Amo', isIGST ? 0 : toNumber(exp?.Cgst_Amo))
-                        .input('Sgst', isIGST ? 0 : toNumber(exp?.Sgst))
-                        .input('Sgst_Amo', isIGST ? 0 : toNumber(exp?.Sgst_Amo))
-                        .input('Igst', isIGST ? toNumber(exp?.Igst) : 0)
-                        .input('Igst_Amo', isIGST ? toNumber(exp?.Igst_Amo) : 0)
-                        .input('Expence_Value', toNumber(exp?.Expence_Value))
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Math.abs(Expence_Value_CR))
                         .query(`
                             INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                                Do_Id, Sno, Expense_Id, Taxable_Amo, Gst_P, Cgst, Cgst_Amo, Sgst, Sgst_Amo, 
-                                Igst, Igst_Amo, Expence_Value
+                                Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
                             ) VALUES (
-                                @Do_Id, @Sno, @Expense_Id, @Taxable_Amo, @Gst_P, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, 
-                                @Igst, @Igst_Amo, @Expence_Value
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
                             )`
                         );
 
@@ -750,6 +791,42 @@ const SalesInvoice = () => {
                     if (result.rowsAffected[0] === 0) {
                         throw new Error('Failed to insert Expence row in sales invoice creation');
                     }
+                }
+            }
+
+            const taxTypes = [
+                { Expense_Id: CGST_Acc_Id, Value: CGST },
+                { Expense_Id: SGST_Acc_Id, Value: SGST },
+                { Expense_Id: IGST_Acc_Id, Value: IGST },
+                { Expense_Id: Round_off_Acc_Id, Value: Round_off }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            let snoOffset = toNumber(Expence_Array?.length) || 0;
+
+            for (let i = 0; i < taxTypes.length; i++) {
+                const { Expense_Id, Value } = taxTypes[i];
+                const numValue = toNumber(Value);
+
+                const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                const request = new sql.Request(transaction)
+                    .input('Do_Id', Do_Id)
+                    .input('Sno', snoOffset + i + 1)
+                    .input('Expense_Id', Expense_Id)
+                    .input('Expence_Value_DR', Expence_Value_DR)
+                    .input('Expence_Value_CR', Expence_Value_CR)
+                    .query(`
+                        INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                        ) VALUES (
+                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                        )`
+                    );
+
+                const result = await request;
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error('Failed to insert tax expense row');
                 }
             }
 
@@ -840,12 +917,58 @@ const SalesInvoice = () => {
         }
     }
 
+    const getSalesExpenceAccount = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    WITH GroupHierarchy AS (
+                        SELECT 
+                            AG.Group_Id,
+                            AG.ERP_Id,
+                            AG.Group_Name,
+                            AG.Alias_name,
+                            AG.Parent_AC_id
+                        FROM dbo.tbl_Accounting_Group AS AG
+                    	LEFT JOIN tbl_Account_Master AS A ON 
+                    		A.Group_Id = AG.Group_Id
+                        WHERE AG.Group_Id IN (14, 633) 
+                        UNION ALL
+                        SELECT 
+                            ag.Group_Id,
+                            ag.ERP_Id,
+                            ag.Group_Name,
+                            ag.Alias_name,
+                            ag.Parent_AC_id
+                        FROM dbo.tbl_Accounting_Group ag
+                        INNER JOIN GroupHierarchy gh ON 
+                    		ag.Parent_AC_id = gh.Group_Id
+                    )
+                    SELECT 
+                        am.Acc_Id AS Id,
+                        am.Account_name AS Expence_Name
+                    FROM dbo.tbl_Account_Master am
+                    WHERE 
+                    	am.Group_Id IN (
+                    		SELECT DISTINCT Group_Id 
+                    		FROM GroupHierarchy
+                    	) OR am.Acc_Id IN (8056)`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createSalesInvoice,
         updateSalesInvoice,
         getSalesInvoice,
         getFilterValues,
         getStockInHandGodownWise,
+        getSalesExpenceAccount,
     }
 }
 

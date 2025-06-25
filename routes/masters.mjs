@@ -15,7 +15,7 @@ import employeesTasks from '../controller/EmployeesInvolved/EmployeesTask.mjs';
 import TallyMasters from '../controller/Masters/tallyMasters.mjs';
 import voucherType from '../controller/Masters/voucherType.mjs';
 import branchPos from '../controller/Masters/pos.mjs';
-import uom  from '../controller/Masters/uom.mjs';
+import uom from '../controller/Masters/uom.mjs';
 import posRateMaster from '../controller/Masters/posRateMaster.mjs';
 import expenceMaster from '../controller/Masters/expences.mjs';
 import accountMaster from '../controller/Masters/accountMaster.mjs';
@@ -23,6 +23,7 @@ import leaveType from '../controller/Masters/leaveType.mjs';
 import leaveMaster from '../controller/Masters/leaveMaster.mjs';
 import lom from '../controller/Masters/lom.mjs'
 import dbconnect from '../middleware/otherDB.mjs';
+import defaultAccountMaster from '../controller/Masters/defaultAccountMaster.mjs';
 
 const MastersRouter = express.Router();
 
@@ -127,20 +128,20 @@ MastersRouter.get('/uom', salesAppMasters.getUOM);
 MastersRouter.get('/brand', salesAppMasters.getBrand);
 
 
-MastersRouter.get('/Employeedetails',employeesTasks.getEmployeeTasks)
-MastersRouter.get('/Employeedetails/dropDown',employeesTasks.getusersDropDown)
-MastersRouter.post('/Employeedetails/employeeAdd',employeesTasks.postEmployeesProjects)
-MastersRouter.get('/Employeedetails/getusersproject',employeesTasks.getUsersProjectId)
-MastersRouter.post('/employeedetails/assignTask',employeesTasks.assignTaskForEmployee)
-MastersRouter.put('/employeedetails/updateTask',employeesTasks.modifyTaskAssignedForEmployee)
-MastersRouter.get('/employeedetails/assignedTaskDetails',employeesTasks.getEmployeeAssignedInTheTask)
-MastersRouter.delete('/employeedetails/deleteTask',employeesTasks.deleteAssignedTaskDetails)
+MastersRouter.get('/Employeedetails', employeesTasks.getEmployeeTasks)
+MastersRouter.get('/Employeedetails/dropDown', employeesTasks.getusersDropDown)
+MastersRouter.post('/Employeedetails/employeeAdd', employeesTasks.postEmployeesProjects)
+MastersRouter.get('/Employeedetails/getusersproject', employeesTasks.getUsersProjectId)
+MastersRouter.post('/employeedetails/assignTask', employeesTasks.assignTaskForEmployee)
+MastersRouter.put('/employeedetails/updateTask', employeesTasks.modifyTaskAssignedForEmployee)
+MastersRouter.get('/employeedetails/assignedTaskDetails', employeesTasks.getEmployeeAssignedInTheTask)
+MastersRouter.delete('/employeedetails/deleteTask', employeesTasks.deleteAssignedTaskDetails)
 MastersRouter.get('/routes/dropdown', salesAppMasters.getRoutes);
-MastersRouter.get('/areas/dropdown', salesAppMasters.getareaRoutes);    
+MastersRouter.get('/areas/dropdown', salesAppMasters.getareaRoutes);
 
 
-MastersRouter.delete('/employeedetails/deleteTask',employeesTasks.deleteAssignedTaskDetails)
-MastersRouter.get('/employeedetails/selectedTaskDetails',employeesTasks.selectedTaskDetails)
+MastersRouter.delete('/employeedetails/deleteTask', employeesTasks.deleteAssignedTaskDetails)
+MastersRouter.get('/employeedetails/selectedTaskDetails', employeesTasks.selectedTaskDetails)
 
 MastersRouter.post('/users/costcenter', user.createUserForCostcenter);
 MastersRouter.get('/userTypecostcenter', userType.userTypeforcostcenter);
@@ -161,49 +162,54 @@ MastersRouter.get('/posbranch/dropdown', branchPos.getPosDropDown);
 MastersRouter.get('/posbranch', branchPos.getPosBranch);
 MastersRouter.post('/posbranch', branchPos.postPosBranch);
 MastersRouter.put('/posbranch', branchPos.putPosBranch);
-MastersRouter.delete('/posbranch',branchPos.deleteBranch)
+MastersRouter.delete('/posbranch', branchPos.deleteBranch)
 
-MastersRouter.get('/posbrand/productList',branchPos.getProductsList)
+MastersRouter.get('/posbrand/productList', branchPos.getProductsList)
 
 MastersRouter.get('/uom', uom.getUOM);
 MastersRouter.post('/uom', uom.postUOM);
 MastersRouter.put('/uom', uom.putUOM);
-MastersRouter.delete('/uom',uom.deleteUOM)
+MastersRouter.delete('/uom', uom.deleteUOM)
 
 MastersRouter.get('/posRateMaster', posRateMaster.getPosRateMaster);
-MastersRouter.get('/product/dropdown',posRateMaster.getProductDropdown)
-MastersRouter.post('/posRateMaster',posRateMaster.postPosRateMaster)
-MastersRouter.put('/posRateMaster',posRateMaster.putPosRateMaster)
-MastersRouter.delete('/posRateMaster',posRateMaster.deletePosRateMaster)
+MastersRouter.get('/product/dropdown', posRateMaster.getProductDropdown)
+MastersRouter.post('/posRateMaster', posRateMaster.postPosRateMaster)
+MastersRouter.put('/posRateMaster', posRateMaster.putPosRateMaster)
+MastersRouter.delete('/posRateMaster', posRateMaster.deletePosRateMaster)
 
 
 MastersRouter.post('/exportRateMaster', posRateMaster.postbulkExport);
-MastersRouter.get('/syncPOSData',posRateMaster.valuesSync)
-MastersRouter.get('/posproductSync',posRateMaster.posProductSync);
+MastersRouter.get('/syncPOSData', posRateMaster.valuesSync)
+MastersRouter.get('/posproductSync', posRateMaster.posProductSync);
 MastersRouter.get('/posRetailersSync', retailers.posRetailesSync);
 MastersRouter.get('/posProductList', posRateMaster.posProductList);
 
 MastersRouter.get('/accounts', accountMaster.getAccounts);
 MastersRouter.get('/accountGroups', accountMaster.getAccountGroups);
 
-MastersRouter.post('/leaveType',leaveType.addLeaveType);
-MastersRouter.get('/leaveType',leaveType.getLeaveType);
-MastersRouter.put('/leaveType',leaveType.editLeaveType);
-MastersRouter.delete('/leaveType',leaveType.deleteLeaveType);
-MastersRouter.get('/leaveType/dropDown',leaveType.getLeaveTypeDropdown)
+MastersRouter.post('/leaveType', leaveType.addLeaveType);
+MastersRouter.get('/leaveType', leaveType.getLeaveType);
+MastersRouter.put('/leaveType', leaveType.editLeaveType);
+MastersRouter.delete('/leaveType', leaveType.deleteLeaveType);
+MastersRouter.get('/leaveType/dropDown', leaveType.getLeaveTypeDropdown)
 
 
-MastersRouter.get('/leave',leaveMaster.getLeaveList);
-MastersRouter.post('/leave',leaveMaster.applyLeave);
-MastersRouter.put('/leave',leaveMaster.editLeave);
-MastersRouter.get('/leave',leaveMaster.deleteLeave)
-MastersRouter.get('/approveData',leaveMaster.lisitingApproveData);
+MastersRouter.get('/leave', leaveMaster.getLeaveList);
+MastersRouter.post('/leave', leaveMaster.applyLeave);
+MastersRouter.put('/leave', leaveMaster.editLeave);
+MastersRouter.get('/leave', leaveMaster.deleteLeave)
+MastersRouter.get('/approveData', leaveMaster.lisitingApproveData);
 
-MastersRouter.post('/addLeave',leaveMaster.definedLeave)
-MastersRouter.get('/defaultLeave',leaveMaster.getDefaultLeave)
-MastersRouter.put('/defaultLeave',leaveMaster.updateDefaultLeave);
+MastersRouter.post('/addLeave', leaveMaster.definedLeave)
+MastersRouter.get('/defaultLeave', leaveMaster.getDefaultLeave)
+MastersRouter.put('/defaultLeave', leaveMaster.updateDefaultLeave);
 
-MastersRouter.get('/getDetails',lom.getDetailsData)
-MastersRouter.get('/getTallyData',dbconnect,lom.getTallyDatabase)
+MastersRouter.get('/getDetails', lom.getDetailsData)
+MastersRouter.get('/getTallyData', dbconnect, lom.getTallyDatabase);
+
+
+MastersRouter.get('/defaultAccountMaster', defaultAccountMaster.getDefaultAccounts);
+MastersRouter.post('/defaultAccountMaster', defaultAccountMaster.insertDefaultAccount);
+MastersRouter.put('/defaultAccountMaster', defaultAccountMaster.updateDefaultAccount);
 
 export default MastersRouter;
