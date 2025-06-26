@@ -906,17 +906,33 @@ LEFT JOIN
                     	GROUP BY V.Voucher_Type
                     ), RECEIPT AS (
                     	SELECT 
-                    		COUNT(R.collection_id) AS VoucherBreakUpCount,
+                    		COUNT(R.receipt_id) AS VoucherBreakUpCount,
                     		V.Voucher_Type AS Voucher_Type,
                     		'Receipt' AS ModuleName,
-                    		ISNULL(SUM(total_amount), 0) AS Amount,
+                    		ISNULL(SUM(debit_amount), 0) AS Amount,
                             '/erp/receipts/listReceipts' AS navLink,
                     		'ERP' AS dataSource
-                    	FROM tbl_Sales_Receipt_General_Info AS R
+                    	FROM tbl_Receipt_General_Info AS R
                     	LEFT JOIN ERP_VOUCHERS AS V
-                    	ON V.Vocher_Type_Id =  R.voucher_id
-                    	WHERE R.collection_date BETWEEN @Fromdate AND @Todate
-                    	AND R.payment_status <> 'Canceled'
+                    	ON V.Vocher_Type_Id =  R.receipt_voucher_type_id
+                    	WHERE 
+                    		R.receipt_date BETWEEN @Fromdate AND @Todate
+                    		AND R.status <> 0
+                    	GROUP BY V.Voucher_Type
+                    ), PAYMENT AS (
+                    	SELECT 
+                    		COUNT(P.pay_id) AS VoucherBreakUpCount,
+                    		V.Voucher_Type AS Voucher_Type,
+                    		'Payment' AS ModuleName,
+                    		ISNULL(SUM(P.credit_amount), 0) AS Amount,
+                            '/erp/payments/paymentList' AS navLink,
+                    		'ERP' AS dataSource
+                    	FROM tbl_Payment_General_Info AS P
+                    	LEFT JOIN ERP_VOUCHERS AS V
+                    	ON V.Vocher_Type_Id =  P.payment_voucher_type_id
+                    	WHERE 
+                    		P.payment_date BETWEEN @Fromdate AND @Todate
+                    		AND P.status <> 0
                     	GROUP BY V.Voucher_Type
                     ), STOCK_JOURNAL AS (
                     	SELECT 
@@ -958,6 +974,8 @@ LEFT JOIN
                     SELECT * FROM SALES_INVOICE
                     UNION ALL
                     SELECT * FROM RECEIPT
+                    UNION ALL
+                    SELECT * FROM PAYMENT
                     UNION ALL 
                     SELECT * FROM STOCK_JOURNAL
                     UNION ALL

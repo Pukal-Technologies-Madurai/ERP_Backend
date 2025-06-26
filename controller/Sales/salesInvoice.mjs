@@ -1,9 +1,8 @@
 import sql from 'mssql';
-import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Multiplication, RoundNumber, toArray, toNumber } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
 import { failed, invalidInput, servError, dataFound, noData, sentData, success } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
-import { CGST_Acc_Id, SGST_Acc_Id, IGST_Acc_Id, Round_off_Acc_Id, defaultAccountAsArray } from '../../config/defaultAccountValues.mjs';
 
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
@@ -323,38 +322,62 @@ const SalesInvoice = () => {
             }
 
             const taxTypes = [
-                { Expense_Id: CGST_Acc_Id, Value: CGST },
-                { Expense_Id: SGST_Acc_Id, Value: SGST },
-                { Expense_Id: IGST_Acc_Id, Value: IGST },
-                { Expense_Id: Round_off_Acc_Id, Value: Round_off }
+                { expName: 'CGST', Value: CGST },
+                { expName: 'SGST', Value: SGST },
+                { expName: 'IGST', Value: IGST },
+                { expName: 'ROUNDOFF', Value: Round_off }
             ].filter(fil => toNumber(fil.Value) !== 0);
 
             let snoOffset = toNumber(Expence_Array?.length) || 0;
 
-            for (let i = 0; i < taxTypes.length; i++) {
-                const { Expense_Id, Value } = taxTypes[i];
-                const numValue = toNumber(Value);
+            const getExpName = new sql.Request();
+            taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+            const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
 
-                const Expence_Value_DR = numValue >= 0 ? numValue : 0;
-                const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+            if (taxTypes.length > 0) {
+                const getCurrespondingAccount = getExpName.query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE AC_Reason IN (${inClause}) 
+                    AND Acc_Id IS NOT NULL;`
+                );
 
-                const request = new sql.Request(transaction)
-                    .input('Do_Id', Do_Id)
-                    .input('Sno', snoOffset + i + 1)
-                    .input('Expense_Id', Expense_Id)
-                    .input('Expence_Value_DR', Expence_Value_DR)
-                    .input('Expence_Value_CR', Expence_Value_CR)
-                    .query(`
-                        INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
-                        ) VALUES (
-                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
-                        )`
-                    );
+                const expData = (await getCurrespondingAccount).recordset;
 
-                const result = await request;
-                if (result.rowsAffected[0] === 0) {
-                    throw new Error('Failed to insert tax expense row');
+                const missing = taxTypes.filter(exp =>
+                    !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+                );
+
+                if (missing.length > 0) {
+                    throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+                }
+
+                for (let i = 0; i < taxTypes.length; i++) {
+                    const { expName, Value } = taxTypes[i];
+                    const numValue = toNumber(Value);
+                    const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('Do_Id', Do_Id)
+                        .input('Sno', snoOffset + i + 1)
+                        .input('Expense_Id', Expense_Id)
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                                Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            ) VALUES (
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            )`
+                        );
+
+                    const result = await request;
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert tax expense row');
+                    }
                 }
             }
 
@@ -398,7 +421,19 @@ const SalesInvoice = () => {
                 Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
                 Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
-            const defaultIdExclude = defaultAccountAsArray.map(a => a.id).join(',');
+            const getCurrespondingAccount = new sql.Request()
+                .query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE 
+                        AC_Reason = 'DEFAULT' 
+                        AND Acc_Id IS NOT NULL;`
+                );
+
+            const expData = (await getCurrespondingAccount).recordset;
+
+            const excludeList = expData.map(exp => exp.Acc_Id).join(', ');
+            console.log(excludeList)
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
@@ -430,7 +465,7 @@ const SalesInvoice = () => {
                         LEFT JOIN tbl_Voucher_Type AS v
                             ON v.Vocher_Type_Id = sdgi.Voucher_Type
                         WHERE 
-                            sdgi.Do_Date BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                            sdgi.Do_Date BETWEEN @Fromdate AND @Todate
                             ${checkIsNumber(Retailer_Id) ? ' AND sdgi.Retailer_Id = @retailer ' : ''}
                             ${checkIsNumber(Cancel_status) ? ' AND sdgi.Cancel_status = @cancel ' : ''}
                             ${checkIsNumber(Created_by) ? ' AND sdgi.Created_by = @creater ' : ''}
@@ -462,7 +497,7 @@ const SalesInvoice = () => {
                             ON em.Acc_Id = exp.Expense_Id
                         WHERE 
                             exp.Do_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
-                            ${defaultAccountAsArray.length > 0 ? ` AND exp.Expense_Id NOT IN (${defaultIdExclude}) ` : ''}
+                            ${excludeList ? ` AND exp.Expense_Id NOT IN (${excludeList}) ` : ''}
                     ), STAFF_DETAILS AS (
                         SELECT 
                             stf.*,
@@ -795,38 +830,62 @@ const SalesInvoice = () => {
             }
 
             const taxTypes = [
-                { Expense_Id: CGST_Acc_Id, Value: CGST },
-                { Expense_Id: SGST_Acc_Id, Value: SGST },
-                { Expense_Id: IGST_Acc_Id, Value: IGST },
-                { Expense_Id: Round_off_Acc_Id, Value: Round_off }
+                { expName: 'CGST', Value: CGST },
+                { expName: 'SGST', Value: SGST },
+                { expName: 'IGST', Value: IGST },
+                { expName: 'ROUNDOFF', Value: Round_off }
             ].filter(fil => toNumber(fil.Value) !== 0);
 
             let snoOffset = toNumber(Expence_Array?.length) || 0;
 
-            for (let i = 0; i < taxTypes.length; i++) {
-                const { Expense_Id, Value } = taxTypes[i];
-                const numValue = toNumber(Value);
+            const getExpName = new sql.Request();
+            taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+            const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
 
-                const Expence_Value_DR = numValue >= 0 ? numValue : 0;
-                const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+            if (taxTypes.length > 0) {
+                const getCurrespondingAccount = getExpName.query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE AC_Reason IN (${inClause}) 
+                    AND Acc_Id IS NOT NULL;`
+                );
 
-                const request = new sql.Request(transaction)
-                    .input('Do_Id', Do_Id)
-                    .input('Sno', snoOffset + i + 1)
-                    .input('Expense_Id', Expense_Id)
-                    .input('Expence_Value_DR', Expence_Value_DR)
-                    .input('Expence_Value_CR', Expence_Value_CR)
-                    .query(`
+                const expData = (await getCurrespondingAccount).recordset;
+
+                const missing = taxTypes.filter(exp =>
+                    !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+                );
+
+                if (missing.length > 0) {
+                    throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+                }
+
+                for (let i = 0; i < taxTypes.length; i++) {
+                    const { expName, Value } = taxTypes[i];
+                    const numValue = toNumber(Value);
+                    const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('Do_Id', Do_Id)
+                        .input('Sno', snoOffset + i + 1)
+                        .input('Expense_Id', Expense_Id)
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Expence_Value_CR)
+                        .query(`
                         INSERT INTO tbl_Sales_Delivery_Expence_Info (
                             Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
                         ) VALUES (
                             @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
                         )`
-                    );
+                        );
 
-                const result = await request;
-                if (result.rowsAffected[0] === 0) {
-                    throw new Error('Failed to insert tax expense row');
+                    const result = await request;
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert tax expense row');
+                    }
                 }
             }
 
