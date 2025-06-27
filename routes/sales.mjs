@@ -19,6 +19,7 @@ SalesRouter.get('/stockInGodown', salesInvoice.getStockInHandGodownWise);
 SalesRouter.get('/salesInvoice/filterValues', salesInvoice.getFilterValues);
 SalesRouter.get('/salesInvoice/expenceAccount', salesInvoice.getSalesExpenceAccount);
 
+SalesRouter.get('/salesInvoice/tallySync', salesInvoice.salesTallySync);
 SalesRouter.get('/salesInvoice', salesInvoice.getSalesInvoice);
 SalesRouter.post('/salesInvoice', salesInvoice.createSalesInvoice);
 SalesRouter.put('/salesInvoice', salesInvoice.updateSalesInvoice);

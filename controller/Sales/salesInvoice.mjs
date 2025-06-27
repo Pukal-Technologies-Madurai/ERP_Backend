@@ -1021,6 +1021,16 @@ const SalesInvoice = () => {
         }
     }
 
+    const salesTallySync = async (req, res) => {
+        try {
+            const request = new sql.Request().execute('sales_Tally_Sync_3');
+            await request;
+            success(res, 'Sync completed')
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createSalesInvoice,
         updateSalesInvoice,
@@ -1028,6 +1038,7 @@ const SalesInvoice = () => {
         getFilterValues,
         getStockInHandGodownWise,
         getSalesExpenceAccount,
+        salesTallySync
     }
 }
 
