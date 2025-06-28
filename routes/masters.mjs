@@ -26,6 +26,8 @@ import dbconnect from '../middleware/otherDB.mjs';
 import defaultAccountMaster from '../controller/Masters/defaultAccountMaster.mjs';
 import lol from '../controller/Masters/lol.mjs';
 import los from '../controller/Masters/los.mjs';
+import upload from '../middleware/excelUpload.mjs';
+
 
 const MastersRouter = express.Router();
 
@@ -215,17 +217,20 @@ MastersRouter.post('/defaultAccountMaster', defaultAccountMaster.insertDefaultAc
 MastersRouter.put('/defaultAccountMaster', defaultAccountMaster.updateDefaultAccount);
 
 
-MastersRouter.get('/getlolDetails',lol.lollist)
-MastersRouter.get('/displayColumn',lol.displayColumn)
-MastersRouter.put('/updateColumnChanges',lol.applyColumnChanges);
-MastersRouter.get('/columns/dropDown',lol.dropDownColumn)
+MastersRouter.get('/getlolDetails', lol.lollist)
+MastersRouter.get('/displayColumn', lol.displayColumn)
+MastersRouter.put('/updateColumnChanges', lol.applyColumnChanges);
+MastersRouter.get('/columns/dropDown', lol.dropDownColumn)
 
-MastersRouter.put('/updateDetails',dbconnect,lol.updateLolData)
-MastersRouter.put('/updateLosDetails',dbconnect,los.updateLosData)
+MastersRouter.put('/updateDetails', dbconnect, lol.updateLolData)
+MastersRouter.put('/updateLosDetails', dbconnect, los.updateLosData)
 
-MastersRouter.get('/getlosDetails',los.loslist)
-MastersRouter.get('/displayLosColumn',los.displayLoSColumn)
-MastersRouter.put('/updateLosColumnChanges',los.applyLosColumnChanges);
-MastersRouter.get('/columns/dropDownLos',los.dropDownLosColumn)
+MastersRouter.get('/getlosDetails', los.loslist)
+MastersRouter.get('/displayLosColumn', los.displayLoSColumn)
+MastersRouter.put('/updateLosColumnChanges', los.applyLosColumnChanges);
+MastersRouter.get('/columns/dropDownLos', los.dropDownLosColumn);
+
+MastersRouter.post('/uploadExcel', dbconnect, upload.single('file'), lol.excelUpload)
+MastersRouter.post('/uploadLosExcel', dbconnect, upload.single('file'), los.excelUpload)
 
 export default MastersRouter;

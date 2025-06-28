@@ -37,8 +37,14 @@ const searchWhoHasTheItem = async (req, res) => {
 
 		if (!checkIsNumber(Item_Id)) return invalidInput(res, 'Item_Id is required');
 
+		const
+			Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+			Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
 		const request = new sql.Request()
 			.input('searchItem', Item_Id)
+			.input('Fromdate', Fromdate)
+			.input('Todate', Todate)
 			.query(`
                 WITH LatestPerRetailer AS (
 					SELECT 
@@ -56,7 +62,8 @@ const searchWhoHasTheItem = async (req, res) => {
 					JOIN tbl_Sales_Delivery_Gen_Info sdgi
 						ON sdgi.Do_Id = sdi.Delivery_Order_Id
 					WHERE 
-						sdi.Item_Id = @searchItem
+						sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+						AND sdi.Item_Id = @searchItem
 						AND sdi.Bill_Qty <> 0
 				), LatestStock AS (
 					SELECT 
@@ -73,7 +80,8 @@ const searchWhoHasTheItem = async (req, res) => {
 					JOIN tbl_Closing_Stock_Gen_Info AS csgi
 						ON csgi.ST_Id = csi.St_Id
 					WHERE 
-						csi.Item_Id = @searchItem
+						csgi.ST_Date BETWEEN @Fromdate AND @Todate
+						AND csi.Item_Id = @searchItem
 						AND csi.ST_Qty <> 0
 				)
 				SELECT 
@@ -174,10 +182,16 @@ const ledgerClosingStock = async (req, res) => {
 	try {
 		const { Retailer_Id } = req.query;
 
+		const
+			Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+			Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
 		if (!checkIsNumber(Retailer_Id)) return invalidInput(res, 'Retailer_Id is required');
 
 		const request = new sql.Request()
 			.input('Retailer_Id', Retailer_Id)
+			.input('Fromdate', Fromdate)
+			.input('Todate', Todate)
 			.query(`
                 WITH LatestPerRetailer AS (
 					SELECT 
@@ -193,7 +207,9 @@ const ledgerClosingStock = async (req, res) => {
 						) AS rn
 					FROM tbl_Sales_Delivery_Stock_Info sdi
 					JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdgi.Do_Id = sdi.Delivery_Order_Id
-					WHERE sdgi.Retailer_Id = @Retailer_Id
+					WHERE 
+						sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+						AND sdgi.Retailer_Id = @Retailer_Id
 						AND sdi.Bill_Qty <> 0
 				), LatestStock AS (
 					SELECT 
@@ -208,7 +224,9 @@ const ledgerClosingStock = async (req, res) => {
 						) AS rn
 					FROM tbl_Closing_Stock_Info AS csi
 					JOIN tbl_Closing_Stock_Gen_Info AS csgi ON csgi.ST_Id = csi.St_Id
-					WHERE csgi.Retailer_Id = @Retailer_Id
+					WHERE 
+						csgi.ST_Date BETWEEN @Fromdate AND @Todate
+						AND csgi.Retailer_Id = @Retailer_Id
 						AND csi.ST_Qty <> 0
 				)
 				SELECT 
@@ -282,7 +300,13 @@ const ledgerClosingStock = async (req, res) => {
 const ledgerBasedClosingStock = async (req, res) => {
 	try {
 
+		const
+			Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+			Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
 		const request = new sql.Request()
+			.input('Fromdate', Fromdate)
+			.input('Todate', Todate)
 			.query(`
                 WITH LatestDeliveryPerItem AS (
 					SELECT 
@@ -300,7 +324,9 @@ const ledgerBasedClosingStock = async (req, res) => {
 					FROM tbl_Sales_Delivery_Stock_Info sdi
 					JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdi.Delivery_Order_Id = sdgi.Do_Id
 					JOIN tbl_Product_Master P ON P.Product_Id = sdi.Item_Id
-					WHERE sdi.Bill_Qty > 0
+					WHERE 
+						sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+						AND sdi.Bill_Qty > 0
 				), LatestClosingPerItem AS (
 					SELECT 
 						csgi.Retailer_Id,
@@ -317,7 +343,9 @@ const ledgerBasedClosingStock = async (req, res) => {
 					FROM tbl_Closing_Stock_Info csi
 					JOIN tbl_Closing_Stock_Gen_Info csgi ON csi.ST_Id = csgi.ST_Id
 					JOIN tbl_Product_Master P ON P.Product_Id = csi.Item_Id
-					WHERE csi.ST_Qty > 0
+					WHERE 
+						csgi.ST_Date BETWEEN @Fromdate AND @Todate
+						AND csi.ST_Qty > 0
 				), FilteredStock AS (
 					SELECT * FROM LatestClosingPerItem WHERE rn = 1
 				), FilteredDelivery AS (
@@ -429,7 +457,13 @@ const ledgerBasedClosingStock = async (req, res) => {
 const ledgerBasedClosingStockWithLOL = async (req, res) => {
 
 	try {
+		const
+			Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+			Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
 		const request = new sql.Request()
+			.input('Fromdate', Fromdate)
+			.input('Todate', Todate)
 			.query(`
                 WITH LatestDeliveryPerItem AS (
 					SELECT 
@@ -447,7 +481,9 @@ const ledgerBasedClosingStockWithLOL = async (req, res) => {
 					FROM tbl_Sales_Delivery_Stock_Info sdi
 					JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdi.Delivery_Order_Id = sdgi.Do_Id
 					JOIN tbl_Product_Master P ON P.Product_Id = sdi.Item_Id
-					WHERE sdi.Bill_Qty > 0
+					WHERE 
+						sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+						AND sdi.Bill_Qty > 0
 				), LatestClosingPerItem AS (
 					SELECT 
 						csgi.Retailer_Id,
@@ -464,7 +500,9 @@ const ledgerBasedClosingStockWithLOL = async (req, res) => {
 					FROM tbl_Closing_Stock_Info csi
 					JOIN tbl_Closing_Stock_Gen_Info csgi ON csi.ST_Id = csgi.ST_Id
 					JOIN tbl_Product_Master P ON P.Product_Id = csi.Item_Id
-					WHERE csi.ST_Qty > 0
+					WHERE 
+						csgi.ST_Date BETWEEN @Fromdate AND @Todate
+						AND csi.ST_Qty > 0
 				), FilteredStock AS (
 					SELECT * FROM LatestClosingPerItem WHERE rn = 1
 				), FilteredDelivery AS (
@@ -748,9 +786,15 @@ const ledgerSalesPersonGroupingClosingStock = async (req, res) => {
 }
 
 const losBasedReport = async (req, res) => {
-		try {
+	try {
+
+		const
+			Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+			Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
 		const request = new sql.Request()
+			.input('Fromdate', Fromdate)
+			.input('Todate', Todate)
 			.query(`
                 WITH LatestDeliveryPerItem AS (
 					SELECT 
@@ -766,7 +810,9 @@ const losBasedReport = async (req, res) => {
 						) AS rn
 					FROM tbl_Sales_Delivery_Stock_Info sdi
 					JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdi.Delivery_Order_Id = sdgi.Do_Id
-					WHERE sdi.Bill_Qty > 0
+					WHERE 
+						sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+						AND sdi.Bill_Qty > 0
 				), LatestClosingPerItem AS (
 					SELECT 
 						csgi.Retailer_Id,
@@ -782,7 +828,9 @@ const losBasedReport = async (req, res) => {
 					FROM tbl_Closing_Stock_Info csi
 					JOIN tbl_Closing_Stock_Gen_Info csgi ON csi.ST_Id = csgi.ST_Id
 					JOIN tbl_Product_Master P ON P.Product_Id = csi.Item_Id
-					WHERE csi.ST_Qty > 0
+					WHERE 
+						csgi.ST_Date BETWEEN @Fromdate AND @Todate
+						AND csi.ST_Qty > 0
 				), FilteredStock AS (
 					SELECT * FROM LatestClosingPerItem WHERE rn = 1
 				), FilteredDelivery AS (

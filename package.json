@@ -35,7 +35,8 @@
     "path": "^0.12.7",
     "sequelize": "^6.37.3",
     "sequelize-cli": "^6.6.2",
-    "url": "^0.11.4"
+    "url": "^0.11.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",

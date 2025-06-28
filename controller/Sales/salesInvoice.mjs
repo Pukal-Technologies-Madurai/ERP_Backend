@@ -357,8 +357,8 @@ const SalesInvoice = () => {
                     const numValue = toNumber(Value);
                     const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
 
-                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
-                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+                    const Expence_Value_DR = numValue < 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue >= 0 ? Math.abs(numValue) : 0;
 
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)
@@ -426,14 +426,13 @@ const SalesInvoice = () => {
                     SELECT Acc_Id, AC_Reason 
                     FROM tbl_Default_AC_Master 
                     WHERE 
-                        AC_Reason = 'DEFAULT' 
+                        Type = 'DEFAULT' 
                         AND Acc_Id IS NOT NULL;`
                 );
 
             const expData = (await getCurrespondingAccount).recordset;
 
             const excludeList = expData.map(exp => exp.Acc_Id).join(', ');
-            console.log(excludeList)
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
@@ -489,8 +488,8 @@ const SalesInvoice = () => {
                             exp.*, 
                             em.Account_name AS Expence_Name, 
                         	CASE  
-                        		WHEN exp.Expence_Value_DR > 0 THEN exp.Expence_Value_DR 
-                        		ELSE -exp.Expence_Value_CR
+                        		WHEN exp.Expence_Value_DR > 0 THEN -exp.Expence_Value_DR 
+                        		ELSE exp.Expence_Value_CR
                         	END AS Expence_Value
                         FROM tbl_Sales_Delivery_Expence_Info AS exp
                         LEFT JOIN tbl_Account_Master AS em
@@ -865,8 +864,8 @@ const SalesInvoice = () => {
                     const numValue = toNumber(Value);
                     const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
 
-                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
-                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+                    const Expence_Value_DR = numValue < 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue >= 0 ? Math.abs(numValue) : 0;
 
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)

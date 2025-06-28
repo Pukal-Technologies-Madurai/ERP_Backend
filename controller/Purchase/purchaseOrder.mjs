@@ -789,13 +789,18 @@ const PurchaseOrder = () => {
 
     const getStockItemLedgerName = async (req, res) => {
         try {
+            const { type = 'PURCHASE' } = req.query;
             const request = new sql.Request()
-                .query(`SELECT * FROM tbl_Stock_Item_Ledger_Name`)
+                .input('type', type)
+                .query(`
+                    SELECT * 
+                    FROM tbl_Stock_Item_Ledger_Name
+                    WHERE Type = @type`
+                );
 
             const result = await request;
 
-            if (result.recordset.length > 0) return dataFound(res, result.recordset);
-            else return noData(res);
+            sentData(res, result.recordset);
         } catch (e) {
             servError(e, res);
         }

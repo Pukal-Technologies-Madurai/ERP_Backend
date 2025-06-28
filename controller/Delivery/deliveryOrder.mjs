@@ -2019,7 +2019,7 @@ FROM TRIP_MASTER AS tm
                 )
                 GROUP BY pm.Product_Group, pg.Pro_Group
                 ORDER BY pm.Product_Group;
-            `;
+                `;
 
                 request.input('godown_Id', sql.Int, parseInt(godownId));
             }

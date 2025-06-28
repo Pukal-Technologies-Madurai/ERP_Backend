@@ -7,6 +7,7 @@ import tripReports from '../controller/Reports/tripReports.mjs';
 import collectionReport from '../controller/Reports/collectionReport.mjs';
 import tallyPullAPI from '../controller/Reports/tallyPullAPI.mjs';
 import customerClosingStock from '../controller/Reports/customerClosingStock.mjs';
+import storageStockReport from '../controller/Reports/storageStockReport.mjs';
 
 const ReportRouter = express.Router();
 
@@ -65,6 +66,8 @@ ReportRouter.get('/customerClosingStock/retailerBased', customerClosingStock.led
 ReportRouter.get('/customerClosingStock/retailerBased/detailedInfo', customerClosingStock.ledgerClosingStock);
 ReportRouter.get('/customerClosingStock/retailerBased/salesPersonGrouped', customerClosingStock.ledgerSalesPersonGroupingClosingStock);
 ReportRouter.get('/customerClosingStock/retailerBased/withLOL', customerClosingStock.ledgerBasedClosingStockWithLOL);
+
+ReportRouter.get('/storageStock/itemWise', storageStockReport.getStorageStockItemWise);
 
 
 export default ReportRouter;
