@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { servError, dataFound, noData, success, failed, invalidInput } from '../../res.mjs';
+import { servError, dataFound, noData, success, failed, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber, createPadString, isEqualNumber, ISOString } from '../../helper_functions.mjs';
 import { getLOL, getLOS, getNextId } from '../../middleware/miniAPIs.mjs';
 
@@ -135,15 +135,15 @@ const PurchaseOrderDataEntry = () => {
                     DeliveryDetails: o.DeliveryDetails.map(item => ({
 
                         pendingInvoiceWeight: Number(item?.Weight) - Number(o.ConvertedAsInvoices.filter(
-                            itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId) 
-                            && isEqualNumber(itmFil.DeliveryId, item.Trip_Item_SNo)
-                            && isEqualNumber(itmFil.Order_Id, item.OrderId)
+                            itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
+                                && isEqualNumber(itmFil.DeliveryId, item.Trip_Item_SNo)
+                                && isEqualNumber(itmFil.Order_Id, item.OrderId)
                         ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
 
                         convertableQuantity: o.DeliveryDetails.filter(
                             itmFil => isEqualNumber(itmFil.ItemId, item.ItemId)
-                            && isEqualNumber(itmFil.OrderId, item.OrderId)
-                            && isEqualNumber(itmFil.Trip_Item_SNo, item.Trip_Item_SNo)
+                                && isEqualNumber(itmFil.OrderId, item.OrderId)
+                                && isEqualNumber(itmFil.Trip_Item_SNo, item.Trip_Item_SNo)
                         ).reduce((itemAcc, deliveredItem) => {
                             return Number(itemAcc) + Number(deliveredItem.Weight)
                         }, 0) - Number(o.ConvertedAsInvoices.filter(
@@ -807,14 +807,14 @@ const PurchaseOrderDataEntry = () => {
             const productWiseStatus = parsedData.map(item => ({
 
                 pendingInvoiceWeight: Number(item?.Weight) - Number(item.ConvertedAsInvoices.filter(
-                    itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId) 
-                    && isEqualNumber(itmFil.DeliveryId, item.Trip_Item_SNo)
-                    && isEqualNumber(itmFil.Order_Id, item.OrderId)
+                    itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
+                        && isEqualNumber(itmFil.DeliveryId, item.Trip_Item_SNo)
+                        && isEqualNumber(itmFil.Order_Id, item.OrderId)
                 ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
 
                 convertableQuantity: parsedData.filter(
                     itmFil => isEqualNumber(itmFil.Trip_Item_SNo, item.Trip_Item_SNo)
-                    && isEqualNumber(itmFil.OrderId, item.OrderId)
+                        && isEqualNumber(itmFil.OrderId, item.OrderId)
                 ).reduce((itemAcc, deliveredItem) => {
                     return Number(itemAcc) + Number(deliveredItem.Weight)
                 }, 0) - Number(item.ConvertedAsInvoices.filter(
@@ -832,50 +832,50 @@ const PurchaseOrderDataEntry = () => {
     };
 
     const getPartyForInvoice = async (req, res) => {
+
         try {
-            const request = new sql.Request();
+            const request = new sql.Request()
+                .query(`
+                    WITH OrderArrival AS (
+                        SELECT 
+                            d.OrderId, d.ItemId, d.Weight,  
+                            g.PartyId AS Retailer_Id, 
+                            g.PartyName AS Retailer_Name,
+                            r.Reatailer_Address
+                        FROM tbl_PurchaseOrderDeliveryDetails AS d
+                        INNER JOIN tbl_PurchaseOrderGeneralDetails AS g
+                            ON d.OrderId = g.Sno
+                        LEFT JOIN tbl_Retailers_Master AS r
+                            ON r.Retailer_Id = g.PartyId
+                        WHERE g.OrderStatus = 'Completed'
+                    ), InvoicedOrders AS (
+                        SELECT 
+                            odr.Order_Id, ipo.Item_Id, 
+                            SUM(ipo.Bill_Qty) AS Total_Bill_Qty
+                        FROM tbl_Purchase_Order_Inv_Gen_Order AS odr
+                        INNER JOIN tbl_Purchase_Order_Inv_Stock_Info AS ipo
+                            ON ipo.PIN_Id = odr.PIN_Id
+                        WHERE 
+                            odr.Order_Id IN (SELECT OrderId FROM OrderArrival)
+                            AND odr.Cancel_status = 0
+                        GROUP BY odr.Order_Id, ipo.Item_Id
+                    ) SELECT DISTINCT 
+                        g.Retailer_Id, 
+                        g.Retailer_Name, 
+                        g.Reatailer_Address
+                    FROM OrderArrival AS g
+                    LEFT JOIN InvoicedOrders AS i
+                        ON g.OrderId = i.Order_Id 
+                        AND g.ItemId = i.Item_Id
+                    WHERE 
+                        g.Weight > ISNULL(i.Total_Bill_Qty, 0) 
+                    ORDER BY g.Retailer_Name;`
+                );
 
-            const query = `
-            WITH OrderArrival AS (
-                SELECT 
-                    d.OrderId, d.ItemId, d.Weight,  
-                    g.PartyId AS Retailer_Id, 
-                    g.PartyName AS Retailer_Name,
-                    r.Reatailer_Address
-                FROM tbl_PurchaseOrderDeliveryDetails AS d
-                INNER JOIN tbl_PurchaseOrderGeneralDetails AS g
-                    ON d.OrderId = g.Sno
-                LEFT JOIN tbl_Retailers_Master AS r
-                    ON r.Retailer_Id = g.PartyId
-                WHERE g.OrderStatus = 'Completed'
-            ), InvoicedOrders AS (
-                SELECT 
-                    odr.Order_Id, ipo.Item_Id, 
-                    SUM(ipo.Bill_Qty) AS Total_Bill_Qty
-                FROM tbl_Purchase_Order_Inv_Gen_Order AS odr
-                INNER JOIN tbl_Purchase_Order_Inv_Stock_Info AS ipo
-                    ON ipo.PIN_Id = odr.PIN_Id
-                WHERE odr.Order_Id IN (SELECT OrderId FROM OrderArrival)
-                GROUP BY odr.Order_Id, ipo.Item_Id
-            ) SELECT DISTINCT 
-                g.Retailer_Id, 
-                g.Retailer_Name, 
-                g.Reatailer_Address
-            FROM OrderArrival AS g
-            LEFT JOIN InvoicedOrders AS i
-                ON g.OrderId = i.Order_Id 
-                AND g.ItemId = i.Item_Id
-            WHERE 
-                g.Weight > ISNULL(i.Total_Bill_Qty, 0) 
-            ORDER BY g.Retailer_Name;
+            const result = await request;
 
-            `;
+            sentData(res, result.recordset);
 
-            const result = await request.query(query);
-
-            if (result.recordset.length === 0) return noData(res);
-
-            dataFound(res, result.recordset);
         } catch (e) {
             servError(e, res);
         }

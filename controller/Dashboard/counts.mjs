@@ -872,7 +872,7 @@ LEFT JOIN
                     	LEFT JOIN ERP_VOUCHERS AS V
                     	ON V.Vocher_Type_Id =  P.Voucher_Type
                     	WHERE 
-                    		P.Po_Inv_Date BETWEEN @Fromdate AND @Todate
+                    		P.Po_Entry_Date BETWEEN @Fromdate AND @Todate
                     		AND P.Cancel_status = 0
                     	GROUP BY V.Voucher_Type
                     ), SALE_ORDER AS (

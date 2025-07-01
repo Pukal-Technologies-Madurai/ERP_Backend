@@ -68,6 +68,7 @@ ReportRouter.get('/customerClosingStock/retailerBased/salesPersonGrouped', custo
 ReportRouter.get('/customerClosingStock/retailerBased/withLOL', customerClosingStock.ledgerBasedClosingStockWithLOL);
 
 ReportRouter.get('/storageStock/itemWise', storageStockReport.getStorageStockItemWise);
+ReportRouter.get('/storageStock/godownWise', storageStockReport.getStorageStockGodownWise);
 
 
 export default ReportRouter;
