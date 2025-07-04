@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { servError, failed, invalidInput, dataFound, noData, success } from '../../res.mjs';
-import { checkIsNumber, ISOString } from '../../helper_functions.mjs';
+import { checkIsNumber, ISOString, toArray } from '../../helper_functions.mjs';
 import { getLOL, getLOS } from '../../middleware/miniAPIs.mjs';
 
 const QPayReport = () => {
@@ -19,9 +19,9 @@ const QPayReport = () => {
                 .input('Consolidate', Consolidate)
                 .execute('Q_Pay_Online_Report_VW')
 
-            const result = await request;
+            const result = toArray((await request).recordset);
 
-            if (result.recordset.length > 0) {
+            if (result.length > 0) {
                 dataFound(res, result.recordset)
             } else {
                 noData(res)

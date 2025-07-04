@@ -104,7 +104,7 @@ const ReceiptDataDependency = () => {
                         JOIN tbl_Account_Master AS a
                             ON a.ERP_Id = R.ERP_Id
                         WHERE 
-                            pig.Cancel_status = 0
+                            pig.Cancel_status <> 0
                             ${checkIsNumber(Acc_Id) ? ' AND a.Acc_Id = @Acc_Id ' : ''}
                     ) AS inv
                     WHERE inv.Paid_Amount < inv.Total_Invoice_value;`

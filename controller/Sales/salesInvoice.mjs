@@ -442,109 +442,103 @@ const SalesInvoice = () => {
                 .input('creater', Created_by)
                 .input('VoucherType', VoucherType)
                 .query(`
-                    WITH DELIVERY_INVOICE_DETAILS AS (
-                        SELECT 
-                            sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
-                            sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
-                            sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
-                            sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
-                            sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
-                            COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                            COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                            COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                        	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
-                        FROM 
-                            tbl_Sales_Delivery_Gen_Info AS sdgi
-                        LEFT JOIN tbl_Retailers_Master AS rm 
-                            ON rm.Retailer_Id = sdgi.Retailer_Id
-                        LEFT JOIN tbl_Branch_Master AS bm 
-                            ON bm.BranchId = sdgi.Branch_Id
-                        LEFT JOIN tbl_Users AS cb 
-                            ON cb.UserId = sdgi.Created_by
-                        LEFT JOIN tbl_Voucher_Type AS v
-                            ON v.Vocher_Type_Id = sdgi.Voucher_Type
-                        WHERE 
-                            sdgi.Do_Date BETWEEN @Fromdate AND @Todate
-                            ${checkIsNumber(Retailer_Id) ? ' AND sdgi.Retailer_Id = @retailer ' : ''}
-                            ${checkIsNumber(Cancel_status) ? ' AND sdgi.Cancel_status = @cancel ' : ''}
-                            ${checkIsNumber(Created_by) ? ' AND sdgi.Created_by = @creater ' : ''}
-                            ${checkIsNumber(VoucherType) ? ' AND sdgi.Voucher_Type = @VoucherType ' : ''}
-                    ), DELIVERY_DETAILS AS (
-                        SELECT
-                            oi.*,
-                            pm.Product_Id,
-                            COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                            COALESCE(pm.Product_Name, 'not available') AS Item_Name,
-                            COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                            COALESCE(u.Units, 'not available') AS UOM,
-                            COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                        FROM tbl_Sales_Delivery_Stock_Info AS oi
-                        LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-                        LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-                        LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-                        WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
-                    ), EXPENCE_DETAILS AS (
-                        SELECT 
-                            exp.*, 
-                            em.Account_name AS Expence_Name, 
-                        	CASE  
-                        		WHEN exp.Expence_Value_DR > 0 THEN -exp.Expence_Value_DR 
-                        		ELSE exp.Expence_Value_CR
-                        	END AS Expence_Value
-                        FROM tbl_Sales_Delivery_Expence_Info AS exp
-                        LEFT JOIN tbl_Account_Master AS em
-                            ON em.Acc_Id = exp.Expense_Id
-                        WHERE 
-                            exp.Do_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
-                            ${excludeList ? ` AND exp.Expense_Id NOT IN (${excludeList}) ` : ''}
-                    ), STAFF_DETAILS AS (
-                        SELECT 
-                            stf.*,
-                            e.Cost_Center_Name AS Emp_Name,
-                            cc.Cost_Category AS Involved_Emp_Type
-                        FROM tbl_Sales_Delivery_Staff_Info AS stf
-                        LEFT JOIN tbl_ERP_Cost_Center AS e
-                            ON e.Cost_Center_Id = stf.Emp_Id
-                        LEFT JOIN tbl_ERP_Cost_Category AS cc
-                            ON cc.Cost_Category_Id = stf.Emp_Type_Id
-                        WHERE stf.Do_Id IN (SELECT Do_Id FROM DELIVERY_INVOICE_DETAILS)
-                    )
+                    -- declaring table variable
+                    DECLARE @FilteredInvoice TABLE (Do_Id INT);
+                    -- inserting data to temp table
+                    INSERT INTO @FilteredInvoice (Do_Id)
+                    SELECT Do_Id
+                    FROM tbl_Sales_Delivery_Gen_Info
+                    WHERE 
+                        Do_Date BETWEEN @Fromdate AND @Todate
+                        ${checkIsNumber(Retailer_Id) ? ' AND Retailer_Id = @retailer ' : ''}
+                        ${checkIsNumber(Cancel_status) ? ' AND Cancel_status = @cancel ' : ''}
+                        ${checkIsNumber(Created_by) ? ' AND Created_by = @creater ' : ''}
+                        ${checkIsNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''};
+                    -- sales general details
                     SELECT 
-                        gi.*,
-                        COALESCE((
-                            SELECT sd.*
-                            FROM DELIVERY_DETAILS AS sd
-                            WHERE sd.Delivery_Order_Id = gi.Do_Id
-                            FOR JSON PATH
-                        ), '[]') AS Products_List,
-                        COALESCE((
-                            SELECT exp.*
-                            FROM EXPENCE_DETAILS AS exp
-                            WHERE exp.Do_Id = gi.Do_Id
-                            FOR JSON PATH
-                        ), '[]') AS Expence_Array,
-                        COALESCE((
-                            SELECT stf.*
-                            FROM STAFF_DETAILS AS stf
-                            WHERE stf.Do_Id = gi.Do_Id
-                            FOR JSON PATH
-                        ), '[]') AS Staffs_Array
-                    FROM DELIVERY_INVOICE_DETAILS AS gi
-                    `
+                        sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                        sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                        sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
+                        sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                        sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
+                        COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                        COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                        COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    	COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                    FROM 
+                        tbl_Sales_Delivery_Gen_Info AS sdgi
+                    LEFT JOIN tbl_Retailers_Master AS rm 
+                        ON rm.Retailer_Id = sdgi.Retailer_Id
+                    LEFT JOIN tbl_Branch_Master AS bm 
+                        ON bm.BranchId = sdgi.Branch_Id
+                    LEFT JOIN tbl_Users AS cb 
+                        ON cb.UserId = sdgi.Created_by
+                    LEFT JOIN tbl_Voucher_Type AS v
+                        ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                    WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
+                    -- product details
+                    SELECT
+                        oi.*,
+                        pm.Product_Id,
+                        COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                        COALESCE(pm.Product_Name, 'not available') AS Item_Name,
+                        COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                        COALESCE(u.Units, 'not available') AS UOM,
+                        COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                    FROM tbl_Sales_Delivery_Stock_Info AS oi
+                    LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                    LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                    LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                    WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+                    -- expence details
+                    SELECT 
+                        exp.*, 
+                        em.Account_name AS Expence_Name, 
+                    	CASE  
+                    		WHEN exp.Expence_Value_DR > 0 THEN -exp.Expence_Value_DR 
+                    		ELSE exp.Expence_Value_CR
+                    	END AS Expence_Value
+                    FROM tbl_Sales_Delivery_Expence_Info AS exp
+                    LEFT JOIN tbl_Account_Master AS em
+                        ON em.Acc_Id = exp.Expense_Id
+                    WHERE 
+                        exp.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                        ${excludeList ? ` AND exp.Expense_Id NOT IN (${excludeList}) ` : ''};
+                    -- staff involved
+                    SELECT 
+                        stf.*,
+                        e.Cost_Center_Name AS Emp_Name,
+                        cc.Cost_Category AS Involved_Emp_Type
+                    FROM tbl_Sales_Delivery_Staff_Info AS stf
+                    LEFT JOIN tbl_ERP_Cost_Center AS e
+                        ON e.Cost_Center_Id = stf.Emp_Id
+                    LEFT JOIN tbl_ERP_Cost_Category AS cc
+                        ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                    WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);`
                 );
 
             const result = await request;
 
-            if (result.recordset?.length > 0) {
-                const parsed = result.recordset.map(
-                    sales => ({
-                        ...sales,
-                        Products_List: toArray(JSON.parse(sales?.Products_List)),
-                        Expence_Array: toArray(JSON.parse(sales?.Expence_Array)),
-                        Staffs_Array: toArray(JSON.parse(sales?.Staffs_Array))
-                    })
-                )
-                dataFound(res, parsed);
+            const SalesGeneralInfo = toArray(result.recordsets[0]);
+            const Products_List = toArray(result.recordsets[1]);
+            const Expence_Array = toArray(result.recordsets[2]);
+            const Staffs_Array = toArray(result.recordsets[3]);
+
+            if (SalesGeneralInfo.length > 0) {
+                const resData = SalesGeneralInfo.map(row => ({
+                    ...row,
+                    Products_List: Products_List.filter(
+                        fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
+                    ),
+                    Expence_Array: Expence_Array.filter(
+                        fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                    ),
+                    Staffs_Array: Staffs_Array.filter(
+                        fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                    )
+                }));
+
+                dataFound(res, resData);
             } else {
                 noData(res);
             }

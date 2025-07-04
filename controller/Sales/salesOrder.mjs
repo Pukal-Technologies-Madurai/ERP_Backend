@@ -820,9 +820,14 @@ const SaleOrder = () => {
         try {
 
             let query = `
-            SELECT 
+              SELECT 
                gt.*,
                rm.Retailer_Name,
+			   COALESCE(cc1.Cost_Center_Name,'') AS Broker_Name,
+               COALESCE(cc2.Cost_Center_Name,'') AS Transporter_Name,
+			   ISNULL((cc2.User_Type),0) AS TrasnportType,
+			   ISNULL((cc1.user_Type),0) AS Broker_Type,
+
                (
                     SELECT 
                         st.S_No,
@@ -831,7 +836,7 @@ const SaleOrder = () => {
                         st.Bill_Qty,
                         st.Rate AS Item_Rate,
                         st.Amount,
-                        	p.UOM_Id as Unit_Id,
+                        p.UOM_Id as Unit_Id,
 						uom.Units AS Unit_Name,
                         COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18, 2)), 0) AS PackValue,
                         COALESCE(TRY_CAST(pck.Pack AS DECIMAL(18, 2)) * st.Bill_Qty, 0) AS Tonnage
@@ -852,6 +857,8 @@ const SaleOrder = () => {
                 ) AS Status
             FROM tbl_Pre_Sales_Order_Gen_Info AS gt
             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = gt.Custome_Id
+			LEFT JOIN tbl_ERP_Cost_Center AS cc1 ON cc1.Cost_Center_Id=gt.Broker_Id
+            LEFT JOIN tbl_ERP_Cost_Center AS cc2 ON cc2.Cost_Center_Id=gt.Transporter_Id
             WHERE
                 CONVERT(DATE, gt.Pre_Date) >= CONVERT(DATE, @Fromdate)
             AND CONVERT(DATE, gt.Pre_Date) <= CONVERT(DATE, @Todate)
@@ -881,6 +888,7 @@ const SaleOrder = () => {
         const {
             Retailer_Id, Pre_Id,
             Narration = null, Created_by, Product_Array = [], GST_Inclusive = 2, IS_IGST = 0, VoucherType = 0,
+            Staffs_Array = []
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -1107,6 +1115,18 @@ const SaleOrder = () => {
                 }
             }
 
+            for (const staff of Staffs_Array) {
+                await new sql.Request(transaction)
+                    .input('So_Id', sql.Int, So_Id)
+                    .input('Involved_Emp_Id', sql.Int, staff.Emp_Id)
+                    .input('Cost_Center_Type_Id', sql.Int, staff.Emp_Type_Id)
+                    .query(`
+                    INSERT INTO tbl_Sales_Order_Staff_Info 
+                    (So_Id, Involved_Emp_Id, Cost_Center_Type_Id)
+                    VALUES (@So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id)
+                `);
+            }
+
             const updatePresalesOrder = new sql.Request(transaction)
                 .input('Pre_Id', toNumber(Pre_Id) || null)
                 .query(`
@@ -1122,8 +1142,6 @@ const SaleOrder = () => {
             }
 
             await transaction.commit();
-
-
             success(res, 'Order Created!')
         } catch (e) {
             if (transaction._aborted === false) {
@@ -1136,7 +1154,7 @@ const SaleOrder = () => {
     const updatesaleOrderWithPso = async (req, res) => {
         const {
             Retailer_Id, Pre_Id,
-            Narration = null, Created_by, Product_Array = [], GST_Inclusive = 2, IS_IGST = 0, VoucherType = 0,
+            Narration = null, Created_by, Product_Array = [], Staffs_Array = [], GST_Inclusive = 2, IS_IGST = 0, VoucherType = 0,
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -1180,20 +1198,24 @@ const SaleOrder = () => {
             let PrevioudSo_Branch_Inv_Id = getSaleOrderGenId.recordset[0].So_Branch_Inv_Id
             let PrevioudSo_Date = getSaleOrderGenId.recordset[0].So_Date
             let PrevioudYear_Id = getSaleOrderGenId.recordset[0].So_Year
-            const deleteDetails = await new sql.Request()
+
+            await new sql.Request()
                 .input('Sales_Order_Id', getSoId)
                 .query(`
                     DELETE FROM tbl_Sales_Order_Stock_Info 
                     WHERE Sales_Order_Id = @Sales_Order_Id`
                 );
 
-            const deleteDetails1 = await new sql.Request()
+            await new sql.Request()
                 .input('So_Id', getSoId)
                 .query(`
                     DELETE FROM tbl_Sales_Order_Gen_Info 
                     WHERE So_Id = @So_Id`
                 );
 
+            await new sql.Request()
+                .input('So_Id', sql.Int, getSoId)
+                .query(`DELETE FROM tbl_Sales_Order_Staff_Info WHERE So_Id = @So_Id`);
 
             const productsData = (await getProducts()).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
@@ -1354,6 +1376,24 @@ const SaleOrder = () => {
                 }
             }
 
+            for (const staff of Staffs_Array) {
+
+                if (staff.Emp_Id && staff.Emp_Type_Id &&
+                    staff.Emp_Id !== 0 && staff.Emp_Type_Id !== 0) {
+
+                    await new sql.Request(transaction)
+                        .input('So_Id', sql.Int, PrevioudSo_Id)
+                        .input('Involved_Emp_Id', sql.Int, staff.Emp_Id)
+                        .input('Cost_Center_Type_Id', sql.Int, staff.Emp_Type_Id)
+                        .query(`
+                            INSERT INTO tbl_Sales_Order_Staff_Info 
+                            (So_Id, Involved_Emp_Id, Cost_Center_Type_Id)
+                            VALUES (@So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id)
+                        `);
+                }
+
+            }
+
             const updatePresalesOrder = new sql.Request(transaction)
                 .input('Pre_Id', toNumber(Pre_Id) || null)
                 .query(`
@@ -1369,8 +1409,6 @@ const SaleOrder = () => {
             }
 
             await transaction.commit();
-
-
             success(res, 'Order Updated!')
         } catch (e) {
             if (transaction._aborted === false) {
@@ -1379,7 +1417,6 @@ const SaleOrder = () => {
             servError(e, res)
         }
     }
-
 
     return {
         saleOrderCreation,
