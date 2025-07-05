@@ -16,10 +16,13 @@ import inventoryRouter from './inventory.mjs';
 import DeliveryRouter from './delivery.mjs';
 import ReceiptsRouter from './receipts.mjs';
 import PaymentRouter from './payment.mjs';
+import AnalalyticsRouter from './analytics.mjs';
+
 const indexRouter = express.Router();
 
 indexRouter.use('/empAttendance', AttendanceRouter);
 indexRouter.use('/authorization', AuthorizationRouter);
+indexRouter.use('/analytics', AnalalyticsRouter);
 indexRouter.use('/dashboard', DashboardRouter);
 indexRouter.use('/dataEntry', dataEntryRouter);
 indexRouter.use('/discussionForum', TopicsRouter);
