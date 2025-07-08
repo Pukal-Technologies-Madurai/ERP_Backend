@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { servError, dataFound, noData, success, invalidInput, sentData } from '../../res.mjs';
-import { checkIsNumber, createPadString, ISOString, Subraction, toNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, createPadString, isEqualNumber, ISOString, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
 
 const StockManagement = () => {
 
@@ -449,105 +449,109 @@ const StockManagement = () => {
 
     const getProcessingDetails = async (req, res) => {
         try {
-            const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
-            const Stock_Journal_Bill_type = req.query.billType;
-            const request = new sql.Request();
+            const Fromdate = req.body?.Fromdate ? ISOString(req.body.Fromdate) : ISOString();
+            const Todate = req.body?.Todate ? ISOString(req.body.Todate) : ISOString();
+            const { filterItems = [] } = req.body;
 
-            const result = await request
+            const request = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
-                .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
+                .input('filterItems', toArray(filterItems).map(item => toNumber(item)).join(', '))
                 .query(`
-                    WITH SJ_Main AS (
-                        SELECT 
-                    		pgi.*,
-                    		br.BranchName,
-                    		v.Voucher_Type AS VoucherTypeGet,
-                    		g.Godown_Name AS GodownNameGet
-                    	FROM tbl_Processing_Gen_Info AS pgi
-                    	LEFT JOIN tbl_Branch_Master AS br
-                    	ON br.BranchId = pgi.Branch_Id
-                    	LEFT JOIN tbl_Voucher_Type AS v
-                    	ON v.Vocher_Type_Id = pgi.VoucherType
-                    	LEFT JOIN tbl_Godown_Master AS g
-                    	ON g.Godown_Id = pgi.Godownlocation
-                        WHERE 
-                            CONVERT(DATE, pgi.Process_date) >= CONVERT(DATE, @Fromdate) 
-                            AND CONVERT(DATE, pgi.Process_date) <= CONVERT(DATE, @Todate)
-                    ), Source AS (
-                        SELECT s.*,
-                            p.Product_Name,
-                            g.Godown_Name
-                        FROM tbl_Processing_Source_Details AS s
-                        LEFT JOIN tbl_Product_Master AS p
-                        ON s.Sour_Item_Id = p.Product_Id
-                        LEFT JOIN tbl_Godown_Master AS g
-                        ON s.Sour_Goodown_Id = g.Godown_Id
-                        WHERE s.PR_Id IN (
-                            SELECT PR_Id 
-                            FROM SJ_Main
-                        )
-                    ), Destination AS (
-                        SELECT d.*,
-                            p.Product_Name,
-                            g.Godown_Name
-                        FROM tbl_Processing_Destin_Details AS d
-                        LEFT JOIN tbl_Product_Master AS p
-                        ON d.Dest_Item_Id = p.Product_Id
-                        LEFT JOIN tbl_Godown_Master AS g
-                        ON d.Dest_Goodown_Id = g.Godown_Id
-                        WHERE d.PR_Id IN (
-                            SELECT PR_Id 
-                            FROM SJ_Main
-                        )
-                    ), Staffs AS (
-                        SELECT st.*,
-                            cc.Cost_Center_Name AS EmpNameGet,
-                            cct.Cost_Category AS EmpTypeGet
-                        FROM tbl_Processing_Staff_Involved AS st
-                        LEFT JOIN tbl_ERP_Cost_Center AS cc
-                        ON cc.Cost_Center_Id = st.Staff_Id
-                    	LEFT JOIN tbl_ERP_Cost_Category as cct
-                    	ON cct.Cost_Category_Id = st.Staff_Type_Id
-                        WHERE st.PR_Id IN (
-                            SELECT PR_Id 
-                            FROM SJ_Main
-                        )
-                    )
+                    DECLARE @itemFilterTable TABLE (itemId INT);
+                    -- inserting items
+                    INSERT INTO @itemFilterTable (itemId)
+                    SELECT TRY_CAST(value AS INT) AS Product_Id
+                    FROM STRING_SPLIT(@filterItems, ',')
+                    WHERE TRY_CAST(value AS INT) IS NOT NULL;
+                    -- other final filters
+                    DECLARE @processingFilters TABLE (PR_Id INT);
+                    -- inserting final filter data
+                    INSERT INTO @processingFilters (PR_Id)
+                    SELECT pgi.PR_Id
+                    FROM tbl_Processing_Gen_Info AS pgi
+                    LEFT JOIN tbl_Processing_Source_Details AS s
+                    ON s.PR_Id = pgi.PR_Id
+                    LEFT JOIN tbl_Processing_Destin_Details AS d
+                    ON d.PR_Id = pgi.PR_Id
+                    WHERE 
+                    	pgi.Process_date BETWEEN @Fromdate AND @Todate
+                    	${toArray(filterItems).length > 0 ? `
+                        AND (
+                    		s.Sour_Item_Id IN (SELECT DISTINCT itemId FROM @itemFilterTable)
+                    		OR d.Dest_Item_Id IN (SELECT DISTINCT itemId FROM @itemFilterTable)
+                    	) ` : ''}
+                    -- processing general info
                     SELECT 
-                        main.*,
-                        COALESCE(( 
-                            SELECT source.*
-                            FROM Source AS source
-                            WHERE source.PR_Id = main.PR_Id
-                            FOR JSON PATH
-                        ), '[]') AS SourceDetails,
-                        COALESCE((
-                            SELECT destination.*
-                            FROM Destination AS destination
-                            WHERE destination.PR_Id = main.PR_Id
-                            FOR JSON PATH
-                        ), '[]') AS DestinationDetails,
-                        COALESCE((
-                            SELECT staff.*
-                            FROM Staffs AS staff
-                            WHERE staff.PR_Id = main.PR_Id
-                            FOR JSON PATH
-                        ), '[]') AS StaffsDetails
-                    FROM SJ_Main AS main
-                    ORDER BY main.PR_Id;
+                    	pgi.*,
+                    	br.BranchName,
+                    	v.Voucher_Type AS VoucherTypeGet,
+                    	g.Godown_Name AS GodownNameGet
+                    FROM tbl_Processing_Gen_Info AS pgi
+                    LEFT JOIN tbl_Branch_Master AS br
+                        ON br.BranchId = pgi.Branch_Id
+                    LEFT JOIN tbl_Voucher_Type AS v
+                        ON v.Vocher_Type_Id = pgi.VoucherType
+                    LEFT JOIN tbl_Godown_Master AS g
+                        ON g.Godown_Id = pgi.Godownlocation
+                    WHERE pgi.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters)
+                    ORDER BY pgi.Process_date DESC;
+                    -- source details
+                    SELECT s.*,
+                        p.Product_Name,
+                        g.Godown_Name
+                    FROM tbl_Processing_Source_Details AS s
+                    LEFT JOIN tbl_Product_Master AS p
+                        ON s.Sour_Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Godown_Master AS g
+                        ON s.Sour_Goodown_Id = g.Godown_Id
+                    WHERE s.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+                    -- destination details
+                    SELECT d.*,
+                        p.Product_Name,
+                        g.Godown_Name
+                    FROM tbl_Processing_Destin_Details AS d
+                    LEFT JOIN tbl_Product_Master AS p
+                        ON d.Dest_Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Godown_Master AS g
+                        ON d.Dest_Goodown_Id = g.Godown_Id
+                    WHERE d.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+                    -- staff details
+                    SELECT st.*,
+                        cc.Cost_Center_Name AS EmpNameGet,
+                        cct.Cost_Category AS EmpTypeGet
+                    FROM tbl_Processing_Staff_Involved AS st
+                    LEFT JOIN tbl_ERP_Cost_Center AS cc
+                        ON cc.Cost_Center_Id = st.Staff_Id
+                    LEFT JOIN tbl_ERP_Cost_Category as cct
+                        ON cct.Cost_Category_Id = st.Staff_Type_Id
+                    WHERE st.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
                 `);
 
-            if (result.recordset.length > 0) {
-                const extractedData = result.recordset.map(o => ({
+            const result = await request;
+
+            const generalInfo = toArray(result.recordsets[0]);
+            const sourceInfo = toArray(result.recordsets[1]);
+            const destinationInfo = toArray(result.recordsets[2]);
+            const staffInfo = toArray(result.recordsets[3]);
+
+            if (result.recordsets[0].length > 0) {
+
+                const extractedData = generalInfo.map(o => ({
                     ...o,
-                    SourceDetails: JSON.parse(o.SourceDetails),
-                    DestinationDetails: JSON.parse(o.DestinationDetails),
-                    StaffsDetails: JSON.parse(o.StaffsDetails)
+                    SourceDetails: sourceInfo.filter(
+                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                    ),
+                    DestinationDetails: destinationInfo.filter(
+                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                    ),
+                    StaffsDetails: staffInfo.filter(
+                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                    )
                 }));
 
                 dataFound(res, extractedData);
+
             } else {
                 noData(res);
             }
@@ -557,11 +561,41 @@ const StockManagement = () => {
         }
     };
 
+    const getItemsUsedInProcessing = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    DECLARE @itemFilterTable TABLE (itemId INT);
+                    -- inserting source items
+                    INSERT INTO @itemFilterTable (itemId)
+                    SELECT DISTINCT Sour_Item_Id
+                    FROM tbl_Processing_Source_Details;
+                    -- inserting destination items
+                    INSERT INTO @itemFilterTable (itemId)
+                    SELECT DISTINCT Dest_Item_Id
+                    FROM tbl_Processing_Destin_Details;
+                    -- value, label
+                    SELECT Product_Id AS value, Product_Name AS label
+                    FROM tbl_Product_Master 
+                    WHERE Product_Id IN (SELECT DISTINCT itemId FROM @itemFilterTable)
+                    ORDER BY Product_Name;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createStockProcessing,
         updateStockProcessing,
         deleteStockProcessing,
-        getProcessingDetails
+        getProcessingDetails,
+        getItemsUsedInProcessing,
     }
 }
 

@@ -35,7 +35,8 @@ inventoryRouter.put('/tripSheet/arrivalEntry', arrivalMaster.editArrivalEntry);
 // inventoryRouter.put('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
 // inventoryRouter.delete('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
 
-inventoryRouter.get('/stockProcessing', stockProcessing.getProcessingDetails);
+inventoryRouter.post('/stockProcessing/getWithFilters', stockProcessing.getProcessingDetails);
+inventoryRouter.get('/stockProcessing/itemsUsed', stockProcessing.getItemsUsedInProcessing);
 inventoryRouter.post('/stockProcessing', stockProcessing.createStockProcessing);
 inventoryRouter.put('/stockProcessing', stockProcessing.updateStockProcessing);
 inventoryRouter.delete('/stockProcessing', stockProcessing.deleteStockProcessing);

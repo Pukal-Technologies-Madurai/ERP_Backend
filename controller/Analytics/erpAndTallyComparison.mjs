@@ -179,10 +179,10 @@ const getERPSalesDataStatus = async (req, res) => {
 						tally_id, 
 						COUNT(st.salst_id) AS childCount,
 						SUM(st.bill_qty) AS childQuantity
-					FROM [Online_SMT_Tally].[dbo].[sales_inv_stk_info_ob] AS st
+					FROM [${TALLYDB}].[dbo].[sales_inv_stk_info_ob] AS st
 					WHERE st.tally_id IN (
 						SELECT t.tally_id
-						FROM [Online_SMT_Tally].[dbo].[sales_inv_geninfo_ob] t
+						FROM [${TALLYDB}].[dbo].[sales_inv_geninfo_ob] t
 						JOIN FilteredERP e ON 
 							e.Do_Inv_No COLLATE SQL_Latin1_General_CP1_CI_AS = t.invoice_no
 					)
@@ -200,7 +200,7 @@ const getERPSalesDataStatus = async (req, res) => {
 						ELSE 'Synced'
 					END AS RowStatus
 				FROM FilteredERP erp
-				LEFT JOIN [Online_SMT_Tally].[dbo].[sales_inv_geninfo_ob] tally
+				LEFT JOIN [${TALLYDB}].[dbo].[sales_inv_geninfo_ob] tally
 					ON erp.Do_Inv_No COLLATE SQL_Latin1_General_CP1_CI_AS = tally.invoice_no
 				LEFT JOIN erpSalesChildCount AS erpChild 
 					ON erp.Do_Id = erpChild.Delivery_Order_Id
@@ -536,47 +536,212 @@ const getERPPurchaseDataStatus = async (req, res) => {
 					SELECT 
 						sgi.*,
 						r.Retailer_Name
-					FROM tbl_Sales_Delivery_Gen_Info AS sgi
+					FROM tbl_Purchase_Order_Inv_Gen_Info AS sgi
 					LEFT JOIN tbl_Retailers_Master AS r
 						ON r.Retailer_Id = sgi.Retailer_Id
-					WHERE sgi.Do_Date BETWEEN @Fromdate AND @Todate
+					WHERE sgi.Po_Entry_Date BETWEEN @Fromdate AND @Todate
 				), erpSalesChildCount AS (
-					SELECT Delivery_Order_Id, COUNT(*) AS childCount
-					FROM tbl_Sales_Delivery_Stock_Info
-					WHERE Delivery_Order_Id IN (SELECT Do_Id FROM FilteredERP)
-					GROUP BY Delivery_Order_Id
+					SELECT 
+						PIN_Id, 
+						COUNT(*) AS childCount,
+						SUM(Bill_Qty) AS childQuantity
+					FROM tbl_Purchase_Order_Inv_Stock_Info
+					WHERE PIN_Id IN (SELECT PIN_Id FROM FilteredERP)
+					GROUP BY PIN_Id
 				), tallySalesChildCount AS (
-					SELECT tally_id, COUNT(*) AS childCount
-					FROM [${TALLYDB}].[dbo].[sales_inv_stk_info_ob]
-					WHERE tally_id IN (
-						SELECT t.tally_id
-						FROM [${TALLYDB}].[dbo].[sales_inv_geninfo_ob] t
-						JOIN FilteredERP e ON 
-							e.Do_Inv_No COLLATE SQL_Latin1_General_CP1_CI_AS = t.invoice_no
+					SELECT 
+						tally_id, 
+						REPLACE(invoice_no COLLATE DATABASE_DEFAULT  , '<Auto>', '') AS invNo,
+						COUNT(*) AS childCount,
+						SUM(bill_qty) AS childQuantity
+					FROM [${TALLYDB}].[dbo].[purchase_inv_stk_info_ob]
+					WHERE REPLACE(invoice_no COLLATE DATABASE_DEFAULT  , '<Auto>', '') IN (
+						SELECT DISTINCT Po_Inv_No COLLATE DATABASE_DEFAULT 
+						FROM FilteredERP 
 					)
-					GROUP BY tally_id
+					GROUP BY tally_id, invoice_no
 				)
 				SELECT 
 					erp.*,
 					ISNULL(erpChild.childCount, 0) AS erpChildCount,
+					ISNULL(erpChild.childQuantity, 0) AS erpChildQuantity,
 					ISNULL(tallyChild.childCount, 0) AS tallyChildCount,
+					ISNULL(tallyChild.childQuantity, 0) AS tallyChildQuantity,
 					CASE 
-						WHEN tally.tally_id IS NULL THEN 'Not Synced'
+						WHEN tallyChild.tally_id IS NULL THEN 'Not Synced'
 						WHEN ISNULL(erpChild.childCount, 0) <> ISNULL(tallyChild.childCount, 0) THEN 'Child not Synced'
 						ELSE 'Synced'
 					END AS RowStatus
 				FROM FilteredERP erp
-				LEFT JOIN [${TALLYDB}].[dbo].[sales_inv_geninfo_ob] tally
-					ON erp.Do_Inv_No COLLATE SQL_Latin1_General_CP1_CI_AS = tally.invoice_no
 				LEFT JOIN erpSalesChildCount AS erpChild 
-					ON erp.Do_Id = erpChild.Delivery_Order_Id
+					ON erp.PIN_Id = erpChild.PIN_Id
 				LEFT JOIN tallySalesChildCount AS tallyChild 
-					ON tally.tally_id = tallyChild.tally_id
-				${isEqualNumber(excluedeSyced, 1) ? `
+					ON tallyChild.invNo COLLATE DATABASE_DEFAULT = erp.Po_Inv_No COLLATE DATABASE_DEFAULT 
+				${excluedeSyced ? ` 
 				WHERE 
-					tally.tally_id IS NULL
-					OR ISNULL(erpChild.childCount, 0) <> ISNULL(tallyChild.childCount, 0) `: ''}
-				ORDER BY erp.Do_Inv_No, erp.Do_Date;`
+					tallyChild.tally_id IS NULL
+					OR ISNULL(erpChild.childCount, 0) <> ISNULL(tallyChild.childCount, 0)
+					OR ISNULL(erpChild.childQuantity, 0) <> ISNULL(tallyChild.childQuantity, 0) ` : ''}
+				ORDER BY erp.PO_Inv_Id, erp.Po_Entry_Date;`
+			);
+
+		const result = await request;
+
+		sentData(res, result.recordset)
+
+	} catch (e) {
+		servError(e, res);
+	}
+}
+
+const getPurchaseDifferenceItemWise = async (req, res) => {
+	try {
+
+		if (!TALLYDB) return failed(res, 'Tally Db not found');
+
+		const
+			Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+			Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+
+		const { excluedeSyced = 1 } = req.query;
+
+		const request = new sql.Request()
+			.input('Fromdate', Fromdate)
+			.input('Todate', Todate)
+			.query(`
+                WITH FilteredERP AS (
+					SELECT 
+						sdi.PIN_Id, 
+						sdi.Po_Inv_No, 
+						sdi.Po_Entry_Date, 
+						COALESCE(r.Retailer_Name, 'Not found') AS Purticular,
+						COALESCE(v.Voucher_Type, 'Not found') AS VoucherTypeGet
+					FROM tbl_Purchase_Order_Inv_Gen_Info AS sdi
+					LEFT JOIN tbl_Retailers_Master AS r
+						ON r.Retailer_Id = sdi.Retailer_Id
+					LEFT JOIN tbl_Voucher_Type AS v
+						ON v.Vocher_Type_Id = sdi.Voucher_Type
+					WHERE sdi.Po_Entry_Date BETWEEN @Fromdate AND @Todate
+				),
+				FilteredTally AS (
+					SELECT 
+						sgi.tally_id, 
+						sgi.invoice_no, 
+						sgi.invoice_date, 
+						COALESCE(l.ledger_name, 'Not found') as Purticular,
+						COALESCE(v.voucher_name, 'Not found') AS VoucherTypeGet
+					FROM [${TALLYDB}].[dbo].[purchase_inv_geninfo_ob] AS sgi 
+					LEFT JOIN [${TALLYDB}].[dbo].[ledger_ob] AS l
+					ON l.tally_id = sgi.purchase_party_ledger_id
+					LEFT JOIN [${TALLYDB}].[dbo].[voucher_type_ob] AS v
+					ON v.tally_id = sgi.purchase_voucher_type_id
+					WHERE sgi.invoice_date BETWEEN @Fromdate AND @Todate
+				),
+				ERPSales AS (
+					SELECT 
+						e.PIN_Id AS erpPk,
+						e.Po_Inv_No AS invoiceNo,
+						e.Purticular AS erpLedger,
+						e.VoucherTypeGet AS erpVoucher,
+						e.Po_Entry_Date AS erpDate,
+						p.Product_Id,
+						p.ERP_Id AS Item_Id,
+						p.Product_Name AS erpItemName,
+						s.Bill_Qty AS erpQty,
+						s.Item_Rate AS erpRate,
+						s.Amount AS erpAmount
+					FROM FilteredERP e
+					JOIN tbl_Sales_Delivery_Stock_Info s
+						ON e.PIN_Id = s.Delivery_Order_Id
+					JOIN tbl_Product_Master AS p
+						ON p.Product_Id = s.Item_Id
+				),
+				TallySales AS (
+					SELECT 
+						t.tally_id AS tallyPk,
+						t.invoice_no AS invoiceNo,
+						t.Purticular AS tallyLedger,
+						t.VoucherTypeGet AS tallyVoucher,
+						t.invoice_date AS tallyDate,
+						s.name_item_id AS Item_Id,
+						p.stock_item_name AS tallyItemName,
+						s.bill_qty AS tallyQty,
+						s.item_rate AS tallyRate,
+						s.amount AS tallyAmount
+					FROM FilteredTally t
+					JOIN [${TALLYDB}].[dbo].[purchase_inv_stk_info_ob] s
+						ON t.tally_id = s.tally_id
+					JOIN [${TALLYDB}].[dbo].[stock_items_ob] AS p
+						ON p.tally_id = s.name_item_id
+				),
+				MergedSales AS (
+					SELECT 
+						erp.erpPk,
+						tally.tallyPk,
+						COALESCE(erp.erpDate, tally.tallyDate) AS transactionDate,
+						COALESCE(
+							erp.invoiceNo COLLATE DATABASE_DEFAULT, 
+							tally.invoiceNo COLLATE DATABASE_DEFAULT
+						) AS invoiceNo,
+						COALESCE(
+							erp.erpLedger COLLATE DATABASE_DEFAULT, 
+							tally.tallyLedger COLLATE DATABASE_DEFAULT
+						) AS LedgerName,
+						COALESCE(
+							erp.erpVoucher COLLATE DATABASE_DEFAULT, 
+							tally.tallyVoucher COLLATE DATABASE_DEFAULT
+						) AS VoucherTypeGet,
+						COALESCE(erp.Item_Id, tally.Item_Id) AS Item_Id,
+						COALESCE(
+							erp.erpItemName COLLATE DATABASE_DEFAULT,
+							tally.tallyItemName COLLATE DATABASE_DEFAULT
+						) AS ItemName,
+						COALESCE(erp.erpQty, 0) AS erpQty,
+						COALESCE(tally.tallyQty, 0) AS tallyQty,
+						COALESCE(erp.erpRate, 0) AS erpRate,
+						COALESCE(tally.tallyRate, 0) AS tallyRate,
+						COALESCE(erp.erpAmount, 0) AS erpAmount,
+						COALESCE(tally.tallyAmount, 0) AS tallyAmount,
+						CASE 
+							WHEN erp.Item_Id IS NULL THEN 'Only in Tally'
+							WHEN tally.Item_Id IS NULL THEN 'Only in ERP'
+							WHEN ISNULL(erp.erpQty, 0) <> ISNULL(tally.tallyQty, 0)
+								AND ISNULL(erp.erpRate, 0) <> ISNULL(tally.tallyRate, 0)
+								AND ISNULL(erp.erpAmount, 0) <> ISNULL(tally.tallyAmount, 0)
+								THEN 'Qty + Rate + Amount Mismatch'
+							WHEN ISNULL(erp.erpQty, 0) <> ISNULL(tally.tallyQty, 0)
+								AND ISNULL(erp.erpRate, 0) <> ISNULL(tally.tallyRate, 0)
+								THEN 'Qty + Rate Mismatch'
+							WHEN ISNULL(erp.erpQty, 0) <> ISNULL(tally.tallyQty, 0)
+								AND ISNULL(erp.erpAmount, 0) <> ISNULL(tally.tallyAmount, 0)
+								THEN 'Qty + Amount Mismatch'
+							WHEN ISNULL(erp.erpRate, 0) <> ISNULL(tally.tallyRate, 0)
+								AND ISNULL(erp.erpAmount, 0) <> ISNULL(tally.tallyAmount, 0)
+								THEN 'Rate + Amount Mismatch'
+							WHEN ISNULL(erp.erpQty, 0) <> ISNULL(tally.tallyQty, 0)
+								THEN 'Qty Mismatch'
+							WHEN ISNULL(erp.erpRate, 0) <> ISNULL(tally.tallyRate, 0)
+								THEN 'Rate Mismatch'
+							WHEN ISNULL(erp.erpAmount, 0) <> ISNULL(tally.tallyAmount, 0)
+								THEN 'Amount Mismatch'
+							ELSE 'Match'
+						END AS Status
+					FROM ERPSales erp
+					FULL OUTER JOIN TallySales tally
+						ON erp.invoiceNo COLLATE DATABASE_DEFAULT = 
+						   tally.invoiceNo COLLATE DATABASE_DEFAULT
+						AND erp.Item_Id = tally.Item_Id
+					${excluedeSyced ? `
+					WHERE 
+						erp.erpPk IS NULL
+						OR tally.tallyPk IS NULL
+						OR erp.erpQty <> tally.tallyQty
+						OR erp.erpRate <> tally.tallyRate
+						OR erp.erpAmount <> tally.tallyAmount ` : ''}
+				)
+				SELECT *
+				FROM MergedSales
+				ORDER BY invoiceNo COLLATE DATABASE_DEFAULT, transactionDate;`
 			);
 
 		const result = await request;
@@ -593,5 +758,6 @@ export default {
 	getERPSalesDataStatus,
 	getSalesDifferenceItemWise,
 	getERPAndTallyPurchaseDifference,
-	getERPPurchaseDataStatus
+	getERPPurchaseDataStatus,
+	getPurchaseDifferenceItemWise
 }
