@@ -540,3 +540,11 @@ export const groupData = (arr, key) => {
         return [];
     }
 };
+
+export const randomNumber = (minDigits = 5, maxDigits = 8) => {
+  const digits = Math.floor(Math.random() * (maxDigits - minDigits + 1)) + minDigits;
+  const min = Math.pow(10, digits - 1);
+  const max = Math.pow(10, digits) - 1;
+
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};

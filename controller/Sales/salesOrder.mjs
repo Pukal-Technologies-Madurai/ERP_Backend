@@ -15,6 +15,7 @@ const SaleOrder = () => {
         const {
             Retailer_Id, Sales_Person_Id, Branch_Id,
             Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = '',
+            Staff_Involved_List = []
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -256,6 +257,20 @@ const SaleOrder = () => {
                 }
             }
 
+            for (const staff of toArray(Staff_Involved_List)) {
+                await new sql.Request(transaction)
+                    .input('So_Id', sql.Int, So_Id)
+                    .input('Involved_Emp_Id', sql.Int, staff?.Involved_Emp_Id)
+                    .input('Cost_Center_Type_Id', sql.Int, staff?.Cost_Center_Type_Id)
+                    .query(`
+                    INSERT INTO tbl_Sales_Order_Staff_Info (
+                        So_Id, Involved_Emp_Id, Cost_Center_Type_Id
+                    ) VALUES (
+                        @So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                    );`
+                    );
+            }
+
             await transaction.commit();
 
             success(res, 'Order Created!')
@@ -270,7 +285,8 @@ const SaleOrder = () => {
     const editSaleOrder = async (req, res) => {
         const {
             So_Id, Retailer_Id, Sales_Person_Id, Branch_Id,
-            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, VoucherType = ''
+            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, VoucherType = '',
+            Staff_Involved_List = []
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -398,7 +414,10 @@ const SaleOrder = () => {
 
             await new sql.Request(transaction)
                 .input('soid', So_Id)
-                .query(`DELETE FROM tbl_Sales_Order_Stock_Info WHERE Sales_Order_Id = @soid`);
+                .query(`
+                    DELETE FROM tbl_Sales_Order_Stock_Info WHERE Sales_Order_Id = @soid;
+                    DELETE FROM tbl_Sales_Order_Staff_Info WHERE So_Id = @soid;`
+                );
 
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
@@ -463,6 +482,20 @@ const SaleOrder = () => {
                 }
             }
 
+            for (const staff of toArray(Staff_Involved_List)) {
+                await new sql.Request(transaction)
+                    .input('So_Id', sql.Int, So_Id)
+                    .input('Involved_Emp_Id', sql.Int, staff?.Involved_Emp_Id)
+                    .input('Cost_Center_Type_Id', sql.Int, staff?.Cost_Center_Type_Id)
+                    .query(`
+                    INSERT INTO tbl_Sales_Order_Staff_Info (
+                        So_Id, Involved_Emp_Id, Cost_Center_Type_Id
+                    ) VALUES (
+                        @So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                    );`
+                    );
+            }
+
             await transaction.commit();
             success(res, 'Changes Saved!')
 
@@ -474,6 +507,163 @@ const SaleOrder = () => {
         }
     }
 
+    // const getSaleOrder = async (req, res) => {
+    //     try {
+    //         const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType } = req.query;
+
+    //         const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+    //         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+
+    //         const request = new sql.Request()
+    //             .input('from', Fromdate)
+    //             .input('to', Todate)
+    //             .input('retailer', Retailer_Id)
+    //             .input('cancel', Cancel_status)
+    //             .input('creater', Created_by)
+    //             .input('salesPerson', Sales_Person_Id)
+    //             .input('VoucherType', VoucherType)
+    //             .query(`
+    //                 WITH SALES AS (
+    //                 	SELECT 
+    //                 		so.*,
+    //                 		COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+    //                 		COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+    //                 		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+    //                 		COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+    //                 		COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+    //                 	FROM 
+    //                 		tbl_Sales_Order_Gen_Info AS so
+    //                 		LEFT JOIN tbl_Retailers_Master AS rm
+    //                 		    ON rm.Retailer_Id = so.Retailer_Id
+    //                 		LEFT JOIN tbl_Users AS sp
+    //                 		    ON sp.UserId = so.Sales_Person_Id
+    //                 		LEFT JOIN tbl_Branch_Master bm
+    //                 		    ON bm.BranchId = so.Branch_Id
+    //                 		LEFT JOIN tbl_Users AS cb
+    //                 		    ON cb.UserId = so.Created_by
+    //                 	    LEFT JOIN tbl_Voucher_Type AS v
+    //                 	        ON v.Vocher_Type_Id = so.VoucherType
+    //                     WHERE
+    //                         CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @from) AND CONVERT(DATE, @to)
+    //                         ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
+    //                         ${(Number(Cancel_status) === 0 || Number(Cancel_status) === 1) ? ' AND so.Cancel_status = @cancel ' : ''}
+    //                         ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
+    //                         ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
+    //                         ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
+    //                 ), SALES_DETAILS AS (
+    //                     SELECT
+    //                 		oi.*,
+    //                 		COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+    //                         COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+    //                         COALESCE(u.Units, 'not available') AS UOM,
+    //                         COALESCE(b.Brand_Name, 'not available') AS BrandGet
+    //                 	FROM
+    //                 		tbl_Sales_Order_Stock_Info AS oi
+    //                         LEFT JOIN tbl_Product_Master AS pm
+    //                         ON pm.Product_Id = oi.Item_Id
+    //                         LEFT JOIN tbl_UOM AS u
+    //                         ON u.Unit_Id = oi.Unit_Id
+    //                         LEFT JOIN tbl_Brand_Master AS b
+    //                         ON b.Brand_Id = pm.Brand
+    //                 	WHERE oi.Sales_Order_Id IN (SELECT So_Id FROM SALES)
+    //                 ), DeliveryGI AS (
+    //                     SELECT 
+    //                         so.*,
+    //                         rm.Retailer_Name AS Retailer_Name,
+    //                         bm.BranchName AS Branch_Name,
+    //                         st.Status AS DeliveryStatusName,
+    //                         COALESCE((
+    //                             SELECT SUM(collected_amount)
+    //                             FROM tbl_Sales_Receipt_Details_Info
+    //                             WHERE bill_id = so.Do_Id
+    //                         ), 0) AS receiptsTotalAmount
+    //                     FROM
+    //                         tbl_Sales_Delivery_Gen_Info AS so
+    //                     LEFT JOIN tbl_Retailers_Master AS rm
+    //                         ON rm.Retailer_Id = so.Retailer_Id
+    //                     LEFT JOIN tbl_Status AS st
+    //                         ON st.Status_Id = so.Delivery_Status
+    //                     LEFT JOIN tbl_Branch_Master bm
+    //                         ON bm.BranchId = so.Branch_Id
+    //                     WHERE 
+    //                         so.Do_Id IN (SELECT So_No FROM SALES)
+    //                 ), DeliveryDI AS (
+    //                     SELECT
+    //                         oi.*,
+    //                         pm.Product_Id,
+    //                         COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+    //                         COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+    //                         COALESCE(u.Units, 'not available') AS UOM,
+    //                         COALESCE(b.Brand_Name, 'not available') AS BrandGet
+    //                     FROM
+    //                         tbl_Sales_Delivery_Stock_Info AS oi
+    //                     LEFT JOIN tbl_Product_Master AS pm
+    //                         ON pm.Product_Id = oi.Item_Id
+    //                     LEFT JOIN tbl_UOM AS u
+    //                         ON u.Unit_Id = oi.Unit_Id
+    //                     LEFT JOIN tbl_Brand_Master AS b
+    //                         ON b.Brand_Id = pm.Brand
+    //                     WHERE
+    //                         oi.Delivery_Order_Id IN (SELECT Do_Id FROM DeliveryGI)
+    //                 )
+    //                 SELECT 
+    //                 	sg.*,
+    //                 	COALESCE((
+    //                 		SELECT *
+    //                 		FROM SALES_DETAILS
+    //                 		WHERE Sales_Order_Id = sg.So_Id
+    //                         FOR JSON PATH
+    //                 	), '[]') AS Products_List,
+    //                 	COALESCE((
+    //                 		SELECT 
+    //                             gi.*,
+    //                             COALESCE((
+    //                                 SELECT
+    //                                     sd.*
+    //                                 FROM
+    //                                     DeliveryDI AS sd
+    //                                 WHERE
+    //                                     sd.Delivery_Order_Id = gi.Do_Id
+    //                                 FOR JSON PATH
+    //                             ), '[]') AS InvoicedProducts
+    //                         FROM DeliveryGI AS gi
+    //                         ORDER BY gi.Do_Date ASC
+    //                         FOR JSON PATH
+    //                 	), '[]') AS ConvertedInvoice
+    //                 FROM SALES AS sg
+    //                 ORDER BY CONVERT(DATETIME, sg.So_Id) DESC`
+    //             )
+
+    //         const result = await request
+
+    //         if (result.recordset.length > 0) {
+    //             const parseFistLeverl = result.recordset.map(o => ({
+    //                 ...o,
+    //                 Products_List: JSON.parse(o?.Products_List),
+    //                 ConvertedInvoice: JSON.parse(o?.ConvertedInvoice)
+    //             }));
+
+    //             const parsed = parseFistLeverl.map(o => ({
+    //                 ...o,
+    //                 Products_List: o?.Products_List.map(oo => ({
+    //                     ...oo,
+    //                     ProductImageUrl: getImage('products', oo?.Product_Image_Name)
+    //                 })),
+    //                 ConvertedInvoice: toArray(o?.ConvertedInvoice).map(oo => ({
+    //                     ...oo,
+    //                     InvoicedProducts: JSON.parse(oo?.InvoicedProducts),
+    //                 }))
+    //             }));
+
+    //             dataFound(res, parsed);
+    //         } else {
+    //             noData(res)
+    //         }
+    //     } catch (e) {
+    //         servError(e, res);
+    //     }
+    // }
+
     const getSaleOrder = async (req, res) => {
         try {
             const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType } = req.query;
@@ -482,154 +672,133 @@ const SaleOrder = () => {
             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
             const request = new sql.Request()
-                .input('from', Fromdate)
-                .input('to', Todate)
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
                 .input('retailer', Retailer_Id)
                 .input('cancel', Cancel_status)
                 .input('creater', Created_by)
                 .input('salesPerson', Sales_Person_Id)
-                .input('VoucherType', VoucherType)
-                .query(`
-                    WITH SALES AS (
-                    	SELECT 
-                    		so.*,
-                    		COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                    		COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
-                    		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                    		COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                    		COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
-                    	FROM 
-                    		tbl_Sales_Order_Gen_Info AS so
-                    		LEFT JOIN tbl_Retailers_Master AS rm
-                    		    ON rm.Retailer_Id = so.Retailer_Id
-                    		LEFT JOIN tbl_Users AS sp
-                    		    ON sp.UserId = so.Sales_Person_Id
-                    		LEFT JOIN tbl_Branch_Master bm
-                    		    ON bm.BranchId = so.Branch_Id
-                    		LEFT JOIN tbl_Users AS cb
-                    		    ON cb.UserId = so.Created_by
-                    	    LEFT JOIN tbl_Voucher_Type AS v
-                    	        ON v.Vocher_Type_Id = so.VoucherType
-                        WHERE
-                            CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @from) AND CONVERT(DATE, @to)
-                            ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
-                            ${(Number(Cancel_status) === 0 || Number(Cancel_status) === 1) ? ' AND so.Cancel_status = @cancel ' : ''}
-                            ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
-                            ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
-                            ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
-                    ), SALES_DETAILS AS (
-                        SELECT
-                    		oi.*,
-                    		COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                            COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                            COALESCE(u.Units, 'not available') AS UOM,
-                            COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                    	FROM
-                    		tbl_Sales_Order_Stock_Info AS oi
-                            LEFT JOIN tbl_Product_Master AS pm
-                            ON pm.Product_Id = oi.Item_Id
-                            LEFT JOIN tbl_UOM AS u
-                            ON u.Unit_Id = oi.Unit_Id
-                            LEFT JOIN tbl_Brand_Master AS b
-                            ON b.Brand_Id = pm.Brand
-                    	WHERE oi.Sales_Order_Id IN (SELECT So_Id FROM SALES)
-                    ), DeliveryGI AS (
-                        SELECT 
-                            so.*,
-                            rm.Retailer_Name AS Retailer_Name,
-                            bm.BranchName AS Branch_Name,
-                            st.Status AS DeliveryStatusName,
-                            COALESCE((
-                                SELECT SUM(collected_amount)
-                                FROM tbl_Sales_Receipt_Details_Info
-                                WHERE bill_id = so.Do_Id
-                            ), 0) AS receiptsTotalAmount
-                        FROM
-                            tbl_Sales_Delivery_Gen_Info AS so
-                        LEFT JOIN tbl_Retailers_Master AS rm
-                            ON rm.Retailer_Id = so.Retailer_Id
-                        LEFT JOIN tbl_Status AS st
-                            ON st.Status_Id = so.Delivery_Status
-                        LEFT JOIN tbl_Branch_Master bm
-                            ON bm.BranchId = so.Branch_Id
-                        WHERE 
-                            so.Do_Id IN (SELECT So_No FROM SALES)
-                    ), DeliveryDI AS (
-                        SELECT
-                            oi.*,
-                            pm.Product_Id,
-                            COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                            COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                            COALESCE(u.Units, 'not available') AS UOM,
-                            COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                        FROM
-                            tbl_Sales_Delivery_Stock_Info AS oi
-                        LEFT JOIN tbl_Product_Master AS pm
-                            ON pm.Product_Id = oi.Item_Id
-                        LEFT JOIN tbl_UOM AS u
-                            ON u.Unit_Id = oi.Unit_Id
-                        LEFT JOIN tbl_Brand_Master AS b
-                            ON b.Brand_Id = pm.Brand
-                        WHERE
-                            oi.Delivery_Order_Id IN (SELECT Do_Id FROM DeliveryGI)
-                    )
-                    SELECT 
-                    	sg.*,
-                    	COALESCE((
-                    		SELECT *
-                    		FROM SALES_DETAILS
-                    		WHERE Sales_Order_Id = sg.So_Id
-                            FOR JSON PATH
-                    	), '[]') AS Products_List,
-                    	COALESCE((
-                    		SELECT 
-                                gi.*,
-                                COALESCE((
-                                    SELECT
-                                        sd.*
-                                    FROM
-                                        DeliveryDI AS sd
-                                    WHERE
-                                        sd.Delivery_Order_Id = gi.Do_Id
-                                    FOR JSON PATH
-                                ), '[]') AS InvoicedProducts
-                            FROM DeliveryGI AS gi
-                            ORDER BY gi.Do_Date ASC
-                            FOR JSON PATH
-                    	), '[]') AS ConvertedInvoice
-                    FROM SALES AS sg
-                    ORDER BY CONVERT(DATETIME, sg.So_Id) DESC`
-                )
+                .input('VoucherType', VoucherType);
 
-            const result = await request
+            const result = await request.query(`
+                -- Step 1: Declare and populate filtered sales orders
+                DECLARE @FilteredOrders TABLE (So_Id INT);
+                INSERT INTO @FilteredOrders (So_Id)
+                SELECT so.So_Id
+                FROM tbl_Sales_Order_Gen_Info AS so
+                WHERE 
+                    CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                    ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
+                    ${checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @cancel ' : ''}
+                    ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
+                    ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
+                    ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''};
+                -- Step 2: Sales Order General Info
+                SELECT 
+                    so.*, 
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                FROM tbl_Sales_Order_Gen_Info AS so
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+                LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+                LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+                WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+                -- Step 3: Product Details
+                SELECT 
+                    si.*,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Order_Stock_Info AS si
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+                -- Step 4: Staff involved
+                SELECT 
+                	sosi.So_Id, 
+                	sosi.Involved_Emp_Id,
+                	sosi.Cost_Center_Type_Id,
+                	c.Cost_Center_Name AS EmpName,
+                	cc.Cost_Category AS EmpType
+                FROM tbl_Sales_Order_Staff_Info AS sosi
+                LEFT JOIN tbl_ERP_Cost_Center AS c
+                	ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category cc
+                	ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+                WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders)
+                -- Step 5: Delivery General Info
+                SELECT 
+                    dgi.*,
+                    rm.Retailer_Name AS Retailer_Name,
+                    bm.BranchName AS Branch_Name,
+                    st.Status AS DeliveryStatusName,
+                    COALESCE((
+                        SELECT SUM(collected_amount)
+                        FROM tbl_Sales_Receipt_Details_Info
+                        WHERE bill_id = dgi.Do_Id
+                    ), 0) AS receiptsTotalAmount
+                FROM tbl_Sales_Delivery_Gen_Info AS dgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+                LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+                WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+                -- Step 6: Delivery Product Details
+                SELECT 
+                    oi.*,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Delivery_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                WHERE oi.Delivery_Order_Id IN (
+                    SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
+                    WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+                );`
+            );
 
-            if (result.recordset.length > 0) {
-                const parseFistLeverl = result.recordset.map(o => ({
-                    ...o,
-                    Products_List: JSON.parse(o?.Products_List),
-                    ConvertedInvoice: JSON.parse(o?.ConvertedInvoice)
-                }));
+            const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
 
-                const parsed = parseFistLeverl.map(o => ({
-                    ...o,
-                    Products_List: o?.Products_List.map(oo => ({
-                        ...oo,
-                        ProductImageUrl: getImage('products', oo?.Product_Image_Name)
-                    })),
-                    ConvertedInvoice: toArray(o?.ConvertedInvoice).map(oo => ({
-                        ...oo,
-                        InvoicedProducts: JSON.parse(oo?.InvoicedProducts),
-                    }))
-                }));
+            if (OrderData.length > 0) {
+                const resData = OrderData.map(order => {
+                    const deliveryList = DeliveryData.filter(d => isEqualNumber(d.So_No, order.So_Id));
+                    const mappedDeliveries = deliveryList.map(d => ({
+                        ...d,
+                        InvoicedProducts: DeliveryItems.filter(p => isEqualNumber(p.Delivery_Order_Id, d.Do_Id)).map(prod => ({
+                            ...prod,
+                            ProductImageUrl: getImage('products', prod.Product_Image_Name)
+                        }))
+                    }));
 
-                dataFound(res, parsed);
+                    return {
+                        ...order,
+                        Products_List: ProductDetails.filter(p => isEqualNumber(p.Sales_Order_Id, order.So_Id)).map(p => ({
+                            ...p,
+                            ProductImageUrl: getImage('products', p.Product_Image_Name)
+                        })),
+                        Staff_Involved_List: StaffInvolved.filter(s => isEqualNumber(s.So_Id, order.So_Id)),
+                        ConvertedInvoice: mappedDeliveries
+                    };
+                });
+
+                dataFound(res, resData);
             } else {
-                noData(res)
+                noData(res);
             }
+
         } catch (e) {
             servError(e, res);
         }
-    }
+    };
 
     const getDeliveryorder = async (req, res) => {
         try {
