@@ -33,6 +33,7 @@ import state from '../controller/Masters/state.mjs';
 import godown from '../controller/Masters/godown.mjs';
 import brand from '../controller/Masters/brand.mjs';
 import district from '../controller/Masters/district.mjs';
+import voucherGroup from '../controller/Masters/voucherGroup.mjs';
 
 
 const MastersRouter = express.Router();
@@ -276,6 +277,8 @@ MastersRouter.put('/brand',brand.putBrand)
 MastersRouter.get('/district',district.getDistric);
 MastersRouter.post('/district',district.createDistrict)
 MastersRouter.put('/district',district.updateDistrict)
-MastersRouter.delete('/district',district.deleteDistrict)
+MastersRouter.delete('/district',district.deleteDistrict);
+
+MastersRouter.get('/voucherGroup', voucherGroup.getVoucherGroupDropdown)
 
 export default MastersRouter;

@@ -871,7 +871,6 @@ const PurchaseOrder = () => {
         }
     };
 
-
     const getVoucherType = async (req, res) => {
         // const { Type = 'PURCHASE' } = req.query;
 

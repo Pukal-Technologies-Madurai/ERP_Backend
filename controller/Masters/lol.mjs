@@ -14,7 +14,7 @@ const lol = () => {
 
     const lollist = async (req, res) => {
         try {
-            const result = await sql.query("SELECT * FROM tbl_Ledger_LOL");
+            const result = await sql.query("SELECT * FROM tbl_Ledger_LOL ORDER BY Is_Tally_Updated desc");
 
             if (result.recordset.length) {
                 dataFound(res, result.recordset);

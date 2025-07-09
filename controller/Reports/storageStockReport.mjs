@@ -72,22 +72,22 @@ const getStorageStockItemWise = async (req, res) => {
         const productLosResult = (await getProductLosData).recordset;
 
         const mergeLosData = filteredData.map(row => {
-            const { 
-                Product_Rate = 0, Stock_Item = '', Group_ST = '', Bag = '', 
-                Stock_Group = '', S_Sub_Group_1 = '', Grade_Item_Group = '', 
-                Item_Name_Modified = '' 
+            const {
+                Product_Rate = 0, Stock_Item = '', Group_ST = '', Bag = '',
+                Stock_Group = '', S_Sub_Group_1 = '', Grade_Item_Group = '',
+                Item_Name_Modified = ''
             } = productLosResult.find(
                 productDetails => isEqualNumber(
-                    productDetails.Product_Id, 
+                    productDetails.Product_Id,
                     row?.Product_Id
                 )
             ) || {};
 
             return {
                 ...row,
-                Product_Rate, Stock_Item, Group_ST, Bag, 
-                Stock_Group, S_Sub_Group_1, Grade_Item_Group, 
-                Item_Name_Modified 
+                Product_Rate, Stock_Item, Group_ST, Bag,
+                Stock_Group, S_Sub_Group_1, Grade_Item_Group,
+                Item_Name_Modified
             }
         });
 
@@ -166,22 +166,22 @@ const getStorageStockGodownWise = async (req, res) => {
         const productLosResult = (await getProductLosData).recordset;
 
         const mergeLosData = filteredData.map(row => {
-            const { 
-                Product_Rate = 0, Stock_Item = '', Group_ST = '', Bag = '', 
-                Stock_Group = '', S_Sub_Group_1 = '', Grade_Item_Group = '', 
-                Item_Name_Modified = '' 
+            const {
+                Product_Rate = 0, Stock_Item = '', Group_ST = '', Bag = '',
+                Stock_Group = '', S_Sub_Group_1 = '', Grade_Item_Group = '',
+                Item_Name_Modified = ''
             } = productLosResult.find(
                 productDetails => isEqualNumber(
-                    productDetails.Product_Id, 
+                    productDetails.Product_Id,
                     row?.Product_Id
                 )
             ) || {};
 
             return {
                 ...row,
-                Product_Rate, Stock_Item, Group_ST, Bag, 
-                Stock_Group, S_Sub_Group_1, Grade_Item_Group, 
-                Item_Name_Modified 
+                Product_Rate, Stock_Item, Group_ST, Bag,
+                Stock_Group, S_Sub_Group_1, Grade_Item_Group,
+                Item_Name_Modified
             }
         });
 
@@ -191,7 +191,51 @@ const getStorageStockGodownWise = async (req, res) => {
     }
 }
 
+const itemGroupWiseClosingDetails = async (req, res) => {
+    try {
+
+        const reqDate = req.query?.reqDate ? ISOString(req.query?.reqDate) : ISOString();
+        const getMaxOfItemClosingDate = isEqualNumber(req?.query?.getMaxOfItemClosingDate, 1); 
+
+        const request = new sql.Request()
+            .input('reqDate', reqDate)
+            .query(`
+                SELECT
+                    latest.*,
+                	COALESCE(los.Brand, 'not found') AS Brand, 
+                    COALESCE(los.Group_ST, 'not found') AS Group_ST, 
+                    COALESCE(los.Stock_Group, 'not found') AS Stock_Group, 
+                    COALESCE(los.S_Sub_Group_1, 'not found') AS S_Sub_Group_1, 
+                    COALESCE(los.Grade_Item_Group, 'not found') AS Grade_Item_Group
+                FROM (
+                    SELECT DISTINCT Item_Group_Id
+                    FROM tbl_Daily_Stock_Value
+                ) ig
+                OUTER APPLY (
+                    SELECT TOP 1 *
+                    FROM tbl_Daily_Stock_Value pcs
+                    WHERE 
+                        pcs.Item_Group_Id = ig.Item_Group_Id
+                        ${getMaxOfItemClosingDate ? `
+                        AND pcs.Trans_Date <= @reqDate ` : ''}
+                    ORDER BY pcs.Trans_Date DESC
+                ) AS latest 
+                LEFT JOIN tbl_Stock_LOS as los
+                ON los.Item_Group_Id = ig.Item_Group_Id
+                WHERE latest.Item_Group_Id IS NOT NULL;`
+            );
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 export default {
     getStorageStockItemWise,
     getStorageStockGodownWise,
+    itemGroupWiseClosingDetails,
 }

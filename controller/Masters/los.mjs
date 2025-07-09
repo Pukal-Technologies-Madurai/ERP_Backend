@@ -14,7 +14,7 @@ const los = () => {
 
     const loslist = async (req, res) => {
         try {
-            const result = await sql.query("SELECT * FROM tbl_Stock_LOS");
+            const result = await sql.query("SELECT * FROM tbl_Stock_LOS ORDER BY Is_Tally_Updated desc");
 
             if (result.recordset.length) {
                 dataFound(res, result.recordset);

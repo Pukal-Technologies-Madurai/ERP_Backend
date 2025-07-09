@@ -841,42 +841,42 @@ const PurchaseOrderDataEntry = () => {
                         Retailer_Name, 
                         Reatailer_Address
                     FROM tbl_Retailers_Master`)
-            // .query(`
-            //     WITH OrderArrival AS (
-            //         SELECT 
-            //             d.OrderId, d.ItemId, d.Weight,  
-            //             g.PartyId AS Retailer_Id, 
-            //             g.PartyName AS Retailer_Name,
-            //             r.Reatailer_Address
-            //         FROM tbl_PurchaseOrderDeliveryDetails AS d
-            //         INNER JOIN tbl_PurchaseOrderGeneralDetails AS g
-            //             ON d.OrderId = g.Sno
-            //         LEFT JOIN tbl_Retailers_Master AS r
-            //             ON r.Retailer_Id = g.PartyId
-            //         WHERE g.OrderStatus = 'Completed'
-            //     ), InvoicedOrders AS (
-            //         SELECT 
-            //             odr.Order_Id, ipo.Item_Id, 
-            //             SUM(ipo.Bill_Qty) AS Total_Bill_Qty
-            //         FROM tbl_Purchase_Order_Inv_Gen_Order AS odr
-            //         INNER JOIN tbl_Purchase_Order_Inv_Stock_Info AS ipo
-            //             ON ipo.PIN_Id = odr.PIN_Id
-            //         WHERE 
-            //             odr.Order_Id IN (SELECT OrderId FROM OrderArrival)
-            //             AND odr.Cancel_status = 0
-            //         GROUP BY odr.Order_Id, ipo.Item_Id
-            //     ) SELECT DISTINCT 
-            //         g.Retailer_Id, 
-            //         g.Retailer_Name, 
-            //         g.Reatailer_Address
-            //     FROM OrderArrival AS g
-            //     LEFT JOIN InvoicedOrders AS i
-            //         ON g.OrderId = i.Order_Id 
-            //         AND g.ItemId = i.Item_Id
-            //     WHERE 
-            //         g.Weight > ISNULL(i.Total_Bill_Qty, 0) 
-            //     ORDER BY g.Retailer_Name;`
-            // );
+            .query(`
+                WITH OrderArrival AS (
+                    SELECT 
+                        d.OrderId, d.ItemId, d.Weight,  
+                        g.PartyId AS Retailer_Id, 
+                        g.PartyName AS Retailer_Name,
+                        r.Reatailer_Address
+                    FROM tbl_PurchaseOrderDeliveryDetails AS d
+                    INNER JOIN tbl_PurchaseOrderGeneralDetails AS g
+                        ON d.OrderId = g.Sno
+                    LEFT JOIN tbl_Retailers_Master AS r
+                        ON r.Retailer_Id = g.PartyId
+                    WHERE g.OrderStatus = 'Completed'
+                ), InvoicedOrders AS (
+                    SELECT 
+                        odr.Order_Id, ipo.Item_Id, 
+                        SUM(ipo.Bill_Qty) AS Total_Bill_Qty
+                    FROM tbl_Purchase_Order_Inv_Gen_Order AS odr
+                    INNER JOIN tbl_Purchase_Order_Inv_Stock_Info AS ipo
+                        ON ipo.PIN_Id = odr.PIN_Id
+                    WHERE 
+                        odr.Order_Id IN (SELECT OrderId FROM OrderArrival)
+                        AND odr.Cancel_status = 0
+                    GROUP BY odr.Order_Id, ipo.Item_Id
+                ) SELECT DISTINCT 
+                    g.Retailer_Id, 
+                    g.Retailer_Name, 
+                    g.Reatailer_Address
+                FROM OrderArrival AS g
+                LEFT JOIN InvoicedOrders AS i
+                    ON g.OrderId = i.Order_Id 
+                    AND g.ItemId = i.Item_Id
+                WHERE 
+                    g.Weight > ISNULL(i.Total_Bill_Qty, 0) 
+                ORDER BY g.Retailer_Name;`
+            );
 
             const result = await request;
 

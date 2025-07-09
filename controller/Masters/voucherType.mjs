@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs'
-import { checkIsNumber, filterableText, isEqualNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, filterableText, isEqualNumber, randomNumber } from '../../helper_functions.mjs';
 
 const voucherType = () => {
 
@@ -11,10 +11,12 @@ const voucherType = () => {
             const request = new sql.Request()
                 .input('module', module)
                 .query(`
-                    SELECT vt.*,bm.BranchName 
+                    SELECT vt.*,bm.BranchName,vg.Group_Name  
                     FROM tbl_Voucher_Type vt
 	                LEFT JOIN tbl_Branch_Master bm 
                         ON bm.BranchId = vt.Branch_Id
+                        LEFT JOIN tbl_Voucher_Group vg
+						On vg.Voucher_Group_Id=vt.Voucher_Group_Id
                     WHERE Vocher_Type_Id IS NOT NULL
                     ${module ? ' AND Type = @module ' : ''}`
                 );
@@ -28,11 +30,13 @@ const voucherType = () => {
     }
 
     const addVoucherType = async (req, res) => {
-        const { Voucher_Type, Voucher_Code, Branch_Id, Type } = req.body;
+
+        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Voucher_Group_Id, Created_By } = req.body;
 
         if (!Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
             return invalidInput(res, 'Voucher_Type and Branch_Id,Voucher_Code are required');
         }
+
 
         try {
             const voucherType = (await new sql.Request()
@@ -54,15 +58,20 @@ const voucherType = () => {
 
             const Voucher_Type_Id = maxIdResult.recordset[0].Vocher_Type_Id;
 
+            const Alter_Id = randomNumber();
             const request = new sql.Request()
                 .input('Vocher_Type_Id', Voucher_Type_Id)
                 .input('Voucher_Type', Voucher_Type)
                 .input('Voucher_Code', Voucher_Code)
                 .input('Branch_Id', Branch_Id)
                 .input('Type', Type)
+                .input('Voucher_Group_Id', Voucher_Group_Id)
+                .input('Alter_Id', Alter_Id)
+                .input('Created_By', Created_By)
+                .input('Created_Time', new Date())
                 .query(`
-                    INSERT INTO tbl_Voucher_Type (Vocher_Type_Id, Voucher_Type,Voucher_Code, Branch_Id,Type)
-                    VALUES (@Vocher_Type_Id, @Voucher_Type,@Voucher_Code, @Branch_Id,@Type)
+                    INSERT INTO tbl_Voucher_Type (Vocher_Type_Id, Voucher_Type,Voucher_Code, Branch_Id,Type,Voucher_Group_Id,Alter_Id,Created_By,Created_Time)
+                    VALUES (@Vocher_Type_Id, @Voucher_Type,@Voucher_Code, @Branch_Id,@Type,@Voucher_Group_Id,@Alter_Id,@Created_By,@Created_Time)
                 `);
 
             const result = await request;
@@ -79,80 +88,94 @@ const voucherType = () => {
     };
 
     const editVoucherType = async (req, res) => {
-        const { Voucher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type } = req.body;
+        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Voucher_Group_Id, Alter_By } = req.body;
 
-        if (!checkIsNumber(Voucher_Type_Id) || !Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
-            return invalidInput(res, 'Voucher_Type_Id, Voucher_Type, Branch_Id,Type is required')
+
+        if (!checkIsNumber(Vocher_Type_Id) ||
+            !Voucher_Type ||
+            !checkIsNumber(Branch_Id) ||
+            !Type ||
+            !Voucher_Code ||
+            !checkIsNumber(Voucher_Group_Id)) {
+            return invalidInput(res, 'All fields are required and must be valid');
         }
 
         try {
-            const existVoucher = (await new sql.Request()
-                .query(`SELECT Vocher_Type_Id, Voucher_Type,Voucher_Code, Branch_Id,Type FROM tbl_Voucher_Type`)).recordset;
+            const existingVouchers = (await new sql.Request()
+                .query(`SELECT Vocher_Type_Id, Voucher_Type, Branch_Id 
+                    FROM tbl_Voucher_Type`)).recordset;
 
-            existVoucher.forEach(voucher => {
-                if (
-                    filterableText(voucher.Voucher_Type) === filterableText(Voucher_Type)
-                    && isEqualNumber(voucher.Branch_Id, Branch_Id)
-                    && !isEqualNumber(voucher.Vocher_Type_Id, Voucher_Type_Id)
-                ) return failed(res, 'This voucher type is already exist');
-            })
+            const duplicateExists = existingVouchers.some(voucher =>
+                filterableText(voucher.Voucher_Type) === filterableText(Voucher_Type) &&
+                isEqualNumber(voucher.Branch_Id, Branch_Id) &&
+                !isEqualNumber(voucher.Vocher_Type_Id, Vocher_Type_Id)
+            );
 
-            const request = new sql.Request()
-                .input('Voucher_Type_Id', Voucher_Type_Id)
-                .input('Voucher_Type', Voucher_Type)
-                .input('Voucher_Code', Voucher_Code)
-                .input('Branch_Id', Branch_Id)
-                .input('Type', Type)
+            if (duplicateExists) {
+                return failed(res, 'This voucher type already exists for this branch');
+            }
+            const Alter_Id = randomNumber();
+            const result = await new sql.Request()
+                .input('Vocher_Type_Id', sql.Int, Vocher_Type_Id)
+                .input('Voucher_Type', sql.NVarChar, Voucher_Type)
+                .input('Voucher_Code', sql.NVarChar, Voucher_Code)
+                .input('Branch_Id', sql.Int, Branch_Id)
+                .input('Type', sql.NVarChar, Type)
+                .input('Voucher_Group_Id', sql.Int, Voucher_Group_Id)
+                .input('Alter_Id', Alter_Id)
+                .input('Alter_By', Alter_By)
+                .input('Alter_Time', new Date())
                 .query(`
-                    UPDATE tbl_Voucher_Type 
-                    SET 
-                        Voucher_Type = @Voucher_Type, 
-                        Branch_Id = @Branch_Id,
-                        Voucher_Code=@Voucher_Code,
-                        Type=@Type
-                    WHERE
-                        Vocher_Type_Id = @Voucher_Type_Id`
-                )
+                UPDATE tbl_Voucher_Type 
+                SET 
+                    Voucher_Type = @Voucher_Type, 
+                    Branch_Id = @Branch_Id,
+                    Voucher_Code = @Voucher_Code,
+                    Type = @Type,
+                    Voucher_Group_Id = @Voucher_Group_Id,
+                    Alter_Id=@Alter_Id,
+                    Alter_By=@Alter_By,
+                    Alter_Time=@Alter_Time
+                WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                );
 
-            const result = await request;
-
-            if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                success(res, 'Changes Saved')
+            if (result.rowsAffected[0] > 0) {
+                success(res, 'Voucher updated successfully');
             } else {
-                failed(res, 'Failed to save changes')
+                failed(res, 'No voucher found with the provided ID');
             }
 
         } catch (e) {
-            servError(e, res)
+
+            servError(e, res);
         }
-    }
+    };
 
     const deleteVoucherType = async (req, res) => {
         const { Vocher_Type_Id } = req.body;
         if (!checkIsNumber(Vocher_Type_Id)) {
-            return invalidInput(res, 'Voucher_Type_Id is required')
+            return invalidInput(res, 'Vocher_Type_Id is required')
         }
 
         try {
-
             const request = new sql.Request()
                 .input('Vocher_Type_Id', Vocher_Type_Id)
                 .query(`
-                    DELETE 
-                    FROM tbl_Voucher_Type 
-                    WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                DELETE 
+                FROM tbl_Voucher_Type 
+                WHERE Vocher_Type_Id = @Vocher_Type_Id`
                 )
 
             const result = await request;
 
-            if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                success(res, 'Voucher_Type deleted')
+            if (result.rowsAffected[0] > 0) {
+                success(res, 'Voucher type deleted successfully');
             } else {
-                failed(res, 'Failed to delete Voucher_Type')
+                failed(res, 'No voucher found with the provided ID');
             }
 
         } catch (e) {
-            servError(e, res)
+            servError(e, res);
         }
     }
 
