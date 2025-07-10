@@ -410,7 +410,6 @@ const PaymentMaster = () => {
                     const result = await getPurchaseRefNumber;
 
                     if (result.recordset.length !== 1 || !result?.recordset[0]?.Ref_Po_Inv_No) {
-                        console.log('bill_id:', CurrentBillDetails?.pay_bill_id)
                         throw new Error('Invoice ref number not found');
                     }
 
