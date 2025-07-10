@@ -257,8 +257,12 @@ const PaymentMaster = () => {
 
     const updateGeneralInfoPayments = async (req, res) => {
         const transaction = new sql.Transaction();
+        let transactionBegun = false;
 
         try {
+
+            await transaction.begin();
+            transactionBegun = true;
 
             const {
                 pay_id, remarks, status, is_new_ref = 0,
@@ -283,7 +287,6 @@ const PaymentMaster = () => {
                 return invalidInput(res, 'Enter Required Fields', { errors });
             }
 
-            await transaction.begin();
 
             // update values
 
@@ -353,7 +356,7 @@ const PaymentMaster = () => {
             success(res, 'Changes Saved')
 
         } catch (e) {
-            if (transaction && !transaction._aborted) {
+            if (transactionBegun && transaction._aborted === false) {
                 try {
                     await transaction.rollback();
                 } catch (rollbackErr) {
@@ -366,8 +369,12 @@ const PaymentMaster = () => {
 
     const addAgainstRef = async (req, res) => {
         const transaction = new sql.Transaction();
+        let transactionBegun = false;
 
         try {
+            await transaction.begin();
+            transactionBegun = true;
+
             const { payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
 
             if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
@@ -379,8 +386,6 @@ const PaymentMaster = () => {
                     fil => isEqualNumber(bill_id, fil.pay_bill_id)
                 ).reduce((acc, item) => add(acc, item?.expence_value), 0)
             }
-
-            await transaction.begin();
 
             await new sql.Request(transaction)
                 .input('payment_id', payment_id)
@@ -401,7 +406,7 @@ const PaymentMaster = () => {
                             FROM tbl_Purchase_Order_Inv_Gen_Info
                             WHERE PIN_Id = @PIN_Id`
                         );
-                    
+
                     const result = await getPurchaseRefNumber;
 
                     if (result.recordset.length !== 1 || !result?.recordset[0]?.Ref_Po_Inv_No) {
@@ -475,8 +480,12 @@ const PaymentMaster = () => {
             success(res, 'Against Reference Saved');
 
         } catch (e) {
-            if (transaction._aborted === false) {
-                await transaction.rollback();
+            if (transactionBegun && transaction._aborted === false) {
+                try {
+                    await transaction.rollback();
+                } catch (rollbackErr) {
+                    console.error('Rollback failed:', rollbackErr);
+                }
             }
             servError(e, res);
         }

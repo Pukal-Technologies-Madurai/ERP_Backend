@@ -14,120 +14,83 @@ const PurchaseOrderDataEntry = () => {
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
-                    WITH LOLData AS (
-                        SELECT * FROM tbl_Ledger_LOL
-                    ), LOSData AS (
-                        SELECT * FROM tbl_Stock_LOS
-                    ), ORDERINFO AS (
-                        SELECT 
-                            pgi.*, 
-                            COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
-                            COALESCE(lol.Party_District, 'Not found') AS Party_District
-                        FROM
-                            tbl_PurchaseOrderGeneralDetails AS pgi
-                        LEFT JOIN tbl_Retailers_Master AS r
-                            ON r.Retailer_Id = pgi.PartyId
-                        LEFT JOIN LOLData AS lol
-                            ON lol.Ledger_Tally_Id = r.ERP_Id
-                        WHERE
-                            CONVERT(DATE, pgi.TradeConfirmDate) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
-                    ), PurchaseInvoiceOrders AS (
-                        SELECT igo.PIN_Id, igo.Order_Id, isd.Item_Id, isd.Bill_Qty, isd.DeliveryId
-                        FROM tbl_Purchase_Order_Inv_Gen_Order AS igo
-                        LEFT JOIN tbl_Purchase_Order_Inv_Stock_Info AS isd
-                        ON isd.PIN_Id = igo.PIN_Id
-                        WHERE igo.Order_Id IN (
-                            SELECT Sno
-                            FROM ORDERINFO
-                        )
-                    ), ITEM_DETAILS AS (
-                        SELECT 
-                            i.*, 
-                            COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
-                            COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
-                        FROM
-                            tbl_PurchaseOrderItemDetails AS i
-                        LEFT JOIN tbl_Product_Master AS p
-                            ON i.ItemId = p.Product_Id
-                        LEFT JOIN LOSData AS los
-                            ON los.Stock_Tally_Id = p.ERP_Id
-                        WHERE
-                            i.OrderId IN (SELECT Sno FROM ORDERINFO)
-                    ), DELIVERY_DETAILS AS (
-                        SELECT 
-                            d.*, 
-                            COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
-                            COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
-                        FROM
-                            tbl_PurchaseOrderDeliveryDetails AS d
-                        LEFT JOIN tbl_Product_Master AS p
-                            ON d.ItemId = p.Product_Id
-                        LEFT JOIN LOSData AS los
-                            ON los.Stock_Tally_Id = p.ERP_Id
-                        WHERE
-                            d.OrderId IN (SELECT Sno FROM ORDERINFO)
-                    ), TRANSPOTER_DETAILS AS (
-                        SELECT * FROM tbl_PurchaseOrderTranspoterDetails
-                        WHERE OrderId IN (SELECT Sno FROM ORDERINFO)
-                    ), STAFF_DETAILS AS (
-                        SELECT stf.*,
-                        e.Cost_Center_Name AS Emp_Name,
-                        cc.Cost_Category
-                        FROM tbl_PurchaseOrderEmployeesInvolved AS stf
-                            LEFT JOIN tbl_ERP_Cost_Center AS e
-                            ON e.Cost_Center_Id = stf.EmployeeId
-                            LEFT JOIN tbl_ERP_Cost_Category AS cc
-                            ON cc.Cost_Category_Id = stf.CostType
-                        WHERE OrderId IN (SELECT Sno FROM ORDERINFO)
-                    )
+                    -------------------------table variable declaration----------
+                    DECLARE @FilteredOrders TABLE (Sno INT);
+                    -------------------------filtering invoices and inserting into table variable
+                    INSERT INTO @FilteredOrders (Sno)
+                    SELECT pgi.Sno
+                    FROM tbl_PurchaseOrderGeneralDetails AS pgi
+                    WHERE 
+                        CONVERT(DATE, pgi.TradeConfirmDate) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate);
+                    -------------------------general info------------------------- 
                     SELECT 
                         pgi.*,
-                        COALESCE((
-                            SELECT 
-                                *
-                            FROM PurchaseInvoiceOrders
-                            WHERE Order_Id = pgi.Sno
-                            FOR JSON PATH
-                        ), '[]') AS ConvertedAsInvoices,
-                        COALESCE((
-                            SELECT * 
-                            FROM ITEM_DETAILS 
-                            WHERE ITEM_DETAILS.OrderId = pgi.Sno 
-                            FOR JSON PATH
-                        ), '[]') AS ItemDetails,
-                        COALESCE((
-                            SELECT * 
-                            FROM DELIVERY_DETAILS 
-                            WHERE DELIVERY_DETAILS.OrderId = pgi.Sno 
-                            FOR JSON PATH
-                        ), '[]') AS DeliveryDetails,
-                        COALESCE((
-                            SELECT * 
-                            FROM TRANSPOTER_DETAILS 
-                            WHERE TRANSPOTER_DETAILS.OrderId = pgi.Sno 
-                            ORDER BY indexValue
-                            FOR JSON PATH
-                        ), '[]') AS TranspoterDetails,
-                        COALESCE((
-                            SELECT * 
-                            FROM STAFF_DETAILS 
-                            WHERE STAFF_DETAILS.OrderId = pgi.Sno 
-                            FOR JSON PATH
-                        ), '[]') AS StaffDetails
-                    FROM
-                        ORDERINFO AS pgi;`
+                        COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
+                        COALESCE(lol.Party_District, 'Not found') AS Party_District
+                    FROM tbl_PurchaseOrderGeneralDetails AS pgi
+                    LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pgi.PartyId
+                    LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ledger_Tally_Id = r.ERP_Id
+                    WHERE pgi.Sno IN (SELECT Sno FROM @FilteredOrders);
+                    -------------------------Stock Details---------------------------
+                    SELECT 
+                        i.*,
+                        COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
+                        COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
+                    FROM tbl_PurchaseOrderItemDetails AS i
+                    LEFT JOIN tbl_Product_Master AS p ON i.ItemId = p.Product_Id
+                    LEFT JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
+                    WHERE i.OrderId IN (SELECT Sno FROM @FilteredOrders);
+                    -------------------------Delivery details------------------------------
+                    SELECT 
+                        d.*,
+                        COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
+                        COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
+                    FROM tbl_PurchaseOrderDeliveryDetails AS d
+                    LEFT JOIN tbl_Product_Master AS p ON d.ItemId = p.Product_Id
+                    LEFT JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
+                    WHERE d.OrderId IN (SELECT Sno FROM @FilteredOrders);
+                    -------------------------Transporter Details--------------------
+                    SELECT *
+                    FROM tbl_PurchaseOrderTranspoterDetails
+                    WHERE OrderId IN (SELECT Sno FROM @FilteredOrders)
+                    ORDER BY indexValue;
+                    -------------------------Staff Details -------------------------
+                    SELECT 
+                    	stf.*,
+                        COALESCE(e.Cost_Center_Name, 'Not found') AS Emp_Name,
+                        COALESCE(cc.Cost_Category, 'Not found') AS Cost_Category
+                    FROM tbl_PurchaseOrderEmployeesInvolved AS stf
+                    LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = stf.EmployeeId
+                    LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = stf.CostType
+                    WHERE stf.OrderId IN (SELECT Sno FROM @FilteredOrders);
+                    -------------------------Invoice Orders---------------------------
+                    SELECT 
+                        igo.PIN_Id,
+                        igo.Order_Id,
+                        isd.Item_Id,
+                        isd.Bill_Qty,
+                        isd.DeliveryId
+                    FROM tbl_Purchase_Order_Inv_Gen_Order AS igo
+                    LEFT JOIN tbl_Purchase_Order_Inv_Stock_Info AS isd
+                        ON isd.PIN_Id = igo.PIN_Id
+                    WHERE igo.Order_Id IN (SELECT Sno FROM @FilteredOrders);`
                 );
 
             const result = await request;
 
-            if (result.recordset.length > 0) {
-                const extractedData = result.recordset.map(o => ({
+            const [
+                generalInfo, productDetails, deliveryDetails, 
+                transporterDetails, Staffdetails, invoicedOrders 
+            ] = result.recordsets; 
+
+            if (generalInfo.length > 0) {
+                const extractedData = generalInfo.map(o => ({
                     ...o,
-                    ConvertedAsInvoices: JSON.parse(o.ConvertedAsInvoices),
-                    ItemDetails: JSON.parse(o.ItemDetails),
-                    DeliveryDetails: JSON.parse(o.DeliveryDetails),
-                    TranspoterDetails: JSON.parse(o.TranspoterDetails),
-                    StaffDetails: JSON.parse(o.StaffDetails)
+                    ConvertedAsInvoices: invoicedOrders.filter(fil => isEqualNumber(fil.Order_Id, o.Sno)),
+                    ItemDetails: productDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    DeliveryDetails: deliveryDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    TranspoterDetails: transporterDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    StaffDetails: Staffdetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno))
                 }));
 
                 const productWiseStatus = extractedData.map(o => ({
@@ -841,42 +804,42 @@ const PurchaseOrderDataEntry = () => {
                         Retailer_Name, 
                         Reatailer_Address
                     FROM tbl_Retailers_Master`)
-            .query(`
-                WITH OrderArrival AS (
-                    SELECT 
-                        d.OrderId, d.ItemId, d.Weight,  
-                        g.PartyId AS Retailer_Id, 
-                        g.PartyName AS Retailer_Name,
-                        r.Reatailer_Address
-                    FROM tbl_PurchaseOrderDeliveryDetails AS d
-                    INNER JOIN tbl_PurchaseOrderGeneralDetails AS g
-                        ON d.OrderId = g.Sno
-                    LEFT JOIN tbl_Retailers_Master AS r
-                        ON r.Retailer_Id = g.PartyId
-                    WHERE g.OrderStatus = 'Completed'
-                ), InvoicedOrders AS (
-                    SELECT 
-                        odr.Order_Id, ipo.Item_Id, 
-                        SUM(ipo.Bill_Qty) AS Total_Bill_Qty
-                    FROM tbl_Purchase_Order_Inv_Gen_Order AS odr
-                    INNER JOIN tbl_Purchase_Order_Inv_Stock_Info AS ipo
-                        ON ipo.PIN_Id = odr.PIN_Id
-                    WHERE 
-                        odr.Order_Id IN (SELECT OrderId FROM OrderArrival)
-                        AND odr.Cancel_status = 0
-                    GROUP BY odr.Order_Id, ipo.Item_Id
-                ) SELECT DISTINCT 
-                    g.Retailer_Id, 
-                    g.Retailer_Name, 
-                    g.Reatailer_Address
-                FROM OrderArrival AS g
-                LEFT JOIN InvoicedOrders AS i
-                    ON g.OrderId = i.Order_Id 
-                    AND g.ItemId = i.Item_Id
-                WHERE 
-                    g.Weight > ISNULL(i.Total_Bill_Qty, 0) 
-                ORDER BY g.Retailer_Name;`
-            );
+            // .query(`
+            //     WITH OrderArrival AS (
+            //         SELECT 
+            //             d.OrderId, d.ItemId, d.Weight,  
+            //             g.PartyId AS Retailer_Id, 
+            //             g.PartyName AS Retailer_Name,
+            //             r.Reatailer_Address
+            //         FROM tbl_PurchaseOrderDeliveryDetails AS d
+            //         INNER JOIN tbl_PurchaseOrderGeneralDetails AS g
+            //             ON d.OrderId = g.Sno
+            //         LEFT JOIN tbl_Retailers_Master AS r
+            //             ON r.Retailer_Id = g.PartyId
+            //         WHERE g.OrderStatus = 'Completed'
+            //     ), InvoicedOrders AS (
+            //         SELECT 
+            //             odr.Order_Id, ipo.Item_Id, 
+            //             SUM(ipo.Bill_Qty) AS Total_Bill_Qty
+            //         FROM tbl_Purchase_Order_Inv_Gen_Order AS odr
+            //         INNER JOIN tbl_Purchase_Order_Inv_Stock_Info AS ipo
+            //             ON ipo.PIN_Id = odr.PIN_Id
+            //         WHERE 
+            //             odr.Order_Id IN (SELECT OrderId FROM OrderArrival)
+            //             AND odr.Cancel_status = 0
+            //         GROUP BY odr.Order_Id, ipo.Item_Id
+            //     ) SELECT DISTINCT 
+            //         g.Retailer_Id, 
+            //         g.Retailer_Name, 
+            //         g.Reatailer_Address
+            //     FROM OrderArrival AS g
+            //     LEFT JOIN InvoicedOrders AS i
+            //         ON g.OrderId = i.Order_Id 
+            //         AND g.ItemId = i.Item_Id
+            //     WHERE 
+            //         g.Weight > ISNULL(i.Total_Bill_Qty, 0) 
+            //     ORDER BY g.Retailer_Name;`
+            // );
 
             const result = await request;
 
