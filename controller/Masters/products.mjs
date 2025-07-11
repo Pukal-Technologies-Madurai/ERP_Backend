@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import dotenv from 'dotenv';
-import { dataFound, failed, invalidInput, noData, servError, success } from '../../res.mjs';
+import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import getImage from '../../middleware/getImageIfExist.mjs';
 import fileRemoverMiddleware from '../../middleware/unSyncFile.mjs';
@@ -33,59 +33,34 @@ const deleteCurrentProductImage = async (productId) => {
 
 const sfProductController = () => {
 
-    // const getProducts = async (req, res) => {
-    //     const { IS_Sold = 1 } = req.query;
+    const getAllProducts = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    SELECT 
+                        p.*,
+                        COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
+                        COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
+                        COALESCE(u.Units, 'NOT FOUND') AS Units,
+                        COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
+                        COALESCE(p.Product_Rate, 0) AS Item_Rate
+                    FROM 
+                        tbl_Product_Master AS p
+                        LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
+                        LEFT JOIN tbl_Product_Group AS pg ON pg.Pro_Group_Id = p.Product_Group
+                        LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
+                        LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                    ORDER BY p.Product_Id DESC`
+                );
 
-    //     try {
+            const productResult = await request;
 
-    //         const request = new sql.Request()
-    //             .input('IS_Sold', IS_Sold)
-    //             .query(`
-    //                 SELECT 
-    //                 	p.*,
-    //                 	COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
-    //                 	COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
-    //                     COALESCE(u.Units, 'NOT FOUND') AS Units,
-    //                     COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
-    //                     COALESCE((
-    //                         SELECT 
-    //                             TOP (1) Product_Rate 
-    //                         FROM 
-    //                             tbl_Pro_Rate_Master 
-    //                         WHERE 
-    //                             Product_Id = p.Product_Id
-    //                         ORDER BY
-    //                             CONVERT(DATETIME, Rate_Date) DESC
-    //                     ), 0) AS Item_Rate
-    //                 FROM 
-    //                 	tbl_Product_Master AS p
-    //                 	LEFT JOIN tbl_Brand_Master AS b
-    //                 	ON b.Brand_Id = p.Brand
-    //                 	LEFT JOIN tbl_Product_Group AS pg
-    //                 	ON pg.Pro_Group_Id = p.Product_Group
-    //                     LEFT JOIN tbl_UOM AS u
-    //                     ON u.Unit_Id = p.UOM_Id
-    //                     LEFT JOIN tbl_Pack_Master AS pck
-    //                     ON pck.Pack_Id = p.Pack_Id
-    //                 WHERE
-    //                     IS_Sold = @IS_Sold`
-    //             )
+            sentData(res, productResult.recordset);
 
-    //         const result = await request;
-
-    //         if (result.recordset.length) {
-    //             const withPic = result.recordset.map(o => ({
-    //                 ...o,
-    //                 productImageUrl: getImage('products', o?.Product_Image_Name)
-    //             }));
-    //             dataFound(res, withPic);
-    //         } else {
-    //             noData(res)
-    //         }
-    //     } catch (e) {
-    //         servError(e, res)
-    //     }
-    // }
+        } catch (e) {
+            servError(e, res);
+        }
+    };
 
     const getProducts = async (req, res) => {
         const {
@@ -244,23 +219,7 @@ const sfProductController = () => {
 
         try {
             const query = `
-            WITH UOM AS (
-                SELECT *
-                FROM tbl_UOM
-            ),
-            RATE AS (
-                SELECT * 
-                FROM tbl_Pro_Rate_Master
-            ),
-            BRAND AS (
-                SELECT *
-                FROM tbl_Brand_Master
-            ),
-            PRODUCTGROUP AS (
-                SELECT *
-                FROM tbl_Product_Group
-            ),
-            PRODUCTS AS (
+            WITH PRODUCTS AS (
                 SELECT 
                     p.*,
                     COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
@@ -269,11 +228,11 @@ const sfProductController = () => {
                     COALESCE(p.Product_Rate, 0) AS Item_Rate
                 FROM 
                     tbl_Product_Master AS p
-                    LEFT JOIN BRAND AS b
+                    LEFT JOIN tbl_Brand_Master AS b
             	    ON b.Brand_Id = p.Brand
-            	    LEFT JOIN PRODUCTGROUP AS pg
+            	    LEFT JOIN tbl_Product_Group AS pg
             	    ON pg.Pro_Group_Id = p.Product_Group
-                    LEFT JOIN UOM AS u
+                    LEFT JOIN tbl_UOM AS u
                     ON u.Unit_Id = p.UOM_Id
                 WHERE
                     p.IS_Sold = @IS_Sold
@@ -289,12 +248,9 @@ const sfProductController = () => {
                         g.Pro_Group_Id = p.Product_Group
                     FOR JSON PATH
                 ), '[]') AS GroupedProductArray
-            FROM
-                tbl_Product_Group AS g
-            WHERE
-                g.Pro_Group_Id != 0 
-            ORDER BY 
-                g.Pro_Group_Id`;
+            FROM tbl_Product_Group AS g
+            WHERE g.Pro_Group_Id != 0 
+            ORDER BY g.Pro_Group_Id`;
 
             const request = new sql.Request()
                 .input('IS_Sold', IS_Sold)
@@ -621,6 +577,7 @@ const sfProductController = () => {
 
 
     return {
+        getAllProducts,
         getProducts,
         productDropDown,
         getGroupedProducts,

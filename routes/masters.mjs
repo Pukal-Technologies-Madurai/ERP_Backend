@@ -108,6 +108,7 @@ MastersRouter.get('/tallyMaster/ledger', dbconnect, TallyMasters.getTallyAndERPL
 MastersRouter.get('/tallyMaster/items', dbconnect, TallyMasters.getTallyAndERPLOS);
 
 
+MastersRouter.get('/products/allProducts', products.getAllProducts);
 MastersRouter.get('/products', products.getProducts);
 MastersRouter.get('/products/dropDown', products.productDropDown);
 MastersRouter.post('/products', products.postProductsWithoutImage);
