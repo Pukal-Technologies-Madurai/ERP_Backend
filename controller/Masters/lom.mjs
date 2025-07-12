@@ -13,8 +13,7 @@ const lom = () => {
 
     const getDetailsData = async (req, res) => {
         try {
-
-            const results = [];
+            //             const results = [];
 
             const tables = [
                 { master: "Cost Center", table: "tbl_ERP_Cost_Center" },
@@ -36,44 +35,69 @@ const lom = () => {
                 { master: "Ledger Lol", table: "tbl_Ledger_LOL" },
             ];
 
-            for (const { master, table } of tables) {
-                
+
+            const results = await Promise.all(tables.map(async ({ master, table }) => {
                 try {
-                    const countRes = await new sql.Request().query(
-                        `SELECT COUNT(*) AS count FROM [dbo].[${table}]`
-                    );
-                    const colRes = await new sql.Request().query(
-                        `SELECT * FROM [dbo].[${table}]`
-                    );
+                    if (table === "-") {
+                        return {
+                            master,
+                            count: "-",
+                            fields: "-",
+                            columns: [],
+                            message: "Table not configured"
+                        };
+                    }
 
-                    const columnCount = Object.keys(colRes.recordset.columns).length;
-                    const columnRes = await new sql.Request()
-                        .query(`
-                            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
-                            FROM INFORMATION_SCHEMA.COLUMNS
-                            WHERE TABLE_NAME = '${table}'`);
+                    // Get count and columns in parallel
+                    const [countRes, columnRes] = await Promise.all([
+                        new sql.Request().query(`SELECT COUNT(*) AS count FROM [dbo].[${table}]`),
+                        new sql.Request().query(`
+                        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE TABLE_NAME = '${table}'
+                    `)
+                    ]);
 
-                    const columnDetails = columnRes.recordset || [];
-                    results.push({
+
+                    const sampleData = await new sql.Request()
+                        .query(`SELECT * FROM [dbo].[${table}]`);
+
+                    return {
                         master,
+                        table_name: table,
                         count: countRes.recordset[0].count,
-                        fields: columnCount,
-                        columns: columnDetails,
-                    });
+                        fields: columnRes.recordset.length,
+                        columns: columnRes.recordset,
+                        data: sampleData.recordset
+                    };
 
                 } catch (err) {
-                    results.push({
+                    console.error(`Error processing table ${table}:`, err);
+                    return {
                         master,
+                        table_name: table,
                         count: "-",
                         fields: "-",
                         error: err.message,
-                    });
+                        columns: []
+                    };
                 }
-            }
+            }));
 
-            return dataFound(res, results);
+            // Return successful response
+            res.status(200).json({
+                success: true,
+                data: results,
+                message: "Table details retrieved successfully"
+            });
+
         } catch (e) {
-            servError(e, res);
+            console.error("Error in getDetailsData:", e);
+            res.status(500).json({
+                success: false,
+                message: "Failed to retrieve table details",
+                error: e.message
+            });
         }
     };
 
@@ -95,53 +119,166 @@ const lom = () => {
                 { master: "Brand", table: "-" },
                 { master: "Area", table: "-" },
                 { master: "Pos Brand", table: "-" },
-                { master: "Route Master	", table: "-" },
-                { master: "Pos_Rate_Master	", table: "-" },
-                { master: "Stock_Los	", table: "tbl_Stock_LOS" },
+                { master: "Route Master", table: "-" },
+                { master: "Pos_Rate_Master", table: "-" },
+                { master: "Stock_Los", table: "tbl_Stock_LOS" },
                 { master: "Ledger Lol", table: "tbl_Ledger_LOL" },
             ];
 
             const results = [];
 
             for (const { master, table } of tables) {
+                // Skip tables with no actual table name
+                if (!table || table === "-") {
+                    results.push({
+                        master,
+                        count: "-",
+                        fields: "-",
+                        columns: [],
+                        data: [],
+                        error: "No table defined",
+                    });
+                    continue;
+                }
 
                 try {
-                    const countRes = await request
-                    .query(`SELECT COUNT(*) AS count FROM [dbo].[${table}]`);
+                    // Fetch count
+                    const countRes = await request.query(`
+                    SELECT COUNT(*) AS count FROM [dbo].[${table}]
+                `);
 
-                    const colMetaRes = await request
-                        .query(`
-                            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
-                            FROM INFORMATION_SCHEMA.COLUMNS
-                            WHERE TABLE_NAME = '${table}' `);
+                    const count = countRes.recordset[0]?.count ?? 0;
 
-                    const fieldsCount = colMetaRes.recordset.length;
-                    const columnDetails = colMetaRes.recordset;
+                    // Fetch column meta
+                    const colMetaRes = await request.query(`
+                    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = '${table}'
+                `);
+
+                    const fieldsCount = colMetaRes.recordset?.length ?? 0;
+                    const columnDetails = colMetaRes.recordset || [];
+
+                    // Fetch sample data (limit to avoid huge response)
+                    const sampleDataRes = await request.query(`
+                    SELECT * FROM [dbo].[${table}]
+                `);
+
+                    const sampleData = sampleDataRes.recordset || [];
 
                     results.push({
                         master,
-                        count: countRes.recordset[0].count,
+                        count,
                         fields: fieldsCount,
                         columns: columnDetails,
+                        data: sampleData,
                     });
 
                 } catch (err) {
                     results.push({
                         master,
-                        error: `Error processing table '${table}': ${err.message}`,
+                        count: "-",
+                        fields: "-",
+                        columns: [],
+                        data: [],
+                        error: `Error fetching data for '${table}': ${err.message}`,
                     });
                 }
             }
 
             return dataFound(res, results);
+
         } catch (e) {
-            servError(e, res);
+            return servError(e, res);
+        }
+    };
+
+    const getDatabaseTables = async (req, res) => {
+        try {
+            const dbTablesQuery = await new sql.Request().query(`
+            SELECT database_name, table_name, display_name, page
+            FROM tbl_Database_Tables 
+            WHERE is_active = 1
+            ORDER BY display_name, database_name
+        `);
+
+            const displayNameGroups = {};
+            dbTablesQuery.recordset.forEach(row => {
+                if (!displayNameGroups[row.display_name]) {
+                    displayNameGroups[row.display_name] = {};
+                }
+                displayNameGroups[row.display_name][row.database_name] = {
+                    table_name: row.table_name,
+                    display_name: row.display_name,
+                    page: row.page
+                };
+            });
+
+            const dbNames = [...new Set(dbTablesQuery.recordset.map(r => r.database_name))];
+            const results = [];
+
+            for (const [displayName, dbEntries] of Object.entries(displayNameGroups)) {
+                const rowData = {
+                    display_name: displayName,
+                    page: Object.values(dbEntries)[0]?.page
+                };
+
+                for (const dbName of dbNames) {
+                    if (dbEntries[dbName]) {
+                        try {
+                            const request = dbName === 'Online_SMT_Tally'
+                                ? new sql.Request(req.db)
+                                : new sql.Request();
+
+                            const countRes = await request.query(
+                                `SELECT COUNT(*) AS count FROM [${dbName}].[dbo].[${dbEntries[dbName].table_name}]`
+                            );
+
+                            const colMetaRes = await request.query(`
+                            SELECT 
+                                COLUMN_NAME, 
+                                DATA_TYPE, 
+                                IS_NULLABLE
+                            FROM [${dbName}].INFORMATION_SCHEMA.COLUMNS
+                            WHERE TABLE_NAME = '${dbEntries[dbName].table_name}'
+                        `);
+
+                            rowData[dbName] = {
+                                count: countRes.recordset[0].count,
+                                fields: colMetaRes.recordset.length,
+                                columns: colMetaRes.recordset,
+                                table_name: dbEntries[dbName].table_name,
+                                page: dbEntries[dbName].page
+                            };
+                        } catch (err) {
+                            rowData[dbName] = {
+                                error: err.message,
+                                count: "-",
+                                fields: "-",
+                                table_name: dbEntries[dbName].table_name,
+                                page: dbEntries[dbName].page
+                            };
+                        }
+                    } else {
+                        rowData[dbName] = null;
+                    }
+                }
+                results.push(rowData);
+            }
+
+            return dataFound(res, {
+                data: results,
+                databases: dbNames
+            });
+        } catch (e) {
+            return servError(e, res);
         }
     };
 
     return {
         getDetailsData,
         getTallyDatabase,
+        getDatabaseTables
     };
 };
 

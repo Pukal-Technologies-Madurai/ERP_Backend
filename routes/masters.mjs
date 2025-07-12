@@ -34,7 +34,7 @@ import godown from '../controller/Masters/godown.mjs';
 import brand from '../controller/Masters/brand.mjs';
 import district from '../controller/Masters/district.mjs';
 import voucherGroup from '../controller/Masters/voucherGroup.mjs';
-
+import prodGroup from '../controller/Masters/prodGroup.mjs';
 
 const MastersRouter = express.Router();
 
@@ -242,44 +242,49 @@ MastersRouter.post('/uploadExcel', dbconnect, upload.single('file'), lol.excelUp
 MastersRouter.post('/uploadLosExcel', dbconnect, upload.single('file'), los.excelUpload)
 
 
-MastersRouter.post('/accountMaster',accountMaster.createAccount)
-MastersRouter.get('/accountMaster',accountMaster.getAccountDetails)
-MastersRouter.put('/accountMaster',accountMaster.updateAccountDetails)
-MastersRouter.delete('/accountMaster',accountMaster.deleteAccountDetails)
-MastersRouter.get('/account/dropDown',accountMaster.accountingGroupDropDown)
+MastersRouter.post('/accountMaster', accountMaster.createAccount)
+MastersRouter.get('/accountMaster', accountMaster.getAccountDetails)
+MastersRouter.put('/accountMaster', accountMaster.updateAccountDetails)
+MastersRouter.delete('/accountMaster', accountMaster.deleteAccountDetails)
+MastersRouter.get('/account/dropDown', accountMaster.accountingGroupDropDown)
 
 
-MastersRouter.get('/accountGroup',accountGroup.getAccountGroup);
-MastersRouter.post('/accountGroup',accountGroup.createAccountGroup);
-MastersRouter.put('/accountGroup',accountGroup.updateAccountGroup)
-MastersRouter.delete('/accountGroup',accountGroup.deleteAccountGroup)
+MastersRouter.get('/accountGroup', accountGroup.getAccountGroup);
+MastersRouter.post('/accountGroup', accountGroup.createAccountGroup);
+MastersRouter.put('/accountGroup', accountGroup.updateAccountGroup)
+MastersRouter.delete('/accountGroup', accountGroup.deleteAccountGroup)
 
 
-MastersRouter.get('/state',state.getState);
-MastersRouter.post('/state',state.createState);
-MastersRouter.delete('/state',state.deleteState)
-MastersRouter.put('/state',state.updateState)
-MastersRouter.get('/state/dropDown',state.stateDropDown)
+MastersRouter.get('/state', state.getState);
+MastersRouter.post('/state', state.createState);
+MastersRouter.delete('/state', state.deleteState)
+MastersRouter.put('/state', state.updateState)
+MastersRouter.get('/state/dropDown', state.stateDropDown)
 
 
-MastersRouter.get('/godown',godown.getGodown);
-MastersRouter.post('/godown',godown.createGodown)
-MastersRouter.put('/godown',godown.updateGodown)
-MastersRouter.delete('/godown',godown.deleteGodown)
+MastersRouter.get('/godown', godown.getGodown);
+MastersRouter.post('/godown', godown.createGodown)
+MastersRouter.put('/godown', godown.updateGodown)
+MastersRouter.delete('/godown', godown.deleteGodown)
 
 
-MastersRouter.get('/brand',brand.getBrand);
-MastersRouter.get('/brand/dropDown',brand.getBrandDropDown)
-MastersRouter.post('/brand',brand.postBrand)
-MastersRouter.delete('/brand',brand.deleteBrand)
-MastersRouter.put('/brand',brand.putBrand)
+MastersRouter.get('/brand', brand.getBrand);
+MastersRouter.get('/brand/dropDown', brand.getBrandDropDown)
+MastersRouter.post('/brand', brand.postBrand)
+MastersRouter.delete('/brand', brand.deleteBrand)
+MastersRouter.put('/brand', brand.putBrand)
 
 
-MastersRouter.get('/district',district.getDistric);
-MastersRouter.post('/district',district.createDistrict)
-MastersRouter.put('/district',district.updateDistrict)
-MastersRouter.delete('/district',district.deleteDistrict);
+MastersRouter.get('/district', district.getDistric);
+MastersRouter.post('/district', district.createDistrict)
+MastersRouter.put('/district', district.updateDistrict)
+MastersRouter.delete('/district', district.deleteDistrict);
 
-MastersRouter.get('/voucherGroup', voucherGroup.getVoucherGroupDropdown)
+MastersRouter.get('/voucherGroup', voucherGroup.getVoucherGroupDropdown);
+
+MastersRouter.get('/proGroup', prodGroup.getProductGroups);
+MastersRouter.post('/proGroup', prodGroup.postProdGroup);
+MastersRouter.put('/proGroup', prodGroup.putProdGroup);
+MastersRouter.delete('/proGroup', prodGroup.deleteProGroup)
 
 export default MastersRouter;

@@ -220,9 +220,19 @@ const itemGroupWiseClosingDetails = async (req, res) => {
                         AND pcs.Trans_Date <= @reqDate ` : ''}
                     ORDER BY pcs.Trans_Date DESC
                 ) AS latest 
-                LEFT JOIN tbl_Stock_LOS as los
-                ON los.Item_Group_Id = ig.Item_Group_Id
-                WHERE latest.Item_Group_Id IS NOT NULL;`
+                LEFT JOIN ( 
+					SELECT 
+						DISTINCT Item_Group_Id,
+						Brand,Group_ST,
+						Stock_Group,
+						S_Sub_Group_1,
+						Grade_Item_Group 
+					FROM tbl_Stock_LOS 
+					WHERE  
+						Item_Group_Id IS NOT NULL 
+						and Item_Group_Id <> 0
+				) AS los
+                ON los.Item_Group_Id = ig.Item_Group_Id`
             );
 
         const result = await request;
