@@ -53,9 +53,14 @@ const sfProductController = () => {
                     ORDER BY p.Product_Id DESC`
                 );
 
-            const productResult = await request;
+            const productResult = (await request).recordset;
 
-            sentData(res, productResult.recordset);
+            const withImage = productResult.map(product => ({
+                ...product,
+                productImageUrl: getImage('products', product?.Product_Image_Name),
+            }));
+
+            sentData(res, withImage);
 
         } catch (e) {
             servError(e, res);
