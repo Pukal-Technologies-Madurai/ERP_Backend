@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition, toArray } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition, toArray, Division } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -188,6 +188,9 @@ const PurchaseOrder = () => {
                 throw new Error('Failed to create order, Try again.');
             }
 
+            const getPackDetails = new sql.Request()
+                .query(`SELECT * FROM tbl_Pack_Master`)
+
             for (let i = 0; i < Product_Array.length; i++) {
 
                 const product = Product_Array[i];
@@ -208,6 +211,8 @@ const PurchaseOrder = () => {
                 const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
                 const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
 
+                const Bill_Alt_Qty = Division(Bill_Qty, productDetails.Pack);
+
                 const request2 = new sql.Request(transaction)
                     .input('DeliveryId', Number(product?.DeliveryId || 0))
                     .input('Po_Inv_Date', Po_Inv_Date)
@@ -219,8 +224,8 @@ const PurchaseOrder = () => {
 
                     .input('Bill_Qty', Bill_Qty)
                     .input('Act_Qty', Number(product?.Act_Qty))
-                    .input('Bill_Alt_Qty', Number(product?.Bill_Alt_Qty))
-                    .input('Alt_Act_Qty', Number(product?.Bill_Alt_Qty))
+                    .input('Bill_Alt_Qty', Bill_Alt_Qty)
+                    .input('Alt_Act_Qty', Bill_Alt_Qty)
 
                     .input('Unit_Id', product.Unit_Id ?? '')
                     .input('Bill_Alt_Unit_Id', product.Unit_Id ?? '')
@@ -500,6 +505,8 @@ const PurchaseOrder = () => {
                 const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
                 const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
 
+                const Bill_Alt_Qty = Division(Bill_Qty, productDetails.Pack);
+
                 const request2 = new sql.Request(transaction)
                     .input('DeliveryId', Number(product?.DeliveryId || 0))
                     .input('Po_Inv_Date', Po_Inv_Date)
@@ -511,8 +518,8 @@ const PurchaseOrder = () => {
 
                     .input('Bill_Qty', Bill_Qty)
                     .input('Act_Qty', Number(product?.Act_Qty))
-                    .input('Bill_Alt_Qty', Number(product?.Bill_Alt_Qty))
-                    .input('Alt_Act_Qty', Number(product?.Bill_Alt_Qty))
+                    .input('Bill_Alt_Qty', Bill_Alt_Qty)
+                    .input('Alt_Act_Qty', Bill_Alt_Qty)
 
                     .input('Unit_Id', product.Unit_Id ?? '')
                     .input('Bill_Alt_Unit_Id', product.Unit_Id ?? '')
@@ -811,7 +818,7 @@ const PurchaseOrder = () => {
                         ${checkIsNumber(VoucherType) ? ' AND pigi.Voucher_Type = @VoucherType' : ''}
                         ${checkIsNumber(Cost_Center_Type_Id) ? ' AND pisd.Cost_Center_Type_Id = @Cost_Center_Type_Id' : ''}
                         ${checkIsNumber(Involved_Emp_Id) ? ' AND pisd.Involved_Emp_Id = @Involved_Emp_Id' : ''}
-                        ${checkIsNumber(filterItems) ? ' AND pisi.Item_Id = @filterItems' : ''};
+                        ${checkIsNumber(filterItems) ? ' AND pisi.Item_Id = @filterItems ' : ''};
                     -- Step 3: Get Purchase General Info
                     SELECT 
                         pigi.*,
@@ -824,7 +831,7 @@ const PurchaseOrder = () => {
                     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = pigi.Branch_Id
                     LEFT JOIN tbl_Users AS cb ON cb.UserId = pigi.Created_by
                     LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pigi.Voucher_Type
-                    WHERE pigi.PIN_Id IN (SELECT PIN_Id FROM @FilteredPurchase)
+                    WHERE pigi.PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)
                     ORDER BY CONVERT(DATE, pigi.Po_Entry_Date) DESC;
                     -- Step 4: Get Purchase Product Details
                     SELECT
@@ -835,7 +842,7 @@ const PurchaseOrder = () => {
                     FROM tbl_Purchase_Order_Inv_Stock_Info AS oi
                     LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
                     LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS pdd ON pdd.Id = oi.DeliveryId
-                    WHERE oi.PIN_Id IN (SELECT PIN_Id FROM @FilteredPurchase);
+                    WHERE oi.PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase);
                     -- Step 5: Get Purchase Staff Info
                     SELECT 
                         s.*,
@@ -844,7 +851,11 @@ const PurchaseOrder = () => {
                     FROM tbl_Purchase_Order_Inv_Staff_Details AS s
                     LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = s.Involved_Emp_Id
                     LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = s.Cost_Center_Type_Id
-                    WHERE s.PIN_Id IN (SELECT PIN_Id FROM @FilteredPurchase);`
+                    WHERE s.PIN_Id IN (SELECT PIN_Id FROM @FilteredPurchase);
+                    -- Step 6: Get is direct order or from purchase order
+                    SELECT DISTINCT PIN_Id
+                    FROM tbl_Purchase_Order_Inv_Gen_Order
+                    WHERE PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)`
                 );
 
             const result = await request;
@@ -852,6 +863,7 @@ const PurchaseOrder = () => {
             const PurchaseInfo = toArray(result.recordsets[0]);
             const Products_List = toArray(result.recordsets[1]);
             const Staff_List = toArray(result.recordsets[2]);
+            const FromPurchseOrder = toArray(result.recordsets[3]);
 
             if (PurchaseInfo.length > 0) {
                 const finalResult = PurchaseInfo.map(p => ({
@@ -860,7 +872,8 @@ const PurchaseOrder = () => {
                         ...pp,
                         ProductImageUrl: getImage('products', pp.Product_Image_Name)
                     })),
-                    Staff_List: Staff_List.filter(stf => isEqualNumber(stf.PIN_Id, p.PIN_Id))
+                    Staff_List: Staff_List.filter(stf => isEqualNumber(stf.PIN_Id, p.PIN_Id)),
+                    isFromPurchaseOrder: checkIsNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.PIN_Id)
                 }));
                 dataFound(res, finalResult);
             } else {

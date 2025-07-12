@@ -320,21 +320,9 @@ export const getProducts = async (IS_Sold = 1) => {
         const request = new sql.Request()
             .input('IS_Sold', IS_Sold)
             .query(`
-            WITH UOM AS (
-                SELECT *
-                FROM tbl_UOM
-            ),
-            RATE AS (
+            WITH RATE AS (
                 SELECT * 
                 FROM tbl_Pro_Rate_Master
-            ),
-            BRAND AS (
-                SELECT *
-                FROM tbl_Brand_Master
-            ),
-            PRODUCTGROUP AS (
-                SELECT *
-                FROM tbl_Product_Group
             )
             SELECT 
                 p.*,
@@ -350,15 +338,18 @@ export const getProducts = async (IS_Sold = 1) => {
                         r.Product_Id = p.Product_Id
                     ORDER BY
                         CONVERT(DATETIME, r.Rate_Date) DESC
-                ), 0) AS Item_Rate 
+                ), 0) AS Item_Rate,
+                TRY_CAST(ISNULL(pck.Pack, 0) AS DECIMAL(18, 2)) AS Pack
             FROM 
                 tbl_Product_Master AS p
-                LEFT JOIN BRAND AS b
+                LEFT JOIN tbl_Brand_Master AS b
                 ON b.Brand_Id = p.Brand
-                LEFT JOIN PRODUCTGROUP AS pg
+                LEFT JOIN tbl_Product_Group AS pg
                 ON pg.Pro_Group_Id = p.Product_Group
-                LEFT JOIN UOM AS u
+                LEFT JOIN tbl_UOM AS u
                 ON u.Unit_Id = p.UOM_Id
+                LEFT JOIN tbl_Pack_Master AS pck
+                ON pck.Pack_Id = p.Pack_Id
             `);
             // WHERE
             //     p.IS_Sold = @IS_Sold ;

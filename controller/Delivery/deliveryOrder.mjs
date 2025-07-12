@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { dataFound, invalidInput, noData, servError, success } from '../../res.mjs';
+import { dataFound, invalidInput, noData, servError, success, failed } from '../../res.mjs';
 import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getProducts, getNextId } from '../../middleware/miniAPIs.mjs';

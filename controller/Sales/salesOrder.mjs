@@ -1177,6 +1177,7 @@ const SaleOrder = () => {
                 .input('So_Inv_No', So_Inv_No)
                 .input('So_Year', Year_Id)
                 .input('So_Branch_Inv_Id', So_Branch_Inv_Id)
+                .input('Pre_Id',Pre_Id)
                 .input('So_Date', So_Date)
                 .input('Retailer_Id', Retailer_Id)
                 .input('Sales_Person_Id', 0)
@@ -1201,13 +1202,13 @@ const SaleOrder = () => {
                 .input('Trans_Type', 'INSERT')
                 .query(`
                     INSERT INTO tbl_Sales_Order_Gen_Info (
-                        So_Id, So_Inv_No, So_Year, So_Branch_Inv_Id, So_Date, 
+                        So_Id, So_Inv_No, So_Year, So_Branch_Inv_Id,Pre_Id, So_Date, 
                         Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, CSGT_Total, 
                         SGST_Total, IGST_Total, GST_Inclusive, IS_IGST, Round_off, 
                         Total_Invoice_value, Total_Before_Tax, Total_Tax,Narration, Cancel_status, 
                         Created_by, Altered_by, Alter_Id, Created_on, Alterd_on, Trans_Type
                     ) VALUES (
-                        @So_Id, @So_Inv_No, @So_Year, @So_Branch_Inv_Id, @So_Date, 
+                        @So_Id, @So_Inv_No, @So_Year, @So_Branch_Inv_Id,@Pre_Id, @So_Date, 
                         @Retailer_Id, @Sales_Person_Id, @Branch_Id, @VoucherType, @CSGT_Total, 
                         @SGST_Total, @IGST_Total, @GST_Inclusive, @IS_IGST, @Round_off, 
                         @Total_Invoice_value, @Total_Before_Tax, @Total_Tax, @Narration, @Cancel_status, 
@@ -1438,6 +1439,7 @@ const SaleOrder = () => {
                 .input('So_Inv_No', PrevioudSo_Inv_No)
                 .input('So_Year', PrevioudYear_Id)
                 .input('So_Branch_Inv_Id', PrevioudSo_Branch_Inv_Id)
+                .input('Pre_Id',Pre_Id)
                 .input('So_Date', PrevioudSo_Date)
                 .input('Retailer_Id', Retailer_Id)
                 .input('Sales_Person_Id', 0)
@@ -1462,13 +1464,13 @@ const SaleOrder = () => {
                 .input('Trans_Type', 'INSERT')
                 .query(`
                     INSERT INTO tbl_Sales_Order_Gen_Info (
-                       So_Id, So_Inv_No, So_Year, So_Branch_Inv_Id, So_Date, 
+                       So_Id, So_Inv_No, So_Year, So_Branch_Inv_Id,Pre_Id, So_Date, 
                         Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, CSGT_Total, 
                         SGST_Total, IGST_Total, GST_Inclusive, IS_IGST, Round_off, 
                         Total_Invoice_value, Total_Before_Tax, Total_Tax,Narration, Cancel_status, 
                         Created_by, Altered_by, Alter_Id, Created_on, Alterd_on, Trans_Type
                     ) VALUES (
-                       @So_Id, @So_Inv_No, @So_Year, @So_Branch_Inv_Id, @So_Date, 
+                       @So_Id, @So_Inv_No, @So_Year, @So_Branch_Inv_Id, @Pre_Id,@So_Date, 
                         @Retailer_Id, @Sales_Person_Id, @Branch_Id, @VoucherType, @CSGT_Total, 
                         @SGST_Total, @IGST_Total, @GST_Inclusive, @IS_IGST, @Round_off, 
                         @Total_Invoice_value, @Total_Before_Tax, @Total_Tax, @Narration, @Cancel_status, 
