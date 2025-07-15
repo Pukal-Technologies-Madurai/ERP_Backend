@@ -71,10 +71,12 @@ ReportRouter.get('/customerClosingStock/retailerBased/withLOL', customerClosingS
 ReportRouter.get('/storageStock/itemWise', storageStockReport.getStorageStockItemWise);
 ReportRouter.get('/storageStock/godownWise', storageStockReport.getStorageStockGodownWise);
 ReportRouter.get('/itemGroup/stockInfo', storageStockReport.itemGroupWiseClosingDetails);
+ReportRouter.get('/itemGroup/stockInfo/grouped', storageStockReport.StockGroupWiseClosingDetails);
 
 ReportRouter.get('/brokerageReport/getInvolvedBroker', costCenterReports.getBrokerInvolvedInPurchase);
 ReportRouter.get('/brokerageReport/purchaseInvoice', costCenterReports.purchaseBrokerageReport);
-ReportRouter.get('/brokerageReport/salesInvoice', costCenterReports.salesDeliveryBrokerageReport)
+ReportRouter.get('/brokerageReport/salesInvoice', costCenterReports.salesDeliveryBrokerageReport);
+
 
 
 export default ReportRouter;
