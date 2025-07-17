@@ -128,27 +128,36 @@ const retailerRoutes = () => {
                 return invalidInput(res, 'Route_Id, User_Id and Date are required');
             }
 
+            const request = new sql.Request();
+
+
+            await request
+                .input('User_Id', sql.Int, User_Id)
+                .input('Date', sql.Date, date)
+                .query(`
+                UPDATE tbl_Route_Setting
+                SET IsActive = 0
+                WHERE User_Id = @User_Id AND Date = @Date
+            `);
+
             const getId = await getNextId({
                 table: 'tbl_Route_Setting',
                 column: 'Id'
             });
 
-            const retailers = await new sql.Request()
-                .input('Id', sql.BigInt, getId.MaxId)
+            await request
+                .input('Id', getId.MaxId)
                 .input('Route_Id', Route_Id)
-                .input('User_Id', User_Id)
-                .input('Date', date)
+                .input('IsActive', 1)
                 .query(`
-                INSERT INTO tbl_Route_Setting (Id, User_Id, Route_Id, Date) 
-                VALUES (@Id, @User_Id, @Route_Id, @Date)`);
+                INSERT INTO tbl_Route_Setting (Id, User_Id, Route_Id, Date, IsActive)
+                VALUES (@Id, @User_Id, @Route_Id, @Date, @IsActive)
+            `);
 
-            if (retailers.rowsAffected?.[0] > 0) {
-                success(res, 'New Route Set');
-            } else {
-                failed(res, 'Failed to create Route Setting');
-            }
 
+            success(res, 'New Route Set successfully');
         } catch (e) {
+
             servError(e, res);
         }
     };
@@ -156,6 +165,7 @@ const retailerRoutes = () => {
     const getSetRoutes = async (req, res) => {
         try {
             const { date, User_Id } = req.query;
+
 
             const result = await new sql.Request()
                 .input('date', date)
@@ -174,9 +184,22 @@ const retailerRoutes = () => {
     const updateSetRoutes = async (req, res) => {
         try {
             const { Id, User_Id, date, Route_Id } = req.body;
-            if (!checkIsNumber(Route_Id) || !User_Id) {
-                return invalidInput(res, 'Route_Id, User_Id is required')
+
+            if (!checkIsNumber(Route_Id) || !User_Id || !date) {
+                return invalidInput(res, 'Route_Id, User_Id, and date are required');
             }
+
+
+            await new sql.Request()
+                .input('User_Id', User_Id)
+                .input('date', date)
+                .input('currentId', Id)
+                .query(`
+                UPDATE tbl_Route_Setting
+                SET IsActive = 0
+                WHERE User_Id = @User_Id AND date = @date AND Id <> @currentId
+            `);
+
 
             const result = await new sql.Request()
                 .input('Id', Id)
@@ -184,15 +207,43 @@ const retailerRoutes = () => {
                 .input('date', date)
                 .input('Route_Id', Route_Id)
                 .query(`
-                    UPDATE tbl_Route_setting
-                    SET User_Id = @User_Id,date=@date,Route_Id=@Route_Id
+                UPDATE tbl_Route_Setting
+                SET User_Id = @User_Id,
+                    date = @date,
+                    Route_Id = @Route_Id,
+                    IsActive = 1
+                WHERE Id = @Id
+            `);
+
+            if (result.rowsAffected[0] > 0) {
+                success(res, 'Route setting updated successfully');
+            } else {
+                failed(res, 'Failed to update the route setting');
+            }
+
+        } catch (err) {
+            servError(err, res);
+        }
+    };
+
+    const deletesetRoutes = async (req, res) => {
+        try {
+            const { Id } = req.query;
+            if (!checkIsNumber(Id)) {
+                return invalidInput(res, 'Id is required')
+            }
+
+            const result = await new sql.Request()
+                .input('Id', Id)
+                .query(`
+                    Delete tbl_Route_setting
                     WHERE Id=@Id`
                 )
 
             if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-                success(res, 'Update Setting Saved')
+                success(res, 'Settings deleted')
             } else {
-                failed(res, 'Failed to save changes')
+                failed(res, 'Failed to delete ')
             }
 
         } catch (e) {
@@ -207,7 +258,8 @@ const retailerRoutes = () => {
         deleteRoute,
         setRoutes,
         getSetRoutes,
-        updateSetRoutes
+        updateSetRoutes,
+        deletesetRoutes
     }
 }
 

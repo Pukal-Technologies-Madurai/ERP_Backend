@@ -108,42 +108,6 @@ const PaymentDataDependency = () => {
         }
     }
 
-    // const getPaymentInvoiceBillInfo = async (req, res) => {
-    //     try {
-    //         const { payment_id, pay_bill_type = 1 } = req.query;
-
-    //         if (!checkIsNumber(payment_id)) return invalidInput(res, 'payment_id is required');
-
-    //         const purchaseInvoiceBillType = `
-    //             SELECT 
-    //                 pbi.*,
-    //                 pogi.Po_Inv_Date AS PurchaseInvoiceDate,
-    //                 ISNULL(pb.TotalPaidAmount, 0) AS TotalPaidAmount,
-    //                 pogi.Total_Invoice_value - ISNULL(pb.TotalPaidAmount, 0) AS PendingAmount
-    //             FROM tbl_Payment_Bill_Info AS pbi
-    //             LEFT JOIN tbl_Purchase_Order_Inv_Gen_Info AS pogi
-    //                 ON pogi.PIN_Id = pbi.pay_bill_id
-    //             LEFT JOIN (
-    //                 SELECT 
-    //                     pay_bill_id,
-    //                     SUM(Debit_Amo) AS TotalPaidAmount
-    //                 FROM tbl_Payment_Bill_Info
-    //                 GROUP BY pay_bill_id
-    //             ) AS pb ON pb.pay_bill_id = pbi.pay_bill_id
-    //             WHERE pbi.payment_id = @payment_id;`
-
-    //         const request = new sql.Request()
-    //             .input('payment_id', payment_id)
-    //             .query(isEqualNumber(pay_bill_type, 1) ? purchaseInvoiceBillType : '');
-
-    //         const result = await request;
-
-    //         sentData(res, result.recordset)
-    //     } catch (e) {
-    //         servError(e, res);
-    //     }
-    // }
-
     const getPaymentInvoiceBillInfo = async (req, res) => {
         try {
             const { payment_id, pay_bill_type = 1 } = req.query;
@@ -341,8 +305,18 @@ const PaymentDataDependency = () => {
                     		WHERE JournalBillType = 'PROCESSING' 
                     	)
                     )
-                    SELECT 
-                    	pci.*,
+                    SELECT 	
+                        distinct pci.auto_id,
+	                    pci.payment_id,
+	                    pci.payment_no,
+	                    pci.payment_date, 
+	                    pci.bill_type,
+	                    pci.Debit_Ledger_Id,
+	                    pci.pay_bill_id,
+	                    pci.JournalBillType,
+	                    pci.item_id,
+	                    pci.item_name,
+	                    pci.expence_value,
                     	CASE 
                     		WHEN pci.JournalBillType IN ('MATERIAL INWARD', 'OTHER GODOWN') THEN tdq.itemQuantity
                     		WHEN pci.JournalBillType = 'PROCESSING' THEN pdq.itemQuantity

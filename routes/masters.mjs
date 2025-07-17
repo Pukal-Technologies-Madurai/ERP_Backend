@@ -128,6 +128,7 @@ MastersRouter.delete('/routes', retailerRoutes.deleteRoute);
 MastersRouter.post('/setRoutes', retailerRoutes.setRoutes);
 MastersRouter.get('/setRoutes', retailerRoutes.getSetRoutes);
 MastersRouter.put('/setRoutes', retailerRoutes.updateSetRoutes)
+MastersRouter.delete('/setRoutes', retailerRoutes.deletesetRoutes);
 
 MastersRouter.get('/areas', retailerArea.getAreaMaster);
 MastersRouter.post('/areas', retailerArea.addArea);

@@ -261,9 +261,9 @@ const StockGroupWiseClosingDetails = async (req, res) => {
                     COALESCE(los.Stock_Group, 'not found') AS Stock_Group, 
                     COALESCE(los.S_Sub_Group_1, 'not found') AS S_Sub_Group_1, 
                     COALESCE(los.Grade_Item_Group, 'not found') AS Grade_Item_Group,
-                	latest.Bal_Qty AS Bal_Qty,
-                	latest.CL_Rate AS CL_Rate,
-                	latest.CL_Value AS Stock_Value
+                	COALESCE(latest.Bal_Qty, 0) AS Bal_Qty,
+                	COALESCE(latest.CL_Rate, 0) AS CL_Rate,
+                	COALESCE(latest.CL_Value, 0) AS Stock_Value
                 FROM (
                     SELECT DISTINCT Item_Group_Id
                     FROM tbl_Daily_Stock_Value
@@ -288,7 +288,12 @@ const StockGroupWiseClosingDetails = async (req, res) => {
                 		Item_Group_Id IS NOT NULL 
                 		and Item_Group_Id <> 0
                 ) AS los
-                ON los.Item_Group_Id = ig.Item_Group_Id`
+                ON los.Item_Group_Id = ig.Item_Group_Id
+                WHERE (
+                    latest.Bal_Qty > 0 OR
+                    latest.CL_Rate > 0 OR
+                	latest.CL_Value > 0
+                )`
             );
 
         const result = (await request).recordset;

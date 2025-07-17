@@ -105,9 +105,37 @@ const ReceiptDataDependency = () => {
                             ON a.ERP_Id = R.ERP_Id
                         WHERE 
                             pig.Cancel_status <> 0
-                            ${checkIsNumber(Acc_Id) ? ' AND a.Acc_Id = @Acc_Id ' : ''}
+                            AND a.Acc_Id = @Acc_Id
                     ) AS inv
-                    WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
+                    WHERE inv.Paid_Amount < inv.Total_Invoice_value
+                    --UNION ALL
+                    --SELECT 
+                    --    0 AS bill_id, 
+                    --    cb.bill_no, 
+                    --    cb.bill_date, 
+                    --    cb.Retailer_id,  
+                    --    0 AS bef_tax, 
+                    --    0 AS tot_tax, 
+                    --    cb.dr_amount, 
+                    --	COALESCE((
+                    --        SELECT SUM(pb.Credit_Amo) 
+                    --        FROM tbl_Receipt_Bill_Info AS pb
+                    --        JOIN tbl_Receipt_General_Info AS pgi
+                    --            ON pgi.receipt_id = pb.receipt_id
+                    --        WHERE 
+                    --            pgi.status <> 0
+                    --            AND pgi.receipt_bill_type = 1
+                    --            AND pb.bill_id = 0
+                    --            AND pb.bill_name = cb.bill_no
+                    --    ), 0) AS Paid_Amount
+                    --FROM tbl_Ledger_Opening_Balance AS cb
+                    --LEFT JOIN tbl_Retailers_Master AS r
+                    --	ON r.Retailer_Id = cb.Retailer_id
+                    --JOIN tbl_Account_Master AS a
+                    --    ON a.ERP_Id = r.ERP_Id
+                    --WHERE cb.OB_date >= (
+                    --	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                    --) AND a.Acc_Id = @Acc_Id;`
                 );
 
             const result = await request;
