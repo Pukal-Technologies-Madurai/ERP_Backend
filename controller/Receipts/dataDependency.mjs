@@ -87,6 +87,7 @@ const ReceiptDataDependency = () => {
                             pig.Total_Before_Tax,
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,
+	                        'INV' AS dataSource,
                             COALESCE((
                                 SELECT SUM(pb.Credit_Amo) 
                                 FROM tbl_Receipt_Bill_Info AS pb
@@ -108,34 +109,35 @@ const ReceiptDataDependency = () => {
                             AND a.Acc_Id = @Acc_Id
                     ) AS inv
                     WHERE inv.Paid_Amount < inv.Total_Invoice_value
-                    --UNION ALL
-                    --SELECT 
-                    --    0 AS bill_id, 
-                    --    cb.bill_no, 
-                    --    cb.bill_date, 
-                    --    cb.Retailer_id,  
-                    --    0 AS bef_tax, 
-                    --    0 AS tot_tax, 
-                    --    cb.dr_amount, 
-                    --	COALESCE((
-                    --        SELECT SUM(pb.Credit_Amo) 
-                    --        FROM tbl_Receipt_Bill_Info AS pb
-                    --        JOIN tbl_Receipt_General_Info AS pgi
-                    --            ON pgi.receipt_id = pb.receipt_id
-                    --        WHERE 
-                    --            pgi.status <> 0
-                    --            AND pgi.receipt_bill_type = 1
-                    --            AND pb.bill_id = 0
-                    --            AND pb.bill_name = cb.bill_no
-                    --    ), 0) AS Paid_Amount
-                    --FROM tbl_Ledger_Opening_Balance AS cb
-                    --LEFT JOIN tbl_Retailers_Master AS r
-                    --	ON r.Retailer_Id = cb.Retailer_id
-                    --JOIN tbl_Account_Master AS a
-                    --    ON a.ERP_Id = r.ERP_Id
-                    --WHERE cb.OB_date >= (
-                    --	SELECT MAX(OB_Date) FROM tbl_OB_Date
-                    --) AND a.Acc_Id = @Acc_Id;`
+                    UNION ALL
+                    SELECT 
+                        0 AS bill_id, 
+                        cb.bill_no, 
+                        cb.bill_date, 
+                        cb.Retailer_id,  
+                        0 AS bef_tax, 
+                        0 AS tot_tax, 
+                        cb.dr_amount, 
+	                    'OB' AS dataSource,
+                    	COALESCE((
+                            SELECT SUM(pb.Credit_Amo) 
+                            FROM tbl_Receipt_Bill_Info AS pb
+                            JOIN tbl_Receipt_General_Info AS pgi
+                                ON pgi.receipt_id = pb.receipt_id
+                            WHERE 
+                                pgi.status <> 0
+                                AND pgi.receipt_bill_type = 1
+                                AND pb.bill_id = 0
+                                AND pb.bill_name = cb.bill_no
+                        ), 0) AS Paid_Amount
+                    FROM tbl_Ledger_Opening_Balance AS cb
+                    LEFT JOIN tbl_Retailers_Master AS r
+                    	ON r.Retailer_Id = cb.Retailer_id
+                    JOIN tbl_Account_Master AS a
+                        ON a.ERP_Id = r.ERP_Id
+                    WHERE cb.OB_date >= (
+                    	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                    ) AND a.Acc_Id = @Acc_Id;`
                 );
 
             const result = await request;
@@ -160,6 +162,29 @@ const ReceiptDataDependency = () => {
                             pbi.*
                         FROM tbl_Receipt_Bill_Info AS pbi
                         WHERE pbi.receipt_id = @receipt_id
+                    ), 
+                    -- CTE for Purchase Invoice
+                    SALES_OPENING_BALANCE_DATE AS (
+                        SELECT 
+                            0 AS bill_id, 
+                            bill_date,
+                    		bill_no,
+                            COALESCE((
+                                SELECT SUM(refAmount.Credit_Amo)
+                                FROM tbl_Receipt_Bill_Info AS refAmount
+                                LEFT JOIN tbl_Receipt_General_Info AS pgi
+                                    ON pgi.receipt_id = refAmount.receipt_id
+                                WHERE 
+                                    ref.bill_no = refAmount.bill_name
+                                    AND refAmount.JournalBillType = 'SALES RECEIPT'
+                                    AND pgi.status <> 0
+                            ), 0) AS TotalPaidAmount
+                        FROM tbl_Ledger_Opening_Balance AS ref
+                        WHERE bill_no IN (
+                            SELECT DISTINCT bill_name 
+                            FROM RECEIPT_BILL_INFO 
+                            WHERE receipt_bill_type = 1 AND JournalBillType = 'SALES RECEIPT'
+                        )
                     ), 
                     -- CTE for Purchase Invoice
                     SALES_INVOICE_DATE AS (
@@ -254,7 +279,8 @@ const ReceiptDataDependency = () => {
                         pbi.*,
                         -- Resolve the referenceBillDate
                         CASE 
-                            WHEN pbi.receipt_bill_type = 1 AND pbi.JournalBillType = 'SALES RECEIPT' THEN pid.SalesInvoiceDate
+                            WHEN pbi.receipt_bill_type = 1 AND pbi.JournalBillType = 'SALES RECEIPT' AND sob.bill_no IS NOT NULL THEN sob.bill_date
+                            WHEN pbi.receipt_bill_type = 1 AND pbi.JournalBillType = 'SALES RECEIPT' AND sob.bill_no IS NULL THEN pid.SalesInvoiceDate
                             WHEN pbi.receipt_bill_type = 2 AND pbi.JournalBillType = 'MATERIAL INWARD' THEN mid.TripDate
                             WHEN pbi.receipt_bill_type = 2 AND pbi.JournalBillType = 'OTHER GODOWN' THEN ogd.TripDate
                             WHEN pbi.receipt_bill_type = 2 AND pbi.JournalBillType = 'PROCESSING' THEN pr.ProcessDate
@@ -262,13 +288,15 @@ const ReceiptDataDependency = () => {
                         END AS referenceBillDate,
                         -- Resolve the TotalPaidAmount per type
                         CASE 
-                            WHEN pbi.receipt_bill_type = 1 AND pbi.JournalBillType = 'SALES RECEIPT' THEN pid.TotalPaidAmount
+                    	    WHEN pbi.receipt_bill_type = 1 AND pbi.JournalBillType = 'SALES RECEIPT' AND sob.bill_no IS NOT NULL THEN pid.TotalPaidAmount
+                            WHEN pbi.receipt_bill_type = 1 AND pbi.JournalBillType = 'SALES RECEIPT' AND sob.bill_no IS NULL THEN mid.TotalPaidAmount
                             WHEN pbi.receipt_bill_type = 2 AND pbi.JournalBillType = 'MATERIAL INWARD' THEN mid.TotalPaidAmount
                             WHEN pbi.receipt_bill_type = 2 AND pbi.JournalBillType = 'OTHER GODOWN' THEN ogd.TotalPaidAmount
                             WHEN pbi.receipt_bill_type = 2 AND pbi.JournalBillType = 'PROCESSING' THEN pr.TotalPaidAmount
                             ELSE NULL
                         END AS totalPaidAmount
                     FROM RECEIPT_BILL_INFO AS pbi
+                    LEFT JOIN SALES_OPENING_BALANCE_DATE AS sob ON pbi.bill_name = sob.bill_no
                     LEFT JOIN SALES_INVOICE_DATE AS pid ON pbi.bill_id = pid.bill_id
                     LEFT JOIN MATERIAL_INWARD_DATE AS mid ON pbi.bill_id = mid.bill_id
                     LEFT JOIN OTHER_GODOWN_TRANSFER_DATE AS ogd ON pbi.bill_id = ogd.bill_id
