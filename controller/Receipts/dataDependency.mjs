@@ -107,6 +107,9 @@ const ReceiptDataDependency = () => {
                         WHERE 
                             pig.Cancel_status <> 0
                             AND a.Acc_Id = @Acc_Id
+                            AND pig.Do_Date >= (
+                            	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                            )
                     ) AS inv
                     WHERE inv.Paid_Amount < inv.Total_Invoice_value
                     UNION ALL
@@ -524,6 +527,7 @@ const ReceiptDataDependency = () => {
                     SELECT 
                         d.PR_Id AS journalId,
                         d.Dest_Item_Id AS productId,
+                        d.PRD_Id AS Arr_Id,
                         d.Dest_Goodown_Id,
                         d.Dest_Batch_Lot_No,
                         d.Dest_Qty AS quantity,

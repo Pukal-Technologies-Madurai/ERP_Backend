@@ -455,17 +455,18 @@ const PaymentMaster = () => {
                         .input('Debit_Ledger_Id', DR_CR_Acc_Id)
                         .input('pay_bill_id', itemDetails?.pay_bill_id)
                         .input('JournalBillType', itemDetails?.JournalBillType)
+                        .input('arr_id', itemDetails?.arr_id)
                         .input('item_id', itemDetails?.item_id)
                         .input('item_name', itemDetails?.item_name)
                         .input('expence_value', itemDetails?.expence_value)
                         .query(`
-                        INSERT INTO tbl_Payment_Costing_Info (
-                            payment_id, payment_no, payment_date, bill_type, Debit_Ledger_Id, 
-                            pay_bill_id, JournalBillType, item_id, item_name, expence_value
-                        ) VALUES (
-                            @payment_id, @payment_no, @payment_date, @bill_type, @Debit_Ledger_Id, 
-                            @pay_bill_id, @JournalBillType, @item_id, @item_name, @expence_value
-                        );`
+                            INSERT INTO tbl_Payment_Costing_Info (
+                                payment_id, payment_no, payment_date, bill_type, Debit_Ledger_Id, 
+                                pay_bill_id, JournalBillType, arr_id, item_id, item_name, expence_value
+                            ) VALUES (
+                                @payment_id, @payment_no, @payment_date, @bill_type, @Debit_Ledger_Id, 
+                                @pay_bill_id, @JournalBillType, @arr_id, @item_id, @item_name, @expence_value
+                            );`
                         );
 
                     const result = await request;

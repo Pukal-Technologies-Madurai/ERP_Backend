@@ -314,6 +314,7 @@ const PaymentDataDependency = () => {
 	                    pci.Debit_Ledger_Id,
 	                    pci.pay_bill_id,
 	                    pci.JournalBillType,
+	                    pci.arr_id,
 	                    pci.item_id,
 	                    pci.item_name,
 	                    pci.expence_value,
@@ -468,6 +469,7 @@ const PaymentDataDependency = () => {
                     SELECT 
                 		d.PR_Id AS journalId,
                 		d.Dest_Item_Id AS productId,
+                        d.PRD_Id AS Arr_Id,
                 		d.Dest_Goodown_Id,
                 		d.Dest_Batch_Lot_No,
                 		d.Dest_Qty AS quantity,
