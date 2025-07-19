@@ -18,6 +18,7 @@ PaymentRouter.post('/paymentMaster/searchStockJournal', paymentDependency.search
 PaymentRouter.get('/paymentMaster/search', paymentDependency.searchPaymentInvoice);
 PaymentRouter.get('/accountGroup', paymentDependency.getAccountGroups);
 PaymentRouter.get('/accounts', paymentDependency.getAccounts);
+PaymentRouter.get('/paymentPendingInvoices', paymentDependency.getPendingPayments);
 
 PaymentRouter.get('/reports/pendingReference', paymentReport.getPendingPaymentReference);
 PaymentRouter.get('/reports/accountsTransaction', paymentReport.getAccountsTransaction);

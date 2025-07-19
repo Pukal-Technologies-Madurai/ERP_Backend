@@ -110,37 +110,34 @@ const ReceiptDataDependency = () => {
                             AND pig.Do_Date >= (
                             	SELECT MAX(OB_Date) FROM tbl_OB_Date
                             )
+                        UNION ALL
+                            -- from opening balance
+                        SELECT 
+                            0 AS bill_id, 
+                            cb.bill_no, 
+                            cb.bill_date, 
+                            cb.Retailer_id,  
+                            0 AS bef_tax, 
+                            0 AS tot_tax, 
+                            cb.dr_amount, 
+                            'OB' AS dataSource,
+                        	COALESCE((
+                                SELECT SUM(pb.Credit_Amo) 
+                                FROM tbl_Receipt_Bill_Info AS pb
+                                JOIN tbl_Receipt_General_Info AS pgi
+                                    ON pgi.receipt_id = pb.receipt_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.receipt_bill_type = 1
+                                    AND pb.bill_id = 0
+                                    AND pb.bill_name = cb.bill_no
+                            ), 0) AS Paid_Amount
+                        FROM tbl_Ledger_Opening_Balance AS cb
+                        WHERE cb.OB_date >= (
+                        	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                        ) AND cb.Retailer_id = @Acc_Id AND cb.cr_amount = 0
                     ) AS inv
-                    WHERE inv.Paid_Amount < inv.Total_Invoice_value
-                    UNION ALL
-                    SELECT 
-                        0 AS bill_id, 
-                        cb.bill_no, 
-                        cb.bill_date, 
-                        cb.Retailer_id,  
-                        0 AS bef_tax, 
-                        0 AS tot_tax, 
-                        cb.dr_amount, 
-	                    'OB' AS dataSource,
-                    	COALESCE((
-                            SELECT SUM(pb.Credit_Amo) 
-                            FROM tbl_Receipt_Bill_Info AS pb
-                            JOIN tbl_Receipt_General_Info AS pgi
-                                ON pgi.receipt_id = pb.receipt_id
-                            WHERE 
-                                pgi.status <> 0
-                                AND pgi.receipt_bill_type = 1
-                                AND pb.bill_id = 0
-                                AND pb.bill_name = cb.bill_no
-                        ), 0) AS Paid_Amount
-                    FROM tbl_Ledger_Opening_Balance AS cb
-                    LEFT JOIN tbl_Retailers_Master AS r
-                    	ON r.Retailer_Id = cb.Retailer_id
-                    JOIN tbl_Account_Master AS a
-                        ON a.ERP_Id = r.ERP_Id
-                    WHERE cb.OB_date >= (
-                    	SELECT MAX(OB_Date) FROM tbl_OB_Date
-                    ) AND a.Acc_Id = @Acc_Id;`
+                    WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
                 );
 
             const result = await request;
@@ -166,7 +163,7 @@ const ReceiptDataDependency = () => {
                         FROM tbl_Receipt_Bill_Info AS pbi
                         WHERE pbi.receipt_id = @receipt_id
                     ), 
-                    -- CTE for Purchase Invoice
+                    -- CTE for Sales Invoice
                     SALES_OPENING_BALANCE_DATE AS (
                         SELECT 
                             0 AS bill_id, 

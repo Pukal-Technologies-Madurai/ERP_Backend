@@ -798,59 +798,6 @@ const PurchaseOrder = () => {
         }
     }
 
-    const getPendingPayments = async (req, res) => {
-        try {
-            const { Acc_Id, reqDate, Fromdate, Todate } = req.query;
-
-            if (!checkIsNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
-
-            const request = new sql.Request()
-                .input('Acc_Id', Acc_Id)
-                .input('reqDate', reqDate)
-                .input('Fromdate', Fromdate)
-                .input('Todate', Todate)
-                .query(`
-                    SELECT inv.*
-                    FROM (
-                        SELECT 
-                            pig.PIN_Id,
-                            pig.Po_Inv_No,
-                            pig.Po_Inv_Date,
-                            pig.Retailer_Id,
-                            pig.Total_Before_Tax,
-                            pig.Total_Tax, 
-                            pig.Total_Invoice_value,
-                            COALESCE((
-                                SELECT SUM(pb.Debit_Amo) 
-                                FROM tbl_Payment_Bill_Info AS pb
-                                JOIN tbl_Payment_General_Info AS pgi
-                                    ON pgi.pay_id = pb.payment_id
-                                WHERE 
-                                    pgi.status <> 0
-                                    AND pgi.pay_bill_type = 1
-                                    AND pb.pay_bill_id = pig.PIN_Id
-                                    AND pb.bill_name = pig.Po_Inv_No
-                            ), 0) AS Paid_Amount
-                        FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
-                        JOIN tbl_Retailers_Master AS r
-                        ON r.Retailer_Id = pig.Retailer_Id
-                        JOIN tbl_Account_Master AS a
-                        ON a.ERP_Id = R.ERP_Id
-                        WHERE 
-                            pig.Cancel_status = 0
-                            ${checkIsNumber(Acc_Id) ? ' AND a.Acc_Id = @Acc_Id ' : ''}
-                    ) AS inv
-                    WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
-                );
-
-            const result = await request;
-
-            sentData(res, result.recordset);
-        } catch (e) {
-            servError(e, res);
-        }
-    }
-
     const getInvolvedStaffs = async (req, res) => {
         try {
 
@@ -892,7 +839,6 @@ const PurchaseOrder = () => {
         getPurchaseOrder,
         getVoucherType,
         getStockItemLedgerName,
-        getPendingPayments,
         getInvolvedStaffs
     }
 }

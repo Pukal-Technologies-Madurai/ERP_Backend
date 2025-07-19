@@ -9,8 +9,6 @@ PurchaseRoute.put('/purchaseOrder', purchaseOrder.editPurchaseOrder);
 PurchaseRoute.delete('/purchaseOrder', purchaseOrder.cancelPurchaseOrder);
 PurchaseRoute.get('/purchaseOrder/involvedStaffs', purchaseOrder.getInvolvedStaffs);
 
-PurchaseRoute.get('/paymentPendingInvoices', purchaseOrder.getPendingPayments);
-
 PurchaseRoute.get('/voucherType', purchaseOrder.getVoucherType);
 PurchaseRoute.get('/stockItemLedgerName', purchaseOrder.getStockItemLedgerName);
 

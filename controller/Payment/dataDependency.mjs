@@ -108,6 +108,89 @@ const PaymentDataDependency = () => {
         }
     }
 
+    const getPendingPayments = async (req, res) => {
+        try {
+            const { Acc_Id, reqDate, Fromdate, Todate } = req.query;
+
+            if (!checkIsNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
+
+            const request = new sql.Request()
+                .input('Acc_Id', Acc_Id)
+                .input('reqDate', reqDate)
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    SELECT inv.*
+                    FROM (
+                        SELECT 
+                            pig.PIN_Id,
+                            pig.Po_Inv_No,
+                            pig.Po_Entry_Date AS Po_Inv_Date,
+                            pig.Retailer_Id,
+                            pig.Total_Before_Tax,
+                            pig.Total_Tax, 
+                            pig.Total_Invoice_value,
+                            'INV' AS dataSource,
+                            COALESCE((
+                                SELECT SUM(pb.Debit_Amo) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = pb.payment_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.pay_bill_type = 1
+                                    AND pb.pay_bill_id = pig.PIN_Id
+                                    AND pb.bill_name = pig.Po_Inv_No
+                            ), 0) AS Paid_Amount
+                        FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
+                        JOIN tbl_Retailers_Master AS r
+                        ON r.Retailer_Id = pig.Retailer_Id
+                        JOIN tbl_Account_Master AS a
+                        ON a.ERP_Id = R.ERP_Id
+                        WHERE 
+                            pig.Cancel_status = 0
+                            AND a.Acc_Id = @Acc_Id
+                            AND pig.Po_Entry_Date >= (
+                            	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                            )
+                        UNION ALL
+                        -- from purchase invoice
+                        SELECT 
+                            0 AS bill_id, 
+                            cb.bill_no, 
+                            cb.bill_date, 
+                            cb.Retailer_id,  
+                            0 AS bef_tax, 
+                            0 AS tot_tax, 
+                            cb.cr_amount, 
+                            'OB' AS dataSource,
+                        	COALESCE((
+                                SELECT SUM(pb.Debit_Amo) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = pb.payment_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.pay_bill_type = 1
+                                    AND pb.pay_bill_id = 0
+                                    AND pb.bill_name = cb.bill_no
+                            ), 0) AS Paid_Amount
+                        FROM tbl_Ledger_Opening_Balance AS cb
+                        WHERE cb.OB_date >= (
+                        	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                        ) AND cb.Retailer_id = @Acc_Id AND cb.dr_amount = 0
+                    ) AS inv
+                    WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     const getPaymentInvoiceBillInfo = async (req, res) => {
         try {
             const { payment_id, pay_bill_type = 1 } = req.query;
@@ -122,7 +205,30 @@ const PaymentDataDependency = () => {
                     		pbi.*
                     	FROM tbl_Payment_Bill_Info AS pbi
                     	WHERE pbi.payment_id = @payment_id
-                    ), 
+                    ),
+                    -- CTE for purchase Invoice OB
+                    PURCHASE_OPENING_BALANCE_DATE AS (
+                        SELECT 
+                            0 AS bill_id, 
+                            bill_date,
+                    		bill_no,
+                            COALESCE((
+                                SELECT SUM(refAmount.Debit_Amo)
+                                FROM tbl_Payment_Bill_Info AS refAmount
+                                LEFT JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = refAmount.payment_id
+                                WHERE 
+                                    ref.bill_no = refAmount.bill_name
+                                    AND refAmount.JournalBillType = 'PURCHASE INVOICE'
+                                    AND pgi.status <> 0
+                            ), 0) AS TotalPaidAmount
+                        FROM tbl_Ledger_Opening_Balance AS ref
+                        WHERE bill_no IN (
+                            SELECT DISTINCT bill_name 
+                            FROM PAYMENT_BILL_INFO 
+                            WHERE bill_type = 1 AND JournalBillType = 'PURCHASE INVOICE'
+                        )
+                    ),  
                     -- CTE for Purchase Invoice
                     PURCHASE_INVOICE_DATE AS (
                     	SELECT 
@@ -216,6 +322,7 @@ const PaymentDataDependency = () => {
                     	pbi.*,
                     	-- Resolve the referenceBillDate
                     	CASE 
+                            WHEN pbi.bill_type = 1 AND pbi.JournalBillType = 'PURCHASE INVOICE' AND pob.bill_no IS NOT NULL THEN pob.bill_date
                     		WHEN pbi.bill_type = 1 AND pbi.JournalBillType = 'PURCHASE INVOICE' THEN pid.PurchaseInvoiceDate
                     		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'MATERIAL INWARD' THEN mid.TripDate
                     		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'OTHER GODOWN' THEN ogd.TripDate
@@ -224,6 +331,7 @@ const PaymentDataDependency = () => {
                     	END AS referenceBillDate,
                     	-- Resolve the TotalPaidAmount per type
                     	CASE 
+                            WHEN pbi.bill_type = 1 AND pbi.JournalBillType = 'PURCHASE INVOICE' AND pob.bill_no IS NOT NULL THEN pob.TotalPaidAmount
                     		WHEN pbi.bill_type = 1 AND pbi.JournalBillType = 'PURCHASE INVOICE' THEN pid.TotalPaidAmount
                     		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'MATERIAL INWARD' THEN mid.TotalPaidAmount
                     		WHEN pbi.bill_type = 3 AND pbi.JournalBillType = 'OTHER GODOWN' THEN ogd.TotalPaidAmount
@@ -231,6 +339,7 @@ const PaymentDataDependency = () => {
                     		ELSE NULL
                     	END AS totalPaidAmount
                     FROM PAYMENT_BILL_INFO AS pbi
+                    LEFT JOIN PURCHASE_OPENING_BALANCE_DATE AS pob ON pbi.bill_name = pob.bill_no
                     LEFT JOIN PURCHASE_INVOICE_DATE AS pid ON pbi.pay_bill_id = pid.pay_bill_id
                     LEFT JOIN MATERIAL_INWARD_DATE AS mid ON pbi.pay_bill_id = mid.pay_bill_id
                     LEFT JOIN OTHER_GODOWN_TRANSFER_DATE AS ogd ON pbi.pay_bill_id = ogd.pay_bill_id
@@ -616,6 +725,7 @@ const PaymentDataDependency = () => {
         getAccountGroups,
         getAccounts,
         searchPaymentInvoice,
+        getPendingPayments,
         getPaymentInvoiceBillInfo,
         getPaymentInvoiceCostingInfo,
         searchStockJournal,
