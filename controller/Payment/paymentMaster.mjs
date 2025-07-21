@@ -1,5 +1,5 @@
 import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isArray, toArray, toNumber } from '../../helper_functions.mjs';
+import { ISOString, checkIsNumber, createPadString, isArray, randomNumber, toArray, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql'
 
@@ -173,6 +173,8 @@ const PaymentMaster = () => {
 
             const payment_invoice_no = Voucher_Code + "/" + createPadString(payment_sno, 6) + '/' + Year_Desc;
 
+            const Alter_Id = randomNumber(6, 8);
+
             const request = new sql.Request()
                 .input('pay_id', pay_id)
                 .input('year_id', Year_Id)
@@ -195,19 +197,20 @@ const PaymentMaster = () => {
                 .input('bank_date', bank_date ? bank_date : null)
                 .input('status', status)
                 .input('created_by', created_by)
+                .input('Alter_Id', Alter_Id)
                 .query(`
                     INSERT INTO tbl_Payment_General_Info (
                         pay_id, year_id, payment_sno, payment_invoice_no, payment_voucher_type_id, payment_date, pay_bill_type, is_new_ref,
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
                         check_no, check_date, bank_name, bank_date, 
-                        remarks, status, created_by, created_on
+                        remarks, status, created_by, created_on, Alter_Id
                     ) VALUES (
                         @pay_id, @year_id, @payment_sno, @payment_invoice_no, @payment_voucher_type_id, @payment_date, @pay_bill_type, @is_new_ref,
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
                         @check_no, @check_date, @bank_name, @bank_date,
-                        @remarks, @status, @created_by, GETDATE() 
+                        @remarks, @status, @created_by, GETDATE(), @Alter_Id
                     )`
                 );
 
@@ -287,7 +290,7 @@ const PaymentMaster = () => {
                 return invalidInput(res, 'Enter Required Fields', { errors });
             }
 
-
+            const Alter_Id = randomNumber(6, 8);
             // update values
 
             const request = new sql.Request(transaction)
@@ -307,6 +310,7 @@ const PaymentMaster = () => {
                 .input('remarks', remarks)
                 .input('status', status)
                 .input('altered_by', altered_by)
+                .input('Alter_Id', Alter_Id)
                 .query(`
                     UPDATE tbl_Payment_General_Info
                     SET 
@@ -324,7 +328,8 @@ const PaymentMaster = () => {
                         bank_date = @bank_date,
                         remarks = @remarks,
                         status = @status,
-                        altered_by = @altered_by
+                        altered_by = @altered_by,
+                        Alter_Id = @Alter_Id
                     WHERE
                         pay_id = @pay_id;`
                 );

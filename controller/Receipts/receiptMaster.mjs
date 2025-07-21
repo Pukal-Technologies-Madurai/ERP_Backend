@@ -1,5 +1,5 @@
 import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isArray, toArray, toNumber } from '../../helper_functions.mjs';
+import { ISOString, checkIsNumber, createPadString, isArray, randomNumber, toArray, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql'
 
@@ -95,7 +95,7 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount,
-                check_no, check_date, bank_name, bank_date,
+                check_no, check_date, bank_name, bank_date, is_new_ref = 0,
                 BillsDetails = []
             } = req.body;
 
@@ -173,6 +173,8 @@ const ReceiptMaster = () => {
 
             const receipt_invoice_no = Voucher_Code + "/" + createPadString(receipt_sno, 6) + '/' + Year_Desc;
 
+            const Alter_Id = randomNumber(6, 8);
+
             const request = new sql.Request()
                 .input('receipt_id', receipt_id)
                 .input('year_id', Year_Id)
@@ -194,6 +196,8 @@ const ReceiptMaster = () => {
                 .input('bank_date', bank_date ? bank_date : null)
                 .input('status', status)
                 .input('created_by', created_by)
+                .input('is_new_ref', is_new_ref)
+                .input('Alter_Id', Alter_Id)
                 .query(`
                     INSERT INTO tbl_Receipt_General_Info (
                         receipt_id, year_id, receipt_sno, receipt_invoice_no, 
@@ -201,14 +205,14 @@ const ReceiptMaster = () => {
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
                         check_no, check_date, bank_name, bank_date, 
-                        remarks, status, created_by, created_on
+                        remarks, status, created_by, created_on, is_new_ref, Alter_Id
                     ) VALUES (
                         @receipt_id, @year_id, @receipt_sno, @receipt_invoice_no, 
                         @receipt_voucher_type_id, @receipt_date, @receipt_bill_type, 
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
                         @check_no, @check_date, @bank_name, @bank_date,
-                        @remarks, @status, @created_by, GETDATE() 
+                        @remarks, @status, @created_by, GETDATE(), @is_new_ref, @Alter_Id
                     )`
                 );
 
@@ -286,7 +290,7 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount, altered_by,
-                check_no, check_date, bank_name, bank_date
+                check_no, check_date, bank_name, bank_date, is_new_ref
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -306,6 +310,8 @@ const ReceiptMaster = () => {
 
             await transaction.begin();
 
+            const Alter_Id = randomNumber(6, 8);
+
             // update values
 
             const request = new sql.Request(transaction)
@@ -324,6 +330,8 @@ const ReceiptMaster = () => {
                 .input('remarks', remarks)
                 .input('status', status)
                 .input('altered_by', altered_by)
+                .input('is_new_ref', is_new_ref)
+                .input('Alter_Id', Alter_Id)
                 .query(`
                     UPDATE tbl_Receipt_General_Info
                     SET 
@@ -340,7 +348,9 @@ const ReceiptMaster = () => {
                         bank_date = @bank_date,
                         remarks = @remarks,
                         status = @status,
-                        altered_by = @altered_by
+                        altered_by = @altered_by,
+                        is_new_ref = @is_new_ref,
+                        Alter_Id = @Alter_Id
                     WHERE
                         receipt_id = @receipt_id;`
                 );

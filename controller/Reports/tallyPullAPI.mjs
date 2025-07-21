@@ -138,7 +138,11 @@ const externalAPIReceipt = async (req, res) => {
         if (result.recordset.length > 0) {
             const receipt = JSON.parse(result.recordset[0]?.Receipt);
 
-            dataFound(res, toArray(receipt.Receipt));
+            dataFound(res, toArray(receipt.Receipt).map(receipt => ({
+                ...receipt,
+                billrefrence: JSON.parse(receipt.billrefrence),
+            })));
+
         } else {
             noData(res)
         }
