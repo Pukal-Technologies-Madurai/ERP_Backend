@@ -126,7 +126,7 @@ const PaymentDataDependency = () => {
                             pig.PIN_Id,
                             pig.Po_Inv_No,
                             pig.Po_Entry_Date AS Po_Inv_Date,
-                            pig.Retailer_Id,
+                            a.Acc_Id Retailer_Id,
                             pig.Total_Before_Tax,
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,

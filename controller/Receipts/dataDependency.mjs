@@ -83,7 +83,7 @@ const ReceiptDataDependency = () => {
                             pig.Do_Id,
                             pig.Do_Inv_No,
                             pig.Do_Date,
-                            pig.Retailer_Id,
+                            a.Acc_Id Retailer_Id,
                             pig.Total_Before_Tax,
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,

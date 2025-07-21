@@ -12,7 +12,7 @@ const CustomerAPIs = () => {
             if (!checkIsNumber(UserId)) {
                 return res.status(400).json({ data: [], success: false, message: 'UserId is required', isCustomer: false });
             }
-            
+
             const result = await new sql.Request()
                 .input('UserId', UserId)
                 .query(`SELECT Cust_Id FROM tbl_Customer_Master WHERE User_Mgt_Id = @UserId`);
@@ -90,7 +90,7 @@ const CustomerAPIs = () => {
             if (!checkIsNumber(UserId)) {
                 return invalidInput(res, 'UserId is required')
             }
-            
+
             const result = await new sql.Request()
                 .input('UserId', UserId)
                 .query('SELECT Cust_Id FROM tbl_Customer_Master WHERE User_Mgt_Id = @UserId');
@@ -160,19 +160,134 @@ const CustomerAPIs = () => {
 
             if (LedgerArray.length === 0) return invalidInput(res, 'Select Ledger');
 
-            const recordsetArray = await Promise.all(LedgerArray.map(async (obj) => {
-                const getPaymentDetails = new sql.Request();
-                getPaymentDetails.input('Acc_Id', obj.Ledger_Tally_Id);
-                getPaymentDetails.input('Fromdate', reqDate);
+            // const recordsetArray = await Promise.all(LedgerArray.map(async (obj) => {
+            //     const getPaymentDetails = new sql.Request();
+            //     getPaymentDetails.input('Acc_Id', obj.Ledger_Tally_Id);
+            //     getPaymentDetails.input('Fromdate', reqDate);
 
-                try {
-                    const ResData = await getPaymentDetails.execute('Online_Payment_Invoice_List_TALLY');
-                    return ResData.recordset;
-                } catch (e) {
-                    console.error(e);
-                    return [];
-                }
-            }));
+            //     try {
+            //         const ResData = await getPaymentDetails.execute('Online_Payment_Invoice_List_TALLY');
+            //         return ResData.recordset;
+            //     } catch (e) {
+            //         console.error(e);
+            //         return [];
+            //     }
+            // }));
+
+            const request = await new sql.Request()
+                .input('reqDate', reqDate)
+                .input('Acc_Id', toArray(LedgerArray).map(item => item.Ledger_Tally_Id).join(', '))
+                .query(`
+                    WITH LedgerList AS (
+                    	SELECT TRY_CAST(value AS INT) AS LedgerId
+                        FROM STRING_SPLIT(@Acc_Id, ',')
+                    	WHERE TRY_CAST(value AS INT) IS NOT NULL
+                    ), LatestOBDate AS (
+                        SELECT MAX(OB_Date) AS max_ob_date FROM tbl_OB_Date
+                    ), LedgerDetails AS (
+                        SELECT 
+                            lol.Ledger_Tally_Id,
+                    		lol.Ledger_Name,
+                    		lol.Ref_Brokers,
+                    		r.ERP_Id,
+                    		a.Acc_Id
+                        FROM tbl_Ledger_LOL lol
+                    	JOIN tbl_Retailers_Master r ON r.ERP_Id = lol.Ledger_Tally_Id
+                    	JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
+                        WHERE (
+                            @Acc_Id IS NULL 
+                            OR LTRIM(RTRIM(@Acc_Id)) = '' 
+                    		OR lol.Ledger_Tally_Id IN (SELECT DISTINCT LedgerId FROM LedgerList)
+                    	) 
+                    ),
+                    Sales_Invoice AS (
+                        SELECT 
+                            pig.Do_Id AS tally_id,
+                            pig.Do_Inv_No AS invoice_no,
+                            pig.Do_Date AS invoice_date,
+                            a.Acc_Id AS Retailer_Id,
+                            pig.Total_Invoice_value,
+                            'INV' AS dataSource,
+                            COALESCE((
+                                SELECT SUM(pb.Credit_Amo)
+                                FROM tbl_Receipt_Bill_Info pb
+                                JOIN tbl_Receipt_General_Info pgi
+                                    ON pgi.receipt_id = pb.receipt_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.receipt_bill_type = 1
+                                    AND pb.bill_id = pig.Do_Id
+                                    AND pb.bill_name = pig.Do_Inv_No
+                            ), 0) AS Paid_Amount,
+                    		b.BranchName Bill_Company
+                        FROM tbl_Sales_Delivery_Gen_Info pig
+                        JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
+                        JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
+                    	JOIN tbl_Branch_Master AS b ON b.BranchId = pig.Branch_Id
+                        WHERE 
+                            pig.Cancel_status <> 0
+                            AND pig.Do_Date >= (SELECT max_ob_date FROM LatestOBDate)
+                            AND pig.Do_Date <= @reqDate
+                            AND a.ERP_Id IN (SELECT DISTINCT ERP_Id FROM LedgerDetails)
+                    ),
+                    Opening_Balance AS (
+                        SELECT 
+                            0 AS tally_id,
+                            cb.bill_no AS invoice_no,
+                            cb.bill_date AS invoice_date,
+                            cb.Retailer_id AS Retailer_Id,
+                            cb.dr_amount AS Total_Invoice_value,
+                            'OB' AS dataSource,
+                            COALESCE((
+                                SELECT SUM(pb.Credit_Amo)
+                                FROM tbl_Receipt_Bill_Info pb
+                                JOIN tbl_Receipt_General_Info pgi
+                                    ON pgi.receipt_id = pb.receipt_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.receipt_bill_type = 1
+                                    AND pb.bill_id = 0
+                                    AND pb.bill_name = cb.bill_no
+                            ), 0) AS Paid_Amount,
+                    		cb.Bill_Company
+                        FROM tbl_Ledger_Opening_Balance cb
+                        WHERE 
+                            cb.OB_date >= (SELECT max_ob_date FROM LatestOBDate)
+                            AND cb.OB_date <= @reqDate
+                            AND cb.cr_amount = 0
+                            AND cb.Retailer_id IN (
+                                SELECT a.Acc_Id
+                                FROM tbl_Account_Master a
+                                WHERE a.ERP_Id IN (SELECT DISTINCT ERP_Id FROM LedgerDetails)
+                            )
+                    ),
+                    Combined_Invoice AS (
+                        SELECT * FROM Sales_Invoice
+                        UNION ALL
+                        SELECT * FROM Opening_Balance
+                    )
+                    SELECT 
+                    	DISTINCT inv.invoice_no,
+                        inv.tally_id,
+                    	inv.invoice_date,
+                    	inv.Retailer_Id,
+                    	inv.Total_Invoice_value,
+                    	inv.dataSource,
+                    	inv.Paid_Amount,
+                    	inv.Bill_Company,
+                        r.Retailer_Name,
+                        lol.Ref_Brokers,
+                    	COALESCE(inv.Total_Invoice_value - inv.Paid_Amount, 0) Bal_Amount
+                    FROM Combined_Invoice inv
+                    JOIN tbl_Account_Master a ON a.Acc_Id = inv.Retailer_Id
+                    JOIN tbl_Retailers_Master r ON r.ERP_Id = a.ERP_Id
+                    LEFT JOIN tbl_Ledger_LOL lol ON lol.Ledger_Tally_Id = r.ERP_Id
+                    WHERE 
+                        inv.Paid_Amount < inv.Total_Invoice_value
+                    ORDER BY inv.invoice_date;`
+                );
+
+            const recordsetArray = request.recordset;
 
             const flattenedArray = recordsetArray.flat();
             res.status(200).json({ data: flattenedArray, success: true, message: '', isCustomer: true });
