@@ -6,7 +6,7 @@ import sql from 'mssql';
 
 const getDefaultAccounts = async (req, res) => {
     try {
-        const { Type = '' } = req.query;
+        const { Type = '', AC_Reason = '' } = req.query;
 
         const request = new sql.Request()
             .query(`
@@ -25,7 +25,8 @@ const getDefaultAccounts = async (req, res) => {
                     ON ag.Group_Id = am.Group_Id
                 WHERE 
                     dc.Acc_Id IS NOT NULL
-                    ${Type ? ' AND dc.Type = @Type ' : ''}`
+                    ${Type ? ' AND dc.Type = @Type ' : ''}
+                    ${AC_Reason ? ' AND dc.AC_Reason = @AC_Reason ' : ''}`
             );
 
         const result = await request;

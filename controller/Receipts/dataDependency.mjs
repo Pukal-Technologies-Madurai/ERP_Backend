@@ -692,6 +692,16 @@ const ReceiptDataDependency = () => {
         }
     }
 
+    // const retailerWithAccountMaster = async (req, res) => {
+    //     try {
+    //         const request = await new sql.Request()
+    //             .query(``);
+
+    //     } catch (e) {
+    //         servError(e, res);
+    //     }
+    // }
+
     return {
         searchReceiptInvoice,
         getPendingReceipts,
