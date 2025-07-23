@@ -9,6 +9,7 @@ import tallyPullAPI from '../controller/Reports/tallyPullAPI.mjs';
 import customerClosingStock from '../controller/Reports/customerClosingStock.mjs';
 import storageStockReport from '../controller/Reports/storageStockReport.mjs';
 import costCenterReports from '../controller/Reports/costCenterReports.mjs';
+import nagalReports from '../controller/Reports/nakalReports.mjs'
 
 const ReportRouter = express.Router();
 
@@ -76,6 +77,10 @@ ReportRouter.get('/itemGroup/stockInfo/grouped', storageStockReport.StockGroupWi
 ReportRouter.get('/brokerageReport/getInvolvedBroker', costCenterReports.getBrokerInvolvedInPurchase);
 ReportRouter.get('/brokerageReport/purchaseInvoice', costCenterReports.purchaseBrokerageReport);
 ReportRouter.get('/brokerageReport/salesInvoice', costCenterReports.salesDeliveryBrokerageReport);
+
+ReportRouter.get('/brokerageNakalReport/sales', nagalReports.nakalSalesReport)
+ReportRouter.post('/brokerageNagal/create', nagalReports.postNakalReport)
+ReportRouter.get('/brokerageNagal/list', nagalReports.getNakalReport)
 
 
 

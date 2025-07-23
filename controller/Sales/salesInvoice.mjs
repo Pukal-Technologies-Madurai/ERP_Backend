@@ -15,8 +15,8 @@ const SalesInvoice = () => {
 
         try {
             const {
-                Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
-                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0,
+                Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status = 1,
+                Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
                 Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
             } = req.body;
 
@@ -160,7 +160,7 @@ const SalesInvoice = () => {
             const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
             const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
             const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
-            const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
+            // const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
 
             await transaction.begin();
 
@@ -255,7 +255,7 @@ const SalesInvoice = () => {
                     .input('Unit_Id', product.Unit_Id ?? '')
                     .input('Act_unit_Id', isSO ? product.Act_unit_Id : product.Unit_Id)
                     .input('Alt_Act_Unit_Id', isSO ? product.Alt_Act_Unit_Id : product.Unit_Id)
-                    .input('Unit_Name', product.Units ?? '')
+                    .input('Unit_Name', product.Unit_Name ?? '')
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', gstPercentage)
                     .input('Cgst', cgstPer ?? 0)
@@ -554,7 +554,7 @@ const SalesInvoice = () => {
         try {
             const {
                 Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
-                Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0,
+                Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
                 Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
             } = req.body;
 
@@ -646,7 +646,7 @@ const SalesInvoice = () => {
             const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
             const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
             const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
-            const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
+            // const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
 
             await transaction.begin();
 
