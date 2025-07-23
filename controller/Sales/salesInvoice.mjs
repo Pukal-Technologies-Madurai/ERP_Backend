@@ -1024,6 +1024,34 @@ const SalesInvoice = () => {
         }
     }
 
+    const liveSalesCreation = async (req, res) => {
+        try {
+            const {
+                Retailer_Id, 
+                Sales_Person_Id, 
+                Branch_Id,
+                Narration = null, 
+                Created_by, 
+                Product_Array = [], 
+                GST_Inclusive = 1, 
+                IS_IGST = 0, 
+                VoucherType = '',
+                Staff_Involved_List = []
+            } = req.body;
+
+            const So_Date = ISOString(req?.body?.So_Date);
+            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+            const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
+
+            
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         createSalesInvoice,
         updateSalesInvoice,

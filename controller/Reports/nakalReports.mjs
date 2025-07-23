@@ -9,6 +9,8 @@ import {
 } from "../../helper_functions.mjs";
 import { getNextId } from "../../middleware/miniAPIs.mjs";
 
+
+
 const nakalSalesReport = async (req, res) => {
     try {
         const Fromdate = req.query?.FromDate
@@ -23,79 +25,67 @@ const nakalSalesReport = async (req, res) => {
             .input("Fromdate", sql.Date, Fromdate)
             .input("Todate", sql.Date, Todate)
             .input("broker", sql.Int, broker).query(`
-      SELECT DISTINCT
-        pigi.Do_Id, 
-        pigi.Do_Inv_No, 
-        pigi.Voucher_Type, 
-        pigi.Do_Date AS Date, 
-        pigi.Retailer_Id,
-        pigi.Narration,
-        ISNULL(r.Retailer_Name, 'Not found') AS Retailer_Name,
-        pisi.Item_Id AS Product_Id,
-        ISNULL(p.Product_Name, 'Not found') AS Product_Name,
-        CAST(ISNULL(pck.Pack, 0) AS DECIMAL(18, 2)) AS Pack,
-        ISNULL(pisi.Bill_Qty, 0) AS Bill_Qty,
-        ISNULL(pisi.Act_Qty, 0) AS Act_Qty,
-        ISNULL(pisi.Item_Rate, 0) AS Item_Rate,
-        ISNULL(pisi.Amount, 0) AS Amount,
-        ISNULL(br.Brokerage, 0) AS Brokerage,
-        ISNULL(br.Coolie, 0) AS Coolie,
-        CASE 
-          WHEN ISNULL(TRY_CAST(pck.Pack AS DECIMAL(18,2)), 0) = 0 THEN 0
-          WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0 THEN 0
-          WHEN pisi.Act_Qty IS NULL THEN 0
-          ELSE ISNULL(pisi.Act_Qty, 0) / CAST(ISNULL(pck.Pack, 0) AS DECIMAL(18,2))
+    WITH BrokerInfo AS (
+    SELECT 
+        s.Do_Id,
+        s.Emp_Id AS CostCenterId,
+        s.Emp_Type_Id AS CostTypeId,
+        cc.Cost_Category AS CostTypeGet,
+        ec.Cost_Center_Name AS CostCenterGet
+    FROM tbl_Sales_Delivery_Staff_Info s
+    JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = s.Emp_Type_Id
+    JOIN tbl_ERP_Cost_Center ec ON ec.Cost_Center_Id = s.Emp_Id
+    WHERE cc.Cost_Category LIKE '%BROKER%'
+)
+
+SELECT DISTINCT
+    pigi.Do_Id, 
+    pigi.Do_Inv_No, 
+    pigi.Voucher_Type, 
+    pigi.Do_Date AS Date, 
+    pigi.Retailer_Id,
+    pigi.Narration,
+    COALESCE(r.Retailer_Name, 'Not found') AS Retailer_Name,
+   CAST(ISNULL(pck.Pack, 0) AS DECIMAL(18, 2)) AS Pack,
+    pisi.Item_Id AS Product_Id,
+    COALESCE(p.Product_Name, 'Not found') AS Product_Name,
+   CASE 
+        WHEN ISNULL(TRY_CAST(pck.Pack AS DECIMAL(18,2)), 0) = 0 THEN 0
+        ELSE ISNULL(pisi.Act_Qty, 0) / CAST(ISNULL(pck.Pack, 0) AS DECIMAL(18,2))
         END AS displayQuantity,
-        (SELECT TOP 1 Emp_Id FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = pigi.Do_Id AND Emp_Type_Id IN 
-          (SELECT Cost_Category_Id FROM tbl_ERP_Cost_Category WHERE Cost_Category LIKE '%BROKER%')
-        ) AS CostCenterId,
-        COALESCE((SELECT TOP 1 Cost_Center_Name FROM tbl_ERP_Cost_Center WHERE Cost_Center_Id = 
-          (SELECT TOP 1 Emp_Id FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = pigi.Do_Id AND Emp_Type_Id IN 
-            (SELECT Cost_Category_Id FROM tbl_ERP_Cost_Category WHERE Cost_Category LIKE '%BROKER%')
-          )
-        ), 'Not found') AS CostCenterGet,
-        (SELECT TOP 1 Emp_Type_Id FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = pigi.Do_Id AND Emp_Type_Id IN 
-          (SELECT Cost_Category_Id FROM tbl_ERP_Cost_Category WHERE Cost_Category LIKE '%BROKER%')
-        ) AS CostTypeId,
-        COALESCE((SELECT TOP 1 Cost_Category FROM tbl_ERP_Cost_Category WHERE Cost_Category_Id = 
-          (SELECT TOP 1 Emp_Type_Id FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = pigi.Do_Id AND Emp_Type_Id IN 
-            (SELECT Cost_Category_Id FROM tbl_ERP_Cost_Category WHERE Cost_Category LIKE '%BROKER%')
-          )
-        ), 'Not found') AS CostTypeGet,
-        COALESCE(v.Voucher_Type, 'Not found') AS VoucherGet,
-        ISNULL(nd.Vilaivasi_Rate, 0) AS Vilaivasi_Rate,
-        ISNULL(nd.Vilai_Vasi, 0) AS Vilai_Vasi,
-        ISNULL(nd.Brok_Rate, 0) AS Brok_Rate,
-        ISNULL(nd.Brok_Amt, 0) AS Brok_Amt,
-        ISNULL(nd.Coolie_Rate, 0) AS Coolie_Rate,
-        ISNULL(nd.Coolie_Amt, 0) AS Coolie_Amt
-      FROM tbl_Sales_Delivery_Gen_Info AS pigi
-      LEFT JOIN tbl_Retailers_Master AS r
-          ON r.Retailer_Id = pigi.Retailer_Id
-      LEFT JOIN tbl_Sales_Delivery_Stock_Info AS pisi
-          ON pisi.Delivery_Order_Id = pigi.Do_Id
-      LEFT JOIN tbl_Product_Master AS p
-          ON p.Product_Id = pisi.Item_Id
-      LEFT JOIN tbl_Pack_Master AS pck
-          ON pck.Pack_Id = p.Pack_Id
-      LEFT JOIN tbl_Voucher_Type AS v
-          ON v.Vocher_Type_Id = pigi.Voucher_Type
-      LEFT JOIN tbl_Brokerage as br
-          ON br.Product_Id = pisi.Item_Id
-      LEFT JOIN tbl_Nakal_Data nd
-          ON nd.Do_Id = pigi.Do_Id
-          AND nd.Product_Id = pisi.Item_Id
-      WHERE 
-          pigi.Cancel_status != 0
-          AND nd.Do_Id IS NULL 
-          AND pigi.Do_Date BETWEEN @Fromdate AND @Todate
-          AND EXISTS (
-            SELECT 1 FROM tbl_Sales_Delivery_Staff_Info s
-            JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = s.Emp_Type_Id
-            WHERE s.Do_Id = pigi.Do_Id
-            AND cc.Cost_Category LIKE '%BROKER%'
-            ${checkIsNumber(broker) ? " AND s.Emp_Id = @broker " : ""}
-          )`);
+    COALESCE(pisi.Bill_Qty, 0) AS Bill_Qty,
+    COALESCE(pisi.Act_Qty, 0) AS Act_Qty,
+    COALESCE(pisi.Item_Rate, 0) AS Item_Rate,
+    COALESCE(pisi.Amount, 0) AS Amount,
+    COALESCE(br.Brokerage, 0) AS Brokerage,
+    COALESCE(br.Coolie, 0) AS Coolie,
+    bi.CostCenterId,
+    COALESCE(bi.CostCenterGet, 'Not found') AS CostCenterGet,
+    bi.CostTypeId,
+    COALESCE(bi.CostTypeGet, 'Not found') AS CostTypeGet,
+    COALESCE(v.Voucher_Type, 'Not found') AS VoucherGet,
+    COALESCE(nd.Vilaivasi_Rate, 0) AS Vilaivasi_Rate,
+    COALESCE(nd.Vilai_Vasi, 0) AS Vilai_Vasi,
+    COALESCE(nd.Brok_Rate, 0) AS Brok_Rate,
+    COALESCE(nd.Brok_Amt, 0) AS Brok_Amt,
+    COALESCE(nd.Coolie_Rate, 0) AS Coolie_Rate,
+    COALESCE(nd.Coolie_Amt, 0) AS Coolie_Amt
+FROM tbl_Sales_Delivery_Gen_Info AS pigi
+LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pigi.Retailer_Id
+LEFT JOIN tbl_Sales_Delivery_Stock_Info AS pisi ON pisi.Delivery_Order_Id = pigi.Do_Id
+LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = pisi.Item_Id
+LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id=p.Pack_Id
+LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pigi.Voucher_Type
+LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = pisi.Item_Id
+LEFT JOIN tbl_Nakal_Data nd ON nd.Do_Id = pigi.Do_Id AND nd.Product_Id = pisi.Item_Id
+LEFT JOIN BrokerInfo bi ON bi.Do_Id = pigi.Do_Id
+WHERE 
+    pigi.Cancel_status != 0
+    AND nd.Do_Id IS NULL 
+   AND pigi.Do_Date BETWEEN @Fromdate AND @Todate
+    AND bi.Do_Id IS NOT NULL
+    ${checkIsNumber(broker) ? " AND bi.CostCenterId = @broker " : ""}
+          `);
 
         const result = await request;
         sentData(res, toArray(result.recordset));
@@ -103,6 +93,7 @@ const nakalSalesReport = async (req, res) => {
         servError(e, res);
     }
 };
+
 
 const postNakalReport = async (req, res) => {
     try {
@@ -222,7 +213,7 @@ const getNakalReport = async (req, res) => {
     SUM(ISNULL(outerNk.Vilai_Vasi, 0)) AS Broker_Exp,
     SUM(ISNULL(outerNk.Vilaivasi_Rate,0)) AS VilaiVasi,
     COUNT(outerNk.Broker_Id) AS Total_Bags,
-    (
+    COALESCE((
       SELECT
         rm.Retailer_Name,
         LL.Ledger_Name,
@@ -260,7 +251,7 @@ const getNakalReport = async (req, res) => {
         ${item && !isNaN(item) ? "AND  pm.Product_Id = @item" : ""} 
       ORDER BY nd.Date DESC, nd.Do_Inv_No
       FOR JSON PATH
-    ) AS Items
+    ), '[]') AS Items
 
   FROM tbl_Nakal_Data outerNk
   LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = outerNk.Broker_Id
@@ -297,7 +288,6 @@ const getNakalReport = async (req, res) => {
         servError(e, res);
     }
 };
-
 export default {
     nakalSalesReport,
     postNakalReport,

@@ -161,7 +161,6 @@ const CustomerAPIs = () => {
             if (LedgerArray.length === 0) return invalidInput(res, 'Select Ledger');
 
             if (stringCompare(source, 'TALLY')) {
-                console.log('TALLY')
                 const recordsetArray = await Promise.all(LedgerArray.map(async (obj) => {
                     const getPaymentDetails = new sql.Request();
                     getPaymentDetails.input('Acc_Id', obj.Ledger_Tally_Id);
@@ -180,7 +179,6 @@ const CustomerAPIs = () => {
                 return res.status(200).json({ data: flattenedArray, success: true, message: '', isCustomer: true });
 
             } else {
-                console.log('ERP')
                 const request = await new sql.Request()
                     .input('reqDate', reqDate)
                     .input('Acc_Id', toArray(LedgerArray).map(item => item.Ledger_Tally_Id).join(', '))
