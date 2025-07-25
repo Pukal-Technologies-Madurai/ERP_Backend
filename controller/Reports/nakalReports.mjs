@@ -2,14 +2,10 @@ import sql from "mssql";
 import { sentData, servError, success } from "../../res.mjs";
 import {
     checkIsNumber,
-    Division,
     ISOString,
     toArray,
-    toNumber,
 } from "../../helper_functions.mjs";
 import { getNextId } from "../../middleware/miniAPIs.mjs";
-
-
 
 const nakalSalesReport = async (req, res) => {
     try {
@@ -37,7 +33,6 @@ const nakalSalesReport = async (req, res) => {
     JOIN tbl_ERP_Cost_Center ec ON ec.Cost_Center_Id = s.Emp_Id
     WHERE cc.Cost_Category LIKE '%BROKER%'
 )
-
 SELECT DISTINCT
     pigi.Do_Id, 
     pigi.Do_Inv_No, 
@@ -93,7 +88,6 @@ WHERE
         servError(e, res);
     }
 };
-
 
 const postNakalReport = async (req, res) => {
     try {
@@ -184,7 +178,7 @@ const postNakalReport = async (req, res) => {
 
 const getNakalReport = async (req, res) => {
     try {
-        const { FromDate, ToDate, broker, ledger, item } = req.query;
+        const { FromDate, ToDate, broker, ledger, item, vilaivasiFilter } = req.query;
         const request = new sql.Request();
 
         if (FromDate) request.input("FromDate", sql.Date, new Date(FromDate));
@@ -216,7 +210,7 @@ const getNakalReport = async (req, res) => {
     COALESCE((
       SELECT
         rm.Retailer_Name,
-        LL.Ledger_Name,
+        ll.Ledger_Name,
         ll.Ledger_Tally_Id,
         ll.Ledger_Alias,
         nd.Do_Inv_No,
@@ -230,11 +224,11 @@ const getNakalReport = async (req, res) => {
 	    	nd.Brok_Amt,
 		    nd.Coolie_Rate,
 		    nd.Coolie_Amt,
-        CASE 
-          WHEN ISNULL(TRY_CAST(nd.Pack AS DECIMAL(18,2)), 0) = 0 THEN 0
-          WHEN nd.Act_Qty IS NULL THEN 0
-          ELSE ISNULL(nd.Act_Qty, 0) / CAST(ISNULL(nd.Pack, 0) AS DECIMAL(18,2))
-        END AS QTY,
+         CASE 
+    WHEN ISNULL(TRY_CAST(nd.Pack AS DECIMAL(18,2)), 0) = 0 THEN 0
+    WHEN nd.Act_Qty IS NULL THEN 0
+    ELSE ISNULL(nd.Act_Qty, 0) / CAST(ISNULL(nd.Pack, 0) AS DECIMAL(18,2))
+  END                   AS QTY,
         nd.Act_Qty AS KGS,
         nd.Vilai_Vasi,
         nd.Vilaivasi_Rate
@@ -249,9 +243,14 @@ const getNakalReport = async (req, res) => {
         ${broker && !isNaN(broker) ? "AND nd.Broker_Id = @broker" : ""}
         ${ledger && !isNaN(ledger) ? "AND rm.ERP_Id = @ledger" : ""} 
         ${item && !isNaN(item) ? "AND  pm.Product_Id = @item" : ""} 
+        ${vilaivasiFilter === 'zero'
+                ? 'AND ISNULL(nd.Vilai_Vasi, 0) = 0'
+                : vilaivasiFilter === 'nonzero'
+                    ? 'AND ISNULL(nd.Vilai_Vasi, 0) <> 0'
+                    : ''}
       ORDER BY nd.Date DESC, nd.Do_Inv_No
       FOR JSON PATH
-    ), '[]') AS Items
+  ),'[]') AS Items
 
   FROM tbl_Nakal_Data outerNk
   LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = outerNk.Broker_Id
@@ -264,6 +263,12 @@ const getNakalReport = async (req, res) => {
                 : ""
             }
     ${item && !isNaN(item) ? "AND outerNk.Product_Id = @item" : ""}
+      ${vilaivasiFilter === 'zero'
+                ? 'AND ISNULL(outerNk.Vilai_Vasi, 0) = 0'
+                : vilaivasiFilter === 'nonzero'
+                    ? 'AND ISNULL(outerNk.Vilai_Vasi, 0) <> 0'
+                    : ''
+            }
   GROUP BY outerNk.Broker_Id, ecc.Cost_Center_Name
   ORDER BY ecc.Cost_Center_Name
 
@@ -288,6 +293,7 @@ const getNakalReport = async (req, res) => {
         servError(e, res);
     }
 };
+
 export default {
     nakalSalesReport,
     postNakalReport,

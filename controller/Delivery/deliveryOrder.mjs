@@ -1075,7 +1075,7 @@ const DeliveryOrder = () => {
                         
                          COALESCE(dpUser.Name, 'not available') AS Delivery_Person_Name,
                      
-                         
+                          ISNULL((acm.Acc_Id),0) As Acc_Id,
                          COALESCE((
                              SELECT
                                  sd.*
@@ -1096,7 +1096,7 @@ const DeliveryOrder = () => {
                      LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
                      LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
                      LEFT JOIN tbl_Sales_Order_Gen_Info AS sgi ON sgi.So_Id = so.So_No
-                     
+                     LEFT JOIN tbl_Account_Master AS acm ON acm.ERP_Id=rm.ERP_Id
                   
                      LEFT JOIN tbl_Users AS spUser ON spUser.UserId = sgi.Sales_Person_Id
                      

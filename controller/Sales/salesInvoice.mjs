@@ -3,7 +3,7 @@ import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Mul
 import { failed, invalidInput, servError, dataFound, noData, sentData, success } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
-
+import receiptMaster from '../Receipts/receiptMaster.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
@@ -1025,30 +1025,548 @@ const SalesInvoice = () => {
     }
 
     const liveSalesCreation = async (req, res) => {
-        try {
-            const {
-                Retailer_Id, 
-                Sales_Person_Id, 
-                Branch_Id,
-                Narration = null, 
-                Created_by, 
-                Product_Array = [], 
-                GST_Inclusive = 1, 
-                IS_IGST = 0, 
-                VoucherType = '',
-                Staff_Involved_List = []
-            } = req.body;
 
-            const So_Date = ISOString(req?.body?.So_Date);
+        const {
+            Branch_Id = 0,
+            Narration = null,
+            Created_by,
+            GST_Inclusive = 1,
+            IS_IGST = 0,
+            credit_ledger = 0,
+            credit_ledger_name = '',
+            debit_ledger = 0,
+            debit_ledger_name = '',
+            credit_amount = 0,
+            Staff_Involved_List = [
+                // EmpId, EmpTypeId
+            ],
+            Product_Array = [
+                // Item_Id, Bill_Qty, Item_Rate, UOM, Units
+            ],
+            createReceipt = true
+        } = req.body;
+
+        const transaction = new sql.Transaction();
+
+        try {
+
+            const invoiceDate = ISOString(req?.body?.invoiceDate);
+
             const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
             const isInclusive = isEqualNumber(GST_Inclusive, 1);
             const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
             const isIGST = isEqualNumber(IS_IGST, 1);
             const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
 
-            
+            if (
+                toNumber(Created_by) === 0
+                || (toNumber(credit_ledger) === 0 && createReceipt)
+                // || (toNumber(debit_ledger) === 0 && createReceipt)
+                // || (toNumber(credit_amount) === 0 && createReceipt)
+                || toNumber(Branch_Id) === 0
+                || toArray(Product_Array).length === 0
+                // || (toArray(BillsDetails).length === 0 && createReceipt)
+            ) {
+                return invalidInput(res, 'Created_by, Items is Required')
+            }
+
+            const productsData = (await getProducts()).dataArray;
+            const Alter_Id = Math.floor(Math.random() * 999999);
+
+            // unique Sale order id
+
+            const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
+            const getDo_Id = await getNextId({ table: 'tbl_Sales_Delivery_Gen_Info', column: 'Do_Id' });
+            const receipt_id_get = await getNextId({ table: 'tbl_Receipt_General_Info', column: 'receipt_id' });
+
+            if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
+            if (!getDo_Id.status || !checkIsNumber(getDo_Id.MaxId)) throw new Error('Failed to get Do_Id');
+            if (!receipt_id_get.status || !checkIsNumber(receipt_id_get.MaxId)) throw new Error('Failed to get receipt_id');
+
+            const So_Id = So_Id_Get.MaxId;
+            const Do_Id = getDo_Id.MaxId;
+            const receipt_id = receipt_id_get.MaxId;
+
+            // year id and year code
+
+            const yearDetails = await new sql.Request()
+                .input('invoiceDate', invoiceDate)
+                .query(`
+                    SELECT Id AS Year_Id, Year_Desc
+                    FROM tbl_Year_Master
+                    WHERE Fin_Start_Date <= @invoiceDate AND Fin_End_Date >= @invoiceDate`);
+
+            if (yearDetails.recordset.length === 0) throw new Error('Year_Id not found');
+
+            const { Year_Id, Year_Desc } = yearDetails.recordset[0];
+
+            // voucher code
+
+            const voucherData = await new sql.Request()
+                .input('saleOrderVoucher', 'LIVE_SALE_ORDER')
+                .input('salesInvoiceVoucher', 'LIVE_SALES_INVOICE')
+                .input('receiptVoucher', 'LIVE_RECEIPT')
+                .query(`
+                    SELECT Vocher_Type_Id as vid, Voucher_Type as vt, Voucher_Code as vc 
+                    FROM tbl_Voucher_Type 
+                    WHERE Voucher_Type IN (
+                        @saleOrderVoucher, @salesInvoiceVoucher, @receiptVoucher
+                    ) AND Type IN ('RECEIPT', 'SALES', 'SALE ORDER', 'SALEORDER', 'SALE_ORDER');`
+                );
+
+            const VoucherCode = voucherData.recordset;
+
+            if (VoucherCode.length < 3) throw new Error('Failed to get Voucher Code in live sales');
+
+            const saleOrderVoucher = VoucherCode.find(v => stringCompare(v.vt, 'LIVE_SALE_ORDER'));
+            const salesInvoiceVoucher = VoucherCode.find(v => stringCompare(v.vt, 'LIVE_SALES_INVOICE'));
+            const receiptVoucher = VoucherCode.find(v => stringCompare(v.vt, 'LIVE_RECEIPT'));
+
+            // voucher based serial number
+
+            const voucherBasedSno = await new sql.Request()
+                .input('Year_Id', Year_Id)
+                .input('saleOrderVoucher', saleOrderVoucher.vid)
+                .input('salesInvoiceVoucher', salesInvoiceVoucher.vid)
+                .input('receiptVoucher', receiptVoucher.vid)
+                .query(`
+                    -- sale order
+                    SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) + 1 AS So_Branch_Inv_Id
+                    FROM tbl_Sales_Order_Gen_Info
+                    WHERE So_Year = @Year_Id AND VoucherType = @saleOrderVoucher;
+                    -- sales invoice
+                    SELECT COALESCE(MAX(Do_No), 0) + 1 AS Do_No
+                    FROM tbl_Sales_Delivery_Gen_Info
+                    WHERE Do_Year = @Year_Id
+                    AND Voucher_Type = @salesInvoiceVoucher;
+                    -- receipt 
+                    SELECT COALESCE(MAX(receipt_sno), 0) + 1 AS receipt_sno
+                    FROM tbl_Receipt_General_Info
+                    WHERE year_id = @Year_Id AND receipt_voucher_type_id = @receiptVoucher;`
+                )
+
+            const [saleOrder, salesInvoice, receipt] = voucherBasedSno.recordsets.map(rs => rs[0]);
+
+            const saleOrderSno = saleOrder.So_Branch_Inv_Id;
+            const salesInvoiceSno = salesInvoice.Do_No;
+            const receiptSno = receipt.receipt_sno;
+
+            if (toNumber(saleOrderSno) === 0) throw new Error('Failed to get sale order id');
+            if (toNumber(salesInvoiceSno) === 0) throw new Error('Failed to get sale invoice id');
+            if (toNumber(receiptSno) === 0) throw new Error('Failed to get receipt id');
+
+            // order code
+
+            const So_Inv_No = `${saleOrderVoucher.vc}/${createPadString(saleOrderSno, 6)}/${Year_Desc}`;
+            const Do_Inv_No = `${salesInvoiceVoucher.vc}/${createPadString(salesInvoiceSno, 6)}/${Year_Desc}`;
+            const receipt_invoice_no = `${receiptVoucher.vc}/${createPadString(receiptSno, 6)}/${Year_Desc}`;
+
+            // finding credit account 
+
+            const getRetailerId = (await new sql.Request()
+                .input('acc_id', credit_ledger)
+                .query(`
+                    SELECT TOP (1) r.Retailer_Id, r.Retailer_Name
+                    FROM tbl_Account_Master AS a 
+                    JOIN tbl_Retailers_Master AS r ON r.ERP_Id = a.ERP_Id
+                    WHERE a.Acc_Id = @acc_id;`
+                )).recordset[0];
+
+            const { Retailer_Id, Retailer_Name } = getRetailerId;
+
+            // tax calculation
+
+            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
+
+                if (isNotTaxableBill) return Addition(acc, Amount);
+
+                const product = findProductDetails(productsData, item.Item_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                if (isInclusive) {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                } else {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                }
+            }, 0));
+
+            const totalValueBeforeTax = () => {
+                const productTax = Product_Array.reduce((acc, item) => {
+                    const itemRate = RoundNumber(item?.Item_Rate);
+                    const billQty = RoundNumber(item?.Bill_Qty);
+                    const Amount = Multiplication(billQty, itemRate);
+
+                    if (isNotTaxableBill) return {
+                        TotalValue: Addition(acc.TotalValue, Amount),
+                        TotalTax: 0
+                    }
+
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                    const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                    const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                    const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+                    return {
+                        TotalValue, TotalTax
+                    };
+                }, {
+                    TotalValue: 0,
+                    TotalTax: 0
+                });
+
+                return {
+                    TotalValue: productTax.TotalValue,
+                    TotalTax: productTax.TotalTax,
+                }
+            };
+
+            const totalValueBeforeTaxValues = totalValueBeforeTax();
+
+            const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
+
+            const roundOff = Number(Total_Invoice_value) - (
+                Number(totalValueBeforeTaxValues.TotalValue) + Number(CGST) + Number(SGST) + Number(IGST)
+            );
+
+            const Round_off = RoundNumber(Math.round(roundOff));
+
+            await transaction.begin();
+
+            const request = new sql.Request(transaction)
+
+                .input('So_Id', So_Id)
+                .input('Do_Id', Do_Id)
+
+                .input('So_Inv_No', So_Inv_No)
+                .input('Do_Inv_No', Do_Inv_No)
+
+                .input('So_Year', Year_Id)
+                .input('Do_Year', Year_Id)
+
+                .input('So_Branch_Inv_Id', saleOrderSno)
+                .input('Do_No', salesInvoiceSno)
+
+                .input('So_Date', invoiceDate)
+                .input('Do_Date', invoiceDate)
+
+                .input('Branch_Id', Branch_Id)
+                .input('Retailer_Id', Retailer_Id)
+                .input('Narration', Narration)
+                .input('So_No', So_Id)
+                .input('Cancel_status', 0)
+                .input('Total_Expences', 0)
+                .input('Sales_Person_Id', Created_by)
+                .input('Delivery_Person_Id', Created_by)
+
+                .input('saleOrderVoucher', saleOrderVoucher.vid)
+                .input('saleInvocieVoucher', salesInvoiceVoucher.vid)
+
+                .input('GST_Inclusive', GST_Inclusive)
+                .input('CSGT_Total', CGST)
+                .input('SGST_Total', SGST)
+                .input('IGST_Total', IGST)
+                .input('IS_IGST', isIGST ? 1 : 0)
+
+                .input('Round_off', Round_off)
+                .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+                .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
+                .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
+
+                .input('Created_by', Created_by)
+                .input('Altered_by', Created_by)
+
+                .input('Created_on', new Date())
+                .input('Alterd_on', new Date())
+
+                .input('Alter_Id', Alter_Id)
+                .input('Trans_Type', 'INSERT')
+                .query(`
+                    INSERT INTO tbl_Sales_Order_Gen_Info (
+                        So_Id, So_Inv_No, So_Year, So_Branch_Inv_Id, So_Date, 
+                        Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, CSGT_Total, 
+                        SGST_Total, IGST_Total, GST_Inclusive, IS_IGST, Round_off, 
+                        Total_Invoice_value, Total_Before_Tax, Total_Tax,Narration, Cancel_status, 
+                        Created_by, Altered_by, Alter_Id, Created_on, Alterd_on, Trans_Type
+                    ) VALUES (
+                        @So_Id, @So_Inv_No, @So_Year, @So_Branch_Inv_Id, @So_Date, 
+                        @Retailer_Id, @Sales_Person_Id, @Branch_Id, @saleOrderVoucher, @CSGT_Total, 
+                        @SGST_Total, @IGST_Total, @GST_Inclusive, @IS_IGST, @Round_off, 
+                        @Total_Invoice_value, @Total_Before_Tax, @Total_Tax, @Narration, @Cancel_status, 
+                        @Created_by, @Altered_by, @Alter_Id, @Created_on, @Alterd_on, @Trans_Type
+                    );
+                    INSERT INTO tbl_Sales_Delivery_Gen_Info (
+                        Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year, 
+                        Do_Date, Branch_Id, Retailer_Id, Delivery_Person_Id, Narration, So_No, Cancel_status,
+                        GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
+                        Total_Before_Tax, Total_Tax, Total_Invoice_value,
+                        Trans_Type, Alter_Id, Created_by, Created_on
+                    ) VALUES (
+                        @Do_Id, @Do_Inv_No, @saleInvocieVoucher, @Do_No, @Do_Year,
+                        @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
+                        @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
+                        @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, 
+                        @Trans_Type, @Alter_Id, @Created_by, @Created_on
+                    );`
+                );
+
+            const result = await request;
+
+            if (result.rowsAffected[0] === 0) {
+                throw new Error('Failed to create order, Try again.');
+            }
+
+            if (result.rowsAffected[1] === 0) {
+                throw new Error('Failed to create sales invoice, Try again.');
+            }
+
+            for (const [i, product] of Product_Array.entries()) {
+                const productDetails = findProductDetails(productsData, product.Item_Id);
+
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
+                const Taxble = gstPercentage > 0 ? 1 : 0;
+                const Bill_Qty = Number(product.Bill_Qty);
+                const Item_Rate = RoundNumber(product.Item_Rate);
+                const Amount = Multiplication(Bill_Qty, Item_Rate);
+
+                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
+
+                const request = new sql.Request(transaction)
+                    // Common Inputs
+                    .input('S_No', i + 1)
+                    .input('Item_Id', product.Item_Id)
+                    .input('Pre_Id', toNumber(product.Pre_Id) || null)
+                    .input('Bill_Qty', Bill_Qty)
+                    .input('Item_Rate', Item_Rate)
+                    .input('Amount', Amount)
+                    .input('Free_Qty', 0)
+                    .input('Total_Qty', Bill_Qty)
+                    .input('Taxble', Taxble)
+                    .input('Taxable_Rate', itemRateGst.base_amount)
+                    .input('HSN_Code', productDetails.HSN_Code)
+                    .input('Unit_Id', product.UOM ?? '')
+                    .input('Unit_Name', product.Units ?? '')
+                    .input('Taxable_Amount', gstInfo.base_amount)
+                    .input('Tax_Rate', gstPercentage)
+                    .input('Cgst', cgstPer)
+                    .input('Cgst_Amo', Cgst_Amo)
+                    .input('Sgst', cgstPer)
+                    .input('Sgst_Amo', Cgst_Amo)
+                    .input('Igst', igstPer)
+                    .input('Igst_Amo', Igst_Amo)
+                    .input('Final_Amo', gstInfo.with_tax)
+                    .input('Created_on', new Date())
+
+                    // Sale Order Specific
+                    .input('So_Date', invoiceDate)
+                    .input('Sales_Order_Id', So_Id)
+
+                    // Sales Invoice Specific
+                    .input('Do_Date', invoiceDate) // Reused
+                    .input('DeliveryOrder', Do_Id)
+                    .input('Act_Qty', Bill_Qty)
+                    .input('Alt_Act_Qty', Bill_Qty)
+                    .input('GoDown_Id', checkIsNumber(product?.GoDown_Id) ? Number(product?.GoDown_Id) : null)
+                    .input('Act_unit_Id', product.Act_unit_Id ? product.Act_unit_Id : product.UOM)
+                    .input('Alt_Act_Unit_Id', product.Alt_Act_Unit_Id ? product.Alt_Act_Unit_Id : product.UOM)
+
+                    .query(`
+                        INSERT INTO tbl_Sales_Order_Stock_Info (
+                            So_Date, Sales_Order_Id, S_No, Item_Id, Pre_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty,
+                            Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate,
+                            Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+                        ) VALUES (
+                            @So_Date, @Sales_Order_Id, @S_No, @Item_Id, @Pre_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty,
+                            @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate,
+                            @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+                        );
+                        INSERT INTO tbl_Sales_Delivery_Stock_Info (
+                            Do_Date, Delivery_Order_Id, S_No, Item_Id,
+                            Bill_Qty, Act_Qty, Alt_Act_Qty,
+                            Item_Rate, GoDown_Id, Amount, Free_Qty, Total_Qty,
+                            Taxble, Taxable_Rate, HSN_Code,
+                            Unit_Id, Unit_Name, Act_unit_Id, Alt_Act_Unit_Id,
+                            Taxable_Amount, Tax_Rate,
+                            Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+                        ) VALUES (
+                            @Do_Date, @DeliveryOrder, @S_No, @Item_Id,
+                            @Bill_Qty, @Act_Qty, @Alt_Act_Qty,
+                            @Item_Rate, @GoDown_Id, @Amount, @Free_Qty, @Total_Qty,
+                            @Taxble, @Taxable_Rate, @HSN_Code,
+                            @Unit_Id, @Unit_Name, @Act_unit_Id, @Alt_Act_Unit_Id,
+                            @Taxable_Amount, @Tax_Rate,
+                            @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+                        );`
+                    );
+
+                const result = await request;
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error('Failed to insert Sale Order and Invoice Product');
+                }
+
+                if (result.rowsAffected[1] === 0) {
+                    throw new Error('Failed to insert Sale invoice product');
+                }
+            }
+
+            for (const staff of toArray(Staff_Involved_List)) {
+                await new sql.Request(transaction)
+                    .input('So_Id', So_Id)
+                    .input('Do_Id', Do_Id)
+                    .input('Involved_Emp_Id', sql.Int, staff?.EmpId)
+                    .input('Cost_Center_Type_Id', sql.Int, staff?.EmpTypeId)
+                    .query(`
+                        INSERT INTO tbl_Sales_Order_Staff_Info (
+                            So_Id, Involved_Emp_Id, Cost_Center_Type_Id
+                        ) VALUES (
+                            @So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                        );
+                        INSERT INTO tbl_Sales_Delivery_Staff_Info (
+                            Do_Id, Emp_Id, Emp_Type_Id
+                        ) VALUES (
+                            @Do_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                        );`
+                    );
+            }
+
+            const taxTypes = [
+                { expName: 'CGST', Value: CGST },
+                { expName: 'SGST', Value: SGST },
+                { expName: 'IGST', Value: IGST },
+                { expName: 'ROUNDOFF', Value: Round_off }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            const getExpName = new sql.Request();
+            taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+            const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
+
+            if (taxTypes.length > 0) {
+                const getCurrespondingAccount = getExpName.query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE AC_Reason IN (${inClause}) 
+                    AND Acc_Id IS NOT NULL;`
+                );
+
+                const expData = (await getCurrespondingAccount).recordset;
+
+                const missing = taxTypes.filter(exp =>
+                    !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+                );
+
+                if (missing.length > 0) {
+                    throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+                }
+
+                for (let i = 0; i < taxTypes.length; i++) {
+                    const { expName, Value } = taxTypes[i];
+                    const numValue = toNumber(Value);
+                    const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                    const Expence_Value_DR = numValue < 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue >= 0 ? Math.abs(numValue) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('Do_Id', Do_Id)
+                        .input('Sno', i + 1)
+                        .input('Expense_Id', Expense_Id)
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                                Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            ) VALUES (
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            )`
+                        );
+
+                    const result = await request;
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert tax expense row');
+                    }
+                }
+            }
+
+            if (createReceipt) {
+                const request = new sql.Request(transaction)
+                    .input('receipt_id', receipt_id)
+                    .input('year_id', Year_Id)
+                    .input('receipt_sno', receiptSno)
+                    .input('receipt_invoice_no', receipt_invoice_no)
+                    .input('receipt_voucher_type_id', receiptVoucher.vid)
+                    .input('receipt_date', invoiceDate)
+                    .input('receipt_bill_type', 1)
+                    .input('credit_ledger', credit_ledger)
+                    .input('credit_ledger_name', credit_ledger_name)
+                    .input('credit_amount', credit_amount)
+                    .input('debit_ledger', debit_ledger)
+                    .input('debit_ledger_name', debit_ledger_name)
+                    .input('debit_amount', 0)
+                    .input('remarks', Narration)
+                    .input('status', 1)
+                    .input('created_by', Created_by)
+                    .input('is_new_ref', 0)
+                    .input('Alter_Id', Alter_Id)
+                    // bill info
+                    .input('bill_id', Do_Id)
+                    .input('bill_name', Do_Inv_No)
+                    .input('bill_amount', Math.round(Total_Invoice_value))
+                    .input('JournalBillType', 'SALES RECEIPT')
+                    .input('Credit_Amo', 0)
+                    .query(`
+                        -- general info
+                        INSERT INTO tbl_Receipt_General_Info (
+                            receipt_id, year_id, receipt_sno, receipt_invoice_no, 
+                            receipt_voucher_type_id, receipt_date, receipt_bill_type, 
+                            credit_ledger, credit_ledger_name, credit_amount, 
+                            debit_ledger, debit_ledger_name, debit_amount,
+                            remarks, status, created_by, created_on, is_new_ref, Alter_Id
+                        ) VALUES (
+                            @receipt_id, @year_id, @receipt_sno, @receipt_invoice_no, 
+                            @receipt_voucher_type_id, @receipt_date, @receipt_bill_type, 
+                            @credit_ledger, @credit_ledger_name, @credit_amount, 
+                            @debit_ledger, @debit_ledger_name, @debit_amount, 
+                            @check_no, @check_date, @bank_name, @bank_date,
+                            @remarks, @status, @created_by, GETDATE(), @is_new_ref, @Alter_Id
+                        );
+                        --details info
+                        INSERT INTO tbl_Receipt_Bill_Info (
+                            receipt_id, receipt_no, receipt_date, receipt_bill_type, DR_CR_Acc_Id,
+                            bill_id, bill_name, bill_amount, JournalBillType, Debit_Amo, Credit_Amo
+                        ) VALUES (
+                            @receipt_id, @receipt_invoice_no, @receipt_date, @receipt_bill_type, @credit_ledger,
+                            @bill_id, @bill_name, @bill_amount, @JournalBillType, 0, @credit_amount
+                        );`
+                    );
+
+                const result = await request;
+
+                if (result.rowsAffected[0] > 0) {
+                    throw new Error('Failed to create receipt');
+                }
+            }
+
+            await transaction.commit();
+
+            success(res, 'Sales Created!');
+
         } catch (e) {
-            servError(e, res);
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
+            servError(e, res)
         }
     }
 
@@ -1059,7 +1577,8 @@ const SalesInvoice = () => {
         getFilterValues,
         getStockInHandGodownWise,
         getSalesExpenceAccount,
-        salesTallySync
+        salesTallySync,
+        liveSalesCreation
     }
 }
 

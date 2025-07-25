@@ -137,7 +137,8 @@ const ReceiptDataDependency = () => {
                         	SELECT MAX(OB_Date) FROM tbl_OB_Date
                         ) AND cb.Retailer_id = @Acc_Id AND cb.cr_amount = 0
                     ) AS inv
-                    WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
+                    WHERE inv.Paid_Amount < inv.Total_Invoice_value
+                    ORDER BY inv.Do_Date ASC;`
                 );
 
             const result = await request;

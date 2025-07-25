@@ -143,14 +143,9 @@ const ReceiptMaster = () => {
                 .input('Year_Id', Year_Id)
                 .input('receipt_voucher_type_id', receipt_voucher_type_id)
                 .query(`
-                    SELECT 
-                        COALESCE(MAX(receipt_sno), 0) AS receipt_sno
-                    FROM 
-                        tbl_Receipt_General_Info
-                    WHERE
-                        year_id = @Year_Id
-                        AND
-                        receipt_voucher_type_id = @receipt_voucher_type_id`
+                    SELECT COALESCE(MAX(receipt_sno), 0) AS receipt_sno
+                    FROM tbl_Receipt_General_Info
+                    WHERE year_id = @Year_Id AND receipt_voucher_type_id = @receipt_voucher_type_id`
                 ))?.recordset[0]?.receipt_sno) + 1;
 
             if (!checkIsNumber(receipt_sno)) throw new Error('Failed to get voucher Based unique id');

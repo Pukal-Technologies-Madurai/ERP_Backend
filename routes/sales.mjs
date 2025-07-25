@@ -23,6 +23,7 @@ SalesRouter.get('/salesInvoice/tallySync', salesInvoice.salesTallySync);
 SalesRouter.get('/salesInvoice', salesInvoice.getSalesInvoice);
 SalesRouter.post('/salesInvoice', salesInvoice.createSalesInvoice);
 SalesRouter.put('/salesInvoice', salesInvoice.updateSalesInvoice);
+SalesRouter.post('/salesInvoice/liveSales', salesInvoice.liveSalesCreation);
 
 SalesRouter.get('/presaleOrder/getList',salesOrder.getPresaleOrder)
 SalesRouter.post('/presaleOrder/saleOrderCreationWithPso',salesOrder.saleOrderCreationWithPso)
