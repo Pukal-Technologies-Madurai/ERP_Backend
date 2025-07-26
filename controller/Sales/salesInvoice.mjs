@@ -1061,11 +1061,10 @@ const SalesInvoice = () => {
             if (
                 toNumber(Created_by) === 0
                 || (toNumber(credit_ledger) === 0 && createReceipt)
-                // || (toNumber(debit_ledger) === 0 && createReceipt)
-                // || (toNumber(credit_amount) === 0 && createReceipt)
+                || (toNumber(debit_ledger) === 0 && createReceipt)
+                || (toNumber(credit_amount) === 0 && createReceipt)
                 || toNumber(Branch_Id) === 0
                 || toArray(Product_Array).length === 0
-                // || (toArray(BillsDetails).length === 0 && createReceipt)
             ) {
                 return invalidInput(res, 'Created_by, Items is Required')
             }
@@ -1538,7 +1537,6 @@ const SalesInvoice = () => {
                             @receipt_voucher_type_id, @receipt_date, @receipt_bill_type, 
                             @credit_ledger, @credit_ledger_name, @credit_amount, 
                             @debit_ledger, @debit_ledger_name, @debit_amount, 
-                            @check_no, @check_date, @bank_name, @bank_date,
                             @remarks, @status, @created_by, GETDATE(), @is_new_ref, @Alter_Id
                         );
                         --details info

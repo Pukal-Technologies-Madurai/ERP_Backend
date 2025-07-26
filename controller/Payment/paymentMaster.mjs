@@ -402,10 +402,11 @@ const PaymentMaster = () => {
             for (let i = 0; i < BillsDetails.length; i++) {
                 const CurrentBillDetails = BillsDetails[i];
                 let bill_ref_number = '';
+                const payBillId = toNumber(CurrentBillDetails?.pay_bill_id);
 
-                if (isPurchasePayment) {
+                if (isPurchasePayment && payBillId) {
                     const getPurchaseRefNumber = new sql.Request()
-                        .input('PIN_Id', CurrentBillDetails?.pay_bill_id)
+                        .input('PIN_Id', payBillId)
                         .query(`
                             SELECT TOP (1) Ref_Po_Inv_No
                             FROM tbl_Purchase_Order_Inv_Gen_Info

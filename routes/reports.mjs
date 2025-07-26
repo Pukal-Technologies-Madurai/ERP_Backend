@@ -9,7 +9,8 @@ import tallyPullAPI from '../controller/Reports/tallyPullAPI.mjs';
 import customerClosingStock from '../controller/Reports/customerClosingStock.mjs';
 import storageStockReport from '../controller/Reports/storageStockReport.mjs';
 import costCenterReports from '../controller/Reports/costCenterReports.mjs';
-import nagalReports from '../controller/Reports/nakalReports.mjs'
+import nagalReports from '../controller/Reports/nakalReports.mjs';
+import reportsColumnVisiblity from '../controller/Reports/reportsColumnVisiblity.mjs';
 
 const ReportRouter = express.Router();
 
@@ -80,7 +81,11 @@ ReportRouter.get('/brokerageReport/salesInvoice', costCenterReports.salesDeliver
 
 ReportRouter.get('/brokerageNakalReport/sales', nagalReports.nakalSalesReport)
 ReportRouter.post('/brokerageNagal/create', nagalReports.postNakalReport)
-ReportRouter.get('/brokerageNagal/list', nagalReports.getNakalReport)
+ReportRouter.get('/brokerageNagal/list', nagalReports.getNakalReport);
+
+
+ReportRouter.get('/reportState/columnVisiblity', reportsColumnVisiblity.getReportColumnVisiblityState);
+ReportRouter.post('/reportState/columnVisiblity', reportsColumnVisiblity.createReportColumnVisiblityState)
 
 
 

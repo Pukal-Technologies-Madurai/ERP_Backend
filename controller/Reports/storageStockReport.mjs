@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { servError, sentData, noData, dataFound } from '../../res.mjs'
-import { Addition, Division, groupData, isEqualNumber, ISOString, toArray } from '../../helper_functions.mjs';
+import { Addition, Division, groupData, isEqualNumber, ISOString, Multiplication, toArray } from '../../helper_functions.mjs';
 
 
 const getStorageStockItemWise = async (req, res) => {
@@ -152,14 +152,17 @@ const getStorageStockGodownWise = async (req, res) => {
                 	COALESCE(los.Stock_Group, '-') AS Stock_Group,
                 	COALESCE(los.S_Sub_Group_1, '-') AS S_Sub_Group_1,
                 	COALESCE(los.Grade_Item_Group, '-') AS Grade_Item_Group,
-                	COALESCE(los.Item_Name_Modified, '-') AS Item_Name_Modified
+                	COALESCE(los.Item_Name_Modified, '-') AS Item_Name_Modified,
+                    COALESCE(stvlu.CL_Rate, 0) AS CL_Rate
                 FROM tbl_Product_Master AS p
                 JOIN tbl_Stock_LOS AS los
                 ON los.Stock_Tally_Id = p.ERP_Id
+                LEFT JOIN tbl_Daily_Stock_Value AS stvlu
+                ON stvlu.Group_Name = los.Item_Name_Modified AND stvlu.Trans_Date = '${Todate}'
                 WHERE (
-                        @filterItems IS NULL 
-                        OR LTRIM(RTRIM(@filterItems)) = '' 
-                        OR P.Product_Id IN (SELECT DISTINCT Product_Id FROM FilteredProducts)
+                    @filterItems IS NULL 
+                    OR LTRIM(RTRIM(@filterItems)) = '' 
+                    OR P.Product_Id IN (SELECT DISTINCT Product_Id FROM FilteredProducts)
                 );`
             );
 
@@ -169,7 +172,7 @@ const getStorageStockGodownWise = async (req, res) => {
             const {
                 Product_Rate = 0, Stock_Item = '', Group_ST = '', Bag = '',
                 Stock_Group = '', S_Sub_Group_1 = '', Grade_Item_Group = '',
-                Item_Name_Modified = ''
+                Item_Name_Modified = '', CL_Rate = 0
             } = productLosResult.find(
                 productDetails => isEqualNumber(
                     productDetails.Product_Id,
@@ -181,7 +184,7 @@ const getStorageStockGodownWise = async (req, res) => {
                 ...row,
                 Product_Rate, Stock_Item, Group_ST, Bag,
                 Stock_Group, S_Sub_Group_1, Grade_Item_Group,
-                Item_Name_Modified
+                Item_Name_Modified, CL_Rate, CL_Value: Multiplication(row?.Bal_Qty, CL_Rate)
             }
         });
 
