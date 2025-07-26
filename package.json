@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon app.mjs",
-    "start": "node app.mjs"
+    "start": "node app.mjs",
+    "import": "node import.js"
   },
   "keywords": [
     "database",
@@ -27,6 +28,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "fs": "^0.0.1-security",
+    "fs-extra": "^11.3.0",
     "mime": "^4.0.4",
     "morgan": "^1.10.0",
     "mssql": "^11.0.1",

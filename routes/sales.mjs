@@ -19,15 +19,18 @@ SalesRouter.get('/stockInGodown', salesInvoice.getStockInHandGodownWise);
 SalesRouter.get('/salesInvoice/filterValues', salesInvoice.getFilterValues);
 SalesRouter.get('/salesInvoice/expenceAccount', salesInvoice.getSalesExpenceAccount);
 
+SalesRouter.get('/saleOrderMobile', salesOrder.getSaleOrderMobile);
+SalesRouter.get('/salesInvoiceMobile', salesInvoice.getSalesInvoiceMobile);
+
 SalesRouter.get('/salesInvoice/tallySync', salesInvoice.salesTallySync);
 SalesRouter.get('/salesInvoice', salesInvoice.getSalesInvoice);
 SalesRouter.post('/salesInvoice', salesInvoice.createSalesInvoice);
 SalesRouter.put('/salesInvoice', salesInvoice.updateSalesInvoice);
 SalesRouter.post('/salesInvoice/liveSales', salesInvoice.liveSalesCreation);
 
-SalesRouter.get('/presaleOrder/getList',salesOrder.getPresaleOrder)
-SalesRouter.post('/presaleOrder/saleOrderCreationWithPso',salesOrder.saleOrderCreationWithPso)
-SalesRouter.put('/presaleOrder/saleOrderCreationWithPso',salesOrder.updatesaleOrderWithPso)
+SalesRouter.get('/presaleOrder/getList', salesOrder.getPresaleOrder)
+SalesRouter.post('/presaleOrder/saleOrderCreationWithPso', salesOrder.saleOrderCreationWithPso)
+SalesRouter.put('/presaleOrder/saleOrderCreationWithPso', salesOrder.updatesaleOrderWithPso)
 
 
 

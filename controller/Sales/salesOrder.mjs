@@ -1177,7 +1177,7 @@ const SaleOrder = () => {
                 .input('So_Inv_No', So_Inv_No)
                 .input('So_Year', Year_Id)
                 .input('So_Branch_Inv_Id', So_Branch_Inv_Id)
-                .input('Pre_Id',Pre_Id)
+                .input('Pre_Id', Pre_Id)
                 .input('So_Date', So_Date)
                 .input('Retailer_Id', Retailer_Id)
                 .input('Sales_Person_Id', 0)
@@ -1439,7 +1439,7 @@ const SaleOrder = () => {
                 .input('So_Inv_No', PrevioudSo_Inv_No)
                 .input('So_Year', PrevioudYear_Id)
                 .input('So_Branch_Inv_Id', PrevioudSo_Branch_Inv_Id)
-                .input('Pre_Id',Pre_Id)
+                .input('Pre_Id', Pre_Id)
                 .input('So_Date', PrevioudSo_Date)
                 .input('Retailer_Id', Retailer_Id)
                 .input('Sales_Person_Id', 0)
@@ -1589,6 +1589,79 @@ const SaleOrder = () => {
         }
     }
 
+    const getSaleOrderMobile = async (req, res) => {
+        try {
+            const FromDate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const ToDate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+            const product = req.query?.Product;
+            const brand = req.query?.Brand_Id
+            const request = new sql.Request()
+                .input('FromDate', FromDate)
+                .input('ToDate', ToDate);
+
+            let productCondition = "";
+            let BrandCondition = "";
+            if (product && !isNaN(product)) {
+                productCondition = "AND pm.Product_Id = @Product";
+                request.input('Product', product);
+            }
+            if (brand && !isNaN(brand)) {
+                BrandCondition = "AND bm.Brand_Id = @Brand";
+                request.input('Brand', brand);
+            }
+
+            const sqlQuery = `
+                SELECT
+                    COALESCE((
+                        SELECT 
+                            pm.Product_Id,
+                            pm.Product_Name,
+                            bm.Brand_Id,
+                            bm.Brand_Name,
+                            COUNT(*) AS Total_Orders,
+                            SUM(so.Total_Invoice_value) AS Total_Invoice_Value
+                        FROM tbl_Sales_Order_Gen_Info AS so
+                        LEFT JOIN tbl_Sales_Order_Stock_Info AS sos ON sos.Sales_Order_Id = so.So_Id
+                        LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sos.Item_Id
+                        LEFT JOIN tbl_Brand_Master AS bm ON bm.Brand_Id = pm.Brand
+                        WHERE so.So_Date >= @FromDate AND so.So_Date <= @ToDate
+                        ${productCondition}
+                        ${BrandCondition}
+                        GROUP BY pm.Product_Name, bm.Brand_Name, pm.Product_Id, bm.Brand_Id
+                        FOR JSON PATH
+                    ), '[]') AS Summary,
+                    COALESCE((
+                        SELECT
+                            COUNT(*) AS Total_Orders,
+                            SUM(so.Total_Invoice_value) AS Total_Amount
+                        FROM tbl_Sales_Order_Gen_Info AS so
+                        LEFT JOIN tbl_Sales_Order_Stock_Info AS sos ON sos.Sales_Order_Id = so.So_Id
+                        LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sos.Item_Id
+                        LEFT JOIN tbl_Brand_Master AS bm ON bm.Brand_Id = pm.Brand
+                        WHERE so.So_Date >= @FromDate AND so.So_Date <= @ToDate
+                        ${productCondition}
+                        ${BrandCondition}
+                        FOR JSON PATH
+                    ), '[]') AS Totals`;
+
+            const result = await request.query(sqlQuery);
+
+            if (result.recordset.length > 0) {
+                const row = result.recordset[0];
+                const parsed = {
+                    ...row,
+                    Summary: JSON.parse(row.Summary),
+                    Totals: JSON.parse(row.Totals),
+                };
+                dataFound(res, parsed);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
     return {
         saleOrderCreation,
         getSaleOrder,
@@ -1599,6 +1672,7 @@ const SaleOrder = () => {
         getPresaleOrder,
         saleOrderCreationWithPso,
         updatesaleOrderWithPso,
+        getSaleOrderMobile
     }
 }
 
