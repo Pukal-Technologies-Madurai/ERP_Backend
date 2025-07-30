@@ -97,7 +97,7 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount,
-                check_no, check_date, bank_name, bank_date, is_new_ref = 0,
+                check_no, check_date, bank_name, bank_date, is_new_ref = 0, is_journal_type = 0,
                 BillsDetails = [], transaction_type = ''
             } = req.body;
 
@@ -195,6 +195,7 @@ const ReceiptMaster = () => {
                 .input('status', status)
                 .input('created_by', created_by)
                 .input('is_new_ref', is_new_ref)
+                .input('is_journal_type', is_journal_type)
                 .input('Alter_Id', Alter_Id)
                 .query(`
                     INSERT INTO tbl_Receipt_General_Info (
@@ -203,14 +204,14 @@ const ReceiptMaster = () => {
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
                         check_no, check_date, bank_name, bank_date, transaction_type,
-                        remarks, status, created_by, created_on, is_new_ref, Alter_Id
+                        remarks, status, created_by, created_on, is_new_ref, is_journal_type, Alter_Id
                     ) VALUES (
                         @receipt_id, @year_id, @receipt_sno, @receipt_invoice_no, 
                         @receipt_voucher_type_id, @receipt_date, @receipt_bill_type, 
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
                         @check_no, @check_date, @bank_name, @bank_date, @transaction_type,
-                        @remarks, @status, @created_by, GETDATE(), @is_new_ref, @Alter_Id
+                        @remarks, @status, @created_by, GETDATE(), @is_new_ref, @is_journal_type, @Alter_Id
                     )`
                 );
 
@@ -288,7 +289,7 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount, altered_by,
-                check_no, check_date, bank_name, bank_date, is_new_ref
+                check_no, check_date, bank_name, bank_date, is_new_ref, is_journal_type = 0, transaction_type = '' 
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -329,6 +330,8 @@ const ReceiptMaster = () => {
                 .input('status', status)
                 .input('altered_by', altered_by)
                 .input('is_new_ref', is_new_ref)
+                .input('is_journal_type', is_journal_type)
+                .input('transaction_type', transaction_type)
                 .input('Alter_Id', Alter_Id)
                 .query(`
                     UPDATE tbl_Receipt_General_Info
@@ -348,6 +351,8 @@ const ReceiptMaster = () => {
                         status = @status,
                         altered_by = @altered_by,
                         is_new_ref = @is_new_ref,
+                        is_journal_type = @is_journal_type,
+                        transaction_type = @transaction_type,
                         Alter_Id = @Alter_Id
                     WHERE
                         receipt_id = @receipt_id;`
