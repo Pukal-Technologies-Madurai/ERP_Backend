@@ -35,6 +35,7 @@ import brand from '../controller/Masters/brand.mjs';
 import district from '../controller/Masters/district.mjs';
 import voucherGroup from '../controller/Masters/voucherGroup.mjs';
 import prodGroup from '../controller/Masters/prodGroup.mjs';
+import defaultBanks from '../controller/Masters/defaultBanks.mjs';
 
 const MastersRouter = express.Router();
 
@@ -289,6 +290,8 @@ MastersRouter.get('/voucherGroup', voucherGroup.getVoucherGroupDropdown);
 MastersRouter.get('/proGroup', prodGroup.getProductGroups);
 MastersRouter.post('/proGroup', prodGroup.postProdGroup);
 MastersRouter.put('/proGroup', prodGroup.putProdGroup);
-MastersRouter.delete('/proGroup', prodGroup.deleteProGroup)
+MastersRouter.delete('/proGroup', prodGroup.deleteProGroup);
+
+MastersRouter.get('/defaultBanks', defaultBanks.getdefaultBanks);
 
 export default MastersRouter;

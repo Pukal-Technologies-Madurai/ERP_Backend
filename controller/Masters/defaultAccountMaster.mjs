@@ -9,6 +9,8 @@ const getDefaultAccounts = async (req, res) => {
         const { Type = '', AC_Reason = '' } = req.query;
 
         const request = new sql.Request()
+            .input('Type', Type)
+            .input('AC_Reason', AC_Reason)
             .query(`
                 SELECT 
                     dc.Id,

@@ -164,8 +164,7 @@ const sfProductController = () => {
                     sps.Product_Id IN (${idList})
                 GROUP BY sps.Product_Id
             )
-            SELECT * FROM StockCTE
-        `;
+            SELECT * FROM StockCTE`;
 
             const stockResult = await stockRequest.query(stockQuery);
             const stockMap = new Map(stockResult.recordset.map(row => [row.Product_Id, row.CL_Qty]));

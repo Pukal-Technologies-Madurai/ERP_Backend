@@ -11,7 +11,6 @@ const createReportColumnVisiblityState = async (req, res) => {
             ColumnName: String(col?.ColumnName),
             ColumnOrder: toNumber(col?.ColumnOrder),
         })));
-        console.log(columnsJson)
 
         const request = new sql.Request()
             .input('jsonVisibleColumns', sql.NVarChar(sql.MAX), columnsJson)

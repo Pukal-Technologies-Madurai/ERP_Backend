@@ -38,7 +38,7 @@ const ReceiptMaster = () => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
-            const { voucher, debit, credit, receipt_type, createdBy, status } = req.query
+            const { voucher, debit, credit, receipt_type, createdBy, status, transaction_type } = req.query
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
@@ -47,6 +47,7 @@ const ReceiptMaster = () => {
                 .input('debit', debit)
                 .input('credit', credit)
                 .input('receipt_type', receipt_type)
+                .input('transaction_type', transaction_type)
                 .input('createdBy', createdBy)
                 .input('status', status)
                 .query(`
@@ -74,6 +75,7 @@ const ReceiptMaster = () => {
                         ${checkIsNumber(credit) ? ' AND pgi.credit_ledger = @credit ' : ''}
                         ${checkIsNumber(receipt_type) ? ' AND pgi.receipt_bill_type = @receipt_type ' : ''}
                         ${checkIsNumber(createdBy) ? ' AND pgi.created_by = @createdBy ' : ''}
+                        ${transaction_type ? ' AND pgi.transaction_type = @transaction_type ' : ''}
                         ${checkIsNumber(status) ? ' AND pgi.status = @status ' : ''}
                     ORDER BY 
                         pgi.receipt_date DESC, pgi.created_on DESC;`
@@ -96,7 +98,7 @@ const ReceiptMaster = () => {
                 debit_ledger, debit_ledger_name,
                 credit_amount,
                 check_no, check_date, bank_name, bank_date, is_new_ref = 0,
-                BillsDetails = []
+                BillsDetails = [], transaction_type = ''
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -184,6 +186,7 @@ const ReceiptMaster = () => {
                 .input('debit_ledger', debit_ledger)
                 .input('debit_ledger_name', debit_ledger_name)
                 .input('debit_amount', 0)
+                .input('transaction_type', transaction_type)
                 .input('remarks', remarks)
                 .input('check_no', check_no ? check_no : null)
                 .input('check_date', check_date ? check_date : null)
@@ -199,14 +202,14 @@ const ReceiptMaster = () => {
                         receipt_voucher_type_id, receipt_date, receipt_bill_type, 
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
-                        check_no, check_date, bank_name, bank_date, 
+                        check_no, check_date, bank_name, bank_date, transaction_type,
                         remarks, status, created_by, created_on, is_new_ref, Alter_Id
                     ) VALUES (
                         @receipt_id, @year_id, @receipt_sno, @receipt_invoice_no, 
                         @receipt_voucher_type_id, @receipt_date, @receipt_bill_type, 
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
-                        @check_no, @check_date, @bank_name, @bank_date,
+                        @check_no, @check_date, @bank_name, @bank_date, @transaction_type,
                         @remarks, @status, @created_by, GETDATE(), @is_new_ref, @Alter_Id
                     )`
                 );

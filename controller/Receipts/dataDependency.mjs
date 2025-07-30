@@ -673,16 +673,29 @@ const ReceiptDataDependency = () => {
 
             const request = new sql.Request()
                 .query(`
+                    --SELECT 
+                    --    DISTINCT sdgi.Retailer_Id, 
+                    --    am.Acc_Id AS value, 
+                    --    am.Account_name AS label 
+                    --FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                    --JOIN tbl_Retailers_Master AS rm
+                    --    ON rm.Retailer_Id = sdgi.Retailer_Id
+                    --JOIN tbl_Account_Master AS am
+                    --    ON am.ERP_Id = rm.ERP_Id
+                    --WHERE am.Acc_Id IS NOT NULL;
                     SELECT 
-                        DISTINCT sdgi.Retailer_Id, 
-                        am.Acc_Id AS value, 
-                        am.Account_name AS label 
-                    FROM tbl_Sales_Delivery_Gen_Info AS sdgi
-                    JOIN tbl_Retailers_Master AS rm
-                        ON rm.Retailer_Id = sdgi.Retailer_Id
-                    JOIN tbl_Account_Master AS am
-                        ON am.ERP_Id = rm.ERP_Id
-                    WHERE am.Acc_Id IS NOT NULL`
+                        a.Acc_Id AS value, 
+                        a.Account_name AS label
+                    FROM tbl_Account_Master AS a 
+                    LEFT JOIN tbl_Retailers_Master AS r ON r.ERP_Id = a.ERP_Id
+                    WHERE r.Retailer_Id IN (
+                    	SELECT DISTINCT Retailer_Id
+                    	FROM tbl_Sales_Delivery_Gen_Info
+                    ) OR a.Acc_Id IN (
+                    	SELECT DISTINCT Retailer_id
+                    	FROM tbl_Ledger_Opening_Balance
+                    )
+                    ORDER BY a.Account_name;`
                 );
 
             const result = await request;
@@ -692,16 +705,6 @@ const ReceiptDataDependency = () => {
             servError(e, res);
         }
     }
-
-    // const retailerWithAccountMaster = async (req, res) => {
-    //     try {
-    //         const request = await new sql.Request()
-    //             .query(``);
-
-    //     } catch (e) {
-    //         servError(e, res);
-    //     }
-    // }
 
     return {
         searchReceiptInvoice,
