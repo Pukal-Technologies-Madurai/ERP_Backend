@@ -5,6 +5,7 @@ import stockProcessing from '../controller/Inventory/stockProcessing.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 import tripmaster from '../controller/Inventory/tripmaster.mjs';
 import arrivalMaster from '../controller/Inventory/arrivalMaster.mjs';
+import batchProcess from '../controller/Inventory/batchProcess.mjs';
 
 const inventoryRouter = express.Router();
 
@@ -40,5 +41,7 @@ inventoryRouter.get('/stockProcessing/itemsUsed', stockProcessing.getItemsUsedIn
 inventoryRouter.post('/stockProcessing', stockProcessing.createStockProcessing);
 inventoryRouter.put('/stockProcessing', stockProcessing.updateStockProcessing);
 inventoryRouter.delete('/stockProcessing', stockProcessing.deleteStockProcessing);
+
+inventoryRouter.get('/batchMaster/unAssignedJournal', batchProcess.getUnAssignedBatchFromTripAndProcessing);
 
 export default inventoryRouter;
