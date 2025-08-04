@@ -42,6 +42,17 @@ inventoryRouter.post('/stockProcessing', stockProcessing.createStockProcessing);
 inventoryRouter.put('/stockProcessing', stockProcessing.updateStockProcessing);
 inventoryRouter.delete('/stockProcessing', stockProcessing.deleteStockProcessing);
 
-inventoryRouter.get('/batchMaster/unAssignedJournal', batchProcess.getUnAssignedBatchFromTripAndProcessing);
+inventoryRouter.get('/batchMaster/materialInward', batchProcess.getUnAssignedBatchFromMaterialInward);
+inventoryRouter.post('/batchMaster/materialInward', batchProcess.postBatchInMaterialInward);
+
+inventoryRouter.get('/batchMaster/production', batchProcess.getUnAssignedBatchProcessing);
+inventoryRouter.post('/batchMaster/production', batchProcess.postBatchInProcessing);
+
+inventoryRouter.get('/batchMaster/godownTransfer', batchProcess.getUnAssignedBatchFromGodownTransfer);
+inventoryRouter.post('/batchMaster/godownTransfer', batchProcess.postOtherGodownTransfer);
+
+inventoryRouter.get('/batchMaster/stockBalance', batchProcess.getBatchStockBalance);
+
+
 
 export default inventoryRouter;
