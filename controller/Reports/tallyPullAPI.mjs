@@ -177,6 +177,73 @@ const externalAPIPayment = async (req, res) => {
     }
 }
 
+const externalAPIJournal = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Journal_API');
+
+        const result = await request;
+        const journal = result.recordset;
+
+        if (result.recordset.length > 0) {
+
+            const firstLevelParsed = journal.map(jou => ({
+                ...jou,
+                DR_ledgerentries: JSON.parse(jou.DR_ledgerentries),
+                CR_ledgerentries: JSON.parse(jou.CR_ledgerentries),
+            }));
+
+            const secondLevelParsed = firstLevelParsed.map(jou => ({
+                ...jou,
+                DR_ledgerentries: jou.DR_ledgerentries.map(dr => ({
+                    ...dr,
+                    billrefrence: JSON.parse(dr.billrefrence),
+                })),
+                CR_ledgerentries: jou.CR_ledgerentries.map(cr => ({
+                    ...cr,
+                    billrefrence: JSON.parse(cr.billrefrence),
+                })),
+            }));
+                    
+
+            dataFound(res, secondLevelParsed);
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+const externalAPIContra = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Contra_API');
+
+        const result = await request;
+
+        if (result.recordset.length > 0) {
+            const contra = result.recordset;
+            
+            dataFound(res, toArray(contra));
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
 // -------- Admin API ---------------
 
 const tallyAdminPurchaseAPI = async (req, res) => {
@@ -296,10 +363,12 @@ export default {
     externalAPIStockJournal,
     externalAPIReceipt,
     externalAPIPayment,
+    externalAPIJournal,
+    externalAPIContra,
 
     // -- admin api
     tallyAdminPurchaseAPI,
     tallyAdminSaleAPI,
     tallyAdminPaymentAPI,
-    tallyAdminReceiptAPI
+    tallyAdminReceiptAPI,
 };

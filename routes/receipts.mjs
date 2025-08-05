@@ -29,6 +29,7 @@ ReceiptsRouter.post('/receiptMaster/againstRef', receiptMaster.addAgainstRef);
 
 ReceiptsRouter.get('/getCustomerWhoHasBills', dataDependency.getSalesInvoicedCustomers);
 ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt', dataDependency.getPendingReceipts);
+ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt/retailerBased', dataDependency.getPendingReceiptsRetailerBased);
 
 ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);

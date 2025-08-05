@@ -83,7 +83,7 @@ const ReceiptDataDependency = () => {
                             pig.Do_Id,
                             pig.Do_Inv_No,
                             pig.Do_Date,
-                            a.Acc_Id Retailer_Id,
+                            COALESCE(a.Acc_Id, 0) Retailer_Id,
                             pig.Total_Before_Tax,
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,
@@ -102,7 +102,7 @@ const ReceiptDataDependency = () => {
                         FROM tbl_Sales_Delivery_Gen_Info AS pig
                         JOIN tbl_Retailers_Master AS r
                             ON r.Retailer_Id = pig.Retailer_Id
-                        JOIN tbl_Account_Master AS a
+                        LEFT JOIN tbl_Account_Master AS a
                             ON a.ERP_Id = R.ERP_Id
                         WHERE 
                             pig.Cancel_status <> 0
@@ -136,6 +136,94 @@ const ReceiptDataDependency = () => {
                         WHERE cb.OB_date >= (
                         	SELECT MAX(OB_Date) FROM tbl_OB_Date
                         ) AND cb.Retailer_id = @Acc_Id AND cb.cr_amount = 0
+                    ) AS inv
+                    WHERE inv.Paid_Amount < inv.Total_Invoice_value
+                    ORDER BY inv.Do_Date ASC;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getPendingReceiptsRetailerBased = async (req, res) => {
+        try {
+            const { Retailer_id, reqDate, Fromdate, Todate } = req.query;
+
+            if (!checkIsNumber(Retailer_id)) return invalidInput(res, 'Acc_Id is required');
+
+            const request = new sql.Request()
+                .input('Retailer_id', Retailer_id)
+                .input('reqDate', reqDate)
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(`
+                    DECLARE @Acc_Id INT = (
+                    	SELECT TOP (1) a.Acc_Id 
+                    	FROM tbl_Account_Master AS a
+                    	JOIN tbl_Retailers_Master AS r ON r.ERP_Id = a.ERP_Id
+                    	WHERE r.Retailer_Id = @Retailer_id
+                    );
+                    SELECT inv.*
+                    FROM (
+                        SELECT 
+                            pig.Do_Id,
+                            pig.Do_Inv_No,
+                            pig.Do_Date,
+                            pig.Retailer_Id,
+                            pig.Total_Before_Tax,
+                            pig.Total_Tax, 
+                            pig.Total_Invoice_value,
+                            'INV' AS dataSource,
+                            COALESCE((
+                                SELECT SUM(pb.Credit_Amo) 
+                                FROM tbl_Receipt_Bill_Info AS pb
+                                JOIN tbl_Receipt_General_Info AS pgi
+                                    ON pgi.receipt_id = pb.receipt_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.receipt_bill_type = 1
+                                    AND pb.bill_id = pig.Do_Id
+                                    AND pb.bill_name = pig.Do_Inv_No
+                            ), 0) AS Paid_Amount
+                        FROM tbl_Sales_Delivery_Gen_Info AS pig
+                        JOIN tbl_Retailers_Master AS r
+                            ON r.Retailer_Id = pig.Retailer_Id
+                        WHERE 
+                            pig.Cancel_status <> 0
+                    		AND pig.Retailer_Id = @Retailer_id
+                            AND pig.Do_Date >= (
+                            	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                            )
+                        UNION ALL
+                            -- from opening balance
+                        SELECT 
+                            0 AS bill_id, 
+                            cb.bill_no, 
+                            cb.bill_date, 
+                            cb.Retailer_id,  
+                            0 AS bef_tax, 
+                            0 AS tot_tax, 
+                            cb.dr_amount, 
+                            'OB' AS dataSource,
+                        	COALESCE((
+                                SELECT SUM(pb.Credit_Amo) 
+                                FROM tbl_Receipt_Bill_Info AS pb
+                                JOIN tbl_Receipt_General_Info AS pgi
+                                    ON pgi.receipt_id = pb.receipt_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.receipt_bill_type = 1
+                                    AND pb.bill_id = 0
+                                    AND pb.bill_name = cb.bill_no
+                            ), 0) AS Paid_Amount
+                        FROM tbl_Ledger_Opening_Balance AS cb
+                        WHERE cb.OB_date >= (
+                        	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                        ) AND cb.Retailer_id = COALESCE(@Acc_Id, 0) AND cb.cr_amount = 0
                     ) AS inv
                     WHERE inv.Paid_Amount < inv.Total_Invoice_value
                     ORDER BY inv.Do_Date ASC;`
@@ -684,10 +772,11 @@ const ReceiptDataDependency = () => {
                     --    ON am.ERP_Id = rm.ERP_Id
                     --WHERE am.Acc_Id IS NOT NULL;
                     SELECT 
-                        a.Acc_Id AS value, 
-                        a.Account_name AS label
-                    FROM tbl_Account_Master AS a 
-                    LEFT JOIN tbl_Retailers_Master AS r ON r.ERP_Id = a.ERP_Id
+                        r.Retailer_id, 
+                        COALESCE(a.Acc_Id, 0) AS value, 
+                        COALESCE(r.Retailer_Name, a.Account_name) AS label
+                    FROM tbl_Retailers_Master AS r 
+                    LEFT JOIN tbl_Account_Master AS a ON r.ERP_Id = a.ERP_Id
                     WHERE r.Retailer_Id IN (
                     	SELECT DISTINCT Retailer_Id
                     	FROM tbl_Sales_Delivery_Gen_Info
@@ -709,6 +798,7 @@ const ReceiptDataDependency = () => {
     return {
         searchReceiptInvoice,
         getPendingReceipts,
+        getPendingReceiptsRetailerBased,
         getReceiptBillInfo,
         getReceiptCostingInfo,
         searchStockJournal,

@@ -31,6 +31,8 @@ ReportRouter.get('/tally-test-api-saleOrder', tallyPullAPI.externalAPISaleOrder)
 ReportRouter.get('/tally-test-api-stockJournal', tallyPullAPI.externalAPIStockJournal);
 ReportRouter.get('/tally-test-api-receipt', tallyPullAPI.externalAPIReceipt);
 ReportRouter.get('/tally-test-api-payment', tallyPullAPI.externalAPIPayment);
+ReportRouter.get('/tally-test-api-journal', tallyPullAPI.externalAPIJournal);
+ReportRouter.get('/tally-test-api-contra', tallyPullAPI.externalAPIContra);
 
 //---- admin api -- 
 ReportRouter.get('/tally-purchase-admin-api', tallyPullAPI.tallyAdminPurchaseAPI);
