@@ -369,7 +369,7 @@ const getBatchStockBalance = async (req, res) => {
         const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
-        const { dateBased = false } = req.query;
+        const { dateBased = 'no' } = req.query;
 
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
@@ -384,9 +384,9 @@ const getBatchStockBalance = async (req, res) => {
                 	COALESCE(SUM(bt.quantity), 0) AS consumedQuantity
                 FROM tbl_Batch_Master AS bm
                 LEFT JOIN tbl_Batch_Transaction AS bt ON bt.batch_id = bm.id
-                ${dateBased ? ` WHERE bm.trans_date BETWEEN @Fromdate AND @Todate ` : ''}
+                ${stringCompare(dateBased, 'yes') ? ` WHERE CONVERT(DATE, bm.trans_date) BETWEEN @Fromdate AND @Todate ` : ''}
                 GROUP BY bm.id, bm.quantity
-                ${!dateBased ? ` HAVING COALESCE(SUM(bt.quantity), 0) < bm.quantity ` : ''};
+                ${stringCompare(dateBased, 'no') ? ` HAVING COALESCE(SUM(bt.quantity), 0) < bm.quantity ` : ''};
             -- batch master
                 SELECT
                 	bm.id,
@@ -408,9 +408,10 @@ const getBatchStockBalance = async (req, res) => {
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = bm.item_id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = bm.created_by;
             -- batch transaction
-                SELECT *
-                FROM tbl_Batch_Transaction
-                WHERE batch_id IN (SELECT batch_id FROM @batchDetails)`
+                SELECT bt.*, g.Godown_Name AS godownNameGet
+                FROM tbl_Batch_Transaction AS bt
+	            LEFT JOIN tbl_Godown_Master AS g ON g.Godown_Id = bt.godown_id
+                WHERE bt.batch_id IN (SELECT batch_id FROM @batchDetails)`
             );
 
         const result = await request;

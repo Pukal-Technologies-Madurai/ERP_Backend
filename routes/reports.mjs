@@ -11,6 +11,8 @@ import storageStockReport from '../controller/Reports/storageStockReport.mjs';
 import costCenterReports from '../controller/Reports/costCenterReports.mjs';
 import nagalReports from '../controller/Reports/nakalReports.mjs';
 import reportsColumnVisiblity from '../controller/Reports/reportsColumnVisiblity.mjs';
+import deliveryReports from '../controller/Reports/deliveryReports.mjs';
+
 
 const ReportRouter = express.Router();
 
@@ -88,11 +90,11 @@ ReportRouter.get('/brokerageNagal/list', nagalReports.getNakalReport);
 
 ReportRouter.get('/brokerageNagalDelivery/list',nagalReports.getNagalPurchase)
 
+ReportRouter.get('/reportsNonconvert/sales',deliveryReports.getNonConvertedSales)
 
 
 ReportRouter.get('/reportState/columnVisiblity', reportsColumnVisiblity.getReportColumnVisiblityState);
 ReportRouter.post('/reportState/columnVisiblity', reportsColumnVisiblity.createReportColumnVisiblityState)
-
 
 
 export default ReportRouter;
