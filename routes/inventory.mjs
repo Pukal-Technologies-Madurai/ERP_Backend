@@ -28,7 +28,6 @@ inventoryRouter.get('/stockJournal/inwardsReport', stockJournals.getDestinationI
 inventoryRouter.get('/tripSheet', tripmaster.getTripDetails);
 inventoryRouter.post('/tripSheet', tripmaster.createTripDetails);
 inventoryRouter.put('/tripSheet', tripmaster.updateTripDetails);
-inventoryRouter.get('/tripSheet/arrivalList', tripmaster.getArrivalReport);
 
 inventoryRouter.get('/tripSheet/arrivalEntry', arrivalMaster.getArrivalEntry);
 inventoryRouter.post('/tripSheet/arrivalEntry', arrivalMaster.addArrivalEntry);
@@ -45,11 +44,20 @@ inventoryRouter.delete('/stockProcessing', stockProcessing.deleteStockProcessing
 inventoryRouter.get('/batchMaster/materialInward', batchProcess.getUnAssignedBatchFromMaterialInward);
 inventoryRouter.post('/batchMaster/materialInward', batchProcess.postBatchInMaterialInward);
 
+inventoryRouter.get('/batchMaster/consumption', batchProcess.getUnAssignedBatchProcessingSource);
+inventoryRouter.post('/batchMaster/consumption', batchProcess.postBatchInProcessingSource);
+
 inventoryRouter.get('/batchMaster/production', batchProcess.getUnAssignedBatchProcessing);
 inventoryRouter.post('/batchMaster/production', batchProcess.postBatchInProcessing);
 
 inventoryRouter.get('/batchMaster/godownTransfer', batchProcess.getUnAssignedBatchFromGodownTransfer);
 inventoryRouter.post('/batchMaster/godownTransfer', batchProcess.postOtherGodownTransfer);
+
+inventoryRouter.get('/batchMaster/sales', batchProcess.getUnAssignedBatchSales);
+inventoryRouter.post('/batchMaster/sales', batchProcess.postSalesUsage);
+
+inventoryRouter.get('/batchMaster/purchase', batchProcess.getUnAssignedBatchPurchase);
+inventoryRouter.post('/batchMaster/purchase', batchProcess.postPurchaseBatch);
 
 inventoryRouter.get('/batchMaster/stockBalance', batchProcess.getBatchStockBalance);
 

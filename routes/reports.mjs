@@ -84,19 +84,28 @@ ReportRouter.get('/brokerageReport/purchaseInvoice', costCenterReports.purchaseB
 ReportRouter.get('/brokerageReport/salesInvoice', costCenterReports.salesDeliveryBrokerageReport);
 
 ReportRouter.get('/brokerageNakalReport/sales', nagalReports.nakalSalesReport)
-ReportRouter.get('/brokerageNakalReport/purchase',nagalReports.nakalPurchaseReport)
-ReportRouter.post('/brokerageNakal/deliveryCreate',nagalReports.postnagalPurchase)
+ReportRouter.get('/brokerageNakalReport/purchase', nagalReports.nakalPurchaseReport)
+ReportRouter.post('/brokerageNakal/deliveryCreate', nagalReports.postnagalPurchase)
 
 ReportRouter.post('/brokerageNagal/create', nagalReports.postNakalReport)
 ReportRouter.get('/brokerageNagal/list', nagalReports.getNakalReport);
 
-ReportRouter.get('/brokerageNagalDelivery/list',nagalReports.getNagalPurchase)
+ReportRouter.get('/brokerageNagalDelivery/list', nagalReports.getNagalPurchase)
 
-ReportRouter.get('/reportsNonconvert/sales',deliveryReports.getNonConvertedSales)
+ReportRouter.get('/reportsNonconvert/sales', deliveryReports.getNonConvertedSales)
 
 
 ReportRouter.get('/reportState/columnVisiblity', reportsColumnVisiblity.getReportColumnVisiblityState);
-ReportRouter.post('/reportState/columnVisiblity', reportsColumnVisiblity.createReportColumnVisiblityState)
+ReportRouter.post('/reportState/columnVisiblity', reportsColumnVisiblity.createReportColumnVisiblityState);
+
+ReportRouter.get('/brokerageNakalReport/salesEntry', nagalReports.nakalSalesDataEntryReport)
+
+ReportRouter.post('/brokerageNagal/createSales', nagalReports.postNakalSales)
+ReportRouter.get('/brokerageNagalSales/list', nagalReports.getSalesReport)
+ReportRouter.delete('/brokerageNagalSales/list', nagalReports.deleteSalesNagal)
+ReportRouter.delete('/brokerageNagalPurchase/list', nagalReports.nagalPurchaseBulkDelete)
+
+ReportRouter.put('/brokerageNagalPurchase/list', nagalReports.nagalUpdateItemwise)
 
 
 export default ReportRouter;

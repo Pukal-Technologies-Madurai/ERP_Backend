@@ -1,5 +1,5 @@
 import sql from "mssql";
-import { sentData, servError, success } from "../../res.mjs";
+import { sentData, servError, success, failed, invalidInput } from "../../res.mjs";
 import { checkIsNumber, ISOString, toArray } from "../../helper_functions.mjs";
 import { getNextId } from "../../middleware/miniAPIs.mjs";
 
@@ -77,11 +77,11 @@ const nakalSalesReport = async (req, res) => {
                     AND pigi.Do_Date BETWEEN @Fromdate AND @Todate
                     AND bi.Do_Id IS NOT NULL
                     ${checkIsNumber(broker) ? " AND bi.CostCenterId = @broker " : ""}`
-                );
+            );
 
         const result = await request;
         sentData(res, toArray(result.recordset));
-        
+
     } catch (e) {
         servError(e, res);
     }
@@ -208,6 +208,7 @@ const getNakalReport = async (req, res) => {
     COUNT(outerNk.Broker_Id) AS Total_Bags,
     COALESCE((
       SELECT
+      nd.Id,
         rm.Retailer_Name,
         ll.Ledger_Name,
         ll.Ledger_Tally_Id,
@@ -289,7 +290,6 @@ const getNakalReport = async (req, res) => {
 
         sentData(res, rows);
     } catch (e) {
-        console.error("Error in getNakalReport:", e);
         servError(e, res);
     }
 };
@@ -314,7 +314,7 @@ const nakalPurchaseReport = async (req, res) => {
                     pigi.Voucher_Type, 
                     pigi.Po_Entry_Date, 
                     pigi.Retailer_Id, 
-                    pigi.Total_Invoice_value,
+                    pisi.Taxable_Amount AS Total_Invoice_value,
                     ISNULL(r.Retailer_Name, 'Not found') AS Retailer_Name,
                     pisi.Item_Id AS Product_Id,
                     ISNULL(p.Product_Name, 'Not found') AS Product_Name,
@@ -356,7 +356,10 @@ const nakalPurchaseReport = async (req, res) => {
                     ${checkIsNumber(broker)
                     ? " AND pstaff.Involved_Emp_Id = @broker "
                     : ""
-                }`);
+                }	
+             
+                    `
+            );
 
         const result = await request;
 
@@ -536,6 +539,534 @@ ORDER BY ecc.Cost_Center_Name
     }
 };
 
+
+const postNakalSales = async (req, res) => {
+    try {
+        const nakalData = req.body;
+
+        if (!Array.isArray(nakalData) || nakalData.length === 0) {
+            return invalidInput(res, "Nakal data array is required");
+        }
+
+        let insertedCount = 0;
+
+        for (let item of nakalData) {
+            const {
+                Do_Inv_No,
+                Do_Id,
+                Date,
+                Retailer_Id,
+                Amount,
+                Product_Id,
+                Pack,
+                Bill_Qty,
+                Act_Qty,
+                Item_Rate,
+                brokerage,
+                CostCenterId,
+                Created_By,
+                Created_At,
+            } = item;
+
+
+            const getMaxId = await getNextId({
+                table: "tbl_NagalSales",
+                column: "Id",
+            });
+            if (!checkIsNumber(getMaxId.MaxId)) {
+                return failed(res, "Error generating State ID");
+            }
+            const request = new sql.Request()
+                .input("Id", getMaxId.MaxId)
+                .input("Do_Id", Do_Id)
+                .input('Date', Date)
+                .input("Do_Inv_No", Do_Inv_No)
+                .input("Retailer_Id", Retailer_Id)
+                .input("Total_Invoice_value", Amount)
+                .input("Product_Id", Product_Id)
+                .input("Pack", Pack)
+                .input("Bill_Qty", Bill_Qty)
+                .input("Act_Qty", Act_Qty)
+                .input("Item_Rate", Item_Rate)
+                .input("Brokerage", brokerage)
+                .input("Created_By", Created_By)
+                .input("Created_At", new global.Date())
+                .input("Broker_Id", CostCenterId)
+
+            const result = await request.query(`
+        INSERT INTO tbl_NagalSales (
+          Id,Do_Id,Date,Do_Inv_No, Retailer_Id, Total_Invoice_value, Product_Id, Pack, Bill_Qty, Act_Qty,
+          Item_Rate, Brokerage, Created_By, Created_At,Broker_Id
+        )
+        VALUES (
+         @Id,@Do_Id,@Date, @Do_Inv_No, @Retailer_Id, @Total_Invoice_value, @Product_Id, @Pack, @Bill_Qty, @Act_Qty,
+          @Item_Rate, @Brokerage, @Created_By, @Created_At,@Broker_Id
+        )
+      `);
+
+            if (result.rowsAffected[0] > 0) insertedCount++;
+        }
+
+        success(res, `Nakal report entries saved successfully`);
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+
+const nakalSalesDataEntryReport = async (req, res) => {
+    try {
+        const Fromdate = req.query?.FromDate
+            ? ISOString(req.query?.FromDate)
+            : ISOString();
+        const Todate = req.query?.ToDate
+            ? ISOString(req.query?.ToDate)
+            : ISOString();
+        const broker = req.query.broker;
+
+        const request = new sql.Request()
+            .input("Fromdate", sql.Date, Fromdate)
+            .input("Todate", sql.Date, Todate)
+            .input("broker", sql.Int, broker)
+            .query(`
+                WITH BrokerInfo AS (
+                    SELECT 
+                        s.Do_Id,
+                        s.Emp_Id AS CostCenterId,
+                        s.Emp_Type_Id AS CostTypeId,
+                        cc.Cost_Category AS CostTypeGet,
+                        ec.Cost_Center_Name AS CostCenterGet
+                    FROM tbl_Sales_Delivery_Staff_Info s
+                    JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = s.Emp_Type_Id
+                    JOIN tbl_ERP_Cost_Center ec ON ec.Cost_Center_Id = s.Emp_Id
+                    WHERE cc.Cost_Category LIKE '%BROKER%'
+                )
+                SELECT DISTINCT
+                    pigi.Do_Id, 
+                    pigi.Do_Inv_No, 
+                    pigi.Voucher_Type, 
+                    pigi.Do_Date AS Date, 
+                    pigi.Retailer_Id,
+                    pigi.Narration,
+                    COALESCE(r.Retailer_Name, 'Not found') AS Retailer_Name,
+                    CAST(ISNULL(pck.Pack, 0) AS DECIMAL(18, 2)) AS Pack,
+                    pisi.Item_Id AS Product_Id,
+                    COALESCE(p.Product_Name, 'Not found') AS Product_Name,
+                    CASE 
+                        WHEN ISNULL(TRY_CAST(pck.Pack AS DECIMAL(18,2)), 0) = 0 THEN 0
+                        ELSE ISNULL(pisi.Act_Qty, 0) / CAST(ISNULL(pck.Pack, 0) AS DECIMAL(18,2))
+                        END AS displayQuantity,
+                    COALESCE(pisi.Bill_Qty, 0) AS Bill_Qty,
+                    COALESCE(pisi.Act_Qty, 0) AS Act_Qty,
+                    COALESCE(pisi.Item_Rate, 0) AS Item_Rate,
+                    COALESCE(pisi.Amount, 0) AS Amount,
+                    COALESCE(br.Brokerage, 0) AS Brokerage,
+                    COALESCE(br.Coolie, 0) AS Coolie,
+                    bi.CostCenterId,
+                    COALESCE(bi.CostCenterGet, 'Not found') AS CostCenterGet,
+                    bi.CostTypeId,
+                    COALESCE(bi.CostTypeGet, 'Not found') AS CostTypeGet,
+                    COALESCE(v.Voucher_Type, 'Not found') AS VoucherGet
+                FROM tbl_Sales_Delivery_Gen_Info AS pigi
+                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pigi.Retailer_Id
+                LEFT JOIN tbl_Sales_Delivery_Stock_Info AS pisi ON pisi.Delivery_Order_Id = pigi.Do_Id
+                LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = pisi.Item_Id
+                LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id=p.Pack_Id
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pigi.Voucher_Type
+                LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = pisi.Item_Id
+                LEFT JOIN tbl_NagalSales nd ON nd.Do_Id = pigi.Do_Id AND nd.Product_Id = pisi.Item_Id
+                LEFT JOIN BrokerInfo bi ON bi.Do_Id = pigi.Do_Id
+                WHERE 
+                    pigi.Cancel_status != 0
+                    AND nd.Do_Id IS NULL 
+                    AND pigi.Do_Date BETWEEN @Fromdate AND @Todate
+                    AND bi.Do_Id IS NOT NULL
+                    ${checkIsNumber(broker) ? " AND bi.CostCenterId = @broker " : ""}`
+            );
+
+        const result = await request;
+        sentData(res, toArray(result.recordset));
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+
+
+
+
+
+
+
+const getSalesReport = async (req, res) => {
+    try {
+        const { FromDate, ToDate, broker, ledger, item } = req.query;
+        const request = new sql.Request();
+
+        if (FromDate) request.input("FromDate", sql.Date, new Date(FromDate));
+        if (ToDate) request.input("ToDate", sql.Date, new Date(ToDate));
+
+        if (broker && !isNaN(broker)) {
+            request.input("broker", sql.Int, parseInt(broker));
+        }
+        if (ledger && !isNaN(ledger)) {
+            request.input("ledger", sql.Int, parseInt(ledger));
+        }
+        if (item && !isNaN(item)) {
+            request.input("Item", sql.Int, parseInt(item));
+        }
+
+        const query = `
+SELECT 
+    outerNk.Broker_Id,
+    ecc.Cost_Center_Name AS Broker_Name,
+    SUM(CASE 
+          WHEN ISNULL(TRY_CAST(outerNk.Pack AS DECIMAL(18,2)), 0) = 0 THEN 0
+          WHEN outerNk.Act_Qty IS NULL THEN 0
+          ELSE ISNULL(outerNk.Act_Qty, 0) / CAST(ISNULL(outerNk.Pack, 0) AS DECIMAL(18,2))
+        END) AS Total_Qty,
+    SUM(ISNULL(outerNk.Act_Qty, 0)) AS Total_KGS,
+    SUM(ISNULL(outerNk.Total_Invoice_value, 0)) AS Total_Amount,
+    SUM(ISNULL(outerNk.Brokerage, 0)) AS Broker_Exp,
+    COUNT(outerNk.Broker_Id) AS Total_Bags,
+    COALESCE((
+      SELECT
+        rm.Retailer_Name,
+          ll.Ledger_Name,
+        ll.Ledger_Tally_Id,
+        ll.Ledger_Alias,
+        nd.*,
+        nd.Total_Invoice_value as Amount,
+        pm.Product_Name,
+        pm.Short_Name,
+        CASE 
+          WHEN ISNULL(TRY_CAST(nd.Pack AS DECIMAL(18,2)), 0) = 0 THEN 0
+          WHEN nd.Act_Qty IS NULL THEN 0
+          ELSE ISNULL(nd.Act_Qty, 0) / CAST(ISNULL(nd.Pack, 0) AS DECIMAL(18,2))
+        END AS QTY,
+        nd.Act_Qty AS KGS
+      FROM tbl_NagalSales nd
+      LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = nd.Product_Id
+      LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = nd.Retailer_Id
+      LEFT JOIN tbl_Ledger_LOL ll ON ll.Ledger_Tally_Id = rm.ERP_Id
+      WHERE 
+        nd.Broker_Id = outerNk.Broker_Id
+        AND (@FromDate IS NULL OR CONVERT(DATE, nd.Date) >= @FromDate)
+        AND (@ToDate IS NULL OR CONVERT(DATE, nd.Date) <= @ToDate)
+        ${broker && !isNaN(broker) ? "AND nd.Broker_Id = @broker" : ""}
+           ${ledger && !isNaN(ledger) ? "AND rm.ERP_Id = @ledger" : ""} 
+        ${item && !isNaN(item) ? "AND  pm.Product_Id = @item" : ""} 
+      ORDER BY nd.Date DESC
+      FOR JSON PATH
+    ), '[]') AS Items
+FROM tbl_NagalSales outerNk
+LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = outerNk.Broker_Id
+WHERE 
+    (@FromDate IS NULL OR CONVERT(DATE, outerNk.Date) >= @FromDate)
+    AND (@ToDate IS NULL OR CONVERT(DATE, outerNk.Date) <= @ToDate)
+    ${broker && !isNaN(broker) ? "AND outerNk.Broker_Id = @broker" : ""}
+      ${ledger && !isNaN(ledger)
+                ? "AND outerNk.Retailer_Id IN (SELECT Retailer_Id FROM tbl_Retailers_Master WHERE ERP_Id = @ledger)"
+                : ""
+            }
+ ${item && !isNaN(item) ? "AND outerNk.Product_Id = @item" : ""}
+GROUP BY outerNk.Broker_Id, ecc.Cost_Center_Name
+ORDER BY ecc.Cost_Center_Name
+        
+`;
+
+        const result = await request.query(query);
+        const rows = result.recordset.map((row) => ({
+            Broker_Id: row.Broker_Id,
+            Broker_Name: row.Broker_Name,
+            Total_Qty: Number(row.Total_Qty || 0).toFixed(2),
+            Total_KGS: Number(row.Total_KGS || 0).toFixed(2),
+            Total_Amount: Number(row.Total_Amount || 0).toFixed(2),
+            Broker_Exp: Number(row.Broker_Exp || 0).toFixed(2),
+            VilaiVasi: Number(row.VilaiVasi || 0).toFixed(2),
+            Total_Bags: Number(row.Total_Bags || 0),
+            Items: JSON.parse(row.Items || "[]"),
+        }));
+
+        sentData(res, rows);
+    } catch (e) {
+        console.error("Error in getNakalReport:", e);
+        servError(e, res);
+    }
+};
+
+
+
+const deleteSalesNagal = async (req, res) => {
+    try {
+        const { Do_Id, Date, Retailer_Id, Product_Id, Broker_Id } = req.body;
+
+        if (!Do_Id || !Date || !Retailer_Id || !Product_Id || !Broker_Id) {
+            return invalidInput(res, "Do_Id,Date,Retailer_Id,Product_Id.Product_Id is Required");
+        }
+
+        const request = new sql.Request()
+            .input('Do_Id', Do_Id)
+            .input('Date', Date)
+            .input('Retailer_Id', Retailer_Id)
+            .input('Product_Id', Product_Id)
+            .input('Broker_Id', Broker_Id)
+
+
+        const result = await request.query(`
+            DELETE FROM tbl_NagalSales
+            WHERE Do_Id = @Do_Id,Date=@Date,Retailer_Id=@Retailer_Id,Product_Id=@Product_Id ,Broker_Id=@Broker_Id`
+        );
+
+        if (result.rowsAffected[0] === 0) {
+            return failed(res, 'No Data Found');
+        }
+
+        success(res, 'Nagal Sales deleted.');
+
+    } catch (error) {
+        servError(error, res);
+    }
+
+}
+
+const nagalPurchaseBulkDelete = async (req, res) => {
+    const { FromDate, ToDate, TransactionType, Broker, Ledger, Item, Product_Id, Do_Id, Id } = req.body;
+
+
+    if (!FromDate || !ToDate) {
+        return invalidInput(res, 'No required fields')
+    }
+    try {
+        const request = new sql.Request();
+
+        request.input('FromDate', FromDate);
+        request.input('ToDate', ToDate);
+        let whereClauses = [];
+        let dateField = 'Date';
+
+        if (TransactionType === 'purchase') {
+            dateField = 'Po_Entry_Date';
+        }
+        if (TransactionType === 'sales') {
+            dateField = 'Date';
+        }
+
+        whereClauses.push(`${dateField} BETWEEN @FromDate AND @ToDate`);
+
+        if (Broker) {
+            request.input('BrokerId', sql.Int, Broker);
+            whereClauses.push('Broker_Id = @BrokerId');
+        }
+        if (Ledger) {
+            request.input('LedgerId', sql.Int, Ledger);
+            whereClauses.push('Ledger_Id = @LedgerId');
+        }
+        if (Item) {
+            request.input('ProductId', sql.Int, Item);
+            whereClauses.push('Product_Id = @ProductId');
+        }
+        if (Product_Id) {
+            request.input('Product_Id', Product_Id)
+            whereClauses.push('Product_Id=@Product_Id')
+        }
+        if (Do_Id) {
+            request.input('Do_Id', Do_Id)
+            whereClauses.push('Do_Id=@Do_Id')
+        }
+        if (Id) {
+            request.input('Id', Id)
+            whereClauses.push('Id=@Id')
+        }
+
+        let tableName = 'tbl_Nakal_Data';
+        if (TransactionType === 'purchase') {
+            tableName = 'tbl_NakalDelivery';
+        } else if (TransactionType === 'sales') {
+            tableName = 'tbl_NagalSales';
+        }
+
+        const deleteQuery = `
+            DELETE FROM ${tableName}
+            WHERE ${whereClauses.join(' AND ')}
+        `;
+
+        const result = await request.query(deleteQuery);
+
+
+
+        if (result.rowsAffected[0] === 0) {
+            return failed(res, 'No data');
+        }
+
+        success(res, { message: 'Data deleted successfully.' });
+
+
+
+    }
+    catch (e) {
+        servError(e, res)
+    }
+}
+
+
+// const nagalUpdateItemwise=async(req,res)=>{
+//     const {Id,Brokerage,TransactionType,Brok_Amt,Coolie_Amt,Vilai_Vasi,Vilaivasi_Rate,Brokerage_Amt} =req.body 
+
+//     try{
+//        if (!Id || !Brokerage ) {
+//                 return invalidInput(res, 'No required fields')
+//             }
+//                 const request = new sql.Request();
+
+//                   request.input('Id', Id);
+//                   request.input('brokerage', Brokerage);
+//                 request.input('TransactionType',TransactionType)
+
+//                     let tableName = 'tbl_Nakal_Data';
+//         if (TransactionType === 'purchase') {
+//             tableName = 'tbl_NakalDelivery';
+//         } else if (TransactionType === 'sales') {
+//             tableName = 'tbl_NagalSales';
+//         }
+//               const updateQuery = `
+//             UPDATE ${tableName} SET Brokerage=${brokerage}
+//             WHERE Id=@Id
+//         `;
+
+//         const result = await request.query(updateQuery);
+
+
+//             if (result.rowsAffected[0] === 0) {
+//                 return failed(res, 'No data');
+//             }
+
+//         success(res, { message: 'Data Updated successfully.' });
+
+
+
+//     }
+//     catch(e){
+//       servError(e,res)
+// }
+// }
+
+
+
+const nagalUpdateItemwise = async (req, res) => {
+    const {
+        Id,
+        TransactionType,
+        Brok_Rate,
+        Brok_Amt,
+        Coolie_Rate,
+        Coolie_Amt,
+        Vilai_Vasi,
+        Vilaivasi_Rate,
+        Brokerage,
+        Brokerage_Amt
+    } = req.body;
+
+    try {
+
+        if (!Id || !TransactionType) {
+            return invalidInput(res, 'Id and TransactionType are required fields');
+        }
+
+        const request = new sql.Request();
+        request.input('Id', Id);
+        request.input('TransactionType', TransactionType);
+
+        let tableName = 'tbl_Nakal_Data';
+        if (TransactionType === 'purchase') {
+            tableName = 'tbl_NakalDelivery';
+        } else if (TransactionType === 'sales') {
+            tableName = 'tbl_NagalSales';
+        }
+
+
+        let setClauses = [];
+
+        if (TransactionType === 'salesNagal') {
+            if (!Brok_Rate && !Coolie_Rate && !Vilai_Vasi) {
+                return invalidInput(res, 'At least one of Brok_Rate, Coolie_Rate, or Vilai_Vasi is required for salesNagal');
+            }
+
+            if (Brok_Rate !== undefined) {
+                request.input('Brok_Rate', sql.Decimal(18, 2), Brok_Rate);
+                setClauses.push('Brok_Rate = @Brok_Rate');
+            }
+            if (Brok_Amt !== undefined) {
+                request.input('Brok_Amt', sql.Decimal(18, 2), Brok_Amt);
+                setClauses.push('Brok_Amt = @Brok_Amt');
+            } else if (Brok_Rate !== undefined) {
+
+                request.input('QTY', sql.Decimal(18, 2), req.body.QTY || 0);
+                setClauses.push('Brok_Amt = @Brok_Rate * @QTY');
+            }
+
+            if (Coolie_Rate !== undefined) {
+                request.input('Coolie_Rate', sql.Decimal(18, 2), Coolie_Rate);
+                setClauses.push('Coolie_Rate = @Coolie_Rate');
+            }
+            if (Coolie_Amt !== undefined) {
+                request.input('Coolie_Amt', sql.Decimal(18, 2), Coolie_Amt);
+                setClauses.push('Coolie_Amt = @Coolie_Amt');
+            } else if (Coolie_Rate !== undefined) {
+
+                setClauses.push('Coolie_Amt = @Coolie_Rate * @QTY');
+            }
+
+            if (Vilai_Vasi !== undefined) {
+                request.input('Vilai_Vasi', sql.Decimal(18, 2), Vilai_Vasi);
+                setClauses.push('Vilai_Vasi = @Vilai_Vasi');
+            }
+            if (Vilaivasi_Rate !== undefined) {
+                request.input('Vilaivasi_Rate', sql.Decimal(18, 2), Vilaivasi_Rate);
+                setClauses.push('Vilaivasi_Rate = @Vilaivasi_Rate');
+            } else if (Vilai_Vasi !== undefined) {
+
+                request.input('Act_Qty', sql.Decimal(18, 2), req.body.Act_Qty || 0);
+                setClauses.push('Vilaivasi_Rate = (@Vilai_Vasi * @Act_Qty) / 100');
+            }
+        } else {
+
+            if (!Brokerage) {
+                return invalidInput(res, 'Brokerage is required for sales/purchase transactions');
+            }
+
+
+            if (Brokerage_Amt !== undefined) {
+                request.input('Brokerage', Brokerage);
+                setClauses.push('Brokerage = @Brokerage');
+            }
+        }
+
+        if (setClauses.length === 0) {
+            return invalidInput(res, 'No valid fields to update');
+        }
+
+        const updateQuery = `
+            UPDATE ${tableName}
+            SET ${setClauses.join(', ')}
+            WHERE Id = @Id
+        `;
+
+        const result = await request.query(updateQuery);
+
+        if (result.rowsAffected[0] === 0) {
+            return failed(res, 'No records were updated - ID not found');
+        }
+
+        success(res, `Nakal report entries saved successfully`);
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+
 export default {
     nakalSalesReport,
     postNakalReport,
@@ -543,4 +1074,10 @@ export default {
     nakalPurchaseReport,
     postnagalPurchase,
     getNagalPurchase,
+    nakalSalesDataEntryReport,
+    postNakalSales,
+    getSalesReport,
+    deleteSalesNagal,
+    nagalPurchaseBulkDelete,
+    nagalUpdateItemwise
 };

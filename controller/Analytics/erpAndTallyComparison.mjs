@@ -278,12 +278,15 @@ const getSalesDifferenceItemWise = async (req, res) => {
 						p.Product_Name AS erpItemName,
 						s.Bill_Qty AS erpQty,
 						s.Item_Rate AS erpRate,
-						s.Amount AS erpAmount
+						s.Amount AS erpAmount,
+						g.Godown_Name AS erpGoDown
 					FROM FilteredERP e
 					JOIN tbl_Sales_Delivery_Stock_Info s
 						ON e.Do_Id = s.Delivery_Order_Id
 					JOIN tbl_Product_Master AS p
 						ON p.Product_Id = s.Item_Id
+					LEFT JOIN tbl_Godown_Master AS g 
+						ON g.Godown_Id = s.GoDown_Id
 				),
 				TallySales AS (
 					SELECT 
@@ -296,12 +299,15 @@ const getSalesDifferenceItemWise = async (req, res) => {
 						p.stock_item_name AS tallyItemName,
 						s.bill_qty AS tallyQty,
 						s.item_rate AS tallyRate,
-						s.amount AS tallyAmount
+						s.amount AS tallyAmount,
+						g.godown_name AS tallyGoDown
 					FROM FilteredTally t
 					JOIN [${TALLYDB}].[dbo].[sales_inv_stk_info_ob] s
 						ON t.tally_id = s.tally_id
 					JOIN [${TALLYDB}].[dbo].[stock_items_ob] AS p
 						ON p.tally_id = s.name_item_id
+					LEFT JOIN [${TALLYDB}].[dbo].[godown_ob] AS g
+						ON g.tally_id = s.godown_id
 				),
 				MergedSales AS (
 					SELECT 
@@ -325,6 +331,10 @@ const getSalesDifferenceItemWise = async (req, res) => {
 							tally.tallyItemName COLLATE SQL_Latin1_General_CP1_CI_AS,
 							erp.erpItemName COLLATE SQL_Latin1_General_CP1_CI_AS
 						) AS ItemName,
+						COALESCE(
+							tally.tallyGoDown COLLATE SQL_Latin1_General_CP1_CI_AS,
+							erp.erpGoDown COLLATE SQL_Latin1_General_CP1_CI_AS
+						) AS GodownName,
 						erp.erpQty,
 						tally.tallyQty,
 						erp.erpRate,
