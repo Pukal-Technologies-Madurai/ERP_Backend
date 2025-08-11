@@ -909,7 +909,7 @@ LEFT JOIN
                     		COUNT(R.receipt_id) AS VoucherBreakUpCount,
                     		V.Voucher_Type AS Voucher_Type,
                     		'Receipt' AS ModuleName,
-                    		ISNULL(SUM(debit_amount), 0) AS Amount,
+                    		ISNULL(SUM(R.credit_amount), 0) AS Amount,
                             '/erp/receipts/listReceipts' AS navLink,
                     		'ERP' AS dataSource
                     	FROM tbl_Receipt_General_Info AS R
@@ -924,7 +924,7 @@ LEFT JOIN
                     		COUNT(P.pay_id) AS VoucherBreakUpCount,
                     		V.Voucher_Type AS Voucher_Type,
                     		'Payment' AS ModuleName,
-                    		ISNULL(SUM(P.credit_amount), 0) AS Amount,
+                    		ISNULL(SUM(P.debit_amount), 0) AS Amount,
                             '/erp/payments/paymentList' AS navLink,
                     		'ERP' AS dataSource
                     	FROM tbl_Payment_General_Info AS P
