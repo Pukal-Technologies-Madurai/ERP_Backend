@@ -12,7 +12,7 @@ import costCenterReports from '../controller/Reports/costCenterReports.mjs';
 import nagalReports from '../controller/Reports/nakalReports.mjs';
 import reportsColumnVisiblity from '../controller/Reports/reportsColumnVisiblity.mjs';
 import deliveryReports from '../controller/Reports/deliveryReports.mjs';
-
+import expences from '../controller/Masters/expences.mjs';
 
 const ReportRouter = express.Router();
 
@@ -106,6 +106,6 @@ ReportRouter.delete('/brokerageNagalSales/list', nagalReports.deleteSalesNagal)
 ReportRouter.delete('/brokerageNagalPurchase/list', nagalReports.nagalPurchaseBulkDelete)
 
 ReportRouter.put('/brokerageNagalPurchase/list', nagalReports.nagalUpdateItemwise)
-
+ReportRouter.get('/expenseReport', expences.getExpences)
 
 export default ReportRouter;

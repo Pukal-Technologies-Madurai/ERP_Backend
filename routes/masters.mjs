@@ -27,6 +27,7 @@ import defaultAccountMaster from '../controller/Masters/defaultAccountMaster.mjs
 import lol from '../controller/Masters/lol.mjs';
 import los from '../controller/Masters/los.mjs';
 import upload from '../middleware/excelUpload.mjs';
+import costCenter from '../controller/Masters/costCenter.mjs';
 
 import accountGroup from '../controller/Masters/accountGroup.mjs';
 import state from '../controller/Masters/state.mjs';
@@ -293,5 +294,9 @@ MastersRouter.put('/proGroup', prodGroup.putProdGroup);
 MastersRouter.delete('/proGroup', prodGroup.deleteProGroup);
 
 MastersRouter.get('/defaultBanks', defaultBanks.getdefaultBanks);
+
+MastersRouter.get('/getCostCenter', costCenter.getCostCenter)
+MastersRouter.get('/erpCostCenter/dropDown', costCenter.getCostDropDown)
+MastersRouter.put('/costCenterupdate', costCenter.putCostcenter)
 
 export default MastersRouter;
