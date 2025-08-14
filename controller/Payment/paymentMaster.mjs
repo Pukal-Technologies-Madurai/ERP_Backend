@@ -94,8 +94,8 @@ const PaymentMaster = () => {
                 payment_voucher_type_id, pay_bill_type, is_new_ref = 0,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
-                debit_amount,
-                check_no, check_date, bank_name, bank_date,
+                debit_amount, transaction_type = null,
+                check_no, check_date, bank_name, bank_date, 
                 remarks, status, created_by,
             } = req.body;
 
@@ -190,6 +190,7 @@ const PaymentMaster = () => {
                 .input('debit_ledger', debit_ledger)
                 .input('debit_ledger_name', debit_ledger_name)
                 .input('debit_amount', debit_amount)
+                .input('transaction_type', transaction_type)
                 .input('remarks', remarks)
                 .input('check_no', check_no ? check_no : null)
                 .input('check_date', check_date ? check_date : null)
@@ -203,13 +204,13 @@ const PaymentMaster = () => {
                         pay_id, year_id, payment_sno, payment_invoice_no, payment_voucher_type_id, payment_date, pay_bill_type, is_new_ref,
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
-                        check_no, check_date, bank_name, bank_date, 
+                        check_no, check_date, bank_name, bank_date, transaction_type,
                         remarks, status, created_by, created_on, Alter_Id
                     ) VALUES (
                         @pay_id, @year_id, @payment_sno, @payment_invoice_no, @payment_voucher_type_id, @payment_date, @pay_bill_type, @is_new_ref,
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
-                        @check_no, @check_date, @bank_name, @bank_date,
+                        @check_no, @check_date, @bank_name, @bank_date, @transaction_type,
                         @remarks, @status, @created_by, GETDATE(), @Alter_Id
                     )`
                 );
@@ -271,7 +272,7 @@ const PaymentMaster = () => {
                 pay_id, remarks, status, is_new_ref = 0,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
-                debit_amount, altered_by,
+                debit_amount, altered_by, transaction_type,
                 check_no, check_date, bank_name, bank_date
             } = req.body;
 
@@ -303,6 +304,7 @@ const PaymentMaster = () => {
                 .input('debit_ledger', debit_ledger)
                 .input('debit_ledger_name', debit_ledger_name)
                 .input('debit_amount', debit_amount)
+                .input('transaction_type', transaction_type)
                 .input('check_no', check_no ? check_no : null)
                 .input('check_date', check_date ? check_date : null)
                 .input('bank_name', bank_name ? bank_name : null)
@@ -322,6 +324,7 @@ const PaymentMaster = () => {
                         debit_ledger = @debit_ledger,
                         debit_ledger_name = @debit_ledger_name,
                         debit_amount = @debit_amount,
+                        transaction_type = @transaction_type,
                         check_no = @check_no,
                         check_date = @check_date,
                         bank_name = @bank_name,

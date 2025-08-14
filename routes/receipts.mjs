@@ -2,6 +2,7 @@ import express from 'express';
 import paymentCollection from '../controller/Delivery/paymentCollection.mjs';
 import receiptMaster from '../controller/Receipts/receiptMaster.mjs';
 import dataDependency from '../controller/Receipts/dataDependency.mjs';
+import receiptReport from '../controller/Receipts/receiptReport.mjs';
 
 const ReceiptsRouter = express.Router();
 
@@ -32,6 +33,9 @@ ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt', dataDependency.g
 ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt/retailerBased', dataDependency.getPendingReceiptsRetailerBased);
 
 ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);
+
+ReceiptsRouter.get('/outStandingAbove',receiptReport.getOutstadingAbove)
+ReceiptsRouter.get('/outstandingOver',receiptReport.getoutstandingOver)
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 
 export default ReceiptsRouter;
