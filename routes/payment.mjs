@@ -2,6 +2,7 @@ import express from 'express';
 import paymentMaster from '../controller/Payment/paymentMaster.mjs';
 import paymentDependency from '../controller/Payment/dataDependency.mjs';
 import paymentReport from '../controller/Payment/paymentReport.mjs';
+import debtorsCreditors from '../controller/Payment/debtorsCreditors.mjs';
 
 const PaymentRouter = express.Router();
 
@@ -23,6 +24,9 @@ PaymentRouter.get('/paymentPendingInvoices', paymentDependency.getPendingPayment
 PaymentRouter.get('/reports/pendingReference', paymentReport.getPendingPaymentReference);
 PaymentRouter.get('/reports/accountsTransaction', paymentReport.getAccountsTransaction);
 PaymentRouter.get('/reports/itemExpences', paymentReport.itemTotalExpenceWithStockGroup);
+
+PaymentRouter.post('/debtorsCreditors', debtorsCreditors.getDebtorsCrditors)
+PaymentRouter.get('/getDebtorsCreditors', debtorsCreditors.getDebtorsCreditorsId)
 
 
 export default PaymentRouter;

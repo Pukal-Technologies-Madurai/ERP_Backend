@@ -354,11 +354,11 @@ const SalesInvoice = () => {
 
                 for (let i = 0; i < taxTypes.length; i++) {
                     const { expName, Value } = taxTypes[i];
-                    const numValue = toNumber(Value);
+                    const numValue = Number(Value);
                     const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
 
-                    const Expence_Value_DR = numValue < 0 ? numValue : 0;
-                    const Expence_Value_CR = numValue >= 0 ? Math.abs(numValue) : 0;
+                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
 
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)
@@ -858,8 +858,8 @@ const SalesInvoice = () => {
                     const numValue = toNumber(Value);
                     const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
 
-                    const Expence_Value_DR = numValue < 0 ? numValue : 0;
-                    const Expence_Value_CR = numValue >= 0 ? Math.abs(numValue) : 0;
+                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
 
                     const request = new sql.Request(transaction)
                         .input('Do_Id', Do_Id)

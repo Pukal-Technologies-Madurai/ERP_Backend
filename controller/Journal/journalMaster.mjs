@@ -94,7 +94,7 @@ const createJournal = async (req, res) => {
         if (!VoucherType) errors.push("VoucherType");
         if (!BranchId) errors.push("BranchId");
         if (!CreatedBy) errors.push("CreatedBy");
-        if (JournalStatus === undefined || JournalStatus === null) errors.push("JournalStatus");
+        if (JournalStatus === undefined || JournalStatus === null || JournalStatus === '') errors.push("JournalStatus");
 
         const rows = toArray(Entries).sort((a, b) => String(b.DrCr).localeCompare(a.DrCr)).map((r) => ({
             Acc_Id: Number(r?.Acc_Id),
@@ -270,8 +270,174 @@ const createJournal = async (req, res) => {
     }
 };
 
+const editJournal = async (req, res) => {
+    const tx = new sql.Transaction();
+    try {
+        const {
+            JournalAutoId,
+            JournalDate,
+            Narration = null,
+            JournalStatus,
+            Entries = [],
+        } = req.body || {};
+
+        const errors = [];
+
+        if (!JournalAutoId) errors.push("JournalAutoId");
+        if (JournalStatus === undefined || JournalStatus === null || JournalStatus === '') errors.push("JournalStatus");
+
+        const rows = toArray(Entries).map((r, idx) => ({
+            LineId: r?.LineId || null,
+            LineNum: Number(r?.LineNum || idx + 1),
+            Acc_Id: Number(r?.Acc_Id),
+            DrCr: String(r?.DrCr || "").trim(),
+            Amount: Number(r?.Amount || 0),
+            Remarks: r?.Remarks ?? null,
+        }));
+
+        if (rows.length === 0) errors.push("Entries");
+
+        rows.forEach((r, i) => {
+            if (!r.Acc_Id) errors.push(`Entries[${i}].Acc_Id`);
+            if (!(r.DrCr === "Dr" || r.DrCr === "Cr")) errors.push(`Entries[${i}].DrCr`);
+            if (!(r.Amount > 0)) errors.push(`Entries[${i}].Amount`);
+        });
+
+        const hasDr = rows.some((r) => r.DrCr === "Dr");
+        const hasCr = rows.some((r) => r.DrCr === "Cr");
+        if (!hasDr) errors.push("Entries:MissingDebit");
+        if (!hasCr) errors.push("Entries:MissingCredit");
+
+        const seen = new Set();
+        rows.forEach((r) => {
+            const k = `${r.DrCr}:${r.Acc_Id}`;
+            if (seen.has(k)) errors.push(`Duplicate_${k}`);
+            seen.add(k);
+        });
+
+        const drTotal = rows.filter((r) => r.DrCr === "Dr").reduce((t, r) => t + r.Amount, 0);
+        const crTotal = rows.filter((r) => r.DrCr === "Cr").reduce((t, r) => t + r.Amount, 0);
+        if (Math.round((drTotal - crTotal) * 100) !== 0) errors.push("NotBalanced");
+
+        if (errors.length) {
+            return invalidInput(res, "Enter Required Fields", { errors });
+        }
+
+        const journalDate = JournalDate ? ISOString(JournalDate) : ISOString();
+
+
+        const hdrQ = await new sql.Request()
+            .input("JournalAutoId", JournalAutoId)
+            .query(`
+                SELECT TOP 1
+                    JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo
+                FROM dbo.tbl_Journal_General_Info
+                WHERE JournalAutoId = @JournalAutoId`
+            );
+
+        if (hdrQ.recordset.length === 0) {
+            return invalidInput(res, "Journal not found", { JournalAutoId });
+        }
+
+        const {
+            JournalId,
+            Year_Id,
+            VoucherType,
+            JournalNo,
+            JournalVoucherNo,
+        } = hdrQ.recordset[0];
+
+        await tx.begin();
+
+        await new sql.Request(tx)
+            .input("JournalAutoId", JournalAutoId)
+            .input("JournalDate", journalDate)
+            .input("Narration", Narration)
+            .input("JournalStatus", JournalStatus)
+            .query(`
+                UPDATE dbo.tbl_Journal_General_Info
+                SET
+                    JournalDate   = @JournalDate,
+                    Narration     = @Narration,
+                    JournalStatus = @JournalStatus,
+                    UpdatedAt     = GETDATE(),
+                    AlterId       = AlterId + 1
+                WHERE JournalAutoId = @JournalAutoId;`
+            );
+
+        const EntriesJson = JSON.stringify(rows);
+
+        await new sql.Request(tx)
+            .input("JournalAutoId", JournalAutoId)
+            .input("JournalId", JournalId)
+            .input("JournalVoucherNo", JournalVoucherNo)
+            .input("JournalDate", journalDate)
+            .input("EntriesJson", EntriesJson)
+            .query(`
+            -- Parse incoming entries JSON into a tabular source
+                WITH Src AS (
+                    SELECT
+                        TRY_CONVERT(UNIQUEIDENTIFIER, JSON_VALUE(j.value,'$.LineId'))  AS LineId,
+                        CAST(JSON_VALUE(j.value,'$.LineNum') AS INT)                   AS LineNum,
+                        CAST(JSON_VALUE(j.value,'$.Acc_Id') AS INT)                    AS Acc_Id,
+                        JSON_VALUE(j.value,'$.DrCr')                                   AS DrCr,
+                        CAST(JSON_VALUE(j.value,'$.Amount') AS DECIMAL(18,2))          AS Amount,
+                        JSON_VALUE(j.value,'$.Remarks')                                AS Remarks
+                    FROM OPENJSON(@EntriesJson) AS j
+                )
+                MERGE dbo.tbl_Journal_Entries_Info AS tgt
+                USING Src AS src
+                    ON tgt.JournalAutoId = @JournalAutoId
+                    AND tgt.LineId        = src.LineId
+                WHEN MATCHED THEN
+                    UPDATE SET
+                        tgt.LineNum         = src.LineNum,
+                        tgt.Acc_Id          = src.Acc_Id,
+                        tgt.DrCr            = src.DrCr,
+                        tgt.Amount          = src.Amount,
+                        tgt.Remarks         = src.Remarks,
+                        tgt.JournalDate     = @JournalDate,
+                        tgt.JournalId       = @JournalId,
+                        tgt.JournalVoucherNo= @JournalVoucherNo
+                WHEN NOT MATCHED BY TARGET THEN
+                    INSERT (
+                        LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+                        Acc_Id, DrCr, Amount, Remarks
+                    ) VALUES (
+                        DEFAULT, src.LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+                        src.Acc_Id, src.DrCr, src.Amount, src.Remarks
+                    )
+                WHEN NOT MATCHED BY SOURCE
+                    AND tgt.JournalAutoId = @JournalAutoId THEN
+                    DELETE;`
+            );
+
+        await tx.commit();
+
+        return success(res, "Journal Updated", {
+            JournalAutoId,
+            JournalId,
+            Year_Id,
+            VoucherType,
+            JournalNo,
+            JournalVoucherNo,
+            JournalDate: journalDate,
+            Narration,
+            JournalStatus,
+            DrTotal: Number(drTotal.toFixed(2)),
+            CrTotal: Number(crTotal.toFixed(2)),
+            Difference: Number((drTotal - crTotal).toFixed(2)),
+            Lines: rows.length,
+        });
+    } catch (e) {
+        try { if (tx._aborted !== true) await tx.rollback(); } catch { }
+        return servError(e, res);
+    }
+};
+
 
 export default {
     getJournal,
     createJournal,
+    editJournal
 }

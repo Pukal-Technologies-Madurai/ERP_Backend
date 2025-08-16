@@ -6,6 +6,7 @@ const JournalRouter = express.Router();
 
 JournalRouter.get('/journalMaster', journalMaster.getJournal);
 JournalRouter.post('/journalMaster', journalMaster.createJournal);
+JournalRouter.put('/journalMaster', journalMaster.editJournal);
 
 JournalRouter.get('/filtersValues', journalDependency.getFilterValues);
 
