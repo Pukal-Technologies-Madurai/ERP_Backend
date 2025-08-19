@@ -9,6 +9,7 @@ JournalRouter.post('/journalMaster', journalMaster.createJournal);
 JournalRouter.put('/journalMaster', journalMaster.editJournal);
 
 JournalRouter.get('/filtersValues', journalDependency.getFilterValues);
+JournalRouter.get('/accountPendingReference', journalDependency.getAccountPendingReference);
 
 
 export default JournalRouter;

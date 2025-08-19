@@ -1570,10 +1570,13 @@ const SalesInvoice = () => {
 
     const getSalesInvoiceMobile = async (req, res) => {
         try {
-            // Parse query params and normalize dates
             const {
-                Retailer_Id, Cancel_status = 0, Created_by, VoucherType,
-                Fromdate, Todate
+                Retailer_Id,
+                Cancel_status,
+                Created_by,
+                VoucherType,
+                Fromdate,
+                Todate
             } = req.query;
 
             const fromDate = Fromdate
@@ -1587,47 +1590,47 @@ const SalesInvoice = () => {
                 .input('Fromdate', sql.Date, fromDate)
                 .input('Todate', sql.Date, toDate)
                 .input('Retailer_Id', sql.Int, Retailer_Id || null)
-                .input('Cancel_status', sql.Int, Cancel_status)
+                .input('Cancel_status', sql.Int, Cancel_status || null)
                 .input('Created_by', sql.Int, Created_by || null)
                 .input('VoucherType', sql.Int, VoucherType || null);
 
             const sqlQuery = `
-                SELECT
-                    COALESCE((
-                        SELECT
-                            COUNT(*) AS Total_Invoices,
-                            SUM(Total_Invoice_value) AS Total_Invoice_Value
-                        FROM tbl_Sales_Delivery_Gen_Info sdgi
-                        WHERE sdgi.Do_Date BETWEEN @Fromdate AND @Todate
-                            AND (@Retailer_Id IS NULL OR sdgi.Retailer_Id = @Retailer_Id)
-                            AND (@Cancel_status IS NULL OR sdgi.Cancel_status = @Cancel_status)
-                            AND (@Created_by IS NULL OR sdgi.Created_by = @Created_by)
-                            AND (@VoucherType IS NULL OR sdgi.Voucher_Type = @VoucherType)
-                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-                    ), '{}') AS Total,
-                    COALESCE((
-                        SELECT
-                            sdgi.Retailer_Id,
-                            COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                            COUNT(*) AS Invoice_Count,
-                            SUM(sdgi.Total_Invoice_value) AS Total_Invoice_Value
-                        FROM tbl_Sales_Delivery_Gen_Info sdgi
-                        LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
-                        WHERE sdgi.Do_Date BETWEEN @Fromdate AND @Todate
-                            AND (@Retailer_Id IS NULL OR sdgi.Retailer_Id = @Retailer_Id)
-                            AND (@Cancel_status IS NULL OR sdgi.Cancel_status = @Cancel_status)
-                            AND (@Created_by IS NULL OR sdgi.Created_by = @Created_by)
-                            AND (@VoucherType IS NULL OR sdgi.Voucher_Type = @VoucherType)
-                        GROUP BY sdgi.Retailer_Id, rm.Retailer_Name
-                        FOR JSON PATH
-                    ), '[]') AS Summary`;
+            SELECT
+                COALESCE((
+                    SELECT
+                        COUNT(DISTINCT sdgi.Do_Id) AS Total_Invoices,
+                        SUM(sdgi.Total_Invoice_value) AS Total_Invoice_Value
+                    FROM tbl_Sales_Delivery_Gen_Info sdgi
+                    WHERE sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+                        AND (@Retailer_Id IS NULL OR sdgi.Retailer_Id = @Retailer_Id)
+                        AND (@Cancel_status IS NULL OR sdgi.Cancel_status = @Cancel_status)
+                        AND (@Created_by IS NULL OR sdgi.Created_by = @Created_by)
+                        AND (@VoucherType IS NULL OR sdgi.Voucher_Type = @VoucherType)
+                    FOR JSON PATH
+                ), '[]') AS Total,
+                COALESCE((
+                    SELECT
+                        sdgi.Retailer_Id,
+                        COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                        COUNT(DISTINCT sdgi.Do_Id) AS Invoice_Count,
+                        SUM(sdgi.Total_Invoice_value) AS Total_Invoice_Value
+                    FROM tbl_Sales_Delivery_Gen_Info sdgi
+                    LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                    WHERE sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+                        AND (@Retailer_Id IS NULL OR sdgi.Retailer_Id = @Retailer_Id)
+                        AND (@Cancel_status IS NULL OR sdgi.Cancel_status = @Cancel_status)
+                        AND (@Created_by IS NULL OR sdgi.Created_by = @Created_by)
+                        AND (@VoucherType IS NULL OR sdgi.Voucher_Type = @VoucherType)
+                    GROUP BY sdgi.Retailer_Id, rm.Retailer_Name
+                    FOR JSON PATH
+                ), '[]') AS Summary;`;
 
             const result = await request.query(sqlQuery);
 
             if (result.recordset.length > 0) {
                 const row = result.recordset[0];
                 return dataFound(res, {
-                    Total: row.Total ? JSON.parse(row.Total) : {},
+                    Total: row.Total ? JSON.parse(row.Total) : [],
                     Summary: row.Summary ? JSON.parse(row.Summary) : []
                 });
             } else {

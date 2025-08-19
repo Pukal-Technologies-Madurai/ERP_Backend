@@ -67,7 +67,11 @@ const ReceiptDataDependency = () => {
 
     const getPendingReceipts = async (req, res) => {
         try {
-            const { Acc_Id, reqDate, Fromdate, Todate } = req.query;
+            const { Acc_Id } = req.query;
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+            const reqDate = req.query?.reqDate ? ISOString(req.query?.reqDate) : ISOString();
+
 
             if (!checkIsNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
 

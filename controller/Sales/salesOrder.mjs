@@ -1618,8 +1618,8 @@ const SaleOrder = () => {
                             pm.Product_Name,
                             bm.Brand_Id,
                             bm.Brand_Name,
-                            COUNT(*) AS Total_Orders,
-                            SUM(so.Total_Invoice_value) AS Total_Invoice_Value
+                           COUNT(DISTINCT so.So_Id) AS Total_Orders,
+                           SUM( sos.Final_Amo) AS Total_Invoice_Value
                         FROM tbl_Sales_Order_Gen_Info AS so
                         LEFT JOIN tbl_Sales_Order_Stock_Info AS sos ON sos.Sales_Order_Id = so.So_Id
                         LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sos.Item_Id
@@ -1632,8 +1632,8 @@ const SaleOrder = () => {
                     ), '[]') AS Summary,
                     COALESCE((
                         SELECT
-                            COUNT(*) AS Total_Orders,
-                            SUM(so.Total_Invoice_value) AS Total_Amount
+                             COUNT(DISTINCT so.So_Id) AS Total_Orders,  
+                            SUM( sos.Final_Amo) AS Total_Amount 
                         FROM tbl_Sales_Order_Gen_Info AS so
                         LEFT JOIN tbl_Sales_Order_Stock_Info AS sos ON sos.Sales_Order_Id = so.So_Id
                         LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sos.Item_Id
