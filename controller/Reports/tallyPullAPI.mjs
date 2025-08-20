@@ -288,12 +288,13 @@ const tallyAdminSaleAPI = async (req, res) => {
         const result = await request;
         if (result.recordset.length > 0) {
 
-            const sales = result.recordset;
-            dataFound(res, sales.map(sale => ({
-                ...sale,
-                ALLINVENTORYENTRIES: JSON.parse(sale.ALLINVENTORYENTRIES),
-                LEDGERENTRIES: JSON.parse(sale.LEDGERENTRIES),
-            })));
+            const sales = JSON.parse(result.recordset[0]?.SALES)
+            dataFound(res, sales)
+            // dataFound(res, sales.map(sale => ({
+            //     ...sale,
+            //     ALLINVENTORYENTRIES: JSON.parse(sale.ALLINVENTORYENTRIES),
+            //     LEDGERENTRIES: JSON.parse(sale.LEDGERENTRIES),
+            // })));
 
         } else {
             noData(res)
