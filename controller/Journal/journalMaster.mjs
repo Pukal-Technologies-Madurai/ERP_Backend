@@ -83,6 +83,7 @@ const createJournal = async (req, res) => {
             JournalStatus,
             CreatedBy,
             Entries = [],
+            BillReferences = [],
         } = req.body || {};
 
         const journalDate = JournalDate ? ISOString(JournalDate) : ISOString();
@@ -96,21 +97,29 @@ const createJournal = async (req, res) => {
         if (!CreatedBy) errors.push("CreatedBy");
         if (JournalStatus === undefined || JournalStatus === null || JournalStatus === '') errors.push("JournalStatus");
 
-        const rows = toArray(Entries).sort((a, b) => String(b.DrCr).localeCompare(a.DrCr)).map((r) => ({
+        // carry client LineId + keep original index
+        const raw = toArray(Entries).map((r, idx) => ({
+            __idx: idx,
+            __clientLineId: r?.LineId || null, // client-generated rid
+            LineNum: r?.LineNum || null,
             Acc_Id: Number(r?.Acc_Id),
             DrCr: String(r?.DrCr || "").trim(),
             Amount: Number(r?.Amount || 0),
             Remarks: r?.Remarks ?? null,
-            AccountGet: r?.AccountGet ?? null,
+            AccountGet: r?.AccountGet ?? null, // ignored in DB insert (no column)
         }));
 
-        if (rows.length === 0) errors.push("Entries");
+        if (raw.length === 0) errors.push("Entries");
 
-        rows.forEach((r, i) => {
+        raw.forEach((r, i) => {
             if (!r.Acc_Id) errors.push(`Entries[${i}].Acc_Id`);
             if (!(r.DrCr === "Dr" || r.DrCr === "Cr")) errors.push(`Entries[${i}].DrCr`);
             if (!(r.Amount > 0)) errors.push(`Entries[${i}].Amount`);
+            if (!r.__clientLineId) errors.push(`Entries[${i}].LineId(missing)`);
         });
+
+        // sort (if you need), but keep clientLineId for mapping
+        const rows = raw.sort((a, b) => String(b.DrCr).localeCompare(a.DrCr));
 
         const hasDr = rows.some((r) => r.DrCr === "Dr");
         const hasCr = rows.some((r) => r.DrCr === "Cr");
@@ -129,6 +138,43 @@ const createJournal = async (req, res) => {
         const crTotal = rows.filter((r) => r.DrCr === "Cr").reduce((t, r) => t + r.Amount, 0);
         if (Math.round((drTotal - crTotal) * 100) !== 0) errors.push("NotBalanced");
 
+        // ---- BillReferences validations (flat) ----
+        const refs = toArray(BillReferences).map((r, i) => ({
+            __i: i,
+            LineId: r?.LineId || null,       // must match a client line LineId
+            RefId: r?.RefId ?? null,
+            RefNo: r?.RefNo ?? null,
+            RefType: r?.RefType ?? null,
+            Amount: Number(r?.Amount || 0),
+        }));
+
+        // every ref must target a valid client line
+        const clientLineIdSet = new Set(rows.map((r) => r.__clientLineId));
+        refs.forEach((r) => {
+            if (!r.LineId || !clientLineIdSet.has(r.LineId)) {
+                errors.push(`BillReferences[${r.__i}].LineId(invalid)`);
+            }
+            if (!(r.Amount > 0)) {
+                errors.push(`BillReferences[${r.__i}].Amount`);
+            }
+        });
+
+        // for each line that HAS refs, refs sum must equal line Amount
+        const sumByClientLineId = refs.reduce((m, r) => {
+            if (!r.LineId) return m;
+            m[r.LineId] = (m[r.LineId] || 0) + r.Amount;
+            return m;
+        }, {});
+        rows.forEach((line) => {
+            if (sumByClientLineId[line.__clientLineId] != null) {
+                const lhs = Math.round(sumByClientLineId[line.__clientLineId] * 100);
+                const rhs = Math.round(Number(line.Amount || 0) * 100);
+                if (lhs !== rhs) {
+                    errors.push(`Entries[${line.__idx}].BillReferencesNotBalanced`);
+                }
+            }
+        });
+
         if (errors.length) {
             return invalidInput(res, "Enter Required Fields", { errors });
         }
@@ -139,10 +185,10 @@ const createJournal = async (req, res) => {
         const yearQ = await new sql.Request()
             .input("JournalDate", journalDate)
             .query(`
-                SELECT Id AS Year_Id, Year_Desc
-                FROM tbl_Year_Master
-                WHERE Fin_Start_Date <= @JournalDate AND Fin_End_Date >= @JournalDate`
-            );
+        SELECT Id AS Year_Id, Year_Desc
+        FROM tbl_Year_Master
+        WHERE Fin_Start_Date <= @JournalDate AND Fin_End_Date >= @JournalDate
+      `);
         if (yearQ.recordset.length === 0) throw new Error("Year_Id not found");
         const { Year_Id, Year_Desc } = yearQ.recordset[0];
 
@@ -152,20 +198,17 @@ const createJournal = async (req, res) => {
         const vcodeQ = await new sql.Request()
             .input("Vocher_Type_Id", VoucherType)
             .query(`
-                SELECT Voucher_Code
-                FROM tbl_Voucher_Type
-                WHERE Vocher_Type_Id = @Vocher_Type_Id`
-            );
+        SELECT Voucher_Code
+        FROM tbl_Voucher_Type
+        WHERE Vocher_Type_Id = @Vocher_Type_Id
+      `);
         if (vcodeQ.recordset.length === 0) throw new Error("Voucher_Code not found");
         const Voucher_Code = vcodeQ.recordset[0]?.Voucher_Code || "";
 
         // ----------------------------
         // JournalId (global) & JournalNo (per Year/VoucherType)
         // ----------------------------
-        const journalIdGet = await getNextId({
-            table: "tbl_Journal_General_Info",
-            column: "JournalId",
-        });
+        const journalIdGet = await getNextId({ table: "tbl_Journal_General_Info", column: "JournalId" });
         if (!journalIdGet?.status || !Number.isFinite(Number(journalIdGet.MaxId))) {
             throw new Error("Failed to get JournalId");
         }
@@ -175,10 +218,10 @@ const createJournal = async (req, res) => {
             .input("Year_Id", Year_Id)
             .input("VoucherType", VoucherType)
             .query(`
-                SELECT COALESCE(MAX(JournalNo), 0) AS JournalNo
-                FROM tbl_Journal_General_Info
-                WHERE Year_Id = @Year_Id AND VoucherType = @VoucherType`
-            );
+        SELECT COALESCE(MAX(JournalNo), 0) AS JournalNo
+        FROM tbl_Journal_General_Info
+        WHERE Year_Id = @Year_Id AND VoucherType = @VoucherType
+      `);
         const JournalNo = Number(jnoQ?.recordset?.[0]?.JournalNo || 0) + 1;
 
         const JournalVoucherNo = `${Voucher_Code}/${createPadString(JournalNo, 6)}/${Year_Desc}`;
@@ -189,6 +232,7 @@ const createJournal = async (req, res) => {
         // ----------------------------
         await tx.begin();
 
+        // Header
         const hdrReq = new sql.Request(tx)
             .input("JournalId", JournalId)
             .input("Year_Id", Year_Id)
@@ -203,20 +247,24 @@ const createJournal = async (req, res) => {
             .input("AlterId", AlterId);
 
         const hdrIns = await hdrReq.query(`
-            INSERT INTO dbo.tbl_Journal_General_Info (
-                JournalAutoId, JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo,
-                JournalDate, BranchId, Narration, JournalStatus,
-                CreatedBy, CreatedAt, UpdatedAt, AlterId
-            )
-            OUTPUT inserted.JournalAutoId
-            VALUES (
-                DEFAULT, @JournalId, @Year_Id, @VoucherType, @JournalNo, @JournalVoucherNo,
-                @JournalDate, @BranchId, @Narration, @JournalStatus,
-                @CreatedBy, GETDATE(), NULL, @AlterId
-            )`);
+      INSERT INTO dbo.tbl_Journal_General_Info (
+        JournalAutoId, JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo,
+        JournalDate, BranchId, Narration, JournalStatus,
+        CreatedBy, CreatedAt, UpdatedAt, AlterId
+      )
+      OUTPUT inserted.JournalAutoId
+      VALUES (
+        DEFAULT, @JournalId, @Year_Id, @VoucherType, @JournalNo, @JournalVoucherNo,
+        @JournalDate, @BranchId, @Narration, @JournalStatus,
+        @CreatedBy, GETDATE(), NULL, @AlterId
+      )
+    `);
 
         const JournalAutoId = hdrIns?.recordset?.[0]?.JournalAutoId;
         if (!JournalAutoId) throw new Error("Failed to capture JournalAutoId");
+
+        // Lines: insert & build map from clientLineId -> DB line
+        const lineMapByClientId = new Map(); // clientLineId => {LineId, LineNum, Acc_Id, DrCr}
 
         let LineNum = 1;
         for (const r of rows) {
@@ -227,21 +275,63 @@ const createJournal = async (req, res) => {
                 .input("JournalVoucherNo", JournalVoucherNo)
                 .input("JournalDate", journalDate)
                 .input("Acc_Id", r.Acc_Id)
-                .input("AccountGet", r.AccountGet)
                 .input("DrCr", r.DrCr)
                 .input("Amount", r.Amount)
                 .input("Remarks", r.Remarks);
 
-            await lineReq.query(`
-                INSERT INTO dbo.tbl_Journal_Entries_Info (
-                    LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
-                    Acc_Id, AccountGet, DrCr, Amount, Remarks
-                )
-                VALUES (
-                    DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-                    @Acc_Id, @AccountGet, @DrCr, @Amount, @Remarks
-                )`
-            );
+            const lineIns = await lineReq.query(`
+        INSERT INTO dbo.tbl_Journal_Entries_Info (
+          LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+          Acc_Id, DrCr, Amount, Remarks
+        )
+        OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
+        VALUES (
+          DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+          @Acc_Id, @DrCr, @Amount, @Remarks
+        )
+      `);
+
+            const ins = lineIns?.recordset?.[0];
+            if (!ins?.LineId) throw new Error("Failed to insert journal line");
+
+            lineMapByClientId.set(r.__clientLineId, {
+                LineId: ins.LineId,
+                LineNum: ins.LineNum,
+                Acc_Id: ins.Acc_Id,
+                DrCr: ins.DrCr,
+            });
+        }
+
+        // Bill References: use map to resolve each ref's DB LineId/LineNum + actual Acc_Id/DrCr
+        for (const r of refs) {
+            const map = lineMapByClientId.get(r.LineId);
+            if (!map) {
+                throw new Error(`BillReferences[${r.__i}] refers to unknown LineId`);
+            }
+            const refReq = new sql.Request(tx)
+                .input("LineId", map.LineId)
+                .input("LineNum", map.LineNum)
+                .input("JournalAutoId", JournalAutoId)
+                .input("JournalId", JournalId)
+                .input("JournalVoucherNo", JournalVoucherNo)
+                .input("JournalDate", journalDate)
+                .input("Acc_Id", map.Acc_Id)
+                .input("DrCr", map.DrCr)
+                .input("RefId", r.RefId ?? null)
+                .input("RefNo", r.RefNo ?? null)
+                .input("RefType", r.RefType ?? null)
+                .input("Amount", r.Amount);
+
+            await refReq.query(`
+        INSERT INTO dbo.tbl_Journal_Bill_Reference (
+          autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+          Acc_Id, DrCr, RefId, RefNo, RefType, Amount
+        )
+        VALUES (
+          DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+          @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @Amount
+        )
+      `);
         }
 
         await tx.commit();
@@ -262,13 +352,14 @@ const createJournal = async (req, res) => {
             CrTotal: Number(crTotal.toFixed(2)),
             Difference: Number((drTotal - crTotal).toFixed(2)),
             Lines: rows.length,
+            BillReferences: refs.length,
         });
-
     } catch (e) {
         try { if (tx._aborted !== true) await tx.rollback(); } catch { }
         return servError(e, res);
     }
 };
+
 
 const editJournal = async (req, res) => {
     const tx = new sql.Transaction();

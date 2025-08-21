@@ -174,7 +174,7 @@ const PaymentDataDependency = () => {
                                     AND pgi.pay_bill_type = 1
                                     AND pb.pay_bill_id = 0
                                     AND pb.bill_name = cb.bill_no
-				                    AND pgi.payment_date < cb.bill_date
+				                    -- AND pgi.payment_date < cb.bill_date
                             ), 0) AS Paid_Amount
                         FROM tbl_Ledger_Opening_Balance AS cb
                         WHERE cb.OB_date >= (

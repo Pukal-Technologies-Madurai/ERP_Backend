@@ -152,6 +152,46 @@ const StockAndPurchaseReport = () => {
         }
     }
 
+    const ledgersGroupingSales = async (req, res) => {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+        const { Ledger_Id } = req.query;
+
+        try {
+
+            const result = await new sql.Request(req.db)
+                .input('Fromdate', Fromdate)
+                .input('To_date', Todate)
+                .input('Ledger_Id', Ledger_Id)
+                .execute('Avg_Live_Sales_Report_4')
+
+            if (result.recordsets[0].length > 0) {
+                const columnDataTypes = Array.isArray(result.recordsets[1]) ? result.recordsets[1] : [];
+                const dayWiseSales = Array.isArray(result.recordsets[2]) ? result.recordsets[2] : [];
+
+                const uniqueKeys = dayWiseSales[0] ? Object.keys(dayWiseSales[0]).map(keys => ({
+                    Column_Name: keys,
+                    Data_Type: 'number',
+                })) : [];
+
+                const mergeDataType = [...columnDataTypes, ...uniqueKeys]
+
+                const mergeData = (Array.isArray(result.recordsets[0]) ? result.recordsets[0] : []).map(o => ({
+                    ...o,
+                    ...dayWiseSales.find(daySales => isEqualNumber(daySales?.sales_party_ledger_id, o?.Ledger_Tally_Id))
+                }))
+                dataFound(res, mergeData, 'dataFound', {
+                    dataTypeInfo: mergeDataType,
+                    // daysTransactions: dayWiseSales
+                })
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
     const salesItemDetails = async (req, res) => {
         const Fromdate = ISOString(req.query.Fromdate);
         const Todate = ISOString(req.query.Todate);
@@ -219,12 +259,12 @@ const StockAndPurchaseReport = () => {
     }
 
 
-
     return {
         stockReport,
         liveStockReport,
         purchaseReport,
         salesReport,
+        ledgersGroupingSales,
         salesItemDetails,
         porductBasedSalesResult,
     }

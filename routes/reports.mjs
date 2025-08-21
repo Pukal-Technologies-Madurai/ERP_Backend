@@ -21,6 +21,7 @@ ReportRouter.get('/stockReport', dbconnect, stockAndPurchase.stockReport);
 ReportRouter.get('/liveStockReport', stockAndPurchase.liveStockReport);
 ReportRouter.get('/PurchaseOrderReportCard', dbconnect, stockAndPurchase.purchaseReport);
 ReportRouter.get('/salesReport/ledger', dbconnect, stockAndPurchase.salesReport);
+ReportRouter.get('/salesReport/ledger/groupSales', dbconnect, stockAndPurchase.ledgersGroupingSales);
 ReportRouter.get('/salesReport/ledger/itemDetails', dbconnect, stockAndPurchase.salesItemDetails);
 ReportRouter.get('/salesReport/products', dbconnect, stockAndPurchase.porductBasedSalesResult);
 

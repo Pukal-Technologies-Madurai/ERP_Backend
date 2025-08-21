@@ -121,6 +121,7 @@ MastersRouter.get('/products/grouped', products.getGroupedProducts);
 MastersRouter.get('/products/productGroups', products.getProductGroups);
 MastersRouter.get('/products/packs', products.getProductPacks);
 MastersRouter.post('/products/losSync', products.syncTallyLOS);
+MastersRouter.post('/products/withStock', products.getProductsWithStock);
 
 
 MastersRouter.get('/routes', retailerRoutes.getRoutes);
