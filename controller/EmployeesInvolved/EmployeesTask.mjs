@@ -17,13 +17,11 @@ const employeesTasks = () => {
                 .input('comp', Company_id)
                 .query(`
                     SELECT 
-                        UserId, Name 
+                        fingerPrintEmpId as UserId, Emp_Name as Name 
                     FROM 
-                        tbl_Users 
-                    WHERE 
-                        (UserTypeId = 6 OR UserTypeId = 3) 
-                        AND UDel_Flag = 0 
-                      AND Company_id = @comp 
+                        tbl_Employee_Master 
+                  
+                    
                 `);
 
             if (result.recordset.length > 0) {
@@ -35,8 +33,6 @@ const employeesTasks = () => {
             return servError(e, res);
         }
     };
-
-
 
     const getUsersProjectId = async (req, res) => {
         const { Project_Id } = req.query;
@@ -78,7 +74,6 @@ const employeesTasks = () => {
             return servError(e, res);
         }
     };
-
 
     const getEmployeeTasks = async (req, res) => {
         const { Project_Id } = req.query;
@@ -123,7 +118,6 @@ const employeesTasks = () => {
         }
     };
 
-
     const postEmployeesProjects = async (req, res) => {
         const { Project_Id, UserIds } = req.body;
 
@@ -154,7 +148,6 @@ const employeesTasks = () => {
             return servError(e, res);
         }
     };
-
 
     const assignTaskForEmployee = async (req, res) => {
         const {
@@ -212,7 +205,6 @@ const employeesTasks = () => {
             return servError(e, res);
         }
     };
-    
     
     const getEmployeeAssignedInTheTask = async (req, res) => {
         const { Task_Id, ProjectId,LevelId } = req.query;
@@ -318,8 +310,6 @@ const employeesTasks = () => {
         }
     };
     
-
-    
     const deleteAssignedTaskDetails = async (req, res) => {
 
             const { Task_Id } = req.query;
@@ -351,7 +341,6 @@ const employeesTasks = () => {
         
     
     };
-
 
     const selectedTaskDetails = async (req, res) => {
         const { projectId, Sch_Id,Task_Id } = req.query;
