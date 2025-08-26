@@ -89,48 +89,48 @@ const ReceiptDataDependency = () => {
                     	inv.Paid_Amount + inv.journalAdjustment AS totalReference
                     FROM (
                         SELECT 
-                            pig.PIN_Id,
-                            pig.Po_Inv_No,
-                            pig.Po_Entry_Date AS Po_Inv_Date,
-                            a.Acc_Id Retailer_Id,
+                            pig.Do_Id,
+                            pig.Do_Inv_No,
+                            pig.Do_Date,
+                            COALESCE(a.Acc_Id, 0) Retailer_Id,
                             pig.Total_Before_Tax,
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,
                             'INV' AS dataSource,
                             COALESCE((
-                                SELECT SUM(pb.Debit_Amo) 
-                                FROM tbl_Payment_Bill_Info AS pb
-                                JOIN tbl_Payment_General_Info AS pgi
-                                    ON pgi.pay_id = pb.payment_id
+                                SELECT SUM(pb.Credit_Amo) 
+                                FROM tbl_Receipt_Bill_Info AS pb
+                                JOIN tbl_Receipt_General_Info AS pgi
+                                    ON pgi.receipt_id = pb.receipt_id
                                 WHERE 
                                     pgi.status <> 0
-                                    AND pgi.pay_bill_type = 1
-                                    AND pb.pay_bill_id = pig.PIN_Id
-                                    AND pb.bill_name = pig.Po_Inv_No
+                                    AND pgi.receipt_bill_type = 1
+                                    AND pb.bill_id = pig.Do_Id
+                                    AND pb.bill_name = pig.Do_Inv_No
                             ), 0) AS Paid_Amount,
                             COALESCE((
                                 SELECT SUM(jr.Amount)
                                 FROM dbo.tbl_Journal_Bill_Reference jr
-                                JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
-                                JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
                                 WHERE 
                                     jh.JournalStatus <> 0
                                     AND je.Acc_Id = a.Acc_Id
-                                    AND je.DrCr   = 'Dr'
-                                    AND (jr.RefId = pig.PIN_Id OR jr.RefNo = pig.Po_Inv_No)
-                                    AND jr.RefType = 'PURCHASE'
+                                    AND je.DrCr   = 'Cr'
+                                    AND (jr.RefId = pig.Do_Id OR jr.RefNo = pig.Do_Inv_No)
+                                    AND jr.RefType = 'SALES'
                             ), 0) AS journalAdjustment
-                        FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
+                        FROM tbl_Sales_Delivery_Gen_Info AS pig
                         JOIN tbl_Retailers_Master AS r
-                        ON r.Retailer_Id = pig.Retailer_Id
-                        JOIN tbl_Account_Master AS a
-                        ON a.ERP_Id = R.ERP_Id
+                            ON r.Retailer_Id = pig.Retailer_Id
+                        LEFT JOIN tbl_Account_Master AS a
+                            ON a.ERP_Id = R.ERP_Id
                         WHERE 
-                            pig.Cancel_status = 0
+                            pig.Cancel_status <> 0
                             AND a.Acc_Id = @Acc_Id
-                            AND pig.Po_Entry_Date >= @OB_Date
+                            AND pig.Do_Date >= @OB_Date
                         UNION ALL
-                    -- from purchase invoice
+                            -- from opening balance
                         SELECT 
                             cb.OB_Id AS bill_id, 
                             cb.bill_no, 
@@ -138,19 +138,19 @@ const ReceiptDataDependency = () => {
                             cb.Retailer_id,  
                             0 AS bef_tax, 
                             0 AS tot_tax, 
-                            cb.cr_amount, 
+                            cb.dr_amount, 
                             'OB' AS dataSource,
                         	COALESCE((
-                                SELECT SUM(pb.Debit_Amo) 
-                                FROM tbl_Payment_Bill_Info AS pb
-                                JOIN tbl_Payment_General_Info AS pgi
-                                    ON pgi.pay_id = pb.payment_id
+                                SELECT SUM(pb.Credit_Amo) 
+                                FROM tbl_Receipt_Bill_Info AS pb
+                                JOIN tbl_Receipt_General_Info AS pgi
+                                    ON pgi.receipt_id = pb.receipt_id
                                 WHERE 
                                     pgi.status <> 0
-                                    AND pgi.pay_bill_type = 1
-                                    AND pb.pay_bill_id = 0
+                                    AND pgi.receipt_bill_type = 1
+                                    AND pb.bill_id = 0
                                     AND pb.bill_name = cb.bill_no
-                                    AND pgi.payment_date <= @OB_Date
+                                    AND pgi.receipt_date <= @OB_Date
                             ), 0) AS Paid_Amount,
                             COALESCE((
                                 SELECT SUM(jr.Amount)
@@ -160,17 +160,17 @@ const ReceiptDataDependency = () => {
                                 WHERE 
                                     jh.JournalStatus <> 0
                                     AND je.Acc_Id = cb.Retailer_id
-                                    AND je.DrCr   = 'Dr'
+                                    AND je.DrCr   = 'Cr'
                                     AND (jr.RefId = 0 OR jr.RefNo = cb.bill_no)
-                                    AND jr.RefType = 'PURCHASE-OB'
+                                    AND jr.RefType = 'SALES-OB'
                             ), 0) AS journalAdjustment
                         FROM tbl_Ledger_Opening_Balance AS cb
-                        WHERE 
-                            cb.OB_date >= @OB_Date 
-                            AND cb.Retailer_id = @Acc_Id 
-                            AND cb.dr_amount = 0
+                        WHERE cb.OB_date >= (
+                        	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                        ) AND cb.Retailer_id = @Acc_Id AND cb.cr_amount = 0
                     ) AS inv
-                    WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value;`
+                    WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
+                    ORDER BY inv.Do_Date ASC;`
                 );
 
             const result = await request;

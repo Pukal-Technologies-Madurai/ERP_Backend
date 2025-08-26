@@ -123,7 +123,9 @@ const PaymentDataDependency = () => {
                     DECLARE @OB_Date DATE = (
                     	SELECT MAX(OB_Date) FROM tbl_OB_Date
                     );
-                    SELECT inv.*
+                    SELECT 
+                    	inv.*,
+                    	inv.Paid_Amount + inv.journalAdjustment AS totalReference
                     FROM (
                         SELECT 
                             pig.PIN_Id,
@@ -144,7 +146,19 @@ const PaymentDataDependency = () => {
                                     AND pgi.pay_bill_type = 1
                                     AND pb.pay_bill_id = pig.PIN_Id
                                     AND pb.bill_name = pig.Po_Inv_No
-                            ), 0) AS Paid_Amount
+                            ), 0) AS Paid_Amount,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = a.Acc_Id
+                                    AND je.DrCr   = 'Dr'
+                                    AND (jr.RefId = pig.PIN_Id OR jr.RefNo = pig.Po_Inv_No)
+                                    AND jr.RefType = 'PURCHASE'
+                            ), 0) AS journalAdjustment
                         FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
                         JOIN tbl_Retailers_Master AS r
                         ON r.Retailer_Id = pig.Retailer_Id
@@ -155,7 +169,7 @@ const PaymentDataDependency = () => {
                             AND a.Acc_Id = @Acc_Id
                             AND pig.Po_Entry_Date >= @OB_Date
                         UNION ALL
-                        -- from purchase invoice
+                    -- from purchase invoice
                         SELECT 
                             cb.OB_Id AS bill_id, 
                             cb.bill_no, 
@@ -175,15 +189,27 @@ const PaymentDataDependency = () => {
                                     AND pgi.pay_bill_type = 1
                                     AND pb.pay_bill_id = 0
                                     AND pb.bill_name = cb.bill_no
-				                    AND pgi.payment_date <= @OB_Date
-                            ), 0) AS Paid_Amount
+                                    AND pgi.payment_date <= @OB_Date
+                            ), 0) AS Paid_Amount,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = cb.Retailer_id
+                                    AND je.DrCr   = 'Dr'
+                                    AND (jr.RefId = 0 OR jr.RefNo = cb.bill_no)
+                                    AND jr.RefType = 'PURCHASE-OB'
+                            ), 0) AS journalAdjustment
                         FROM tbl_Ledger_Opening_Balance AS cb
                         WHERE 
                             cb.OB_date >= @OB_Date 
                             AND cb.Retailer_id = @Acc_Id 
                             AND cb.dr_amount = 0
                     ) AS inv
-                    WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
+                    WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value;`
                 );
 
             const result = await request;
