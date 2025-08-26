@@ -11,6 +11,7 @@ import dotenv from 'dotenv';
 import { listRoutes } from './middleware/apiList.mjs';
 import { failed } from './res.mjs';
 import { staticPaths } from './staticPaths.mjs'
+import crypto from "node:crypto";
 
 dotenv.config();
 
@@ -22,6 +23,11 @@ const __dirname = dirname(__filename);
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+app.use((req, res, next) => {
+  res.locals.requestId = crypto.randomUUID();
+  res.locals.startedAt = process.hrtime.bigint();
+  next();
+});
 
 
 const logStream = fs.createWriteStream(path.join(__dirname, 'logs', 'access.log'), { flags: 'a' });

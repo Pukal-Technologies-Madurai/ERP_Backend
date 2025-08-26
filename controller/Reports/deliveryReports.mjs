@@ -63,6 +63,203 @@ const getNonConvertedSales = async (req, res) => {
     }
 };
 
+const closingReport = async (req, res) => {
+    try {
+        const { PassingDate } = req.query;
+        if (!PassingDate) {
+            return invalidInput(res, "PassingDate is required");
+        }
+
+
+        const spRequest = new sql.Request();
+        spRequest.input("fromdate", sql.Date, PassingDate);
+        spRequest.input("todate", sql.Date, PassingDate);
+
+        const stockResult = await spRequest.query(`
+      EXEC [dbo].[Stock_Summarry_Search_Godown_New]
+        @fromdate = @fromdate,
+        @todate = @todate,
+        @Godown_Id = '',
+        @Item_Id = '';
+    `);
+
+        const balanceMap = new Map();
+        for (const row of stockResult.recordset || []) {
+            const key = `${row.Product_Id}-${row.Godown_Id}`;
+            balanceMap.set(key, row.Bal_Qty ?? row.Act_Bal_Qty ?? 0);
+        }
+
+
+        const mainRequest = new sql.Request();
+        mainRequest.input("fromdate", sql.Date, PassingDate);
+        mainRequest.input("todate", sql.Date, PassingDate);
+
+        const mainQuery = `
+     ;WITH GodownInfo AS (
+        SELECT Godown_Id, Godown_Name FROM tbl_Godown_Master
+    ),
+    LastWeek AS (
+        SELECT sdsi.Item_Id, sdsi.Godown_Id,
+            AVG(CAST(sdsi.Total_Qty AS DECIMAL(18,2))) AS Avg_Week_Qty
+        FROM tbl_Sales_Delivery_Stock_Info sdsi
+        WHERE sdsi.Do_Date >= DATEADD(DAY, -7, @todate)
+            AND sdsi.Do_Date < @todate
+        GROUP BY sdsi.Item_Id, sdsi.Godown_Id
+    ),
+    Yesterday AS (
+        SELECT sdsi.Item_Id, sdsi.Godown_Id,
+            SUM(sdsi.Total_Qty) AS Yesterday_Qty
+        FROM tbl_Sales_Delivery_Stock_Info sdsi
+        WHERE sdsi.Do_Date = DATEADD(DAY, -1, @todate)
+        GROUP BY sdsi.Item_Id, sdsi.Godown_Id
+    ),
+    ProductInfo AS (
+        SELECT DISTINCT
+            pm.Product_Id,
+            pm.Pos_Brand_Id,
+            bm.POS_Brand_Name,
+            pm.Product_Name,
+            pm.Product_Description,
+            pm.Product_Rate,
+            pm.Max_Rate,
+            CASE
+                WHEN pm.Product_Name LIKE '%1kg%' THEN '1kg'
+                WHEN pm.Product_Name LIKE '%25kg%' THEN '25kg'
+                WHEN pm.Product_Name LIKE '%26kg%' THEN '26kg'
+                WHEN pm.Product_Name LIKE '%30kg%' THEN '30kg'
+                WHEN pm.Product_Name LIKE '%46kg%' THEN '46kg'
+                WHEN pm.Product_Name LIKE '%50kg%' THEN '50kg'
+                WHEN pm.Product_Name LIKE '%60kg%' THEN '60kg'
+                ELSE 'Other'
+            END AS Product_Pack,
+            LEFT(pm.Product_Name, CHARINDEX(' ', pm.Product_Name + ' ', CHARINDEX('-', pm.Product_Name) + 1) - 1) AS Base_Product
+        FROM tbl_Stock_Los sl
+        INNER JOIN tbl_Product_Master pm ON sl.Stock_Tally_Id = pm.ERP_ID
+        LEFT JOIN tbl_POS_Brand bm ON bm.POS_Brand_Id = pm.Pos_Brand_Id
+    ),
+    SalesAgg AS (
+        SELECT
+            pi.Product_Id,
+            pi.Pos_Brand_Id,
+            pi.POS_Brand_Name,
+            gi.Godown_Id,
+            gi.Godown_Name,
+            pi.Base_Product,
+            pi.Product_Description,
+            pi.Product_Rate,
+            pi.Max_Rate,
+            pi.Product_Pack,
+            ISNULL(LW.Avg_Week_Qty, 0) AS Avg_Week_Qty,
+            ISNULL(Yest.Yesterday_Qty, 0) AS Yesterday_Qty
+        FROM ProductInfo pi
+        CROSS JOIN GodownInfo gi
+        LEFT JOIN LastWeek LW ON LW.Item_Id = pi.Product_Id AND LW.Godown_Id = gi.Godown_Id
+        LEFT JOIN Yesterday Yest ON Yest.Item_Id = pi.Product_Id AND Yest.Godown_Id = gi.Godown_Id
+    )
+SELECT * FROM SalesAgg WHERE Pos_Brand_Id IS NOT NULL ORDER BY POS_Brand_Name;
+
+    `;
+
+        const mainResult = await mainRequest.query(mainQuery);
+
+
+        const brandsMap = new Map();
+
+        for (const row of (mainResult.recordset || [])) {
+            const key = `${row.Product_Id}-${row.Godown_Id}`;
+            const balQty = balanceMap.get(key) || 0;
+
+            if (!brandsMap.has(row.Pos_Brand_Id)) {
+                brandsMap.set(row.Pos_Brand_Id, {
+                    brandId: row.Pos_Brand_Id,
+                    brandName: row.POS_Brand_Name,
+                    godowns: new Map(),
+                });
+            }
+
+            const brand = brandsMap.get(row.Pos_Brand_Id);
+
+            if (!brand.godowns.has(row.Godown_Id)) {
+                brand.godowns.set(row.Godown_Id, {
+                    godownId: row.Godown_Id,
+                    godownName: row.Godown_Name,
+                    products: new Map(),
+                    totalBalanceQty: 0,
+                    totalWeeklyQty: 0,
+                    totalYesterdayQty: 0,
+                });
+            }
+
+            const godown = brand.godowns.get(row.Godown_Id);
+
+            const productKey = row.Base_Product || row.Product_Id;
+
+            if (!godown.products.has(productKey)) {
+                godown.products.set(productKey, {
+                    baseProduct: row.Base_Product,
+                    productDescription: row.Product_Description,
+                    productRate: row.Product_Rate,
+                    maxRate: row.Max_Rate,
+                    packs: [],
+                });
+            }
+
+            const product = godown.products.get(productKey);
+
+            let pack = product.packs.find(p => p.packType === row.Product_Pack);
+            if (pack) {
+                pack.weeklyAverage += row.Avg_Week_Qty;
+                pack.yesterdayQty += row.Yesterday_Qty;
+                pack.balanceQty += balQty;
+            } else {
+                product.packs.push({
+                    packType: row.Product_Pack,
+                    weeklyAverage: row.Avg_Week_Qty,
+                    yesterdayQty: row.Yesterday_Qty,
+                    balanceQty: balQty,
+                });
+            }
+
+            godown.totalBalanceQty += balQty;
+            godown.totalWeeklyQty += row.Avg_Week_Qty;
+            godown.totalYesterdayQty += row.Yesterday_Qty;
+        }
+
+
+        const processedData = [];
+        for (const brand of brandsMap.values()) {
+            const godowns = [];
+            for (const godown of brand.godowns.values()) {
+                godowns.push({
+                    godownId: godown.godownId,
+                    godownName: godown.godownName,
+                    totalBalanceQty: godown.totalBalanceQty,
+                    totalWeeklyQty: godown.totalWeeklyQty,
+                    totalYesterdayQty: godown.totalYesterdayQty,
+                    products: Array.from(godown.products.values()),
+                });
+            }
+            processedData.push({
+                brandId: brand.brandId,
+                brandName: brand.brandName,
+                godowns,
+            });
+        }
+
+
+        if (processedData.length > 0) {
+            sentData(res, processedData);
+        } else {
+            sentData(res, []);
+        }
+    } catch (error) {
+
+        servError(error, res);
+    }
+};
+
+
 export default {
     getNonConvertedSales,
+    closingReport,
 };

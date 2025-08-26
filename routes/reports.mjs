@@ -108,6 +108,7 @@ ReportRouter.delete('/brokerageNagalPurchase/list', nagalReports.nagalPurchaseBu
 
 ReportRouter.put('/brokerageNagalPurchase/list', nagalReports.nagalUpdateItemwise)
 ReportRouter.get('/expenseReport', expences.getExpences)
-ReportRouter.post('/expenseByAccId',expences.expensesExpandable)
+ReportRouter.post('/expenseByAccId', expences.expensesExpandable)
+ReportRouter.post('/smtreports', deliveryReports.closingReport)
 
 export default ReportRouter;

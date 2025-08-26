@@ -120,6 +120,9 @@ const PaymentDataDependency = () => {
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
+                    DECLARE @OB_Date DATE = (
+                    	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                    );
                     SELECT inv.*
                     FROM (
                         SELECT 
@@ -150,13 +153,11 @@ const PaymentDataDependency = () => {
                         WHERE 
                             pig.Cancel_status = 0
                             AND a.Acc_Id = @Acc_Id
-                            AND pig.Po_Entry_Date >= (
-                            	SELECT MAX(OB_Date) FROM tbl_OB_Date
-                            )
+                            AND pig.Po_Entry_Date >= @OB_Date
                         UNION ALL
                         -- from purchase invoice
                         SELECT 
-                            0 AS bill_id, 
+                            cb.OB_Id AS bill_id, 
                             cb.bill_no, 
                             cb.bill_date, 
                             cb.Retailer_id,  
@@ -174,12 +175,13 @@ const PaymentDataDependency = () => {
                                     AND pgi.pay_bill_type = 1
                                     AND pb.pay_bill_id = 0
                                     AND pb.bill_name = cb.bill_no
-				                    -- AND pgi.payment_date < cb.bill_date
+				                    AND pgi.payment_date <= @OB_Date
                             ), 0) AS Paid_Amount
                         FROM tbl_Ledger_Opening_Balance AS cb
-                        WHERE cb.OB_date >= (
-                        	SELECT MAX(OB_Date) FROM tbl_OB_Date
-                        ) AND cb.Retailer_id = @Acc_Id AND cb.dr_amount = 0
+                        WHERE 
+                            cb.OB_date >= @OB_Date 
+                            AND cb.Retailer_id = @Acc_Id 
+                            AND cb.dr_amount = 0
                     ) AS inv
                     WHERE inv.Paid_Amount < inv.Total_Invoice_value;`
                 );

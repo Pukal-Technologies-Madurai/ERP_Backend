@@ -29,7 +29,7 @@ import los from '../controller/Masters/los.mjs';
 import upload from '../middleware/excelUpload.mjs';
 import costCenter from '../controller/Masters/costCenter.mjs';
 
-import accountGroup from '../controller/Masters/accountGroup.mjs';
+import accountGroup from '../controller/Masters/accountgroup.mjs';
 import state from '../controller/Masters/state.mjs';
 import godown from '../controller/Masters/godown.mjs';
 import brand from '../controller/Masters/brand.mjs';
@@ -121,7 +121,7 @@ MastersRouter.get('/products/grouped', products.getGroupedProducts);
 MastersRouter.get('/products/productGroups', products.getProductGroups);
 MastersRouter.get('/products/packs', products.getProductPacks);
 MastersRouter.post('/products/losSync', products.syncTallyLOS);
-MastersRouter.post('/products/withStock', products.getProductsWithStock);
+MastersRouter.get('/products/withStock', products.getProductsWithStock);
 
 
 MastersRouter.get('/routes', retailerRoutes.getRoutes);
