@@ -187,9 +187,9 @@ const PaymentDataDependency = () => {
                                 WHERE 
                                     pgi.status <> 0
                                     AND pgi.pay_bill_type = 1
-                                    AND pb.pay_bill_id = 0
+                                    AND pb.pay_bill_id = cb.OB_Id
                                     AND pb.bill_name = cb.bill_no
-                                    AND pgi.payment_date <= @OB_Date
+                                    -- AND pgi.payment_date >= @OB_Date
                             ), 0) AS Paid_Amount,
                             COALESCE((
                                 SELECT SUM(jr.Amount)

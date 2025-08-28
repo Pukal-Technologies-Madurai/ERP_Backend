@@ -6,14 +6,15 @@ import dbconnect from '../middleware/otherDB.mjs';
 import tripmaster from '../controller/Inventory/tripmaster.mjs';
 import arrivalMaster from '../controller/Inventory/arrivalMaster.mjs';
 import batchProcess from '../controller/Inventory/batchProcess.mjs';
+import inventoryReport from '../controller/Inventory/reports.mjs';
 
 const inventoryRouter = express.Router();
 
 
 inventoryRouter.get('/getTallyStockJournal', dbconnect, tallyStockBased.getTallyStockJournalData);
 inventoryRouter.get(
-    '/getTallyStockJournal/sourceAndDestination', 
-    dbconnect, 
+    '/getTallyStockJournal/sourceAndDestination',
+    dbconnect,
     tallyStockBased.getTallyStockJournalDataExtended
 );
 
@@ -61,6 +62,7 @@ inventoryRouter.post('/batchMaster/purchase', batchProcess.postPurchaseBatch);
 
 inventoryRouter.get('/batchMaster/stockBalance', batchProcess.getBatchStockBalance);
 
+inventoryRouter.get('/trunoverRatio', inventoryReport.getInventoryReport);
 
 
 export default inventoryRouter;

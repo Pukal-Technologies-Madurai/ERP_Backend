@@ -123,6 +123,36 @@ const externalAPIStockJournal = async (req, res) => {
     }
 }
 
+const externalAPIStockJournalAdmin = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .input('Company_Id', 0)
+            .input('Vouche_Id', 0)
+            .execute('Online_Stock_Journal_Admin_API')
+
+        const result = await request;
+        if (result.recordset.length > 0) {
+            const stockjournal = JSON.parse(result.recordset[0]?.Stock);
+            const removeCurlyBrase = toArray(stockjournal?.Stock_Journal).map(journal => ({
+                ...journal,
+                SOURCEENTRIES: cleanArray(toArray(journal?.SOURCEENTRIES)),
+                DESTINATIONENTRIES: cleanArray(toArray(journal?.DESTINATIONENTRIES))
+            }));
+
+            dataFound(res, { Stock_Journal: removeCurlyBrase });
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
 const externalAPIReceipt = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
@@ -362,6 +392,7 @@ export default {
     externalAPIPurchase,
     externalAPISaleOrder,
     externalAPIStockJournal,
+    externalAPIStockJournalAdmin,
     externalAPIReceipt,
     externalAPIPayment,
     externalAPIJournal,

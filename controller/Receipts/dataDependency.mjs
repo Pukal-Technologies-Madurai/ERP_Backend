@@ -84,6 +84,7 @@ const ReceiptDataDependency = () => {
                     DECLARE @OB_Date DATE = (
                     	SELECT MAX(OB_Date) FROM tbl_OB_Date
                     );
+                    --select @OB_Date
                     SELECT 
                     	inv.*,
                     	inv.Paid_Amount + inv.journalAdjustment AS totalReference
@@ -148,9 +149,9 @@ const ReceiptDataDependency = () => {
                                 WHERE 
                                     pgi.status <> 0
                                     AND pgi.receipt_bill_type = 1
-                                    AND pb.bill_id = 0
+                                    AND pb.bill_id = cb.OB_Id
                                     AND pb.bill_name = cb.bill_no
-                                    AND pgi.receipt_date <= @OB_Date
+                                    -- AND pgi.receipt_date >= @OB_Date
                             ), 0) AS Paid_Amount,
                             COALESCE((
                                 SELECT SUM(jr.Amount)
@@ -250,9 +251,9 @@ const ReceiptDataDependency = () => {
                                 WHERE 
                                     pgi.status <> 0
                                     AND pgi.receipt_bill_type = 1
-                                    AND pb.bill_id = 0
+                                    AND pb.bill_id = cb.OB_Id
                                     AND pb.bill_name = cb.bill_no
-                                    AND pgi.receipt_date <= @OB_Date
+                                    -- AND pgi.receipt_date <= @OB_Date
                             ), 0) AS Paid_Amount
                         FROM tbl_Ledger_Opening_Balance AS cb
                         WHERE 
