@@ -163,20 +163,20 @@ const createJournal = async (req, res) => {
         });
 
         // for each line that HAS refs, refs sum must equal line Amount
-        const sumByClientLineId = refs.reduce((m, r) => {
-            if (!r.LineId) return m;
-            m[r.LineId] = (m[r.LineId] || 0) + r.Amount;
-            return m;
-        }, {});
-        rows.forEach((line) => {
-            if (sumByClientLineId[line.__clientLineId] != null) {
-                const lhs = Math.round(sumByClientLineId[line.__clientLineId] * 100);
-                const rhs = Math.round(Number(line.Amount || 0) * 100);
-                if (lhs !== rhs) {
-                    errors.push(`Entries[${line.__idx}].BillReferencesNotBalanced`);
-                }
-            }
-        });
+        // const sumByClientLineId = refs.reduce((m, r) => {
+        //     if (!r.LineId) return m;
+        //     m[r.LineId] = (m[r.LineId] || 0) + r.Amount;
+        //     return m;
+        // }, {});
+        // rows.forEach((line) => {
+        //     if (sumByClientLineId[line.__clientLineId] != null) {
+        //         const lhs = Math.round(sumByClientLineId[line.__clientLineId] * 100);
+        //         const rhs = Math.round(Number(line.Amount || 0) * 100);
+        //         if (lhs !== rhs) {
+        //             errors.push(`Entries[${line.__idx}].BillReferencesNotBalanced`);
+        //         }
+        //     }
+        // });
 
         if (errors.length) {
             return invalidInput(res, "Enter Required Fields", { errors });

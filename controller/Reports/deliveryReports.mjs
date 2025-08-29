@@ -70,7 +70,6 @@ const closingReport = async (req, res) => {
             return invalidInput(res, "PassingDate is required");
         }
 
-
         const spRequest = new sql.Request();
         spRequest.input("fromdate", sql.Date, PassingDate);
         spRequest.input("todate", sql.Date, PassingDate);
@@ -88,7 +87,6 @@ const closingReport = async (req, res) => {
             const key = `${row.Product_Id}-${row.Godown_Id}`;
             balanceMap.set(key, row.Bal_Qty ?? row.Act_Bal_Qty ?? 0);
         }
-
 
         const mainRequest = new sql.Request();
         mainRequest.input("fromdate", sql.Date, PassingDate);
@@ -156,18 +154,21 @@ const closingReport = async (req, res) => {
         LEFT JOIN LastWeek LW ON LW.Item_Id = pi.Product_Id AND LW.Godown_Id = gi.Godown_Id
         LEFT JOIN Yesterday Yest ON Yest.Item_Id = pi.Product_Id AND Yest.Godown_Id = gi.Godown_Id
     )
-SELECT * FROM SalesAgg WHERE Pos_Brand_Id IS NOT NULL ORDER BY POS_Brand_Name;
-
+    SELECT * FROM SalesAgg WHERE Pos_Brand_Id IS NOT NULL ORDER BY POS_Brand_Name;
     `;
 
         const mainResult = await mainRequest.query(mainQuery);
-
 
         const brandsMap = new Map();
 
         for (const row of (mainResult.recordset || [])) {
             const key = `${row.Product_Id}-${row.Godown_Id}`;
             const balQty = balanceMap.get(key) || 0;
+
+
+            if (balQty === 0 && row.Avg_Week_Qty === 0 && row.Yesterday_Qty === 0) {
+                continue;
+            }
 
             if (!brandsMap.has(row.Pos_Brand_Id)) {
                 brandsMap.set(row.Pos_Brand_Id, {
@@ -229,23 +230,46 @@ SELECT * FROM SalesAgg WHERE Pos_Brand_Id IS NOT NULL ORDER BY POS_Brand_Name;
         const processedData = [];
         for (const brand of brandsMap.values()) {
             const godowns = [];
+
             for (const godown of brand.godowns.values()) {
-                godowns.push({
-                    godownId: godown.godownId,
-                    godownName: godown.godownName,
-                    totalBalanceQty: godown.totalBalanceQty,
-                    totalWeeklyQty: godown.totalWeeklyQty,
-                    totalYesterdayQty: godown.totalYesterdayQty,
-                    products: Array.from(godown.products.values()),
+
+                for (const product of godown.products.values()) {
+                    product.packs = product.packs.filter(pack =>
+                        pack.balanceQty > 0 || pack.weeklyAverage > 0 || pack.yesterdayQty > 0
+                    );
+                }
+
+
+                const productsArray = Array.from(godown.products.values()).filter(
+                    product => product.packs.length > 0
+                );
+
+
+                if (productsArray.length > 0 && (
+                    godown.totalBalanceQty > 0 ||
+                    godown.totalWeeklyQty > 0 ||
+                    godown.totalYesterdayQty > 0
+                )) {
+                    godowns.push({
+                        godownId: godown.godownId,
+                        godownName: godown.godownName,
+                        totalBalanceQty: godown.totalBalanceQty,
+                        totalWeeklyQty: godown.totalWeeklyQty,
+                        totalYesterdayQty: godown.totalYesterdayQty,
+                        products: productsArray,
+                    });
+                }
+            }
+
+
+            if (godowns.length > 0) {
+                processedData.push({
+                    brandId: brand.brandId,
+                    brandName: brand.brandName,
+                    godowns,
                 });
             }
-            processedData.push({
-                brandId: brand.brandId,
-                brandName: brand.brandName,
-                godowns,
-            });
         }
-
 
         if (processedData.length > 0) {
             sentData(res, processedData);
@@ -253,7 +277,6 @@ SELECT * FROM SalesAgg WHERE Pos_Brand_Id IS NOT NULL ORDER BY POS_Brand_Name;
             sentData(res, []);
         }
     } catch (error) {
-
         servError(error, res);
     }
 };
