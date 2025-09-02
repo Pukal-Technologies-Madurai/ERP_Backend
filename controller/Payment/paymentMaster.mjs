@@ -95,7 +95,7 @@ const PaymentMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount, transaction_type = null,
-                check_no, check_date, bank_name, bank_date, 
+                check_no, check_date, bank_name, bank_date,
                 remarks, status, created_by,
             } = req.body;
 
@@ -404,26 +404,6 @@ const PaymentMaster = () => {
 
             for (let i = 0; i < BillsDetails.length; i++) {
                 const CurrentBillDetails = BillsDetails[i];
-                let bill_ref_number = '';
-                const payBillId = toNumber(CurrentBillDetails?.pay_bill_id);
-
-                if (isPurchasePayment && payBillId) {
-                    const getPurchaseRefNumber = new sql.Request()
-                        .input('PIN_Id', payBillId)
-                        .query(`
-                            SELECT TOP (1) Ref_Po_Inv_No
-                            FROM tbl_Purchase_Order_Inv_Gen_Info
-                            WHERE PIN_Id = @PIN_Id`
-                        );
-
-                    const result = await getPurchaseRefNumber;
-
-                    if (result.recordset.length !== 1 || !result?.recordset[0]?.Ref_Po_Inv_No) {
-                        throw new Error('Invoice ref number not found');
-                    }
-
-                    bill_ref_number = result?.recordset[0]?.Ref_Po_Inv_No;
-                }
 
                 const request = new sql.Request(transaction)
                     .input('payment_id', payment_id)
@@ -432,7 +412,7 @@ const PaymentMaster = () => {
                     .input('bill_type', bill_type)
                     .input('DR_CR_Acc_Id', DR_CR_Acc_Id)
                     .input('pay_bill_id', CurrentBillDetails?.pay_bill_id)
-                    .input('bill_ref_number', bill_ref_number)
+                    .input('bill_ref_number', CurrentBillDetails?.bill_ref_number)
                     .input('JournalBillType', isPurchasePayment ? 'PURCHASE PAYMENT' : CurrentBillDetails?.JournalBillType)
                     .input('bill_name', CurrentBillDetails?.bill_name)
                     .input('bill_amount', CurrentBillDetails?.bill_amount)

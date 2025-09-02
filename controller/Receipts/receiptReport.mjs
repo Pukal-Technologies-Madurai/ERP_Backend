@@ -1,8 +1,8 @@
 import sql from 'mssql';
 import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
 import { ISOString, checkIsNumber, createPadString, isArray, randomNumber, toArray, toNumber } from '../../helper_functions.mjs';
-const ReceiptReport = () => {
 
+const ReceiptReport = () => {
 
     const getOutstadingAbove = async (req, res) => {
         try {
@@ -152,6 +152,7 @@ const ReceiptReport = () => {
             servError(e, res);
         }
     };
+
     const getoutstandingOver = async (req, res) => {
         const { reqDate } = req.query;
 

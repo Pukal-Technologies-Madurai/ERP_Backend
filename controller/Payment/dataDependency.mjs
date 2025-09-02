@@ -136,6 +136,7 @@ const PaymentDataDependency = () => {
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,
                             'INV' AS dataSource,
+                            pig.Ref_Po_Inv_No AS bill_ref_number,
                             COALESCE((
                                 SELECT SUM(pb.Debit_Amo) 
                                 FROM tbl_Payment_Bill_Info AS pb
@@ -179,6 +180,7 @@ const PaymentDataDependency = () => {
                             0 AS tot_tax, 
                             cb.cr_amount, 
                             'OB' AS dataSource,
+                            cb.bill_no AS bill_ref_number,
                         	COALESCE((
                                 SELECT SUM(pb.Debit_Amo) 
                                 FROM tbl_Payment_Bill_Info AS pb

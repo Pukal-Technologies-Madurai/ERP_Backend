@@ -81,9 +81,7 @@ const ReceiptDataDependency = () => {
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
-                    DECLARE @OB_Date DATE = (
-                    	SELECT MAX(OB_Date) FROM tbl_OB_Date
-                    );
+                    DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
                     --select @OB_Date
                     SELECT 
                     	inv.*,
@@ -131,7 +129,7 @@ const ReceiptDataDependency = () => {
                             AND a.Acc_Id = @Acc_Id
                             AND pig.Do_Date >= @OB_Date
                         UNION ALL
-                            -- from opening balance
+                    -- from opening balance
                         SELECT 
                             cb.OB_Id AS bill_id, 
                             cb.bill_no, 
@@ -166,9 +164,10 @@ const ReceiptDataDependency = () => {
                                     AND jr.RefType = 'SALES-OB'
                             ), 0) AS journalAdjustment
                         FROM tbl_Ledger_Opening_Balance AS cb
-                        WHERE cb.OB_date >= (
-                        	SELECT MAX(OB_Date) FROM tbl_OB_Date
-                        ) AND cb.Retailer_id = @Acc_Id AND cb.cr_amount = 0
+                        WHERE 
+                            cb.OB_date >= @OB_Date 
+                            AND cb.Retailer_id = @Acc_Id 
+                            AND cb.cr_amount = 0
                     ) AS inv
                     WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
                     ORDER BY inv.Do_Date ASC;`

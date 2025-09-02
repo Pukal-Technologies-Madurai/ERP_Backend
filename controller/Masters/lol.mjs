@@ -262,7 +262,6 @@ const lol = () => {
     };
 
     const excelUpload = async (req, res) => {
-
         const transaction = new sql.Transaction();
 
         try {
@@ -276,6 +275,7 @@ const lol = () => {
 
             await transaction.begin();
 
+
             const workbook = XLSX.read(req.file.buffer, {
                 type: "buffer",
                 codepage: 65001,
@@ -283,13 +283,14 @@ const lol = () => {
                 cellDates: true,
                 raw: false
             });
-
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
             const excelData = XLSX.utils.sheet_to_json(worksheet, { defval: null });
 
             let aliasToColumnMap = {};
             try {
-                const aliasMapResult = await transaction.request().query(`SELECT ColumnName, Alias_Name FROM tbl_Lol_Column`);
+                const aliasMapResult = await transaction.request().query(
+                    `SELECT ColumnName, Alias_Name FROM tbl_Lol_Column`
+                );
                 for (const row of aliasMapResult.recordset) {
                     if (row.Alias_Name && row.ColumnName) {
                         aliasToColumnMap[row.Alias_Name.trim()] = row.ColumnName.trim();
@@ -308,43 +309,45 @@ const lol = () => {
 
             for (const row of excelData) {
                 try {
+
                     const mappedRow = {};
                     for (const [key, value] of Object.entries(row)) {
                         const realKey = aliasToColumnMap[key.trim()] || key.trim();
-                        mappedRow[realKey] = typeof value === 'string' ? value.normalize() : value;
+                        mappedRow[realKey] = typeof value === "string" ? value.normalize() : value;
                     }
 
                     const {
                         Ledger_Name = null,
-                        Ledger_Alias = null,
-                        Actual_Party_Name_with_Brokers = null,
-                        Party_Name = null,
-                        Party_Location = null,
-                        Party_Nature = null,
-                        Party_Group = null,
-                        Ref_Brokers = null,
-                        Ref_Owners = null,
-                        Party_Mobile_1 = null,
-                        Party_Mobile_2 = null,
-                        Party_District = null,
-                        File_No = null,
-                        Date_Added = null,
-                        Payment_Mode = null,
-                        Party_Mailing_Name = null,
-                        Party_Mailing_Address = null,
-                        A1 = null,
-                        A2 = null,
-                        A3 = null,
-                        A4 = null,
-                        A5 = null,
-                        Route_Name = null,
-                        GST_No = null
+                        Ledger_Alias,
+                        Actual_Party_Name_with_Brokers,
+                        Party_Name,
+                        Party_Location,
+                        Party_Nature,
+                        Party_Group,
+                        Ref_Brokers,
+                        Ref_Owners,
+                        Party_Mobile_1,
+                        Party_Mobile_2,
+                        Party_District,
+                        File_No,
+                        Date_Added,
+                        Payment_Mode,
+                        Party_Mailing_Name,
+                        Party_Mailing_Address,
+                        A1,
+                        A2,
+                        A3,
+                        A4,
+                        A5,
+                        Route_Name,
+                        GST_No
                     } = mappedRow;
 
                     if (!Ledger_Name) {
                         results.push({ success: false, message: "Missing Ledger_Name", row: mappedRow });
                         continue;
                     }
+
 
                     const retailerRes = await transaction.request()
                         .input("Ledger_Name", sql.NVarChar, Ledger_Name)
@@ -355,6 +358,7 @@ const lol = () => {
                     }
                     const erpId = retailerRes.recordset[0].ERP_Id;
 
+
                     const ledgerRes = await transaction.request()
                         .input("Ledger_Name", sql.NVarChar, Ledger_Name)
                         .query("SELECT * FROM tbl_Ledger_LoL WHERE Ledger_Name = @Ledger_Name");
@@ -364,66 +368,110 @@ const lol = () => {
                     }
                     const currentData = ledgerRes.recordset[0];
 
-                    const updateFields = {
-                        Ledger_Tally_Id: erpId,
-                        Ledger_Alias: Ledger_Alias !== null && Ledger_Alias !== currentData.Ledger_Alias ? String(Ledger_Alias) : null,
-                        Actual_Party_Name_with_Brokers: Actual_Party_Name_with_Brokers !== null && Actual_Party_Name_with_Brokers !== currentData.Actual_Party_Name_with_Brokers ? String(Actual_Party_Name_with_Brokers) : null,
-                        Party_Name: Party_Name !== null && Party_Name !== currentData.Party_Name ? String(Party_Name) : null,
-                        Party_Location: Party_Location !== null && Party_Location !== currentData.Party_Location ? String(Party_Location) : null,
-                        Party_Nature: Party_Nature !== null && Party_Nature !== currentData.Party_Nature ? String(Party_Nature) : null,
-                        Party_Group: Party_Group !== null && Party_Group !== currentData.Party_Group ? String(Party_Group) : null,
-                        Ref_Brokers: Ref_Brokers !== null && Ref_Brokers !== currentData.Ref_Brokers ? String(Ref_Brokers) : null,
-                        Ref_Owners: Ref_Owners !== null && Ref_Owners !== currentData.Ref_Owners ? String(Ref_Owners) : null,
-                        Party_Mobile_1: Party_Mobile_1 !== null && Party_Mobile_1 !== currentData.Party_Mobile_1 ? String(Party_Mobile_1) : null,
-                        Party_Mobile_2: Party_Mobile_2 !== null && Party_Mobile_2 !== currentData.Party_Mobile_2 ? String(Party_Mobile_2) : null,
-                        Party_District: Party_District !== null && Party_District !== currentData.Party_District ? String(Party_District) : null,
-                        File_No: File_No !== null && File_No !== currentData.File_No ? String(File_No) : null,
-                        Date_Added: Date_Added !== null && Date_Added !== currentData.Date_Added ? Date_Added : null,
-                        Payment_Mode: Payment_Mode !== null && Payment_Mode !== currentData.Payment_Mode ? String(Payment_Mode) : null,
-                        Party_Mailing_Name: Party_Mailing_Name !== null && Party_Mailing_Name !== currentData.Party_Mailing_Name ? String(Party_Mailing_Name) : null,
-                        Party_Mailing_Address: Party_Mailing_Address !== null && Party_Mailing_Address !== currentData.Party_Mailing_Address ? String(Party_Mailing_Address) : null,
-                        A1: A1 !== null && A1 !== currentData.A1 ? String(A1) : null,
-                        A2: A2 !== null && A2 !== currentData.A2 ? String(A2) : null,
-                        A3: A3 !== null && A3 !== currentData.A3 ? String(A3) : null,
-                        A4: A4 !== null && A4 !== currentData.A4 ? String(A4) : null,
-                        A5: A5 !== null && A5 !== currentData.A5 ? String(A5) : null,
-                        Route_Name: Route_Name !== null && Route_Name !== currentData.Route_Name ? String(Route_Name) : null,
-                        GST_No: GST_No !== null && GST_No !== currentData.GST_No ? String(GST_No) : null
+                    const updateFields = {};
+                    const changedFields = [];
+
+
+                    const checkAndUpdateField = (fieldName, excelValue, dbValue) => {
+
+                        const excelStr =
+                            excelValue === undefined || excelValue === null || String(excelValue).trim() === ""
+                                ? " "
+                                : String(excelValue).trim();
+
+                        const dbStr =
+                            dbValue === undefined || dbValue === null || String(dbValue).trim() === ""
+                                ? " "
+                                : String(dbValue).trim();
+
+                        if (excelStr !== dbStr) {
+                            updateFields[fieldName] = excelStr;
+                            changedFields.push(fieldName);
+                        }
                     };
 
+                    checkAndUpdateField("Ledger_Alias", Ledger_Alias, currentData.Ledger_Alias);
+                    checkAndUpdateField("Actual_Party_Name_with_Brokers", Actual_Party_Name_with_Brokers, currentData.Actual_Party_Name_with_Brokers);
+                    checkAndUpdateField("Party_Name", Party_Name, currentData.Party_Name);
+                    checkAndUpdateField("Party_Location", Party_Location, currentData.Party_Location);
+                    checkAndUpdateField("Party_Nature", Party_Nature, currentData.Party_Nature);
+                    checkAndUpdateField("Party_Group", Party_Group, currentData.Party_Group);
+                    checkAndUpdateField("Ref_Brokers", Ref_Brokers, currentData.Ref_Brokers);
+                    checkAndUpdateField("Ref_Owners", Ref_Owners, currentData.Ref_Owners);
+                    checkAndUpdateField("Party_Mobile_1", Party_Mobile_1, currentData.Party_Mobile_1);
+                    checkAndUpdateField("Party_Mobile_2", Party_Mobile_2, currentData.Party_Mobile_2);
+                    checkAndUpdateField("Party_District", Party_District, currentData.Party_District);
+                    checkAndUpdateField("File_No", File_No, currentData.File_No);
+                    checkAndUpdateField("Date_Added", Date_Added, currentData.Date_Added); // ✅ keep as varchar
+                    checkAndUpdateField("Payment_Mode", Payment_Mode, currentData.Payment_Mode);
+                    checkAndUpdateField("Party_Mailing_Name", Party_Mailing_Name, currentData.Party_Mailing_Name);
+                    checkAndUpdateField("Party_Mailing_Address", Party_Mailing_Address, currentData.Party_Mailing_Address);
+                    checkAndUpdateField("A1", A1, currentData.A1);
+                    checkAndUpdateField("A2", A2, currentData.A2);
+                    checkAndUpdateField("A3", A3, currentData.A3);
+                    checkAndUpdateField("A4", A4, currentData.A4);
+                    checkAndUpdateField("A5", A5, currentData.A5);
+                    checkAndUpdateField("Route_Name", Route_Name, currentData.Route_Name);
+                    checkAndUpdateField("GST_No", GST_No, currentData.GST_No);
 
-                    const filtered = Object.entries(updateFields).filter(([_, v]) => v !== undefined);
-                    if (filtered.length === 0) {
+                    if (erpId !== currentData.Ledger_Tally_Id) {
+                        updateFields.Ledger_Tally_Id = erpId;
+                        changedFields.push("Ledger_Tally_Id");
+                    }
+
+                    if (Object.keys(updateFields).length === 0) {
                         results.push({ success: true, message: "No changes needed", ledgerName: Ledger_Name });
                         continue;
                     }
 
+
                     const updateLedger = transaction.request().input("ledgerName", sql.NVarChar, Ledger_Name);
                     const setFields = [];
-                    for (const [key, value] of filtered) {
+
+                    for (const [key, value] of Object.entries(updateFields)) {
                         const param = `param_${key}`;
                         setFields.push(`${key} = @${param}`);
-                        updateLedger.input(param, sql.NVarChar, value);
+                        updateLedger.input(param, value);
                     }
-                    await updateLedger.query(`UPDATE tbl_Ledger_LoL SET ${setFields.join(', ')}, IsUpdated = 1 WHERE Ledger_Name = @ledgerName`);
+                    setFields.push("IsUpdated = 1");
+
+                    await updateLedger.query(
+                        `UPDATE tbl_Ledger_LoL SET ${setFields.join(", ")} WHERE Ledger_Name = @ledgerName`
+                    );
+
 
                     const updateSecondary = new sql.Request(req.db).input("ledgerName", sql.NVarChar, Ledger_Name);
-                    for (const [key, value] of filtered) {
+                    for (const [key, value] of Object.entries(updateFields)) {
                         const param = `param_${key}`;
-                        updateSecondary.input(param, sql.NVarChar, value);
+                        updateSecondary.input(param, value);
                     }
-                    await updateSecondary.query(`UPDATE tbl_Ledger_LoL SET ${setFields.join(', ')} WHERE Ledger_Name = @ledgerName`);
+                    await updateSecondary.query(
+                        `UPDATE tbl_Ledger_LoL SET ${setFields.filter(f => f !== "IsUpdated = 1").join(", ")} WHERE Ledger_Name = @ledgerName`
+                    );
 
                     successCount++;
-                    results.push({ success: true, message: "Successfully updated", ledgerName: Ledger_Name, updatedFields: filtered.map(([key]) => key) });
+                    results.push({
+                        success: true,
+                        message: "Successfully updated",
+                        ledgerName: Ledger_Name,
+                        updatedFields: changedFields
+                    });
                 } catch (err) {
-                    await transaction.rollback();
-                    return servError(err, res);
+                    results.push({
+                        success: false,
+                        message: `Error processing row: ${err.message}`
+                    });
+                    console.error(`Error processing row:`, err);
                 }
             }
 
             await transaction.commit();
-            return dataFound(res, `${successCount} record(s) updated successfully.`, results);
+            return dataFound(res, `${successCount} record(s) processed successfully.`, {
+                total: excelData.length,
+                success: successCount,
+                failed: excelData.length - successCount,
+                details: results
+            });
         } catch (error) {
             await transaction.rollback();
             servError(error, res);

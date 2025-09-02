@@ -188,9 +188,6 @@ const PurchaseOrder = () => {
                 throw new Error('Failed to create order, Try again.');
             }
 
-            const getPackDetails = new sql.Request()
-                .query(`SELECT * FROM tbl_Pack_Master`)
-
             for (let i = 0; i < Product_Array.length; i++) {
 
                 const product = Product_Array[i];

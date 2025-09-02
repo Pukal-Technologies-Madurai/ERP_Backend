@@ -736,14 +736,16 @@ const getBatchStockBalance = async (req, res) => {
         const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
-        const { dateBased = 'no' } = req.query;
+        const { dateBased = 'no', Product_Id } = req.query;
+        console.log(req.query);
 
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
+            .input('Product_Id', sql.Int, Product_Id)
             .query(`
             -- only useable quantity details
-                DECLARE @batchDetails TABLE (id NVARCHAR(150), consumedQuantity DECIMAL(18, 2));
+                DECLARE @batchDetails TABLE (id uniqueidentifier, consumedQuantity DECIMAL(18, 2));
             -- filters
                 INSERT INTO @batchDetails (id, consumedQuantity)
                 SELECT 
@@ -751,7 +753,9 @@ const getBatchStockBalance = async (req, res) => {
                 	COALESCE(SUM(bt.quantity), 0) AS consumedQuantity
                 FROM tbl_Batch_Master AS bm
                 LEFT JOIN tbl_Batch_Transaction AS bt ON bt.batch_id = bm.id
-                ${stringCompare(dateBased, 'yes') ? ` WHERE CONVERT(DATE, bm.trans_date) BETWEEN @Fromdate AND @Todate ` : ''}
+                WHERE bm.id IS NOT NULL
+                ${stringCompare(dateBased, 'yes') ? ` AND CONVERT(DATE, bm.trans_date) BETWEEN @Fromdate AND @Todate ` : ''}
+                ${checkIsNumber(Product_Id) ? ` AND bm.item_id = @Product_Id ` : ''}
                 GROUP BY bm.id, bm.quantity
                 ${stringCompare(dateBased, 'no') ? ` HAVING COALESCE(SUM(bt.quantity), 0) < bm.quantity ` : ''};
             -- batch master
@@ -769,12 +773,13 @@ const getBatchStockBalance = async (req, res) => {
                 FROM tbl_Batch_Master AS bm 
                 LEFT JOIN tbl_Godown_Master AS sg ON sg.Godown_Id = bm.godown_id
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = bm.item_id
-                LEFT JOIN tbl_Users AS cb ON cb.UserId = bm.created_by;
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = bm.created_by
+                WHERE bm.id IN (SELECT id FROM @batchDetails);
             -- batch transaction
                 SELECT bt.*, g.Godown_Name AS godownNameGet
                 FROM tbl_Batch_Transaction AS bt
 	            LEFT JOIN tbl_Godown_Master AS g ON g.Godown_Id = bt.godown_id
-                WHERE bt.batch_id IN (SELECT batch_id FROM @batchDetails)`
+                WHERE bt.batch_id IN (SELECT id FROM @batchDetails)`
             );
 
         const result = await request;
