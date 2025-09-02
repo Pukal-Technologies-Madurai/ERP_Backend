@@ -86,7 +86,8 @@ const getAccountPendingReference = async (req, res) => {
                                 jh.JournalStatus <> 0
                                 AND je.Acc_Id = a.Acc_Id
                                 AND je.DrCr   = 'Cr'
-                                AND (jr.RefId = pig.Do_Id OR jr.RefNo = pig.Do_Inv_No)
+                                AND jr.RefId = pig.Do_Id 
+                                AND jr.RefNo = pig.Do_Inv_No
                                 AND jr.RefType = 'SALES'
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide
@@ -127,7 +128,8 @@ const getAccountPendingReference = async (req, res) => {
                             jh.JournalStatus <> 0
                             AND je.Acc_Id = cb.Retailer_id
                             AND je.DrCr   = 'Cr'
-                            AND (jr.RefId = 0 OR jr.RefNo = cb.bill_no)
+                            AND jr.RefId = cb.OB_Id 
+                            AND jr.RefNo = cb.bill_no
                             AND jr.RefType = 'SALES-OB'
                     ), 0) AS journalAdjustment,
                     'Dr' AS accountSide
@@ -164,12 +166,15 @@ const getAccountPendingReference = async (req, res) => {
                                 jh.JournalStatus <> 0
                                 AND je.Acc_Id = rgi.credit_ledger
                                 AND je.DrCr   = 'Dr'
-                                AND (jr.RefId = rgi.receipt_id OR jr.RefNo = rgi.receipt_invoice_no)
+                                AND jr.RefId = rgi.receipt_id 
+                                AND jr.RefNo = rgi.receipt_invoice_no
                                 AND jr.RefType = 'RECEIPT'
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide
                     FROM tbl_Receipt_General_Info rgi
-                    WHERE rgi.credit_ledger = @Acc_Id
+                    WHERE 
+                        rgi.credit_ledger = @Acc_Id
+                        AND rgi.receipt_date >= @OB_Date
                 ) R
                 WHERE R.totalValue > R.againstAmount + R.journalAdjustment
                 UNION ALL
@@ -203,7 +208,8 @@ const getAccountPendingReference = async (req, res) => {
                                 jh.JournalStatus <> 0
                                 AND je.Acc_Id = a.Acc_Id
                                 AND je.DrCr   = 'Dr'
-                                AND (jr.RefId = pig.PIN_Id OR jr.RefNo = pig.Po_Inv_No)
+                                AND jr.RefId = pig.PIN_Id 
+                                AND jr.RefNo = pig.Po_Inv_No
                                 AND jr.RefType = 'PURCHASE'
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide
@@ -244,7 +250,8 @@ const getAccountPendingReference = async (req, res) => {
                                 jh.JournalStatus <> 0
                                 AND je.Acc_Id = cb.Retailer_id
                                 AND je.DrCr   = 'Dr'
-                                AND (jr.RefId = 0 OR jr.RefNo = cb.bill_no)
+                                AND jr.RefId = cb.OB_Id 
+                                AND jr.RefNo = cb.bill_no
                                 AND jr.RefType = 'PURCHASE-OB'
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide
@@ -280,12 +287,15 @@ const getAccountPendingReference = async (req, res) => {
                             WHERE jh.JournalStatus <> 0
                                 AND je.Acc_Id = pgi.debit_ledger
                                 AND je.DrCr   = 'Cr'
-                                AND (jr.RefId = pgi.pay_id OR jr.RefNo = pgi.payment_invoice_no)
+                                AND jr.RefId = pgi.pay_id 
+                                AND jr.RefNo = pgi.payment_invoice_no
                                 AND jr.RefType = 'PAYMENT'
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide
                     FROM tbl_Payment_General_Info pgi
-                    WHERE pgi.debit_ledger = @Acc_Id
+                    WHERE 
+                        pgi.debit_ledger = @Acc_Id
+                        AND pgi.payment_date >= @OB_Date
                 ) PMT
                 WHERE PMT.totalValue > PMT.againstAmount + PMT.journalAdjustment
                 UNION ALL

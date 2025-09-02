@@ -223,7 +223,20 @@ const CustomerAPIs = () => {
                                         AND pgi.receipt_bill_type = 1
                                         AND pb.bill_id = pig.Do_Id
                                         AND pb.bill_name = pig.Do_Inv_No
-                                ), 0) AS Paid_Amount,
+                                ), 0) AS totalReceipt,
+                                COALESCE((
+                                    SELECT SUM(jr.Amount)
+                                    FROM dbo.tbl_Journal_Bill_Reference jr
+                                    JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                    JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                    WHERE 
+                                        jh.JournalStatus <> 0
+                                        AND je.Acc_Id = a.Acc_Id
+                                        AND je.DrCr   = 'Cr'
+                                        AND jr.RefId = pig.Do_Id 
+                                        AND jr.RefNo = pig.Do_Inv_No
+                                        AND jr.RefType = 'SALES'
+                                ), 0) AS journalAdjustment,
                         		b.BranchName Bill_Company
                             FROM tbl_Sales_Delivery_Gen_Info pig
                             JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
@@ -237,7 +250,7 @@ const CustomerAPIs = () => {
                         ),
                         Opening_Balance AS (
                             SELECT 
-                                0 AS tally_id,
+                                cb.OB_Id AS tally_id,
                                 cb.bill_no AS invoice_no,
                                 cb.bill_date AS invoice_date,
                                 cb.Retailer_id AS Retailer_Id,
@@ -246,14 +259,26 @@ const CustomerAPIs = () => {
                                 COALESCE((
                                     SELECT SUM(pb.Credit_Amo)
                                     FROM tbl_Receipt_Bill_Info pb
-                                    JOIN tbl_Receipt_General_Info pgi
-                                        ON pgi.receipt_id = pb.receipt_id
+                                    JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
                                     WHERE 
                                         pgi.status <> 0
                                         AND pgi.receipt_bill_type = 1
-                                        AND pb.bill_id = 0
+                                        AND pb.bill_id = cb.OB_Id
                                         AND pb.bill_name = cb.bill_no
-                                ), 0) AS Paid_Amount,
+                                ), 0) AS totalReceipt,
+                                COALESCE((
+                                    SELECT SUM(jr.Amount)
+                                    FROM dbo.tbl_Journal_Bill_Reference jr
+                                    JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                    JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                    WHERE 
+                                        jh.JournalStatus <> 0
+                                        AND je.Acc_Id = cb.Retailer_id
+                                        AND je.DrCr   = 'Cr'
+                                        AND jr.RefId = cb.OB_Id 
+                                        AND jr.RefNo = cb.bill_no
+                                        AND jr.RefType = 'SALES-OB'
+                                ), 0) AS journalAdjustment,
                         		cb.Bill_Company
                             FROM tbl_Ledger_Opening_Balance cb
                             WHERE 
@@ -278,17 +303,19 @@ const CustomerAPIs = () => {
                         	inv.Retailer_Id,
                         	inv.Total_Invoice_value,
                         	inv.dataSource,
-                        	inv.Paid_Amount,
+                        	inv.totalReceipt,
                         	inv.Bill_Company,
                             r.Retailer_Name,
                             lol.Ref_Brokers,
-                        	COALESCE(inv.Total_Invoice_value - inv.Paid_Amount, 0) Bal_Amount
+                            inv.journalAdjustment,
+                            COALESCE(inv.totalReceipt + inv.journalAdjustment, 0) AS Paid_Amount,
+                        	COALESCE(inv.Total_Invoice_value - (inv.totalReceipt + inv.journalAdjustment), 0) Bal_Amount
                         FROM Combined_Invoice inv
                         JOIN tbl_Account_Master a ON a.Acc_Id = inv.Retailer_Id
                         JOIN tbl_Retailers_Master r ON r.ERP_Id = a.ERP_Id
                         LEFT JOIN tbl_Ledger_LOL lol ON lol.Ledger_Tally_Id = r.ERP_Id
                         WHERE 
-                            inv.Paid_Amount < inv.Total_Invoice_value
+                            inv.totalReceipt < inv.Total_Invoice_value
                         ORDER BY inv.invoice_date;`
                     );
 

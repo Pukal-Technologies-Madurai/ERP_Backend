@@ -116,7 +116,8 @@ const ReceiptDataDependency = () => {
                                     jh.JournalStatus <> 0
                                     AND je.Acc_Id = a.Acc_Id
                                     AND je.DrCr   = 'Cr'
-                                    AND (jr.RefId = pig.Do_Id OR jr.RefNo = pig.Do_Inv_No)
+                                    AND jr.RefId = pig.Do_Id 
+                                    AND jr.RefNo = pig.Do_Inv_No
                                     AND jr.RefType = 'SALES'
                             ), 0) AS journalAdjustment
                         FROM tbl_Sales_Delivery_Gen_Info AS pig
@@ -142,8 +143,7 @@ const ReceiptDataDependency = () => {
                         	COALESCE((
                                 SELECT SUM(pb.Credit_Amo) 
                                 FROM tbl_Receipt_Bill_Info AS pb
-                                JOIN tbl_Receipt_General_Info AS pgi
-                                    ON pgi.receipt_id = pb.receipt_id
+                                JOIN tbl_Receipt_General_Info AS pgi ON pgi.receipt_id = pb.receipt_id
                                 WHERE 
                                     pgi.status <> 0
                                     AND pgi.receipt_bill_type = 1
@@ -160,7 +160,8 @@ const ReceiptDataDependency = () => {
                                     jh.JournalStatus <> 0
                                     AND je.Acc_Id = cb.Retailer_id
                                     AND je.DrCr   = 'Cr'
-                                    AND (jr.RefId = 0 OR jr.RefNo = cb.bill_no)
+                                    AND jr.RefId = cb.OB_Id 
+                                    AND jr.RefNo = cb.bill_no
                                     AND jr.RefType = 'SALES-OB'
                             ), 0) AS journalAdjustment
                         FROM tbl_Ledger_Opening_Balance AS cb

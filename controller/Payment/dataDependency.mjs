@@ -157,7 +157,8 @@ const PaymentDataDependency = () => {
                                     jh.JournalStatus <> 0
                                     AND je.Acc_Id = a.Acc_Id
                                     AND je.DrCr   = 'Dr'
-                                    AND (jr.RefId = pig.PIN_Id OR jr.RefNo = pig.Po_Inv_No)
+                                    AND jr.RefId = pig.PIN_Id 
+                                    AND jr.RefNo = pig.Po_Inv_No
                                     AND jr.RefType = 'PURCHASE'
                             ), 0) AS journalAdjustment
                         FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
@@ -202,7 +203,8 @@ const PaymentDataDependency = () => {
                                     jh.JournalStatus <> 0
                                     AND je.Acc_Id = cb.Retailer_id
                                     AND je.DrCr   = 'Dr'
-                                    AND (jr.RefId = 0 OR jr.RefNo = cb.bill_no)
+                                    AND jr.RefId = cb.OB_Id 
+                                    AND jr.RefNo = cb.bill_no
                                     AND jr.RefType = 'PURCHASE-OB'
                             ), 0) AS journalAdjustment
                         FROM tbl_Ledger_Opening_Balance AS cb
