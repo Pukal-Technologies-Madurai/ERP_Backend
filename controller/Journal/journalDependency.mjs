@@ -175,6 +175,7 @@ const getAccountPendingReference = async (req, res) => {
                     WHERE 
                         rgi.credit_ledger = @Acc_Id
                         AND rgi.receipt_date >= @OB_Date
+                        AND rgi.status <> 0
                 ) R
                 WHERE R.totalValue > R.againstAmount + R.journalAdjustment
                 UNION ALL
@@ -296,6 +297,7 @@ const getAccountPendingReference = async (req, res) => {
                     WHERE 
                         pgi.debit_ledger = @Acc_Id
                         AND pgi.payment_date >= @OB_Date
+                        AND pgi.status <> 0
                 ) PMT
                 WHERE PMT.totalValue > PMT.againstAmount + PMT.journalAdjustment
                 UNION ALL
