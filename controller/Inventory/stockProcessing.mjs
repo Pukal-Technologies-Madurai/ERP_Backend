@@ -465,7 +465,11 @@ const StockManagement = () => {
                         -od.Qty, 'REVERSAL_PRODUCTION', od.PRD_Id, @createdBy
                     FROM @OldDest od
                     WHERE od.Batch_Id IS NOT NULL;
-                    /* ====================================== */                    
+                    /* ===================== Deleting Previous Data ===================== */
+                    DELETE FROM tbl_Processing_Staff_Involved WHERE PR_Id = @PR_Id;
+                    DELETE FROM tbl_Processing_Source_Details WHERE PR_Id = @PR_Id;
+                    DELETE FROM tbl_Processing_Destin_Details WHERE PR_Id = @PR_Id;
+                    /* ====================================== */
                     /* ===================== New Values ===================== */   
                     /* ====================================== */ 
                     DECLARE @SourceOut TABLE (
