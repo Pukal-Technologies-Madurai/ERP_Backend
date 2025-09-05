@@ -1662,6 +1662,75 @@ const SaleOrder = () => {
         }
     };
 
+
+        const saleOrderReport = async (req, res) => {
+      try {
+        const Fromdate = req.query.Fromdate
+          ? ISOString(req.query.Fromdate)
+          : ISOString();
+        const Todate = req.query.Todate
+          ? ISOString(req.query.Todate)
+          : ISOString();
+    
+        const salesQuery = `
+          SELECT DISTINCT
+              fnd.Product_Id,
+              fnd.Product_Name,
+              fnd.bill_qty AS Sales_Quantity,
+              stl.Stock_Item,
+              stl.Stock_Group,
+              stl.S_Sub_Group_1,
+              stl.Grade_Item_Group,
+              stl.Item_Name_Modified,
+              fnd.BranchId,
+              fnd.BranchName
+          FROM Avg_Live_Sale_Order_Branch_Fn_3(@Fromdate, @Todate) fnd
+          LEFT JOIN tbl_Stock_Los stl 
+                ON stl.Pro_Id = fnd.Product_Id
+          ORDER BY fnd.BranchName, fnd.Product_Name;
+        `;
+    
+        const salesRequest = new sql.Request()
+          .input("Fromdate", sql.DateTime, Fromdate)
+          .input("Todate", sql.DateTime, Todate);
+    
+        const salesResult = await salesRequest.query(salesQuery);
+    
+      
+const groupedData = salesResult.recordset.reduce((branchAcc, item) => {
+  const branchKey = item.BranchId || 0;
+
+  if (!branchAcc[branchKey]) {
+    branchAcc[branchKey] = {
+      BranchId: item.BranchId,
+      BranchName: item.BranchName,
+      Products: [],
+    };
+  }
+
+  branchAcc[branchKey].Products.push({
+    Product_Id: item.Product_Id,
+    Product_Name: item.Product_Name,
+    Stock_Item: item.Stock_Item,
+    Item_Name_Modified: item.Item_Name_Modified,
+    Stock_Group: item.Stock_Group,
+    S_Sub_Group_1: item.S_Sub_Group_1,
+    Grade_Item_Group: item.Grade_Item_Group,
+    Sales_Quantity: item.Sales_Quantity,
+  });
+
+  return branchAcc;
+}, {});
+
+    
+  const resultArray = Object.values(groupedData);
+sentData(res, resultArray);
+
+      } catch (e) {
+        console.error("Error in sales report:", e);
+        servError(e, res);
+      }
+    };
     return {
         saleOrderCreation,
         getSaleOrder,
@@ -1672,7 +1741,8 @@ const SaleOrder = () => {
         getPresaleOrder,
         saleOrderCreationWithPso,
         updatesaleOrderWithPso,
-        getSaleOrderMobile
+        getSaleOrderMobile,
+        saleOrderReport
     }
 }
 

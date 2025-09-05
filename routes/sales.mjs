@@ -37,4 +37,8 @@ SalesRouter.put('/presaleOrder/saleOrderCreationWithPso', salesOrder.updatesaleO
 SalesRouter.get('/partyWiseReport', dbconnect, salesEntry.partyWiseSalesReport);
 SalesRouter.get('/partyWiseReport/details', dbconnect, salesEntry.partyDetailsReport);
 
+
+SalesRouter.get('/salesInvoiceReport',salesInvoice.salesInvoiceReport)
+SalesRouter.get('/saleOrderReport',salesOrder.saleOrderReport)
+
 export default SalesRouter;
