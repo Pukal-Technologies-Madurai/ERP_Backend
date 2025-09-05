@@ -154,81 +154,147 @@ const StockManagement = () => {
                 `);
 
             if (OrderDetailsInsert.rowsAffected[0] == 0) {
-                throw new Error('Failed to insert Journal details');
+                throw new Error('Failed to insert Processing details');
             }
 
-            for (let i = 0; i < Source.length; i++) {
-                const item = Source[i];
-                const result = await new sql.Request(transaction)
-                    .input('PR_Id', PR_Id)
-                    .input('Sour_Item_Id', item.Sour_Item_Id)
-                    .input('Sour_Goodown_Id', item.Sour_Goodown_Id)
-                    .input('Sour_Batch_Lot_No', item.Sour_Batch_Lot_No)
-                    .input('Sour_Qty', Number(item.Sour_Qty) || null)
-                    .input('Sour_Unit_Id', item.Sour_Unit_Id)
-                    .input('Sour_Unit', item.Sour_Unit)
-                    .input('Sour_Rate', Number(item.Sour_Rate) || null)
-                    .input('Sour_Amt', Number(item.Sour_Amt) || null)
-                    .query(`
-                        INSERT INTO tbl_Processing_Source_Details (
-                            PR_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, 
-                            Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
-                        ) VALUES (
-                            @PR_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, 
-                            @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
-                        );
-                    `);
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Source details');
-                }
-            }
-
-            for (let i = 0; i < StaffInvolve.length; i++) {
-                const delivery = StaffInvolve[i];
-                const result = await new sql.Request(transaction)
-                    .input('PR_Id', PR_Id)
-                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id) || null)
-                    .input('Staff_Id', Number(delivery.Staff_Id) || null)
-                    .query(`
-                        INSERT INTO tbl_Processing_Staff_Involved (
-                            PR_Id, Staff_Type_Id, Staff_Id
-                        ) VALUES (
-                            @PR_Id, @Staff_Type_Id, @Staff_Id
-                        );
-                    `);
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Staff Involved details');
-                }
-            }
-
-            for (let i = 0; i < Destination.length; i++) {
-                const final = Destination[i];
-                const result = await new sql.Request(transaction)
-                    .input('PR_Id', PR_Id)
-                    .input('Dest_Item_Id', Number(final.Dest_Item_Id) || null)
-                    .input('Dest_Goodown_Id', Number(final.Dest_Goodown_Id) || null)
-                    .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
-                    .input('Dest_Qty', Number(final.Dest_Qty) || null)
-                    .input('Dest_Unit_Id', Number(final.Dest_Unit_Id) || null)
-                    .input('Dest_Unit', final.Dest_Unit)
-                    .input('Dest_Rate', Number(final.Dest_Rate) || null)
-                    .input('Dest_Amt', Number(final.Dest_Amt) || null)
-                    .query(`
-                        INSERT INTO tbl_Processing_Destin_Details (
-                            PR_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, 
-                            Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
-                        ) VALUES (
-                            @PR_Id, @Dest_Item_Id, @Dest_Goodown_Id, @Dest_Batch_Lot_No, @Dest_Qty, 
-                            @Dest_Unit_Id, @Dest_Unit, @Dest_Rate, @Dest_Amt
-                        );
-                    `);
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Destination details');
-                }
-            }
+            await new sql.Request(transaction)
+                .input('PR_Id', sql.BigInt, PR_Id)
+                .input('createdBy', Created_By)
+                .input('trans_date', Process_date)
+                .input('payload', sql.NVarChar(sql.MAX), JSON.stringify({
+                    Source,
+                    Destination,
+                    StaffInvolve
+                }))
+                .query(`
+                    DECLARE @SourceOut TABLE (
+                        PRS_Id BIGINT,
+                        Sour_Item_Id BIGINT,
+                        Sour_Goodown_Id BIGINT,
+                        Sour_Batch_Lot_No NVARCHAR(200),
+                        Quantity DECIMAL(18,4),
+                        Batch_Id UNIQUEIDENTIFIER NULL
+                    );
+                    DECLARE @DestOut TABLE (
+                        PRD_Id BIGINT,
+                        Dest_Item_Id BIGINT,
+                        Dest_Goodown_Id BIGINT,
+                        Dest_Batch_Lot_No NVARCHAR(200),
+                        Quantity DECIMAL(18,4),
+                        Rate DECIMAL(18,4)
+                    );
+                    /* ===================== Source ===================== */
+                    INSERT INTO tbl_Processing_Source_Details (
+                        PR_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty,
+                        Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
+                    )
+                    OUTPUT
+                        inserted.PRS_Id,
+                        inserted.Sour_Item_Id,
+                        inserted.Sour_Goodown_Id,
+                        inserted.Sour_Batch_Lot_No,
+                        inserted.Sour_Qty
+                    INTO @SourceOut (PRS_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Quantity)
+                    SELECT
+                        @PR_Id,
+                        j.Sour_Item_Id,
+                        j.Sour_Goodown_Id,
+                        j.Sour_Batch_Lot_No,
+                        j.Sour_Qty,
+                        j.Sour_Unit_Id,
+                        j.Sour_Unit,
+                        j.Sour_Rate,
+                        j.Sour_Amt
+                    FROM OPENJSON(@payload, '$.Source')
+                    WITH (
+                        Sour_Item_Id       BIGINT             '$.Sour_Item_Id',
+                        Sour_Goodown_Id    BIGINT             '$.Sour_Goodown_Id',
+                        Sour_Batch_Lot_No  NVARCHAR(200)      '$.Sour_Batch_Lot_No',
+                        Sour_Qty           DECIMAL(18,4)      '$.Sour_Qty',
+                        Sour_Unit_Id       BIGINT             '$.Sour_Unit_Id',
+                        Sour_Unit          NVARCHAR(50)       '$.Sour_Unit',
+                        Sour_Rate          DECIMAL(18,4)      '$.Sour_Rate',
+                        Sour_Amt           DECIMAL(18,4)      '$.Sour_Amt'
+                    ) AS j;
+                    /* Fill Source Batch_Id by joining Batch_Master */
+                    UPDATE s
+                    SET s.Batch_Id = bm.id
+                    FROM @SourceOut s
+                    JOIN tbl_Batch_Master bm ON bm.batch = s.Sour_Batch_Lot_No AND bm.item_id = s.Sour_Item_Id AND bm.godown_id = s.Sour_Goodown_Id;
+                    /* =================== Source batch consumption =================== */
+                    INSERT INTO tbl_Batch_Transaction (
+                        batch_id, batch, trans_date, item_id, godown_id, 
+                        quantity, type, reference_id, created_by
+                    )
+                    SELECT 
+                        s.Batch_Id, s.Sour_Batch_Lot_No, @trans_date, s.Sour_Item_Id, s.Sour_Goodown_Id, 
+                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy
+                    FROM @SourceOut s
+                    WHERE s.Batch_Id IS NOT NULL;
+                    /* ====================================== */
+                    /* =================== Destination =================== */
+                    /* ====================================== */
+                    INSERT INTO tbl_Processing_Destin_Details (
+                        PR_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty,
+                        Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
+                    )
+                    OUTPUT
+                        inserted.PRD_Id,
+                        inserted.Dest_Item_Id,
+                        inserted.Dest_Goodown_Id,
+                        inserted.Dest_Batch_Lot_No,
+                        inserted.Dest_Qty,
+                        inserted.Dest_Rate
+                    INTO @DestOut (PRD_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Quantity, Rate)
+                    SELECT
+                        @PR_Id,
+                        j.Dest_Item_Id,
+                        j.Dest_Goodown_Id,
+                        j.Dest_Batch_Lot_No,
+                        j.Dest_Qty,
+                        j.Dest_Unit_Id,
+                        j.Dest_Unit,
+                        j.Dest_Rate,
+                        j.Dest_Amt
+                    FROM OPENJSON(@payload, '$.Destination')
+                    WITH (
+                        Dest_Item_Id       BIGINT             '$.Dest_Item_Id',
+                        Dest_Goodown_Id    BIGINT             '$.Dest_Goodown_Id',
+                        Dest_Batch_Lot_No  NVARCHAR(200)      '$.Dest_Batch_Lot_No',
+                        Dest_Qty           DECIMAL(18,4)      '$.Dest_Qty',
+                        Dest_Unit_Id       BIGINT             '$.Dest_Unit_Id',
+                        Dest_Unit          NVARCHAR(50)       '$.Dest_Unit',
+                        Dest_Rate          DECIMAL(18,4)      '$.Dest_Rate',
+                        Dest_Amt           DECIMAL(18,4)      '$.Dest_Amt'
+                    ) AS j;
+                    /* ==================== Destination Batch production (upsert) ==================== */
+                    MERGE tbl_Batch_Master AS target
+                    USING @DestOut AS d
+                    ON  target.batch    = d.Dest_Batch_Lot_No
+                    AND target.item_id  = d.Dest_Item_Id
+                    AND target.godown_id= d.Dest_Goodown_Id
+                    WHEN MATCHED THEN
+                        UPDATE SET 
+                            target.quantity = target.quantity + d.Quantity,
+                            target.rate     = d.Rate,                -- adjust if you want to keep existing
+                            target.trans_date = @trans_date
+                    WHEN NOT MATCHED THEN
+                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
+                        VALUES (NEWID(), d.Dest_Batch_Lot_No, d.Dest_Item_Id, d.Dest_Goodown_Id, @trans_date, d.Quantity, d.Rate, @createdBy);
+                    /* ====================================== */
+                    /* =================== Staff involved =================== */
+                    /* ====================================== */
+                    INSERT INTO tbl_Processing_Staff_Involved (PR_Id, Staff_Type_Id, Staff_Id)
+                    SELECT
+                        @PR_Id,
+                        Staff_Type_Id,
+                        Staff_Id
+                    FROM OPENJSON(@payload, '$.StaffInvolve')
+                    WITH (
+                        Staff_Type_Id  BIGINT '$.Staff_Type_Id',
+                        Staff_Id       BIGINT '$.Staff_Id'
+                    );`
+                );
 
             await transaction.commit();
 
@@ -330,86 +396,210 @@ const StockManagement = () => {
             }
 
             await new sql.Request(transaction)
-                .input('PR_Id', PR_Id)
+                .input('PR_Id', sql.BigInt, PR_Id)
+                .input('createdBy', Updated_By)
+                .input('trans_date', Process_date)
+                .input('payload', sql.NVarChar(sql.MAX), JSON.stringify({
+                    Source,
+                    Destination,
+                    StaffInvolve
+                }))
                 .query(`
+                    -- removing previous quantity in batch
+                    DECLARE @OldSource TABLE (
+                        PRS_Id BIGINT,
+                        Item_Id BIGINT,
+                        Godown_Id BIGINT,
+                        Batch NVARCHAR(200),
+                        Qty DECIMAL(18,4),
+                        Batch_Id UNIQUEIDENTIFIER NULL
+                    );
+                    INSERT @OldSource (PRS_Id, Item_Id, Godown_Id, Batch, Qty, Batch_Id)
+                    SELECT  s.PRS_Id,
+                            s.Sour_Item_Id,
+                            s.Sour_Goodown_Id,
+                            s.Sour_Batch_Lot_No,
+                            s.Sour_Qty,
+                            bm.id
+                    FROM tbl_Processing_Source_Details s
+                    LEFT JOIN tbl_Batch_Master bm
+                    ON bm.batch = s.Sour_Batch_Lot_No AND bm.item_id = s.Sour_Item_Id AND bm.godown_id = s.Sour_Goodown_Id
+                    WHERE s.PR_Id = @PR_Id;
+                    DECLARE @OldDest TABLE (
+                        PRD_Id BIGINT,
+                        Item_Id BIGINT,
+                        Godown_Id BIGINT,
+                        Batch NVARCHAR(200),
+                        Qty DECIMAL(18,4),
+                        Rate DECIMAL(18,4),
+                        Batch_Id UNIQUEIDENTIFIER NULL
+                    );
+                    INSERT @OldDest (PRD_Id, Item_Id, Godown_Id, Batch, Qty, Rate, Batch_Id)
+                    SELECT  d.PRD_Id,
+                            d.Dest_Item_Id,
+                            d.Dest_Goodown_Id,
+                            d.Dest_Batch_Lot_No,
+                            d.Dest_Qty,
+                            d.Dest_Rate,
+                            bm.id
+                    FROM tbl_Processing_Destin_Details d
+                    LEFT JOIN tbl_Batch_Master bm
+                    ON bm.batch = d.Dest_Batch_Lot_No
+                    AND bm.item_id = d.Dest_Item_Id
+                    AND bm.godown_id = d.Dest_Goodown_Id
+                    WHERE d.PR_Id = @PR_Id;
+                    /* ===================== negative quantity inserting ================== */
+                    -- If you historically wrote a CONSUMPTION row with +Qty, the negative here cancels it out.
+                    INSERT INTO tbl_Batch_Transaction
+                        (batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by)
+                    SELECT
+                        os.Batch_Id, os.Batch, @trans_date, os.Item_Id, os.Godown_Id,
+                        -os.Qty, 'REVERSAL_CONSUMPTION', os.PRS_Id, @createdBy
+                    FROM @OldSource os
+                    WHERE os.Batch_Id IS NOT NULL;
+                    /* ===================== destination removal ================== */
+                    INSERT INTO tbl_Batch_Transaction
+                        (batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by)
+                    SELECT
+                        od.Batch_Id, od.Batch, @trans_date, od.Item_Id, od.Godown_Id,
+                        -od.Qty, 'REVERSAL_PRODUCTION', od.PRD_Id, @createdBy
+                    FROM @OldDest od
+                    WHERE od.Batch_Id IS NOT NULL;
+                    /* ===================== Deleting Previous Data ===================== */
                     DELETE FROM tbl_Processing_Staff_Involved WHERE PR_Id = @PR_Id;
                     DELETE FROM tbl_Processing_Source_Details WHERE PR_Id = @PR_Id;
-                    DELETE FROM tbl_Processing_Destin_Details WHERE PR_Id = @PR_Id;`
+                    DELETE FROM tbl_Processing_Destin_Details WHERE PR_Id = @PR_Id;
+                    /* ====================================== */
+                    /* ===================== New Values ===================== */   
+                    /* ====================================== */ 
+                    DECLARE @SourceOut TABLE (
+                        PRS_Id BIGINT,
+                        Sour_Item_Id BIGINT,
+                        Sour_Goodown_Id BIGINT,
+                        Sour_Batch_Lot_No NVARCHAR(200),
+                        Quantity DECIMAL(18,4),
+                        Batch_Id UNIQUEIDENTIFIER NULL
+                    );
+                    DECLARE @DestOut TABLE (
+                        PRD_Id BIGINT,
+                        Dest_Item_Id BIGINT,
+                        Dest_Goodown_Id BIGINT,
+                        Dest_Batch_Lot_No NVARCHAR(200),
+                        Quantity DECIMAL(18,4),
+                        Rate DECIMAL(18,4)
+                    );
+                    /* ===================== Source ===================== */
+                    INSERT INTO tbl_Processing_Source_Details (
+                        PR_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty,
+                        Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
+                    )
+                    OUTPUT
+                        inserted.PRS_Id,
+                        inserted.Sour_Item_Id,
+                        inserted.Sour_Goodown_Id,
+                        inserted.Sour_Batch_Lot_No,
+                        inserted.Sour_Qty
+                    INTO @SourceOut (PRS_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Quantity)
+                    SELECT
+                        @PR_Id,
+                        j.Sour_Item_Id,
+                        j.Sour_Goodown_Id,
+                        j.Sour_Batch_Lot_No,
+                        j.Sour_Qty,
+                        j.Sour_Unit_Id,
+                        j.Sour_Unit,
+                        j.Sour_Rate,
+                        j.Sour_Amt
+                    FROM OPENJSON(@payload, '$.Source')
+                    WITH (
+                        Sour_Item_Id       BIGINT             '$.Sour_Item_Id',
+                        Sour_Goodown_Id    BIGINT             '$.Sour_Goodown_Id',
+                        Sour_Batch_Lot_No  NVARCHAR(200)      '$.Sour_Batch_Lot_No',
+                        Sour_Qty           DECIMAL(18,4)      '$.Sour_Qty',
+                        Sour_Unit_Id       BIGINT             '$.Sour_Unit_Id',
+                        Sour_Unit          NVARCHAR(50)       '$.Sour_Unit',
+                        Sour_Rate          DECIMAL(18,4)      '$.Sour_Rate',
+                        Sour_Amt           DECIMAL(18,4)      '$.Sour_Amt'
+                    ) AS j;
+                    /* Fill Source Batch_Id by joining Batch_Master */
+                    UPDATE s
+                    SET s.Batch_Id = bm.id
+                    FROM @SourceOut s
+                    JOIN tbl_Batch_Master bm ON bm.batch = s.Sour_Batch_Lot_No AND bm.item_id = s.Sour_Item_Id AND bm.godown_id = s.Sour_Goodown_Id;
+                    /* =================== Source batch consumption =================== */
+                    INSERT INTO tbl_Batch_Transaction (
+                        batch_id, batch, trans_date, item_id, godown_id, 
+                        quantity, type, reference_id, created_by
+                    )
+                    SELECT 
+                        s.Batch_Id, s.Sour_Batch_Lot_No, @trans_date, s.Sour_Item_Id, s.Sour_Goodown_Id, 
+                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy
+                    FROM @SourceOut s
+                    WHERE s.Batch_Id IS NOT NULL;
+                    /* ====================================== */
+                    /* =================== Destination =================== */
+                    /* ====================================== */
+                    INSERT INTO tbl_Processing_Destin_Details (
+                        PR_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty,
+                        Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
+                    )
+                    OUTPUT
+                        inserted.PRD_Id,
+                        inserted.Dest_Item_Id,
+                        inserted.Dest_Goodown_Id,
+                        inserted.Dest_Batch_Lot_No,
+                        inserted.Dest_Qty,
+                        inserted.Dest_Rate
+                    INTO @DestOut (PRD_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Quantity, Rate)
+                    SELECT
+                        @PR_Id,
+                        j.Dest_Item_Id,
+                        j.Dest_Goodown_Id,
+                        j.Dest_Batch_Lot_No,
+                        j.Dest_Qty,
+                        j.Dest_Unit_Id,
+                        j.Dest_Unit,
+                        j.Dest_Rate,
+                        j.Dest_Amt
+                    FROM OPENJSON(@payload, '$.Destination')
+                    WITH (
+                        Dest_Item_Id       BIGINT             '$.Dest_Item_Id',
+                        Dest_Goodown_Id    BIGINT             '$.Dest_Goodown_Id',
+                        Dest_Batch_Lot_No  NVARCHAR(200)      '$.Dest_Batch_Lot_No',
+                        Dest_Qty           DECIMAL(18,4)      '$.Dest_Qty',
+                        Dest_Unit_Id       BIGINT             '$.Dest_Unit_Id',
+                        Dest_Unit          NVARCHAR(50)       '$.Dest_Unit',
+                        Dest_Rate          DECIMAL(18,4)      '$.Dest_Rate',
+                        Dest_Amt           DECIMAL(18,4)      '$.Dest_Amt'
+                    ) AS j;
+                    /* ==================== Destination Batch production (upsert) ==================== */
+                    MERGE tbl_Batch_Master AS target
+                    USING @DestOut AS d
+                    ON  target.batch    = d.Dest_Batch_Lot_No
+                    AND target.item_id  = d.Dest_Item_Id
+                    AND target.godown_id= d.Dest_Goodown_Id
+                    WHEN MATCHED THEN
+                        UPDATE SET 
+                            target.quantity = target.quantity + d.Quantity,
+                            target.rate = d.Rate,
+                            target.trans_date = @trans_date
+                    WHEN NOT MATCHED THEN
+                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
+                        VALUES (NEWID(), d.Dest_Batch_Lot_No, d.Dest_Item_Id, d.Dest_Goodown_Id, @trans_date, d.Quantity, d.Rate, @createdBy);
+                    /* ====================================== */
+                    /* =================== Staff involved =================== */
+                    /* ====================================== */
+                    INSERT INTO tbl_Processing_Staff_Involved (PR_Id, Staff_Type_Id, Staff_Id)
+                    SELECT
+                        @PR_Id,
+                        Staff_Type_Id,
+                        Staff_Id
+                    FROM OPENJSON(@payload, '$.StaffInvolve')
+                    WITH (
+                        Staff_Type_Id  BIGINT '$.Staff_Type_Id',
+                        Staff_Id       BIGINT '$.Staff_Id'
+                    );`
                 );
-
-
-            for (let i = 0; i < Source.length; i++) {
-                const item = Source[i];
-                const result = await new sql.Request(transaction)
-                    .input('PR_Id', PR_Id)
-                    .input('Sour_Item_Id', item.Sour_Item_Id)
-                    .input('Sour_Goodown_Id', item.Sour_Goodown_Id)
-                    .input('Sour_Batch_Lot_No', item.Sour_Batch_Lot_No)
-                    .input('Sour_Qty', Number(item.Sour_Qty) || null)
-                    .input('Sour_Unit_Id', item.Sour_Unit_Id)
-                    .input('Sour_Unit', item.Sour_Unit)
-                    .input('Sour_Rate', Number(item.Sour_Rate) || null)
-                    .input('Sour_Amt', Number(item.Sour_Amt) || null)
-                    .query(`
-                        INSERT INTO tbl_Processing_Source_Details (
-                            PR_Id, Sour_Item_Id, Sour_Goodown_Id, Sour_Batch_Lot_No, Sour_Qty, 
-                            Sour_Unit_Id, Sour_Unit, Sour_Rate, Sour_Amt
-                        ) VALUES (
-                            @PR_Id, @Sour_Item_Id, @Sour_Goodown_Id, @Sour_Batch_Lot_No, @Sour_Qty, 
-                            @Sour_Unit_Id, @Sour_Unit, @Sour_Rate, @Sour_Amt
-                        );`
-                    );
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Source details');
-                }
-            }
-
-            for (let i = 0; i < StaffInvolve.length; i++) {
-                const delivery = StaffInvolve[i];
-                const result = await new sql.Request(transaction)
-                    .input('PR_Id', PR_Id)
-                    .input('Staff_Type_Id', Number(delivery.Staff_Type_Id) || null)
-                    .input('Staff_Id', Number(delivery.Staff_Id) || null)
-                    .query(`
-                        INSERT INTO tbl_Processing_Staff_Involved (
-                            PR_Id, Staff_Type_Id, Staff_Id
-                        ) VALUES (
-                            @PR_Id, @Staff_Type_Id, @Staff_Id
-                        );`
-                    );
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Staff Involved details');
-                }
-            }
-
-            for (let i = 0; i < Destination.length; i++) {
-                const final = Destination[i];
-                const result = await new sql.Request(transaction)
-                    .input('PR_Id', PR_Id)
-                    .input('Dest_Item_Id', Number(final.Dest_Item_Id) || null)
-                    .input('Dest_Goodown_Id', Number(final.Dest_Goodown_Id) || null)
-                    .input('Dest_Batch_Lot_No', final.Dest_Batch_Lot_No)
-                    .input('Dest_Qty', Number(final.Dest_Qty) || null)
-                    .input('Dest_Unit_Id', Number(final.Dest_Unit_Id) || null)
-                    .input('Dest_Unit', final.Dest_Unit)
-                    .input('Dest_Rate', Number(final.Dest_Rate) || null)
-                    .input('Dest_Amt', Number(final.Dest_Amt) || null)
-                    .query(`
-                        INSERT INTO tbl_Processing_Destin_Details (
-                            PR_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty, 
-                            Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
-                        ) VALUES (
-                            @PR_Id, @Dest_Item_Id, @Dest_Goodown_Id, @Dest_Batch_Lot_No, @Dest_Qty, 
-                            @Dest_Unit_Id, @Dest_Unit, @Dest_Rate, @Dest_Amt
-                        );`
-                    );
-
-                if (result.rowsAffected[0] == 0) {
-                    throw new Error('Failed to insert Destination details');
-                }
-            }
 
             await transaction.commit();
             return success(res, 'Journal Updated Successfully');

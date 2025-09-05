@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { servError, dataFound, noData, failed, success, invalidInput, sentData } from '../../res.mjs';
+import { servError, success, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber, getDaysBetween, ISOString, stringCompare, toNumber } from '../../helper_functions.mjs';
 
 // material inward
@@ -220,7 +220,7 @@ const postBatchInProcessingSource = async (req, res) => {
                 INSERT INTO tbl_Batch_Transaction (
                     batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by
                 )
-                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'SALES', moduleId, @createdBy
+                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'CONSUMPTION', moduleId, @createdBy
                 FROM #Parsed;
             -- Update Sales
                 UPDATE pr
@@ -737,7 +737,6 @@ const getBatchStockBalance = async (req, res) => {
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
         const { dateBased = 'no', Product_Id } = req.query;
-        console.log(req.query);
 
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
