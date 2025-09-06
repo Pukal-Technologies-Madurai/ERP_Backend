@@ -212,6 +212,47 @@ const PaymentDataDependency = () => {
                             cb.OB_date >= @OB_Date 
                             AND cb.Retailer_id = @Acc_Id 
                             AND cb.dr_amount = 0
+                    	UNION ALL
+                    -- receipt outstanding
+                    	SELECT 
+                    		rgi.receipt_id,
+                    		rgi.receipt_invoice_no,
+                    		rgi.receipt_date,
+                    		rgi.credit_ledger,
+                            0 AS bef_tax, 
+                            0 AS tot_tax,
+                    		rgi.credit_amount,
+                    		'RECEIPT' AS dataSource,
+                    		rgi.receipt_invoice_no AS bill_ref_number,
+                    		 COALESCE((
+                                SELECT SUM(pb.Debit_Amo) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pgi.pay_bill_type = 1
+                                    AND pb.pay_bill_id = rgi.receipt_id
+                                    AND pb.bill_name = rgi.receipt_invoice_no
+                                    -- AND pgi.payment_date >= @OB_Date
+                            ), 0) AS Paid_Amount,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = rgi.credit_ledger
+                                    AND je.DrCr   = 'Dr'
+                                    AND jr.RefId = rgi.receipt_id
+                                    AND jr.RefNo = rgi.receipt_invoice_no
+                                    -- AND jr.RefType = 'RECEIPT'
+                            ), 0) AS journalAdjustment
+                    	FROM tbl_Receipt_General_Info AS rgi
+                    	WHERE
+                    		rgi.credit_ledger = @Acc_Id
+                            AND rgi.receipt_date >= @OB_Date
+                            AND rgi.status <> 0
                     ) AS inv
                     WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value;`
                 );
@@ -754,6 +795,38 @@ const PaymentDataDependency = () => {
         }
     }
 
+    const getPurchaseInvoicedCustomers = async (req, res) => {
+        try {
+
+            const request = new sql.Request()
+                .query(`
+                    SELECT 
+                        r.Retailer_id, 
+                        COALESCE(a.Acc_Id, 0) AS value, 
+                        COALESCE(r.Retailer_Name, a.Account_name) AS label
+                    FROM tbl_Retailers_Master AS r 
+                    LEFT JOIN tbl_Account_Master AS a ON r.ERP_Id = a.ERP_Id
+                    WHERE r.Retailer_Id IN (
+                    	SELECT DISTINCT Retailer_Id
+                    	FROM tbl_Purchase_Order_Inv_Gen_Info
+                    ) OR a.Acc_Id IN (
+                    	SELECT DISTINCT Retailer_id
+                    	FROM tbl_Ledger_Opening_Balance
+                    ) OR a.Acc_Id IN (
+						SELECT DISTINCT credit_ledger
+						FROM tbl_Receipt_General_Info
+					)
+                    ORDER BY a.Account_name;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getAccountGroups,
         getAccounts,
@@ -762,7 +835,8 @@ const PaymentDataDependency = () => {
         getPaymentInvoiceBillInfo,
         getPaymentInvoiceCostingInfo,
         searchStockJournal,
-        getFilterValues
+        getFilterValues,
+        getPurchaseInvoicedCustomers
     }
 }
 

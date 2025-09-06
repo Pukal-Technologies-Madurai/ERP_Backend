@@ -169,6 +169,45 @@ const ReceiptDataDependency = () => {
                             cb.OB_date >= @OB_Date 
                             AND cb.Retailer_id = @Acc_Id 
                             AND cb.cr_amount = 0
+                    	UNION ALL
+                    -- Payment outstanding
+                    	SELECT
+                    		pgi.pay_id,
+                    		pgi.payment_invoice_no,
+                    		pgi.payment_date,
+                    		pgi.debit_ledger,
+                    		0 AS total_bef_tax,
+                    		0 AS total_aft_tas,
+                    		pgi.debit_amount,
+                    		'PAYMENT' AS dataSource,
+                    		 COALESCE((
+                                SELECT SUM(rbi.Credit_Amo) 
+                                FROM tbl_Receipt_Bill_Info AS rbi
+                                JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
+                                WHERE 
+                                    rgi.status <> 0
+                                    AND rgi.receipt_bill_type = 1
+                                    AND rbi.bill_id = pgi.pay_id
+                                    AND rbi.bill_name = pgi.payment_invoice_no
+                            ), 0) AS Paid_Amount,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = @Acc_Id
+                                    AND je.DrCr   = 'Cr'
+                                    AND jr.RefId = pgi.pay_id 
+                                    AND jr.RefNo = pgi.payment_invoice_no
+                                    --AND jr.RefType = 'PAYMENT'
+                            ), 0) AS journalAdjustment
+                    	FROM tbl_Payment_General_Info AS pgi
+                    	WHERE 
+                    		pgi.debit_ledger = @Acc_Id
+                            AND pgi.payment_date >= @OB_Date
+                            AND pgi.status <> 0
                     ) AS inv
                     WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
                     ORDER BY inv.Do_Date ASC;`
@@ -819,7 +858,10 @@ const ReceiptDataDependency = () => {
                     ) OR a.Acc_Id IN (
                     	SELECT DISTINCT Retailer_id
                     	FROM tbl_Ledger_Opening_Balance
-                    )
+                    ) OR a.Acc_Id IN (
+						SELECT DISTINCT debit_ledger
+						FROM tbl_Payment_General_Info
+					)
                     ORDER BY a.Account_name;`
                 );
 

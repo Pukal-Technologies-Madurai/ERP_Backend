@@ -32,32 +32,41 @@ const DebitorsCreditors = () => {
             const request = new sql.Request();
 
             const query = `
-            SELECT 
-                am.Acc_Id, 
+            WITH RecursiveGroups AS (
+                SELECT group_id, parent_Ac_id
+                FROM tbl_Accounting_Group
+                WHERE parent_Ac_id IN (16, 20)
+                
+                UNION ALL
+                
+                SELECT g.group_id, rg.parent_Ac_id
+                FROM tbl_Accounting_Group g
+                INNER JOIN RecursiveGroups rg 
+                    ON g.parent_Ac_id = rg.group_id
+                WHERE rg.parent_Ac_id IN (16, 20)
+            )
+            SELECT DISTINCT
+                am.Acc_Id,
                 am.Account_Name,
                 CASE 
-                    WHEN ag.parent_Ac_id = 16 THEN 'Creditor'
-                    WHEN ag.parent_Ac_id = 20 THEN 'Debtor'
-                    ELSE 'Other'
-                END AS account_type
+                    WHEN rg.parent_Ac_id = 16 THEN 'Creditor'
+                    WHEN rg.parent_Ac_id = 20 THEN 'Debtor'
+                END AS Account_Types
             FROM tbl_Account_Master am
-            INNER JOIN tbl_Accounting_Group ag 
-                ON am.Group_Id = ag.group_id
-            WHERE ag.parent_Ac_id IN (16, 20)
+            INNER JOIN RecursiveGroups rg 
+                ON am.Group_Id = rg.group_id
+            WHERE rg.parent_Ac_id IN (16, 20)
         `;
 
             const result = await request.query(query);
 
             if (!result.recordset || result.recordset.length === 0) {
-                return invalidInput(res, 'Enter Required Fields');
+                return invalidInput(res, 'No debtors or creditors found');
             }
 
             const response = {
                 success: true,
-                data: {
-                    debtors: result.recordset.filter(acc => acc.account_type === 'Debtor'),
-                    creditors: result.recordset.filter(acc => acc.account_type === 'Creditor')
-                }
+                data: result.recordset
             };
 
             dataFound(res, response);
@@ -67,9 +76,78 @@ const DebitorsCreditors = () => {
         }
     };
 
+    const getDebtorsCreditorsAll = async (req, res) => {
+        try {
+            const { fromDate, toDate } = req.query;
+
+            if (!fromDate || !toDate) {
+                return invalidInput(res, "Enter Required Fields");
+            }
+
+            const result1 = await new sql.Request()
+                .input("fromDate", sql.Date, fromDate)
+                .input("toDate", sql.Date, toDate)
+                .execute("Transaction_Debtors_Creditors_Reort_VW");
+
+            const balances = result1.recordset;
+
+            if (!balances || balances.length === 0) {
+                return noData(res);
+            }
+
+
+            const query2 = `
+        WITH RecursiveGroups AS (
+            SELECT group_id, parent_Ac_id
+            FROM tbl_Accounting_Group
+            WHERE parent_Ac_id IN (16, 20)
+            
+            UNION ALL
+            
+            SELECT g.group_id, rg.parent_Ac_id
+            FROM tbl_Accounting_Group g
+            INNER JOIN RecursiveGroups rg 
+                ON g.parent_Ac_id = rg.group_id
+            WHERE rg.parent_Ac_id IN (16, 20)
+        )
+        SELECT DISTINCT
+            am.Acc_Id,
+            am.Account_Name,
+            CASE 
+                WHEN rg.parent_Ac_id = 16 THEN 'Creditor'
+                WHEN rg.parent_Ac_id = 20 THEN 'Debtor'
+            END AS Account_Types
+        FROM tbl_Account_Master am
+        INNER JOIN RecursiveGroups rg 
+            ON am.Group_Id = rg.group_id
+        WHERE rg.parent_Ac_id IN (16, 20)
+      `;
+
+            const result2 = await new sql.Request().query(query2);
+            const accountTypes = result2.recordset;
+
+
+            const merged = balances.map((bal) => {
+                const accType = accountTypes.find(
+                    (at) => String(at.Acc_Id) === String(bal.Acc_Id)
+                );
+                return {
+                    ...bal,
+                    Account_Types: accType ? accType.Account_Types : null,
+                    Account_Name: accType ? accType.Account_Name : bal.Account_name,
+                };
+            });
+
+            return sentData(res, merged);
+        } catch (err) {
+            servError(err, res);
+        }
+    };
+
     return {
         getDebtorsCrditors,
-        getDebtorsCreditorsId
+        getDebtorsCreditorsId,
+        getDebtorsCreditorsAll
     }
 }
 

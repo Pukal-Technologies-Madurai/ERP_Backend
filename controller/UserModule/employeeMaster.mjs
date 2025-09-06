@@ -3,7 +3,6 @@ import { dataFound, noData, servError, invalidInput, failed, success } from '../
 import { encryptPasswordFun } from '../../helper_functions.mjs';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
-import { getUserIdByAuth, getUserType, getUserTypeByAuth } from '../../middleware/miniAPIs.mjs'
 dotenv.config();
 
 const domain = process.env.domain;
@@ -577,21 +576,23 @@ const EmployeeController = () => {
         }
     };
 
-const employeeAttendanceModule = async (req, res) => {
-    const { FromDate, ToDate, FingerPrintId, EmpId } = req.query;
+    const employeeAttendanceModule = async (req, res) => {
+        const { FromDate, ToDate, FingerPrintId, EmpId } = req.query;
 
-    try {
-        if (!FromDate || !ToDate) {
-            return invalidInput(res, "FromDate and ToDate are required and must be valid dates");
-        }
 
-        const adjustedToDate = new Date(ToDate);
-        adjustedToDate.setDate(adjustedToDate.getDate() + 1);
-        const adjustedToDateStr = adjustedToDate.toISOString();
 
-       
-        if (EmpId && EmpId !== "0" && EmpId !== "ALL") {
-            const query = `
+        try {
+            if (!FromDate || !ToDate) {
+                return invalidInput(res, "FromDate and ToDate are required and must be valid dates");
+            }
+
+            const adjustedToDate = new Date(ToDate);
+            adjustedToDate.setDate(adjustedToDate.getDate() + 1);
+            const adjustedToDateStr = adjustedToDate.toISOString();
+
+
+            if (EmpId && EmpId !== "0" && EmpId !== "ALL") {
+                const query = `
                 WITH RankedLogs AS (
                    SELECT 
                        em.User_Mgt_Id,          
@@ -697,21 +698,21 @@ const employeeAttendanceModule = async (req, res) => {
                    ag.PunchDateTimes
                ORDER BY rl.LogDate DESC;`;
 
-            const request = new sql.Request();
-            request.input("FromDate", sql.DateTime, FromDate);
-            request.input("ToDate", sql.DateTime, adjustedToDateStr);
-            request.input("EmpCode", sql.NVarChar, EmpId); 
+                const request = new sql.Request();
+                request.input("FromDate", sql.DateTime, FromDate);
+                request.input("ToDate", sql.DateTime, adjustedToDateStr);
+                request.input("EmpCode", sql.NVarChar, EmpId);
 
-            const result = await request.query(query);
-            return result.recordset.length > 0 ? dataFound(res, result.recordset) : noData(res);
-        } 
-        else {
-         
-            const queryCondition = !FingerPrintId || FingerPrintId === "ALL" || FingerPrintId === "0"
-                ? ""
-                : `AND em.fingerPrintEmpId = @FingerPrintId`;
+                const result = await request.query(query);
+                return result.recordset.length > 0 ? dataFound(res, result.recordset) : noData(res);
+            }
+            else {
 
-            const query = `
+                const queryCondition = !FingerPrintId || FingerPrintId === "ALL" || FingerPrintId === "0"
+                    ? ""
+                    : `AND em.fingerPrintEmpId = @FingerPrintId`;
+
+                const query = `
                 WITH RankedLogs AS (
                     SELECT 
                         em.fingerPrintEmpId,
@@ -814,21 +815,21 @@ const employeeAttendanceModule = async (req, res) => {
                 ORDER BY rl.LogDate DESC;
             `;
 
-            const request = new sql.Request();
-            request.input("FromDate", sql.DateTime, FromDate);
-            request.input("ToDate", sql.DateTime, adjustedToDateStr);
+                const request = new sql.Request();
+                request.input("FromDate", sql.DateTime, FromDate);
+                request.input("ToDate", sql.DateTime, adjustedToDateStr);
 
-            if (FingerPrintId && FingerPrintId !== "ALL" && FingerPrintId !== "0") {
-                request.input("FingerPrintId", sql.NVarChar, FingerPrintId);
+                if (FingerPrintId && FingerPrintId !== "ALL" && FingerPrintId !== "0") {
+                    request.input("FingerPrintId", sql.NVarChar, FingerPrintId);
+                }
+
+                const result = await request.query(query);
+                return result.recordset.length > 0 ? dataFound(res, result.recordset) : noData(res);
             }
-
-            const result = await request.query(query);
-            return result.recordset.length > 0 ? dataFound(res, result.recordset) : noData(res);
+        } catch (error) {
+            servError(error, res);
         }
-    } catch (error) {
-        servError(error, res);
-    }
-};
+    };
 
     const employeeOverallAttendance = async (req, res) => {
         const { FromDate, ToDate } = req.query;

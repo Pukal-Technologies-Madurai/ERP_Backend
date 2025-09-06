@@ -42,9 +42,31 @@ const StockManagement = () => {
                 return invalidInput(res, 'Start Reading cannot be greater than End Reading');
             }
 
-            const Source = Array.isArray(req.body.Source) ? req.body.Source : [];
-            const StaffInvolve = Array.isArray(req.body.StaffInvolve) ? req.body.StaffInvolve : [];
-            const Destination = Array.isArray(req.body.Destination) ? req.body.Destination : [];
+            const Source = toArray(req.body?.Source).map(item => ({
+                ...item,
+                Sour_Item_Id: toNumber(item?.Sour_Item_Id),
+                Sour_Goodown_Id: toNumber(item?.Sour_Goodown_Id),
+                Sour_Qty: toNumber(item?.Sour_Qty),
+                Sour_Unit_Id: toNumber(item?.Sour_Unit_Id),
+                Sour_Rate: toNumber(item?.Sour_Rate),
+                Sour_Amt: toNumber(item?.Sour_Amt)
+            }));
+
+            const Destination = toArray(req.body?.Destination).map(item => ({
+                ...item,
+                Dest_Item_Id: toNumber(item?.Dest_Item_Id),
+                Dest_Goodown_Id: toNumber(item?.Dest_Goodown_Id),
+                Dest_Qty: toNumber(item?.Dest_Qty),
+                Dest_Unit_Id: toNumber(item?.Dest_Unit_Id),
+                Dest_Rate: toNumber(item?.Dest_Rate),
+                Dest_Amt: toNumber(item?.Dest_Amt)
+            }));
+
+            const StaffInvolve = toArray(req.body.StaffInvolve).map(item => ({
+                ...item,
+                Staff_Type_Id: toNumber(item?.Staff_Type_Id),
+                Staff_Id: toNumber(item?.Staff_Id)
+            }));
 
             // unique id for processing
 
@@ -172,7 +194,7 @@ const StockManagement = () => {
                         Sour_Item_Id BIGINT,
                         Sour_Goodown_Id BIGINT,
                         Sour_Batch_Lot_No NVARCHAR(200),
-                        Quantity DECIMAL(18,4),
+                        Quantity DECIMAL(18,2),
                         Batch_Id UNIQUEIDENTIFIER NULL
                     );
                     DECLARE @DestOut TABLE (
@@ -180,8 +202,8 @@ const StockManagement = () => {
                         Dest_Item_Id BIGINT,
                         Dest_Goodown_Id BIGINT,
                         Dest_Batch_Lot_No NVARCHAR(200),
-                        Quantity DECIMAL(18,4),
-                        Rate DECIMAL(18,4)
+                        Quantity DECIMAL(18,2),
+                        Rate DECIMAL(18,2)
                     );
                     /* ===================== Source ===================== */
                     INSERT INTO tbl_Processing_Source_Details (
@@ -210,11 +232,11 @@ const StockManagement = () => {
                         Sour_Item_Id       BIGINT             '$.Sour_Item_Id',
                         Sour_Goodown_Id    BIGINT             '$.Sour_Goodown_Id',
                         Sour_Batch_Lot_No  NVARCHAR(200)      '$.Sour_Batch_Lot_No',
-                        Sour_Qty           DECIMAL(18,4)      '$.Sour_Qty',
+                        Sour_Qty           DECIMAL(18,2)      '$.Sour_Qty',
                         Sour_Unit_Id       BIGINT             '$.Sour_Unit_Id',
                         Sour_Unit          NVARCHAR(50)       '$.Sour_Unit',
-                        Sour_Rate          DECIMAL(18,4)      '$.Sour_Rate',
-                        Sour_Amt           DECIMAL(18,4)      '$.Sour_Amt'
+                        Sour_Rate          DECIMAL(18,2)      '$.Sour_Rate',
+                        Sour_Amt           DECIMAL(18,2)      '$.Sour_Amt'
                     ) AS j;
                     /* Fill Source Batch_Id by joining Batch_Master */
                     UPDATE s
@@ -261,11 +283,11 @@ const StockManagement = () => {
                         Dest_Item_Id       BIGINT             '$.Dest_Item_Id',
                         Dest_Goodown_Id    BIGINT             '$.Dest_Goodown_Id',
                         Dest_Batch_Lot_No  NVARCHAR(200)      '$.Dest_Batch_Lot_No',
-                        Dest_Qty           DECIMAL(18,4)      '$.Dest_Qty',
+                        Dest_Qty           DECIMAL(18,2)      '$.Dest_Qty',
                         Dest_Unit_Id       BIGINT             '$.Dest_Unit_Id',
                         Dest_Unit          NVARCHAR(50)       '$.Dest_Unit',
-                        Dest_Rate          DECIMAL(18,4)      '$.Dest_Rate',
-                        Dest_Amt           DECIMAL(18,4)      '$.Dest_Amt'
+                        Dest_Rate          DECIMAL(18,2)      '$.Dest_Rate',
+                        Dest_Amt           DECIMAL(18,2)      '$.Dest_Amt'
                     ) AS j;
                     /* ==================== Destination Batch production (upsert) ==================== */
                     MERGE tbl_Batch_Master AS target
@@ -347,27 +369,49 @@ const StockManagement = () => {
                 return invalidInput(res, 'Start Reading cannot be greater than End Reading');
             }
 
-            const Source = Array.isArray(req.body.Source) ? req.body.Source : [];
-            const StaffInvolve = Array.isArray(req.body.StaffInvolve) ? req.body.StaffInvolve : [];
-            const Destination = Array.isArray(req.body.Destination) ? req.body.Destination : [];
+            const Source = toArray(req.body?.Source).map(item => ({
+                ...item,
+                Sour_Item_Id: toNumber(item?.Sour_Item_Id),
+                Sour_Goodown_Id: toNumber(item?.Sour_Goodown_Id),
+                Sour_Qty: toNumber(item?.Sour_Qty),
+                Sour_Unit_Id: toNumber(item?.Sour_Unit_Id),
+                Sour_Rate: toNumber(item?.Sour_Rate),
+                Sour_Amt: toNumber(item?.Sour_Amt)
+            }));
+
+            const Destination = toArray(req.body?.Destination).map(item => ({
+                ...item,
+                Dest_Item_Id: toNumber(item?.Dest_Item_Id),
+                Dest_Goodown_Id: toNumber(item?.Dest_Goodown_Id),
+                Dest_Qty: toNumber(item?.Dest_Qty),
+                Dest_Unit_Id: toNumber(item?.Dest_Unit_Id),
+                Dest_Rate: toNumber(item?.Dest_Rate),
+                Dest_Amt: toNumber(item?.Dest_Amt)
+            }));
+
+            const StaffInvolve = toArray(req.body.StaffInvolve).map(item => ({
+                ...item,
+                Staff_Type_Id: toNumber(item?.Staff_Type_Id),
+                Staff_Id: toNumber(item?.Staff_Id)
+            }));
 
             await transaction.begin();
 
             const updateOrderDetails = await new sql.Request(transaction)
-                .input('Branch_Id', Branch_Id)
-                .input('VoucherType', VoucherType)
+                .input('Branch_Id', toNumber(Branch_Id))
+                .input('VoucherType', toNumber(VoucherType))
                 .input('BillType', BillType)
                 .input('Process_date', Process_date)
                 .input('Machine_No', Machine_No)
-                .input('Godownlocation', Godownlocation)
+                .input('Godownlocation', toNumber(Godownlocation))
                 .input('StartDateTime', StartDateTime)
                 .input('EndDateTime', EndDateTime)
-                .input('ST_Reading', ST_Reading)
-                .input('EN_Reading', EN_Reading)
-                .input('Total_Reading', Total_Reading)
+                .input('ST_Reading', toNumber(ST_Reading))
+                .input('EN_Reading', toNumber(EN_Reading))
+                .input('Total_Reading', toNumber(Total_Reading))
                 .input('Narration', Narration)
                 .input('PR_Status', PR_Status)
-                .input('Updated_By', Updated_By)
+                .input('Updated_By', toNumber(Updated_By))
                 .input('Updated_At', new Date())
                 .input('PR_Id', PR_Id)
                 .query(`
@@ -411,7 +455,7 @@ const StockManagement = () => {
                         Item_Id BIGINT,
                         Godown_Id BIGINT,
                         Batch NVARCHAR(200),
-                        Qty DECIMAL(18,4),
+                        Qty DECIMAL(18,2),
                         Batch_Id UNIQUEIDENTIFIER NULL
                     );
                     INSERT @OldSource (PRS_Id, Item_Id, Godown_Id, Batch, Qty, Batch_Id)
@@ -430,8 +474,8 @@ const StockManagement = () => {
                         Item_Id BIGINT,
                         Godown_Id BIGINT,
                         Batch NVARCHAR(200),
-                        Qty DECIMAL(18,4),
-                        Rate DECIMAL(18,4),
+                        Qty DECIMAL(18,2),
+                        Rate DECIMAL(18,2),
                         Batch_Id UNIQUEIDENTIFIER NULL
                     );
                     INSERT @OldDest (PRD_Id, Item_Id, Godown_Id, Batch, Qty, Rate, Batch_Id)
@@ -477,7 +521,7 @@ const StockManagement = () => {
                         Sour_Item_Id BIGINT,
                         Sour_Goodown_Id BIGINT,
                         Sour_Batch_Lot_No NVARCHAR(200),
-                        Quantity DECIMAL(18,4),
+                        Quantity DECIMAL(18,2),
                         Batch_Id UNIQUEIDENTIFIER NULL
                     );
                     DECLARE @DestOut TABLE (
@@ -485,8 +529,8 @@ const StockManagement = () => {
                         Dest_Item_Id BIGINT,
                         Dest_Goodown_Id BIGINT,
                         Dest_Batch_Lot_No NVARCHAR(200),
-                        Quantity DECIMAL(18,4),
-                        Rate DECIMAL(18,4)
+                        Quantity DECIMAL(18,2),
+                        Rate DECIMAL(18,2)
                     );
                     /* ===================== Source ===================== */
                     INSERT INTO tbl_Processing_Source_Details (
@@ -515,11 +559,11 @@ const StockManagement = () => {
                         Sour_Item_Id       BIGINT             '$.Sour_Item_Id',
                         Sour_Goodown_Id    BIGINT             '$.Sour_Goodown_Id',
                         Sour_Batch_Lot_No  NVARCHAR(200)      '$.Sour_Batch_Lot_No',
-                        Sour_Qty           DECIMAL(18,4)      '$.Sour_Qty',
+                        Sour_Qty           DECIMAL(18,2)      '$.Sour_Qty',
                         Sour_Unit_Id       BIGINT             '$.Sour_Unit_Id',
                         Sour_Unit          NVARCHAR(50)       '$.Sour_Unit',
-                        Sour_Rate          DECIMAL(18,4)      '$.Sour_Rate',
-                        Sour_Amt           DECIMAL(18,4)      '$.Sour_Amt'
+                        Sour_Rate          DECIMAL(18,2)      '$.Sour_Rate',
+                        Sour_Amt           DECIMAL(18,2)      '$.Sour_Amt'
                     ) AS j;
                     /* Fill Source Batch_Id by joining Batch_Master */
                     UPDATE s
@@ -566,11 +610,11 @@ const StockManagement = () => {
                         Dest_Item_Id       BIGINT             '$.Dest_Item_Id',
                         Dest_Goodown_Id    BIGINT             '$.Dest_Goodown_Id',
                         Dest_Batch_Lot_No  NVARCHAR(200)      '$.Dest_Batch_Lot_No',
-                        Dest_Qty           DECIMAL(18,4)      '$.Dest_Qty',
+                        Dest_Qty           DECIMAL(18,2)      '$.Dest_Qty',
                         Dest_Unit_Id       BIGINT             '$.Dest_Unit_Id',
                         Dest_Unit          NVARCHAR(50)       '$.Dest_Unit',
-                        Dest_Rate          DECIMAL(18,4)      '$.Dest_Rate',
-                        Dest_Amt           DECIMAL(18,4)      '$.Dest_Amt'
+                        Dest_Rate          DECIMAL(18,2)      '$.Dest_Rate',
+                        Dest_Amt           DECIMAL(18,2)      '$.Dest_Amt'
                     ) AS j;
                     /* ==================== Destination Batch production (upsert) ==================== */
                     MERGE tbl_Batch_Master AS target

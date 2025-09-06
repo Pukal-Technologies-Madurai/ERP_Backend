@@ -15,6 +15,7 @@ PaymentRouter.get('/paymentMaster/againstRef', paymentDependency.getPaymentInvoi
 PaymentRouter.get('/paymentMaster/againstRef/costingDetails', paymentDependency.getPaymentInvoiceCostingInfo);
 PaymentRouter.post('/paymentMaster/againstRef', paymentMaster.addAgainstRef);
 PaymentRouter.post('/paymentMaster/searchStockJournal', paymentDependency.searchStockJournal);
+PaymentRouter.get('/getRetailersWhoHasBills', paymentDependency.getPurchaseInvoicedCustomers);
 
 PaymentRouter.get('/paymentMaster/search', paymentDependency.searchPaymentInvoice);
 PaymentRouter.get('/accountGroup', paymentDependency.getAccountGroups);
@@ -26,7 +27,8 @@ PaymentRouter.get('/reports/accountsTransaction', paymentReport.getAccountsTrans
 PaymentRouter.get('/reports/itemExpences', paymentReport.itemTotalExpenceWithStockGroup);
 
 PaymentRouter.post('/debtorsCreditors', debtorsCreditors.getDebtorsCrditors)
-PaymentRouter.get('/getDebtorsCreditors', debtorsCreditors.getDebtorsCreditorsId)
+PaymentRouter.get('/getDebtorsCreditors', debtorsCreditors.getDebtorsCreditorsId);
+PaymentRouter.get('/getDebtorDetails', debtorsCreditors.getDebtorsCreditorsAll);
 
 
 export default PaymentRouter;
