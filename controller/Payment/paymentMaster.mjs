@@ -96,7 +96,7 @@ const PaymentMaster = () => {
                 debit_ledger, debit_ledger_name,
                 debit_amount, transaction_type = null,
                 check_no, check_date, bank_name, bank_date,
-                remarks, status, created_by,
+                remarks, status, created_by, BillsDetails = []
             } = req.body;
 
             const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
@@ -222,6 +222,26 @@ const PaymentMaster = () => {
                 const isReference = isEqualNumber(pay_bill_type, 1) || isEqualNumber(pay_bill_type, 3);
 
                 if (!isReference) return success(res, 'Payment Created');
+
+                if (toArray(BillsDetails).length > 0) {
+
+                    const clonedReq = {
+                        ...req,
+                        body: {
+                            payment_id: pay_id,
+                            payment_no: payment_invoice_no,
+                            payment_date: payment_date,
+                            bill_type: pay_bill_type,
+                            DR_CR_Acc_Id: debit_ledger
+                        }
+                    };
+
+                    const againstBillResult = await addAgainstRef(clonedReq);
+
+                    if (againstBillResult.success === true) {
+                        return success(res, 'Receipt Created');
+                    }
+                }
 
                 const getInsertedValues = new sql.Request()
                     .input('pay_id', pay_id)
@@ -466,7 +486,9 @@ const PaymentMaster = () => {
 
             await transaction.commit();
 
-            success(res, 'Against Reference Saved');
+            return res ? success(res, 'Against Reference Saved') : {
+                success: true,
+            };
 
         } catch (e) {
             if (transactionBegun && transaction._aborted === false) {
@@ -476,7 +498,9 @@ const PaymentMaster = () => {
                     console.error('Rollback failed:', rollbackErr);
                 }
             }
-            servError(e, res);
+            return res ? servError(e, res) : {
+                success: false
+            };
         }
     }
 

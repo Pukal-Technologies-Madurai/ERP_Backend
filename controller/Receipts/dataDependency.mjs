@@ -1,6 +1,5 @@
-import { servError, success, failed, sentData, invalidInput, dataFound, noData, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isEqualNumber, toArray } from '../../helper_functions.mjs';
-import { getNextId } from '../../middleware/miniAPIs.mjs';
+import { servError, sentData, invalidInput, dataFound, noData, } from '../../res.mjs';
+import { ISOString, checkIsNumber, isEqualNumber, toArray } from '../../helper_functions.mjs';
 import sql from 'mssql';
 
 const stockJournalTypes = [
@@ -103,7 +102,7 @@ const ReceiptDataDependency = () => {
                                     ON pgi.receipt_id = pb.receipt_id
                                 WHERE 
                                     pgi.status <> 0
-                                    AND pgi.receipt_bill_type = 1
+                                    -- AND pgi.receipt_bill_type = 1
                                     AND pb.bill_id = pig.Do_Id
                                     AND pb.bill_name = pig.Do_Inv_No
                             ), 0) AS Paid_Amount,
@@ -146,7 +145,7 @@ const ReceiptDataDependency = () => {
                                 JOIN tbl_Receipt_General_Info AS pgi ON pgi.receipt_id = pb.receipt_id
                                 WHERE 
                                     pgi.status <> 0
-                                    AND pgi.receipt_bill_type = 1
+                                    -- AND pgi.receipt_bill_type = 1
                                     AND pb.bill_id = cb.OB_Id
                                     AND pb.bill_name = cb.bill_no
                                     -- AND pgi.receipt_date >= @OB_Date
@@ -186,7 +185,7 @@ const ReceiptDataDependency = () => {
                                 JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
                                 WHERE 
                                     rgi.status <> 0
-                                    AND rgi.receipt_bill_type = 1
+                                    -- AND rgi.receipt_bill_type = 1
                                     AND rbi.bill_id = pgi.pay_id
                                     AND rbi.bill_name = pgi.payment_invoice_no
                             ), 0) AS Paid_Amount,
@@ -201,7 +200,7 @@ const ReceiptDataDependency = () => {
                                     AND je.DrCr   = 'Cr'
                                     AND jr.RefId = pgi.pay_id 
                                     AND jr.RefNo = pgi.payment_invoice_no
-                                    --AND jr.RefType = 'PAYMENT'
+                                    -- AND jr.RefType = 'PAYMENT'
                             ), 0) AS journalAdjustment
                     	FROM tbl_Payment_General_Info AS pgi
                     	WHERE 

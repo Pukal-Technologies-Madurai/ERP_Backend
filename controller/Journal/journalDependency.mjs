@@ -73,7 +73,7 @@ const getAccountPendingReference = async (req, res) => {
                             JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
                             WHERE 
                                 pgi.status <> 0
-                                AND pgi.receipt_bill_type = 1
+                                -- AND pgi.receipt_bill_type = 1
                                 AND pb.bill_id  = pig.Do_Id
                                 AND pb.bill_name = pig.Do_Inv_No
                         ), 0) AS againstAmount,
@@ -114,7 +114,7 @@ const getAccountPendingReference = async (req, res) => {
                         JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
                         WHERE 
                             pgi.status <> 0
-                            AND pgi.receipt_bill_type = 1
+                            -- AND pgi.receipt_bill_type = 1
                             AND pb.bill_id = cb.OB_Id
                             AND pb.bill_name = cb.bill_no
                             -- AND pgi.receipt_date <= @OB_Date
@@ -196,7 +196,7 @@ const getAccountPendingReference = async (req, res) => {
                             JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
                             WHERE 
                                 pgi.status <> 0
-                                AND pgi.pay_bill_type = 1
+                                -- AND pgi.pay_bill_type = 1
                                 AND pb.pay_bill_id = pig.PIN_Id
                                 AND pb.bill_name  = pig.Po_Inv_No
                         ), 0) AS againstAmount,
@@ -237,7 +237,7 @@ const getAccountPendingReference = async (req, res) => {
                             JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
                             WHERE 
                                 pgi.status <> 0
-                                AND pgi.pay_bill_type = 1
+                                -- AND pgi.pay_bill_type = 1
                                 AND pb.pay_bill_id = cb.OB_Id
                                 AND pb.bill_name   = cb.bill_no
                                 -- AND pgi.payment_date <= @OB_Date

@@ -144,7 +144,7 @@ const PaymentDataDependency = () => {
                                     ON pgi.pay_id = pb.payment_id
                                 WHERE 
                                     pgi.status <> 0
-                                    AND pgi.pay_bill_type = 1
+                                    -- AND pgi.pay_bill_type = 1
                                     AND pb.pay_bill_id = pig.PIN_Id
                                     AND pb.bill_name = pig.Po_Inv_No
                             ), 0) AS Paid_Amount,
@@ -189,7 +189,7 @@ const PaymentDataDependency = () => {
                                     ON pgi.pay_id = pb.payment_id
                                 WHERE 
                                     pgi.status <> 0
-                                    AND pgi.pay_bill_type = 1
+                                    -- AND pgi.pay_bill_type = 1
                                     AND pb.pay_bill_id = cb.OB_Id
                                     AND pb.bill_name = cb.bill_no
                                     -- AND pgi.payment_date >= @OB_Date
@@ -230,7 +230,7 @@ const PaymentDataDependency = () => {
                                 JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
                                 WHERE 
                                     pgi.status <> 0
-                                    AND pgi.pay_bill_type = 1
+                                    -- AND pgi.pay_bill_type = 1
                                     AND pb.pay_bill_id = rgi.receipt_id
                                     AND pb.bill_name = rgi.receipt_invoice_no
                                     -- AND pgi.payment_date >= @OB_Date
