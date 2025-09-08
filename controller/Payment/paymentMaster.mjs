@@ -232,14 +232,20 @@ const PaymentMaster = () => {
                             payment_no: payment_invoice_no,
                             payment_date: payment_date,
                             bill_type: pay_bill_type,
-                            DR_CR_Acc_Id: debit_ledger
+                            DR_CR_Acc_Id: debit_ledger,
+                            BillsDetails: toArray(BillsDetails).map(bill => ({
+                                pay_bill_id: bill?.bill_id,
+                                bill_ref_number: bill?.bill_ref_number,
+                                bill_name: bill?.bill_name,
+                                bill_amount: bill?.bill_amount,
+                                Debit_Amo: bill?.Debit_Amo
+                            }))
                         }
                     };
 
                     const againstBillResult = await addAgainstRef(clonedReq);
-
                     if (againstBillResult.success === true) {
-                        return success(res, 'Receipt Created');
+                        return success(res, 'Payment and reference Added');
                     }
                 }
 
@@ -400,20 +406,21 @@ const PaymentMaster = () => {
         let transactionBegun = false;
 
         try {
-            await transaction.begin();
-            transactionBegun = true;
-
+            
             const { payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
-
+            
             if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
-
+            
             const isPurchasePayment = isEqualNumber(bill_type, 1);
-
+            
             const calcTotalDebitAmount = (bill_id) => {
                 return toArray(CostingDetails).filter(
                     fil => isEqualNumber(bill_id, fil.pay_bill_id)
                 ).reduce((acc, item) => add(acc, item?.expence_value), 0)
             }
+
+            await transaction.begin();
+            transactionBegun = true;
 
             await new sql.Request(transaction)
                 .input('payment_id', payment_id)
