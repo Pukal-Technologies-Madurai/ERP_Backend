@@ -85,6 +85,64 @@ const accountMaster = () => {
         }
     }
 
+    const getAccountsByGroups = async (req, res) => {
+        try {
+            // Accept ?groupIds=1,2,7 or ?recursiveGroup=11
+            const csv = String(
+                req.query.groupIds ??
+                (req.query.recursiveGroup ? String(req.query.recursiveGroup) : '')
+            ).trim();
+
+            if (!csv) return invalidInput(res, 'groupIds or recursiveGroup is required');
+
+            const request = new sql.Request().input('GroupIds', sql.VarChar, csv);
+
+            const result = await request.query(`
+      -- Parse seeds
+      DECLARE @ids TABLE (Group_Id INT PRIMARY KEY);
+      INSERT INTO @ids (Group_Id)
+      SELECT DISTINCT TRY_CAST(value AS INT)
+      FROM STRING_SPLIT(@GroupIds, ',')
+      WHERE TRY_CAST(value AS INT) IS NOT NULL;
+
+      -- Cycle-safe recursive CTE with path tracking
+      ;WITH GroupTree AS (
+        SELECT 
+          g.Group_Id,
+          g.Parent_AC_id,
+          CAST(CONCAT('/', g.Group_Id, '/') AS varchar(4000)) AS Path,
+          0 AS Lvl
+        FROM dbo.tbl_Accounting_Group g
+        WHERE g.Group_Id IN (SELECT Group_Id FROM @ids)
+
+        UNION ALL
+
+        SELECT 
+          cg.Group_Id,
+          cg.Parent_AC_id,
+          CAST(gt.Path + CAST(cg.Group_Id AS varchar(20)) + '/' AS varchar(4000)) AS Path,
+          gt.Lvl + 1
+        FROM dbo.tbl_Accounting_Group cg
+        JOIN GroupTree gt 
+          ON cg.Parent_AC_id = gt.Group_Id
+        -- prevent cycles: don't revisit a node already in the current path
+        WHERE CHARINDEX('/' + CAST(cg.Group_Id AS varchar(20)) + '/', gt.Path) = 0
+      )
+      SELECT DISTINCT a.Acc_Id, a.Account_name, a.Account_Alias_name, a.Group_Id,
+                      a.ERP_Id, a.Alter_Id, a.Created_By, a.Created_Time, a.Alter_By, a.Alter_Time
+      FROM GroupTree gt
+      JOIN dbo.tbl_Account_Master a ON a.Group_Id = gt.Group_Id
+      ORDER BY a.Account_name
+      OPTION (MAXRECURSION 32767); -- allow deep but finite trees
+    `);
+
+            return sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+
     const createAccount = async (req, res) => {
         try {
             const {
@@ -222,6 +280,7 @@ const accountMaster = () => {
         getAccountGroups,
         getAccounts,
         getAccountDetails,
+        getAccountsByGroups,
         updateAccountDetails,
         deleteAccountDetails,
         createAccount,

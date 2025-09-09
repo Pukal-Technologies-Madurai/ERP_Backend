@@ -97,31 +97,25 @@ const DebitorsCreditors = () => {
 
 
             const query2 = `
-        WITH RecursiveGroups AS (
-            SELECT group_id, parent_Ac_id
-            FROM tbl_Accounting_Group
-            WHERE parent_Ac_id IN (16, 20)
-            
-            UNION ALL
-            
-            SELECT g.group_id, rg.parent_Ac_id
-            FROM tbl_Accounting_Group g
-            INNER JOIN RecursiveGroups rg 
-                ON g.parent_Ac_id = rg.group_id
-            WHERE rg.parent_Ac_id IN (16, 20)
-        )
-        SELECT DISTINCT
-            am.Acc_Id,
-            am.Account_Name,
-            CASE 
-                WHEN rg.parent_Ac_id = 16 THEN 'Creditor'
-                WHEN rg.parent_Ac_id = 20 THEN 'Debtor'
-            END AS Account_Types
-        FROM tbl_Account_Master am
-        INNER JOIN RecursiveGroups rg 
-            ON am.Group_Id = rg.group_id
-        WHERE rg.parent_Ac_id IN (16, 20)
-      `;
+                WITH RecursiveGroups AS (
+                    SELECT group_id, parent_Ac_id, 'Creditor' as Account_Types
+                    FROM tbl_Accounting_Group
+                    WHERE Group_Id IN (16)
+			    UNION
+                    SELECT group_id, parent_Ac_id, 'Debtor' as Account_Types
+                    FROM tbl_Accounting_Group
+                    WHERE Group_Id IN (20)
+                UNION ALL
+                    SELECT rg.group_id, rg.Parent_AC_id, Account_Types
+                    FROM RecursiveGroups AS yd
+                    JOIN tbl_Accounting_Group AS rg ON rg.Parent_AC_id = yd.Group_Id
+                )
+	            SELECT DISTINCT am.Acc_Id, am.Account_Name,  rg1.Account_Types
+                FROM tbl_Account_Master am, tbl_Accounting_Group G, RecursiveGroups rg1 
+		        WHERE 
+                    am.Group_Id =G.Group_Id 
+		            AND g.Group_Id = rg1 .Group_Id 
+		            AND am.Group_Id IN (select Group_Id from RecursiveGroups rg)`;
 
             const result2 = await new sql.Request().query(query2);
             const accountTypes = result2.recordset;

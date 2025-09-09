@@ -251,6 +251,7 @@ MastersRouter.post('/uploadLosExcel', dbconnect, upload.single('file'), los.exce
 
 MastersRouter.post('/accountMaster', accountMaster.createAccount)
 MastersRouter.get('/accountMaster', accountMaster.getAccountDetails)
+MastersRouter.get('/accountMaster/groupFilter', accountMaster.getAccountsByGroups)
 MastersRouter.put('/accountMaster', accountMaster.updateAccountDetails)
 MastersRouter.delete('/accountMaster', accountMaster.deleteAccountDetails)
 MastersRouter.get('/account/dropDown', accountMaster.accountingGroupDropDown)

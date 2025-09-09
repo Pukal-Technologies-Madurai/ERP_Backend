@@ -18,6 +18,7 @@ import ReceiptsRouter from './receipts.mjs';
 import PaymentRouter from './payment.mjs';
 import AnalalyticsRouter from './analytics.mjs';
 import JournalRouter from './journal.mjs';
+import ContraRouter from './contra.mjs'
 
 const indexRouter = express.Router();
 
@@ -38,6 +39,7 @@ indexRouter.use('/delivery', DeliveryRouter);
 indexRouter.use('/receipt', ReceiptsRouter);
 indexRouter.use('/payment', PaymentRouter);
 indexRouter.use('/journal', JournalRouter);
+indexRouter.use('/contra', ContraRouter);
 
 
 export default indexRouter;
