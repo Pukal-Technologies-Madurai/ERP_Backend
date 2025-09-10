@@ -232,8 +232,8 @@ const editContra = async (req, res) => {
             .input("Amount", Number(Amount))
             .input("Narration", Narration)
             .input("ContraStatus", ContraStatus)
-            .query(
-                `UPDATE dbo.tbl_Contra_General_Info
+            .query(`
+                UPDATE dbo.tbl_Contra_General_Info
                 SET
                     ContraDate = @ContraDate,
                     BranchId = @BranchId,

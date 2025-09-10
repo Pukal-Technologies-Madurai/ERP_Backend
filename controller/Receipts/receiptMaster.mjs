@@ -54,8 +54,9 @@ const ReceiptMaster = () => {
                     SELECT 
                         pgi.*,
                         vt.Voucher_Type,
-                        debAcc.Account_name AS DebitAccountGet,
-                        creAcc.Account_name AS CreditAccountGet,
+                        COALESCE(debAcc.Account_name, 'Not found') AS DebitAccountGet,
+                        COALESCE(creAcc.Account_name, 'Not found') AS CreditAccountGet,
+						COALESCE(u.Name, 'Not found') AS CreatedByGet,
                         COALESCE((
                             SELECT SUM(Credit_Amo)
                             FROM tbl_Receipt_Bill_Info AS pbi
@@ -68,6 +69,8 @@ const ReceiptMaster = () => {
                         ON debAcc.Acc_Id = pgi.debit_ledger
                     LEFT JOIN tbl_Account_Master AS creAcc
                         ON creAcc.Acc_Id = pgi.credit_ledger
+                    LEFT JOIN tbl_Users AS  u
+						ON u.UserId = pgi.created_by
                     WHERE
                         pgi.receipt_date BETWEEN @Fromdate AND @Todate
                         ${checkIsNumber(voucher) ? ' AND pgi.receipt_voucher_type_id = @voucher ' : ''}
