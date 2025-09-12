@@ -55,18 +55,34 @@ const PaymentMaster = () => {
                     	vt.Voucher_Type,
                     	debAcc.Account_name AS DebitAccountGet,
                     	creAcc.Account_name AS CreditAccountGet,
-						COALESCE((
-							SELECT SUM(Debit_Amo)
-							FROM tbl_Payment_Bill_Info AS pbi
-							WHERE pbi.payment_id = pgi.pay_id
-						), 0) AS TotalReferencedAmount
+                    	(
+                    		SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
+                    		FROM tbl_Receipt_Bill_Info AS rbi
+                    		JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
+                    		WHERE 
+                    			rgi.status <> 0
+                    			AND rbi.bill_id = pgi.pay_id
+                    		    AND rbi.bill_name = pgi.payment_invoice_no
+                    	) + (
+                            SELECT COALESCE(SUM(Debit_Amo), 0)
+                            FROM tbl_Payment_Bill_Info pbi
+                            WHERE pbi.payment_id = pgi.pay_id
+                        ) + (
+                            SELECT COALESCE(SUM(jr.Amount), 0)
+                            FROM dbo.tbl_Journal_Bill_Reference jr
+                            JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                            JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                            WHERE jh.JournalStatus <> 0
+                                AND je.Acc_Id = pgi.debit_ledger
+                                AND je.DrCr   = 'Cr'
+                                AND jr.RefId = pgi.pay_id 
+                                AND jr.RefNo = pgi.payment_invoice_no
+                                AND jr.RefType = 'PAYMENT'
+                        ) AS TotalReferencedAmount
                     FROM tbl_Payment_General_Info AS pgi
-                    LEFT JOIN tbl_Voucher_Type AS vt
-                        ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
-                    LEFT JOIN tbl_Account_Master AS debAcc
-                        ON debAcc.Acc_Id = pgi.debit_ledger
-					LEFT JOIN tbl_Account_Master AS creAcc
-                        ON creAcc.Acc_Id = pgi.credit_ledger
+                    LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
+                    LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
+                    LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
                     WHERE
                         pgi.payment_date BETWEEN @Fromdate AND @Todate
                         ${checkIsNumber(voucher) ? ' AND pgi.payment_voucher_type_id = @voucher ' : ''}

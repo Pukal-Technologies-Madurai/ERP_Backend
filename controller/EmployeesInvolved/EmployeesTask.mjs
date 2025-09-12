@@ -16,10 +16,10 @@ const employeesTasks = () => {
             const result = await new sql.Request()
                 .input('comp', Company_id)
                 .query(`
-                    SELECT 
-                        fingerPrintEmpId as UserId, Emp_Name as Name 
+  SELECT 
+                        User_Mgt_Id as UserId, Emp_Name as Name 
                     FROM 
-                        tbl_Employee_Master 
+                        tbl_Employee_Master
                   
                     
                 `);
@@ -118,36 +118,46 @@ const employeesTasks = () => {
         }
     };
 
-    const postEmployeesProjects = async (req, res) => {
-        const { Project_Id, UserIds } = req.body;
+ const postEmployeesProjects = async (req, res) => {
+    const { Project_Id, UserIds } = req.body;
 
-        if (!Project_Id) {
-            return invalidInput(res, 'Project_Id is required');
-        }
+    if (!Project_Id) {
+        return invalidInput(res, 'Project_Id is required');
+    }
 
-        try {
+    try {
+        // Delete old employees
+        await new sql.Request()
+            .input('projectId', Project_Id)
+            .query(`DELETE FROM tbl_Project_Employee WHERE Project_Id = @projectId`);
 
-            const deleteQuery = `DELETE FROM tbl_Project_Employee WHERE Project_Id = @projectId`;
-            const deleteRequest = new sql.Request();
-            deleteRequest.input('projectId', Project_Id);
-            await deleteRequest.query(deleteQuery);
+        const insertQuery = `
+            INSERT INTO tbl_Project_Employee (Project_Id, User_Id)
+            VALUES (@projectId, @userId)
+        `;
 
-            const insertQuery = `INSERT INTO tbl_Project_Employee (Project_Id, User_Id) VALUES (@projectId, @userId)`;
-            const insertRequests = UserIds.map(async userId => {
-                const insertRequest = new sql.Request();
-                insertRequest.input('projectId', Project_Id);
-                insertRequest.input('userId', userId);
-                return insertRequest.query(insertQuery);
-            });
+        const ps = new sql.PreparedStatement();
+        ps.input('projectId', sql.Int);
+        ps.input('userId', sql.Int);
 
-            await Promise.all(insertRequests);
+        await ps.prepare(insertQuery);
 
-            return dataFound(res, [], 'Changes Saved');
-        } catch (e) {
-            console.error('Error saving project employees:', e);
-            return servError(e, res);
-        }
-    };
+        // Run all inserts in parallel
+        await Promise.all(
+            (UserIds || []).map(userId =>
+                ps.execute({ projectId: Project_Id, userId })
+            )
+        );
+
+        await ps.unprepare();
+
+        return dataFound(res, [], 'Changes Saved');
+    } catch (e) {
+        console.error('Error saving project employees:', e);
+        return servError(e, res);
+    }
+};
+
 
     const assignTaskForEmployee = async (req, res) => {
         const {

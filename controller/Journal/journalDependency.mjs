@@ -152,11 +152,21 @@ const getAccountPendingReference = async (req, res) => {
                         rgi.credit_amount         AS totalValue,
                         'RECEIPT'                 AS dataSource,
                         'RECEIPT'                 AS actualSource,
-                        COALESCE((
+                        (
                             SELECT SUM(Credit_Amo)
                             FROM tbl_Receipt_Bill_Info pbi
-                            WHERE pbi.receipt_id = rgi.receipt_id
-                        ), 0) AS againstAmount,
+                            WHERE 
+            					pbi.receipt_id = rgi.receipt_id
+            					AND pbi.receipt_no = rgi.receipt_invoice_no
+                        ) + (
+            				SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
+            				FROM tbl_Payment_Bill_Info AS pb
+            				JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+            				WHERE 
+            					pgi.status <> 0
+            					AND pb.pay_bill_id = rgi.receipt_id
+            					AND pb.bill_name = rgi.receipt_invoice_no
+            			) AS againstAmount,
                         COALESCE((
                             SELECT SUM(jr.Amount)
                             FROM dbo.tbl_Journal_Bill_Reference jr
@@ -275,11 +285,19 @@ const getAccountPendingReference = async (req, res) => {
                         pgi.debit_amount         AS totalValue,
                         'PAYMENT'                AS dataSource,
                         'PAYMENT'                AS actualSource,
-                        COALESCE((
+                        (
+            				SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
+            				FROM tbl_Receipt_Bill_Info AS rbi
+            				JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
+            				WHERE 
+            					rgi.status <> 0
+            					AND rbi.bill_id = pgi.pay_id
+            				    AND rbi.bill_name = pgi.payment_invoice_no
+            			) + (
                             SELECT SUM(Debit_Amo)
                             FROM tbl_Payment_Bill_Info pbi
                             WHERE pbi.payment_id = pgi.pay_id
-                        ), 0) AS againstAmount,
+                        ) AS againstAmount,
                         COALESCE((
                             SELECT SUM(jr.Amount)
                             FROM dbo.tbl_Journal_Bill_Reference jr

@@ -71,7 +71,6 @@ const ReceiptDataDependency = () => {
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
             const reqDate = req.query?.reqDate ? ISOString(req.query?.reqDate) : ISOString();
 
-
             if (!checkIsNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
 
             const request = new sql.Request()
@@ -140,7 +139,7 @@ const ReceiptDataDependency = () => {
                             cb.dr_amount, 
                             'OB' AS dataSource,
                         	COALESCE((
-                                SELECT SUM(pb.Credit_Amo) 
+                                SELECT COALESCE(SUM(pb.Credit_Amo), 0) 
                                 FROM tbl_Receipt_Bill_Info AS pb
                                 JOIN tbl_Receipt_General_Info AS pgi ON pgi.receipt_id = pb.receipt_id
                                 WHERE 
@@ -179,8 +178,8 @@ const ReceiptDataDependency = () => {
                     		0 AS total_aft_tas,
                     		pgi.debit_amount,
                     		'PAYMENT' AS dataSource,
-                    		 COALESCE((
-                                SELECT SUM(rbi.Credit_Amo) 
+                    		 (
+                                SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
                                 FROM tbl_Receipt_Bill_Info AS rbi
                                 JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
                                 WHERE 
@@ -188,7 +187,13 @@ const ReceiptDataDependency = () => {
                                     -- AND rgi.receipt_bill_type = 1
                                     AND rbi.bill_id = pgi.pay_id
                                     AND rbi.bill_name = pgi.payment_invoice_no
-                            ), 0) AS Paid_Amount,
+                            ) + (
+                                SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                WHERE 
+                    				pb.payment_id = pgi.pay_id
+                                    AND pb.payment_no = pgi.payment_invoice_no
+                            ) AS Paid_Amount,
                             COALESCE((
                                 SELECT SUM(jr.Amount)
                                 FROM dbo.tbl_Journal_Bill_Reference jr
@@ -556,6 +561,21 @@ const ReceiptDataDependency = () => {
             const result = await request;
 
             sentData(res, result.recordset)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getReceiptAdjesments = async (req, res) => {
+        try {
+            const { receipt_id } = req.query;
+
+            if (!checkIsNumber(receipt_id)) return invalidInput(res, 'receipt_id is required');
+
+            const request = new sql.Request()
+                .input('receipt_id', receipt_id)
+                .query(``);
+
         } catch (e) {
             servError(e, res);
         }

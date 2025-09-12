@@ -52,36 +52,54 @@ const ReceiptMaster = () => {
                 .input('status', status)
                 .query(`
                     SELECT 
-                        pgi.*,
+                        rgi.*,
                         vt.Voucher_Type,
                         COALESCE(debAcc.Account_name, 'Not found') AS DebitAccountGet,
                         COALESCE(creAcc.Account_name, 'Not found') AS CreditAccountGet,
-						COALESCE(u.Name, 'Not found') AS CreatedByGet,
-                        COALESCE((
-                            SELECT SUM(Credit_Amo)
-                            FROM tbl_Receipt_Bill_Info AS pbi
-                            WHERE pbi.receipt_id = pgi.receipt_id
-                        ), 0) AS TotalReferencedAmount
-                    FROM tbl_Receipt_General_Info AS pgi
-                    LEFT JOIN tbl_Voucher_Type AS vt
-                        ON vt.Vocher_Type_Id = pgi.receipt_voucher_type_id
-                    LEFT JOIN tbl_Account_Master AS debAcc
-                        ON debAcc.Acc_Id = pgi.debit_ledger
-                    LEFT JOIN tbl_Account_Master AS creAcc
-                        ON creAcc.Acc_Id = pgi.credit_ledger
-                    LEFT JOIN tbl_Users AS  u
-						ON u.UserId = pgi.created_by
+                    	COALESCE(u.Name, 'Not found') AS CreatedByGet,
+                        (
+                            SELECT COALESCE(SUM(Credit_Amo), 0)
+                            FROM tbl_Receipt_Bill_Info rbi
+                            WHERE 
+                    			rbi.receipt_id = rgi.receipt_id
+                    			AND rbi.receipt_no = rgi.receipt_invoice_no
+                        ) + (
+                    		SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
+                    		FROM tbl_Payment_Bill_Info AS pb
+                    		JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+                    		WHERE 
+                    			rgi.status <> 0
+                    			AND pb.pay_bill_id = rgi.receipt_id
+                    			AND pb.bill_name = rgi.receipt_invoice_no
+                    	) + (
+                    	    SELECT COALESCE(SUM(jr.Amount), 0)
+                            FROM dbo.tbl_Journal_Bill_Reference jr
+                            JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                            JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                            WHERE 
+                                jh.JournalStatus <> 0
+                                AND je.Acc_Id = rgi.credit_ledger
+                                AND je.DrCr   = 'Dr'
+                                AND jr.RefId = rgi.receipt_id 
+                                AND jr.RefNo = rgi.receipt_invoice_no
+                                AND jr.RefType = 'RECEIPT'
+                    	) AS TotalReferencedAmount
+                    FROM tbl_Receipt_General_Info AS rgi
+                    LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = rgi.receipt_voucher_type_id
+                    LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
+                    LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = rgi.credit_ledger
+                    LEFT JOIN tbl_Users AS  u ON u.UserId = rgi.created_by
                     WHERE
-                        pgi.receipt_date BETWEEN @Fromdate AND @Todate
-                        ${checkIsNumber(voucher) ? ' AND pgi.receipt_voucher_type_id = @voucher ' : ''}
-                        ${checkIsNumber(debit) ? ' AND pgi.debit_ledger = @debit ' : ''}
-                        ${checkIsNumber(credit) ? ' AND pgi.credit_ledger = @credit ' : ''}
-                        ${checkIsNumber(receipt_type) ? ' AND pgi.receipt_bill_type = @receipt_type ' : ''}
-                        ${checkIsNumber(createdBy) ? ' AND pgi.created_by = @createdBy ' : ''}
-                        ${transaction_type ? ' AND pgi.transaction_type = @transaction_type ' : ''}
-                        ${checkIsNumber(status) ? ' AND pgi.status = @status ' : ''}
+                        rgi.receipt_date BETWEEN @Fromdate AND @Todate
+                        ${checkIsNumber(voucher) ? ' AND rgi.receipt_voucher_type_id = @voucher ' : ''}
+                        ${checkIsNumber(debit) ? ' AND rgi.debit_ledger = @debit ' : ''}
+                        ${checkIsNumber(credit) ? ' AND rgi.credit_ledger = @credit ' : ''}
+                        ${checkIsNumber(receipt_type) ? ' AND rgi.receipt_bill_type = @receipt_type ' : ''}
+                        ${checkIsNumber(createdBy) ? ' AND rgi.created_by = @createdBy ' : ''}
+                        ${transaction_type ? ' AND rgi.transaction_type = @transaction_type ' : ''}
+                        ${checkIsNumber(status) ? ' AND rgi.status = @status ' : ''}
                     ORDER BY 
-                        pgi.receipt_date DESC, pgi.created_on DESC;`
+                        rgi.receipt_date DESC, rgi.created_on DESC;`
                 );
 
             const result = await request;
