@@ -574,7 +574,43 @@ const ReceiptDataDependency = () => {
 
             const request = new sql.Request()
                 .input('receipt_id', receipt_id)
-                .query(``);
+                .query(`
+                    DECLARE @receipt_no NVARCHAR(100) = (
+                    	SELECT receipt_invoice_no FROM tbl_Receipt_General_Info WHERE receipt_id = @receipt_id
+                    );
+                    SELECT
+                    	jbi.JournalId AS id,
+                    	jbi.JournalVoucherNo AS voucherNo,
+                    	jbi.JournalDate AS transDate,
+                    	jbi.Amount AS adjesmentValue,
+                    	'JOURNAL' AS transType
+                    FROM tbl_Journal_Bill_Reference AS jbi
+                    JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jbi.JournalAutoId
+                    WHERE 
+                    	jbi.RefId = @receipt_id
+                    	AND jbi.RefNo = @receipt_no
+                    	AND jbi.DrCr = 'Dr'
+                    	AND jbi.RefType = 'RECEIPT'
+                    	AND jgi.JournalStatus <> 0
+                    UNION ALL
+                    SELECT
+                    	pbi.payment_id AS id,
+                    	pbi.payment_no AS voucherNo,
+                    	pbi.payment_date AS transDate,
+                    	pbi.Debit_Amo AS adjesmentValue,
+                    	'PAYMENT' AS transType
+                    FROM tbl_Payment_Bill_Info AS pbi
+                    JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pbi.payment_id
+                    WHERE 
+                    	pgi.status <> 0
+                    	AND pbi.pay_bill_id = @receipt_id
+                    	AND pbi.bill_name = @receipt_no
+                    ORDER BY transDate;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset)
 
         } catch (e) {
             servError(e, res);
@@ -900,7 +936,8 @@ const ReceiptDataDependency = () => {
         getReceiptCostingInfo,
         searchStockJournal,
         getFilterValues,
-        getSalesInvoicedCustomers
+        getSalesInvoicedCustomers,
+        getReceiptAdjesments
     }
 }
 

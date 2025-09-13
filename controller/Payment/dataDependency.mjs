@@ -1,6 +1,5 @@
-import { servError, success, failed, sentData, invalidInput, dataFound, noData, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isEqualNumber, toArray } from '../../helper_functions.mjs';
-import { getNextId } from '../../middleware/miniAPIs.mjs';
+import { servError, sentData, invalidInput, dataFound, noData, } from '../../res.mjs';
+import { ISOString, checkIsNumber, isEqualNumber, toArray } from '../../helper_functions.mjs';
 import sql from 'mssql';
 
 const stockJournalTypes = [
@@ -528,6 +527,57 @@ const PaymentDataDependency = () => {
         }
     }
 
+    const getPaymentAdjesments = async (req, res) => {
+        try {
+            const { payment_id } = req.query;
+
+            if (!checkIsNumber(payment_id)) return invalidInput(res, 'payment_id is required');
+
+            const request = new sql.Request()
+                .input('payment_id', payment_id)
+                .query(`
+                    DECLARE @payment_no NVARCHAR(100) = (
+                    	SELECT payment_invoice_no FROM tbl_Payment_General_Info WHERE pay_id = @payment_id
+                    );
+                    SELECT
+                    	jbi.JournalId AS id,
+                    	jbi.JournalVoucherNo AS voucherNo,
+                    	jbi.JournalDate AS transDate,
+                    	jbi.Amount AS adjesmentValue,
+                    	'JOURNAL' AS transType
+                    FROM tbl_Journal_Bill_Reference AS jbi
+                    JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jbi.JournalAutoId
+                    WHERE 
+                    	jbi.RefId = @payment_id
+                    	AND jbi.RefNo = @payment_no
+                    	AND jbi.DrCr = 'Cr'
+                    	AND jbi.RefType = 'PAYMENT'
+                    	AND jgi.JournalStatus <> 0
+                    UNION ALL
+                    SELECT
+                    	rbi.receipt_id AS id,
+                    	rbi.receipt_no AS voucherNo,
+                    	rbi.receipt_date AS transDate,
+                    	rbi.Credit_Amo AS adjesmentValue,
+                    	'RECEIPT' AS transType
+                    FROM tbl_Receipt_Bill_Info AS rbi
+                    JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
+                    WHERE 
+                    	rgi.status <> 0
+                    	AND rbi.bill_id = @payment_id
+                    	AND rbi.bill_name = @payment_no
+                    ORDER BY transDate;`
+                );
+
+            const result = await request;
+
+            sentData(res, result.recordset);
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     const searchStockJournal = async (req, res) => {
         try {
             const { stockJournalType = 1, filterItems = [], voucher } = req.body;
@@ -836,6 +886,7 @@ const PaymentDataDependency = () => {
         getPendingPayments,
         getPaymentInvoiceBillInfo,
         getPaymentInvoiceCostingInfo,
+        getPaymentAdjesments,
         searchStockJournal,
         getFilterValues,
         getPurchaseInvoicedCustomers
@@ -843,144 +894,3 @@ const PaymentDataDependency = () => {
 }
 
 export default PaymentDataDependency();
-
-                    // DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
-                    // --select @OB_Date
-                    // SELECT 
-                    // 	inv.*,
-                    // 	inv.Paid_Amount + inv.journalAdjustment AS totalReference
-                    // FROM (
-                    //     SELECT 
-                    //         pig.Do_Id,
-                    //         pig.Do_Inv_No,
-                    //         pig.Do_Date,
-                    //         COALESCE(a.Acc_Id, 0) Retailer_Id,
-                    //         pig.Total_Before_Tax,
-                    //         pig.Total_Tax, 
-                    //         pig.Total_Invoice_value,
-                    //         'INV' AS dataSource,
-                    //         COALESCE((
-                    //             SELECT SUM(pb.Credit_Amo) 
-                    //             FROM tbl_Receipt_Bill_Info AS pb
-                    //             JOIN tbl_Receipt_General_Info AS pgi
-                    //                 ON pgi.receipt_id = pb.receipt_id
-                    //             WHERE 
-                    //                 pgi.status <> 0
-                    //                 -- AND pgi.receipt_bill_type = 1
-                    //                 AND pb.bill_id = pig.Do_Id
-                    //                 AND pb.bill_name = pig.Do_Inv_No
-                    //         ), 0) AS Paid_Amount,
-                    //         COALESCE((
-                    //             SELECT SUM(jr.Amount)
-                    //             FROM dbo.tbl_Journal_Bill_Reference jr
-                    //             JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
-                    //             JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-                    //             WHERE 
-                    //                 jh.JournalStatus <> 0
-                    //                 AND je.Acc_Id = a.Acc_Id
-                    //                 AND je.DrCr   = 'Cr'
-                    //                 AND jr.RefId = pig.Do_Id 
-                    //                 AND jr.RefNo = pig.Do_Inv_No
-                    //                 AND jr.RefType = 'SALES'
-                    //         ), 0) AS journalAdjustment
-                    //     FROM tbl_Sales_Delivery_Gen_Info AS pig
-                    //     JOIN tbl_Retailers_Master AS r
-                    //         ON r.Retailer_Id = pig.Retailer_Id
-                    //     LEFT JOIN tbl_Account_Master AS a
-                    //         ON a.ERP_Id = R.ERP_Id
-                    //     WHERE 
-                    //         pig.Cancel_status <> 0
-                    //         AND a.Acc_Id = @Acc_Id
-                    //         AND pig.Do_Date >= @OB_Date
-                    //     UNION ALL
-                    // -- from opening balance
-                    //     SELECT 
-                    //         cb.OB_Id AS bill_id, 
-                    //         cb.bill_no, 
-                    //         cb.bill_date, 
-                    //         cb.Retailer_id,  
-                    //         0 AS bef_tax, 
-                    //         0 AS tot_tax, 
-                    //         cb.dr_amount, 
-                    //         'OB' AS dataSource,
-                    //     	COALESCE((
-                    //             SELECT COALESCE(SUM(pb.Credit_Amo), 0) 
-                    //             FROM tbl_Receipt_Bill_Info AS pb
-                    //             JOIN tbl_Receipt_General_Info AS pgi ON pgi.receipt_id = pb.receipt_id
-                    //             WHERE 
-                    //                 pgi.status <> 0
-                    //                 -- AND pgi.receipt_bill_type = 1
-                    //                 AND pb.bill_id = cb.OB_Id
-                    //                 AND pb.bill_name = cb.bill_no
-                    //                 -- AND pgi.receipt_date >= @OB_Date
-                    //         ), 0) AS Paid_Amount,
-                    //         COALESCE((
-                    //             SELECT SUM(jr.Amount)
-                    //             FROM dbo.tbl_Journal_Bill_Reference jr
-                    //             JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
-                    //             JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
-                    //             WHERE 
-                    //                 jh.JournalStatus <> 0
-                    //                 AND je.Acc_Id = cb.Retailer_id
-                    //                 AND je.DrCr   = 'Cr'
-                    //                 AND jr.RefId = cb.OB_Id 
-                    //                 AND jr.RefNo = cb.bill_no
-                    //                 AND jr.RefType = 'SALES-OB'
-                    //         ), 0) AS journalAdjustment
-                    //     FROM tbl_Ledger_Opening_Balance AS cb
-                    //     WHERE 
-                    //         cb.OB_date >= @OB_Date 
-                    //         AND cb.Retailer_id = @Acc_Id 
-                    //         AND cb.cr_amount = 0
-                    // 	UNION ALL
-                    // -- Payment outstanding
-                    // 	SELECT
-                    // 		pgi.pay_id,
-                    // 		pgi.payment_invoice_no,
-                    // 		pgi.payment_date,
-                    // 		pgi.debit_ledger,
-                    // 		0 AS total_bef_tax,
-                    // 		0 AS total_aft_tas,
-                    // 		pgi.debit_amount,
-                    // 		'PAYMENT' AS dataSource,
-					// 		 (
-                    //             SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
-                    //             FROM tbl_Receipt_Bill_Info AS rbi
-                    //             JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
-                    //             WHERE 
-                    //                 rgi.status <> 0
-                    //                 -- AND rgi.receipt_bill_type = 1
-                    //                 AND rbi.bill_id = pgi.pay_id
-                    //                 AND rbi.bill_name = pgi.payment_invoice_no
-                    //         ) + (
-                    //             SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
-                    //             FROM tbl_Payment_Bill_Info AS pb
-                    //             JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
-                    //             WHERE 
-                    //                 pgi.status <> 0
-                    //                 -- AND pgi.pay_bill_type = 1
-                    //                 AND pb.pay_bill_id = pgi.pay_id
-                    //                 AND pb.bill_name = pgi.payment_invoice_no
-                    //                 -- AND pgi.payment_date >= @OB_Date
-                    //         ) AS Paid_Amount,
-                    //         COALESCE((
-                    //             SELECT SUM(jr.Amount)
-                    //             FROM dbo.tbl_Journal_Bill_Reference jr
-                    //             JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
-                    //             JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-                    //             WHERE 
-                    //                 jh.JournalStatus <> 0
-                    //                 AND je.Acc_Id = @Acc_Id
-                    //                 AND je.DrCr   = 'Cr'
-                    //                 AND jr.RefId = pgi.pay_id 
-                    //                 AND jr.RefNo = pgi.payment_invoice_no
-                    //                 -- AND jr.RefType = 'PAYMENT'
-                    //         ), 0) AS journalAdjustment
-                    // 	FROM tbl_Payment_General_Info AS pgi
-                    // 	WHERE 
-                    // 		pgi.debit_ledger = @Acc_Id
-                    //         AND pgi.payment_date >= @OB_Date
-                    //         AND pgi.status <> 0
-                    // ) AS inv
-                    // WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
-                    // ORDER BY inv.Do_Date ASC;

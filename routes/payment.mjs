@@ -11,6 +11,7 @@ PaymentRouter.post('/paymentMaster', paymentMaster.createGeneralInfoPayments);
 PaymentRouter.put('/paymentMaster', paymentMaster.updateGeneralInfoPayments);
 
 PaymentRouter.get('/paymentMaster/filtersValues', paymentDependency.getFilterValues);
+PaymentRouter.get('/paymentMaster/adjesments', paymentDependency.getPaymentAdjesments);
 PaymentRouter.get('/paymentMaster/againstRef', paymentDependency.getPaymentInvoiceBillInfo);
 PaymentRouter.get('/paymentMaster/againstRef/costingDetails', paymentDependency.getPaymentInvoiceCostingInfo);
 PaymentRouter.post('/paymentMaster/againstRef', paymentMaster.addAgainstRef);
