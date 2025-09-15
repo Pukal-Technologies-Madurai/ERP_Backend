@@ -41,4 +41,9 @@ SalesRouter.get('/partyWiseReport/details', dbconnect, salesEntry.partyDetailsRe
 SalesRouter.get('/salesInvoiceReport',salesInvoice.salesInvoiceReport)
 SalesRouter.get('/saleOrderReport',salesOrder.saleOrderReport)
 
+
+
+SalesRouter.post('/salesOrderSalesInvoice',salesInvoice.createSalesTransaction)
+SalesRouter.get('/salesInvoice/Details',salesInvoice.getSaleOrderWithDeliveries)
+
 export default SalesRouter;
