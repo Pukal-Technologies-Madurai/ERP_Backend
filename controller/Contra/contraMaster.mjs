@@ -57,7 +57,6 @@ const createContra = async (req, res) => {
     try {
         const {
             VoucherType,
-            ContraDate,
             BranchId,
             DebitAccount,
             DebitAccountName,
@@ -65,13 +64,16 @@ const createContra = async (req, res) => {
             CreditAccountName,
             Amount,
             Narration = null,
+            BankName = '',
             ContraStatus,
             CreatedBy
         } = req.body || {};
 
+        const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
+        const ContraDate = req.body?.ContraDate ? ISOString(req.body.ContraDate) : ISOString();
+
         const errors = [];
         if (!VoucherType) errors.push("VoucherType");
-        if (!ContraDate) errors.push("ContraDate");
         if (!BranchId) errors.push("BranchId");
         if (!DebitAccount) errors.push("DebitAccount");
         if (!CreditAccount) errors.push("CreditAccount");
@@ -136,17 +138,19 @@ const createContra = async (req, res) => {
             .input("Amount", Number(Amount))
             .input("Narration", Narration)
             .input("ContraStatus", ContraStatus)
+            .input("BankName", BankName)
+            .input("BankDate", BankDate)
             .input("CreatedBy", CreatedBy)
             .input("AlterId", AlterId)
             .query(`
                 INSERT INTO dbo.tbl_Contra_General_Info(
                     ContraAutoId, ContraId, Year_Id, VoucherType, ContraNo, ContraVoucherNo, ContraDate, 
                     BranchId, DebitAccount, DebitAccountName, CreditAccount, CreditAccountName, Amount, 
-                    Narration, ContraStatus, CreatedBy, CreatedAt, UpdatedAt, AlterId
+                    Narration, ContraStatus, BankName, BankDate, CreatedBy, CreatedAt, UpdatedAt, AlterId
                 ) OUTPUT inserted.ContraAutoId VALUES (
                     DEFAULT, @ContraId, @Year_Id, @VoucherType, @ContraNo, @ContraVoucherNo, @ContraDate, 
                     @BranchId, @DebitAccount, @DebitAccountName, @CreditAccount, @CreditAccountName, @Amount, 
-                    @Narration, @ContraStatus, @CreatedBy, GETDATE(), NULL, @AlterId
+                    @Narration, @ContraStatus, @BankName, @BankDate, @CreatedBy, GETDATE(), NULL, @AlterId
                 );`
             );
 
@@ -185,7 +189,6 @@ const editContra = async (req, res) => {
     try {
         const {
             ContraAutoId,
-            ContraDate,
             BranchId,
             DebitAccount,
             DebitAccountName,
@@ -193,12 +196,15 @@ const editContra = async (req, res) => {
             CreditAccountName,
             Amount,
             Narration = null,
-            ContraStatus
+            ContraStatus,
+            BankName = ''
         } = req.body || {};
+
+        const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
+        const ContraDate = req.body?.ContraDate ? ISOString(req.body.ContraDate) : ISOString();
 
         const errors = [];
         if (!ContraAutoId) errors.push("ContraAutoId");
-        if (!ContraDate) errors.push("ContraDate");
         if (!BranchId) errors.push("BranchId");
         if (!DebitAccount) errors.push("DebitAccount");
         if (!CreditAccount) errors.push("CreditAccount");
@@ -230,6 +236,8 @@ const editContra = async (req, res) => {
             .input("CreditAccount", CreditAccount)
             .input("CreditAccountName", CreditAccountName || null)
             .input("Amount", Number(Amount))
+            .input("BankName", BankName)
+            .input("BankDate", BankDate)
             .input("Narration", Narration)
             .input("ContraStatus", ContraStatus)
             .query(`
@@ -244,6 +252,8 @@ const editContra = async (req, res) => {
                     Amount = @Amount,
                     Narration = @Narration,
                     ContraStatus = @ContraStatus,
+                    BankName = @BankName,
+                    BankDate = @BankDate,
                     UpdatedAt = GETDATE(),
                     AlterId = AlterId + 1
                 WHERE ContraAutoId = @ContraAutoId;`

@@ -254,9 +254,9 @@ MastersRouter.get('/accountMaster', accountMaster.getAccountDetails)
 MastersRouter.get('/accountMaster/groupFilter', accountMaster.getAccountsByGroups)
 MastersRouter.put('/accountMaster', accountMaster.updateAccountDetails)
 MastersRouter.delete('/accountMaster', accountMaster.deleteAccountDetails)
-MastersRouter.get('/account/dropDown', accountMaster.accountingGroupDropDown)
 
 
+MastersRouter.get('/accountGroup/dropDown', accountMaster.accountingGroupDropDown)
 MastersRouter.get('/accountGroup', accountGroup.getAccountGroup);
 MastersRouter.post('/accountGroup', accountGroup.createAccountGroup);
 MastersRouter.put('/accountGroup', accountGroup.updateAccountGroup)

@@ -46,7 +46,7 @@ const getAccountPendingReference = async (req, res) => {
     try {
         const { Acc_Id } = req.query;
         if (!checkIsNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
-        
+
         const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
 
@@ -153,7 +153,7 @@ const getAccountPendingReference = async (req, res) => {
                         'RECEIPT'                 AS dataSource,
                         'RECEIPT'                 AS actualSource,
                         (
-                            SELECT SUM(Credit_Amo)
+                            SELECT COALESCE(SUM(Credit_Amo), 0)
                             FROM tbl_Receipt_Bill_Info pbi
                             WHERE 
             					pbi.receipt_id = rgi.receipt_id
@@ -294,7 +294,7 @@ const getAccountPendingReference = async (req, res) => {
             					AND rbi.bill_id = pgi.pay_id
             				    AND rbi.bill_name = pgi.payment_invoice_no
             			) + (
-                            SELECT SUM(Debit_Amo)
+                            SELECT COALESCE(SUM(Debit_Amo), 0)
                             FROM tbl_Payment_Bill_Info pbi
                             WHERE pbi.payment_id = pgi.pay_id
                         ) AS againstAmount,
@@ -360,7 +360,25 @@ const getAccountPendingReference = async (req, res) => {
     }
 }
 
+const getJournalAccounts = async (req, res) => {
+    try {
+        const request = new sql.Request();
+        const result = await request.query(`
+            SELECT 
+                Acc_Id AS value, 
+                Account_name AS label 
+            FROM tbl_Account_Master
+            ORDER BY Account_name`
+        );
+
+        sentData(res, result.recordset);
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 export default {
     getFilterValues,
-    getAccountPendingReference
+    getAccountPendingReference,
+    getJournalAccounts
 }

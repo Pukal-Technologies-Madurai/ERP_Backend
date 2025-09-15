@@ -266,7 +266,7 @@ const accountMaster = () => {
     const accountingGroupDropDown = async (req, res) => {
         try {
             const request = new sql.Request();
-            const result = await request.query(`SELECT Group_Id AS Value, Group_Name AS label FROM tbl_Accounting_Group`);
+            const result = await request.query(`SELECT Group_Id AS value, Group_Name AS label FROM tbl_Accounting_Group`);
 
             sentData(res, result.recordset);
 
