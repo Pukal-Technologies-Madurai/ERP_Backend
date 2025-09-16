@@ -838,6 +838,36 @@ const postEmployeesProjects = async (req, res) => {
             servError(e, res);
         }
     };
+
+
+        const getusersDropDownForFingerPrint = async (req, res) => {
+        const { Company_id } = req.query;
+
+        if (!checkIsNumber(Company_id)) {
+            return invalidInput(res, 'Company_id is required');
+        }
+
+        try {
+            const result = await new sql.Request()
+                .input('comp', Company_id)
+                .query(`
+                    SELECT 
+                        fingerPrintEmpId as UserId, Emp_Name as Name 
+                    FROM 
+                        tbl_Employee_Master 
+                  
+                    
+                `);
+
+            if (result.recordset.length > 0) {
+                return dataFound(res, result.recordset);
+            } else {
+                return noData(res);
+            }
+        } catch (e) {
+            return servError(e, res);
+        }
+    };
     
     return {
         getEmployeeTasks,
@@ -848,7 +878,8 @@ const postEmployeesProjects = async (req, res) => {
         getEmployeeAssignedInTheTask,
         modifyTaskAssignedForEmployee,
         deleteAssignedTaskDetails,
-        selectedTaskDetails
+        selectedTaskDetails,
+        getusersDropDownForFingerPrint
     };
 };
 

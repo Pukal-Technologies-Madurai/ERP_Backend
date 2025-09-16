@@ -158,6 +158,7 @@ MastersRouter.delete('/employeedetails/deleteTask', employeesTasks.deleteAssigne
 MastersRouter.get('/routes/dropdown', salesAppMasters.getRoutes);
 MastersRouter.get('/areas/dropdown', salesAppMasters.getareaRoutes);
 
+MastersRouter.get('/EmployeedetailsfingerPrint/dropDown',employeesTasks.getusersDropDownForFingerPrint)
 
 MastersRouter.delete('/employeedetails/deleteTask', employeesTasks.deleteAssignedTaskDetails)
 MastersRouter.get('/employeedetails/selectedTaskDetails', employeesTasks.selectedTaskDetails)
