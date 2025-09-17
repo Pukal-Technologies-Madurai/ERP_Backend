@@ -110,6 +110,7 @@ const createJournal = async (req, res) => {
             Amount: Number(r?.Amount || 0),
             Remarks: r?.Remarks ?? null,
             AccountGet: r?.AccountGet ?? null,
+            isSundryParty: r?.isSundryParty || 0,
         }));
 
         if (raw.length === 0) errors.push("Entries");
@@ -149,6 +150,7 @@ const createJournal = async (req, res) => {
             RefNo: r?.RefNo ?? null,
             RefType: r?.RefType ?? null,
             Amount: Number(r?.Amount || 0),
+            BillRefNo: r?.BillRefNo ?? null,
         }));
 
         // every ref must target a valid client line
@@ -279,6 +281,7 @@ const createJournal = async (req, res) => {
                 .input("JournalDate", journalDate)
                 .input("Acc_Id", r.Acc_Id)
                 .input("AccountGet", r.AccountGet)
+                .input("isSundryParty", r.isSundryParty)
                 .input("DrCr", r.DrCr)
                 .input("Amount", r.Amount)
                 .input("Remarks", r.Remarks);
@@ -286,12 +289,12 @@ const createJournal = async (req, res) => {
             const lineIns = await lineReq.query(`
                 INSERT INTO dbo.tbl_Journal_Entries_Info (
                     LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
-                    Acc_Id, AccountGet, DrCr, Amount, Remarks
+                    Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
                 )
                 OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
                 VALUES (
                     DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-                    @Acc_Id, @AccountGet, @DrCr, @Amount, @Remarks
+                    @Acc_Id, @AccountGet, @isSundryParty, @DrCr, @Amount, @Remarks
                 );`
             );
 
@@ -323,16 +326,17 @@ const createJournal = async (req, res) => {
                 .input("RefId", r.RefId ?? null)
                 .input("RefNo", r.RefNo ?? null)
                 .input("RefType", r.RefType ?? null)
+                .input("BillRefNo", r.BillRefNo ?? null)
                 .input("Amount", r.Amount);
 
             await refReq.query(`
                 INSERT INTO dbo.tbl_Journal_Bill_Reference (
                     autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
-                    Acc_Id, DrCr, RefId, RefNo, RefType, Amount
+                    Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
                 )
                 VALUES (
                     DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-                    @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @Amount
+                    @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @BillRefNo, @Amount
                 )`
             );
         }
@@ -386,7 +390,8 @@ const editJournal = async (req, res) => {
             AccountGet: r?.AccountGet ?? null,
             DrCr: String(r?.DrCr || "").trim(),
             Amount: Number(r?.Amount || 0),
-            Remarks: r?.Remarks ?? null
+            Remarks: r?.Remarks ?? null,
+            isSundryParty: r?.isSundryParty || 0,
         }));
 
         if (rows.length === 0) errors.push("Entries");
@@ -420,7 +425,8 @@ const editJournal = async (req, res) => {
             RefNo: r?.RefNo ?? null,
             RefType: r?.RefType ?? null,
             Amount: Number(r?.Amount || 0),
-            __i: i
+            __i: i,
+            BillRefNo: r?.BillRefNo ?? null,
         }));
         refs.forEach((r) => {
             if (!(r.Amount > 0)) errors.push(`BillReferences[${r.__i}].Amount`);
@@ -483,17 +489,19 @@ const editJournal = async (req, res) => {
                     LineNum INT NOT NULL,
                     Acc_Id INT NOT NULL,
                     AccountGet NVARCHAR(200) NULL,
+                    isSundryParty INT,
                     DrCr NVARCHAR(2) NOT NULL,
                     Amount DECIMAL(18,2) NOT NULL,
                     Remarks NVARCHAR(500) NULL
                 );
-                INSERT INTO @Src (ClientLineId, LineId, LineNum, Acc_Id, AccountGet, DrCr, Amount, Remarks)
+                INSERT INTO @Src (ClientLineId, LineId, LineNum, Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks)
                 SELECT
                     JSON_VALUE(j.value, '$.LineId'),
                     TRY_CONVERT(UNIQUEIDENTIFIER, JSON_VALUE(j.value, '$.LineId')),
                     CAST(JSON_VALUE(j.value, '$.LineNum') AS INT),
                     CAST(JSON_VALUE(j.value, '$.Acc_Id') AS INT),
                     JSON_VALUE(j.value, '$.AccountGet'),
+                    CAST(JSON_VALUE(j.value, '$.isSundryParty') AS INT),
                     JSON_VALUE(j.value, '$.DrCr'),
                     CAST(JSON_VALUE(j.value, '$.Amount') AS DECIMAL(18,2)),
                     JSON_VALUE(j.value, '$.Remarks')
@@ -515,6 +523,7 @@ const editJournal = async (req, res) => {
                         tgt.LineNum = src.LineNum,
                         tgt.Acc_Id = src.Acc_Id,
                         tgt.AccountGet = src.AccountGet,
+                        tgt.isSundryParty = src.isSundryParty,
                         tgt.DrCr = src.DrCr,
                         tgt.Amount = src.Amount,
                         tgt.Remarks = src.Remarks,
@@ -524,10 +533,10 @@ const editJournal = async (req, res) => {
                 WHEN NOT MATCHED BY TARGET THEN
                     INSERT (
                         LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, 
-                        JournalDate, Acc_Id, AccountGet, DrCr, Amount, Remarks
+                        JournalDate, Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
                     ) VALUES (
                         DEFAULT, src.LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo,
-                        @JournalDate, src.Acc_Id, src.AccountGet, src.DrCr, src.Amount, src.Remarks
+                        @JournalDate, src.Acc_Id, src.AccountGet, src.isSundryParty, src.DrCr, src.Amount, src.Remarks
                     )
                 WHEN NOT MATCHED BY SOURCE AND tgt.JournalAutoId = @JournalAutoId THEN
                     DELETE
@@ -545,15 +554,17 @@ const editJournal = async (req, res) => {
                     RefId BIGINT NULL,
                     RefNo NVARCHAR(100) NULL,
                     RefType NVARCHAR(30) NULL,
+                    BillRefNo NVARCHAR(100),
                     Amount DECIMAL(18,2) NOT NULL
                 );
-                INSERT INTO @RefSrcRaw (AutoGenId, ClientLineId, RefId, RefNo, RefType, Amount)
+                INSERT INTO @RefSrcRaw (AutoGenId, ClientLineId, RefId, RefNo, RefType, BillRefNo, Amount)
                 SELECT
                     TRY_CONVERT(UNIQUEIDENTIFIER, JSON_VALUE(j.value, '$.autoGenId')),
                     JSON_VALUE(j.value, '$.LineId'),
                     CAST(JSON_VALUE(j.value, '$.RefId') AS BIGINT),
                     JSON_VALUE(j.value, '$.RefNo'),
                     JSON_VALUE(j.value, '$.RefType'),
+                    JSON_VALUE(j.value, '$.BillRefNo'),
                     CAST(JSON_VALUE(j.value, '$.Amount') AS DECIMAL(18,2))
                 FROM OPENJSON(@BillRefsJson) AS j;
                 DECLARE @RefSrc TABLE (
@@ -565,12 +576,13 @@ const editJournal = async (req, res) => {
                     RefId BIGINT NULL,
                     RefNo NVARCHAR(100) NULL,
                     RefType NVARCHAR(30) NULL,
+                    BillRefNo NVARCHAR(100),
                     Amount DECIMAL(18,2) NOT NULL
                 );
-                INSERT INTO @RefSrc (AutoGenId, LineId, LineNum, Acc_Id, DrCr, RefId, RefNo, RefType, Amount)
+                INSERT INTO @RefSrc (AutoGenId, LineId, LineNum, Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount)
                 SELECT
                     r.AutoGenId, lm.LineId, lm.LineNum, lm.Acc_Id,
-                    lm.DrCr, r.RefId, r.RefNo, r.RefType, r.Amount
+                    lm.DrCr, r.RefId, r.RefNo, r.RefType, r.BillRefNo, r.Amount
                 FROM @RefSrcRaw AS r
                 JOIN @LineMap AS lm ON lm.ClientLineId = r.ClientLineId;
                 MERGE dbo.tbl_Journal_Bill_Reference AS tgt
@@ -589,14 +601,15 @@ const editJournal = async (req, res) => {
                         tgt.RefId = src.RefId,
                         tgt.RefNo = src.RefNo,
                         tgt.RefType = src.RefType,
+                        tgt.BillRefNo = src.BillRefNo,
                         tgt.Amount = src.Amount
                 WHEN NOT MATCHED BY TARGET THEN
                     INSERT (
                         autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo,
-                        JournalDate, Acc_Id, DrCr, RefId, RefNo, RefType, Amount
+                        JournalDate, Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
                     ) VALUES (
                         src.AutoGenId, src.LineId, src.LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-                        src.Acc_Id, src.DrCr, src.RefId, src.RefNo, src.RefType, src.Amount
+                        src.Acc_Id, src.DrCr, src.RefId, src.RefNo, src.RefType, src.BillRefNo, src.Amount
                     )
                 WHEN NOT MATCHED BY SOURCE AND tgt.JournalAutoId = @JournalAutoId THEN
                     DELETE;`

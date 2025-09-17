@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { dataFound, invalidInput, sentData, servError } from '../../res.mjs';
-import { checkIsNumber, ISOString, toArray } from '../../helper_functions.mjs';
+import { checkIsNumber, isEqualNumber, ISOString, toArray, toNumber } from '../../helper_functions.mjs';
 
 
 const getFilterValues = async (req, res) => {
@@ -90,7 +90,8 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefNo = pig.Do_Inv_No
                                 AND jr.RefType = 'SALES'
                         ), 0) AS journalAdjustment,
-                        'Dr' AS accountSide
+                        'Dr' AS accountSide,
+                        pig.Do_Inv_No AS BillRefNo
                     FROM tbl_Sales_Delivery_Gen_Info pig
                     JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
                     JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
@@ -132,7 +133,8 @@ const getAccountPendingReference = async (req, res) => {
                             AND jr.RefNo = cb.bill_no
                             AND jr.RefType = 'SALES-OB'
                     ), 0) AS journalAdjustment,
-                    'Dr' AS accountSide
+                    'Dr' AS accountSide,
+                    cb.bill_no AS BillRefNo
                 FROM tbl_Ledger_Opening_Balance cb
                 WHERE 
                     cb.OB_date >= @OB_Date
@@ -180,7 +182,8 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefNo = rgi.receipt_invoice_no
                                 AND jr.RefType = 'RECEIPT'
                         ), 0) AS journalAdjustment,
-                        'Cr' AS accountSide
+                        'Cr' AS accountSide,
+                        rgi.receipt_invoice_no AS BillRefNo
                     FROM tbl_Receipt_General_Info rgi
                     WHERE 
                         rgi.credit_ledger = @Acc_Id
@@ -223,7 +226,8 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefNo = pig.Po_Inv_No
                                 AND jr.RefType = 'PURCHASE'
                         ), 0) AS journalAdjustment,
-                        'Cr' AS accountSide
+                        'Cr' AS accountSide,
+                        pig.Ref_Po_Inv_No AS BillRefNo
                     FROM tbl_Purchase_Order_Inv_Gen_Info pig
                     JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
                     JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
@@ -265,7 +269,8 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefNo = cb.bill_no
                                 AND jr.RefType = 'PURCHASE-OB'
                         ), 0) AS journalAdjustment,
-                        'Cr' AS accountSide
+                        'Cr' AS accountSide,
+                        cb.bill_no AS BillRefNo
                     FROM tbl_Ledger_Opening_Balance cb
                     WHERE 
                         cb.OB_date >= @OB_Date
@@ -310,7 +315,8 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefNo = pgi.payment_invoice_no
                                 AND jr.RefType = 'PAYMENT'
                         ), 0) AS journalAdjustment,
-                        'Dr' AS accountSide
+                        'Dr' AS accountSide,
+                        pgi.payment_invoice_no AS BillRefNo
                     FROM tbl_Payment_General_Info pgi
                     WHERE 
                         pgi.debit_ledger = @Acc_Id
@@ -340,7 +346,8 @@ const getAccountPendingReference = async (req, res) => {
                 				AND jbr.Acc_Id = jei.Acc_Id
                 				AND jbr.DrCr = jei.DrCr
                         ), 0) AS journalAdjustment,
-                        jei.DrCr AS accountSide
+                        jei.DrCr AS accountSide,
+                        jgi.JournalVoucherNo AS BillRefNo
                     FROM tbl_Journal_Entries_Info AS jei
                 	JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
                     WHERE 
@@ -363,15 +370,58 @@ const getAccountPendingReference = async (req, res) => {
 const getJournalAccounts = async (req, res) => {
     try {
         const request = new sql.Request();
+
         const result = await request.query(`
             SELECT 
                 Acc_Id AS value, 
-                Account_name AS label 
+                Account_name AS label,
+                Group_Id
             FROM tbl_Account_Master
-            ORDER BY Account_name`
+            ORDER BY Account_name;
+            SELECT Group_Id, Group_Name, Parent_AC_id
+            FROM tbl_Accounting_Group
+            ORDER BY Group_Name;`
         );
 
-        sentData(res, result.recordset);
+        const accountsList = toArray(result.recordsets[0]);
+        const accountGroupData = toArray(result.recordsets[1]);
+
+
+        function getAllChildGroupIds(groupId, groupList, visited = new Set()) {
+            if (visited.has(groupId)) return [];
+
+            visited.add(groupId);
+            let result = [groupId];
+
+            const children = groupList.filter(group => isEqualNumber(group.Parent_AC_id, groupId));
+
+            for (const child of children) {
+                result = result.concat(getAllChildGroupIds(child.Group_Id, groupList, visited));
+            }
+
+            return result;
+        }
+
+        function filterAccountsByGroupIds(selectedGroupId, accountGroups, accountsList) {
+            const validGroupIds = getAllChildGroupIds(selectedGroupId, accountGroups);
+            return accountsList.filter(account => validGroupIds.includes(account.Group_Id));
+        }
+
+        const sundryDebtors = filterAccountsByGroupIds(20, accountGroupData, accountsList);
+        const sundryCreditors = filterAccountsByGroupIds(16, accountGroupData, accountsList);
+
+        const distinctPartyAccounts = new Set([
+            ...sundryDebtors.map(acc => acc.value),
+            ...sundryCreditors.map(acc => acc.value)
+        ]);
+
+        const resAccounts = accountsList.map(acc => ({
+            value: toNumber(acc.value),
+            label: acc.label,
+            isSundryParty: distinctPartyAccounts.has(acc.value)
+        }))
+
+        sentData(res, resAccounts);
     } catch (e) {
         servError(e, res);
     }
