@@ -44,7 +44,7 @@ const getFilterValues = async (req, res) => {
 
 const getAccountPendingReference = async (req, res) => {
     try {
-        const { Acc_Id } = req.query;
+        const { Acc_Id, JournalAutoId } = req.query;
         if (!checkIsNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
 
         const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
@@ -54,6 +54,7 @@ const getAccountPendingReference = async (req, res) => {
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
             .input('Acc_Id', sql.BigInt, Acc_Id)
+            .input('JournalAutoId', sql.NVarChar(200), JournalAutoId)
             .query(`
                 DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
             -- OUTSTANDING SALES (Invoices + OB)
@@ -89,6 +90,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = pig.Do_Id 
                                 AND jr.RefNo = pig.Do_Inv_No
                                 AND jr.RefType = 'SALES'
+                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide,
                         pig.Do_Inv_No AS BillRefNo
@@ -132,6 +134,7 @@ const getAccountPendingReference = async (req, res) => {
                             AND jr.RefId = cb.OB_Id 
                             AND jr.RefNo = cb.bill_no
                             AND jr.RefType = 'SALES-OB'
+                            ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                     ), 0) AS journalAdjustment,
                     'Dr' AS accountSide,
                     cb.bill_no AS BillRefNo
@@ -181,6 +184,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = rgi.receipt_id 
                                 AND jr.RefNo = rgi.receipt_invoice_no
                                 AND jr.RefType = 'RECEIPT'
+                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide,
                         rgi.receipt_invoice_no AS BillRefNo
@@ -225,6 +229,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = pig.PIN_Id 
                                 AND jr.RefNo = pig.Po_Inv_No
                                 AND jr.RefType = 'PURCHASE'
+                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide,
                         pig.Ref_Po_Inv_No AS BillRefNo
@@ -268,6 +273,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = cb.OB_Id 
                                 AND jr.RefNo = cb.bill_no
                                 AND jr.RefType = 'PURCHASE-OB'
+                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide,
                         cb.bill_no AS BillRefNo
@@ -314,6 +320,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = pgi.pay_id 
                                 AND jr.RefNo = pgi.payment_invoice_no
                                 AND jr.RefType = 'PAYMENT'
+                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide,
                         pgi.payment_invoice_no AS BillRefNo
@@ -336,25 +343,41 @@ const getAccountPendingReference = async (req, res) => {
                         jei.Amount		         AS totalValue,
                         'JOURNAL'                AS dataSource,
                         'JOURNAL'                AS actualSource,
-                        0 AS againstAmount,
-                        COALESCE((
-                            SELECT SUM(jbr.Amount)
+                    	0						 AS againstAmount,
+                        (
+                    		SELECT COALESCE(SUM(jr.Amount), 0)
+                            FROM dbo.tbl_Journal_Bill_Reference jr
+                            JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                            JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
+                            WHERE 
+                                jh.JournalStatus <> 0
+                                AND je.Acc_Id = jei.Acc_Id
+                                AND je.DrCr = CASE WHEN jei.DrCr = 'Dr' THEN 'Cr' ELSE 'Dr' END
+                                AND jr.RefId = jgi.JournalId 
+                                AND jr.RefNo = jgi.JournalVoucherNo
+                                AND jr.RefType = 'JOURNAL'
+                                AND jh.JournalVoucherNo <> jgi.JournalVoucherNo
+                                AND jh.JournalId <> jgi.JournalId
+                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+                    	) + (
+                            SELECT COALESCE(SUM(jbr.Amount), 0)
                             FROM dbo.tbl_Journal_Bill_Reference AS jbr
                             WHERE 
                                 jbr.JournalAutoId = jei.JournalAutoId
-                				AND jbr.LineId = jei.LineId
-                				AND jbr.Acc_Id = jei.Acc_Id
-                				AND jbr.DrCr = jei.DrCr
-                        ), 0) AS journalAdjustment,
+                    			AND jbr.LineId = jei.LineId
+                    			AND jbr.Acc_Id = jei.Acc_Id
+                    			AND jbr.DrCr = jei.DrCr
+                                ${JournalAutoId ? ' AND jei.JournalAutoId <> @JournalAutoId ' : ''}
+                        ) AS journalAdjustment,
                         jei.DrCr AS accountSide,
                         jgi.JournalVoucherNo AS BillRefNo
                     FROM tbl_Journal_Entries_Info AS jei
-                	JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
+                    JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
                     WHERE 
-                		jgi.JournalStatus <> 0
-                		AND jei.Acc_Id = @Acc_Id
+                    	jgi.JournalStatus <> 0
+                    	AND jei.Acc_Id = @Acc_Id
                 ) JO
-                WHERE JO.totalValue > JO.journalAdjustment
+                WHERE JO.totalValue > JO.againstAmount + JO.journalAdjustment
                 ORDER BY eventDate ASC;`
             );
 

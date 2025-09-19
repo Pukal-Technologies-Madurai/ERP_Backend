@@ -66,14 +66,18 @@ const createContra = async (req, res) => {
             Narration = null,
             BankName = '',
             ContraStatus,
-            CreatedBy
+            CreatedBy,
+            Chequeno,
+            TransactionType,
         } = req.body || {};
 
         const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
+        const ChequeDate = req.body?.ChequeDate ? ISOString(req.body.ChequeDate) : null;
         const ContraDate = req.body?.ContraDate ? ISOString(req.body.ContraDate) : ISOString();
 
         const errors = [];
         if (!VoucherType) errors.push("VoucherType");
+        if (!TransactionType) errors.push("TransactionType");
         if (!BranchId) errors.push("BranchId");
         if (!DebitAccount) errors.push("DebitAccount");
         if (!CreditAccount) errors.push("CreditAccount");
@@ -82,10 +86,8 @@ const createContra = async (req, res) => {
         if (ContraStatus === undefined || ContraStatus === null || ContraStatus === "") errors.push("ContraStatus");
         if (errors.length) return invalidInput(res, "Enter Required Fields", { errors });
 
-        const contraDate = ISOString(ContraDate);
-
         const yearQ = await new sql.Request()
-            .input("ContraDate", contraDate)
+            .input("ContraDate", ContraDate)
             .query(
                 `SELECT Id AS Year_Id, Year_Desc
                 FROM tbl_Year_Master
@@ -129,7 +131,7 @@ const createContra = async (req, res) => {
             .input("VoucherType", VoucherType)
             .input("ContraNo", ContraNo)
             .input("ContraVoucherNo", ContraVoucherNo)
-            .input("ContraDate", contraDate)
+            .input("ContraDate", ContraDate)
             .input("BranchId", BranchId)
             .input("DebitAccount", DebitAccount)
             .input("DebitAccountName", DebitAccountName || null)
@@ -140,17 +142,22 @@ const createContra = async (req, res) => {
             .input("ContraStatus", ContraStatus)
             .input("BankName", BankName)
             .input("BankDate", BankDate)
+            .input("Chequeno", Chequeno)
+            .input("TransactionType", TransactionType)
+            .input("ChequeDate", ChequeDate)
             .input("CreatedBy", CreatedBy)
             .input("AlterId", AlterId)
             .query(`
                 INSERT INTO dbo.tbl_Contra_General_Info(
                     ContraAutoId, ContraId, Year_Id, VoucherType, ContraNo, ContraVoucherNo, ContraDate, 
                     BranchId, DebitAccount, DebitAccountName, CreditAccount, CreditAccountName, Amount, 
-                    Narration, ContraStatus, BankName, BankDate, CreatedBy, CreatedAt, UpdatedAt, AlterId
+                    Narration, ContraStatus, BankName, BankDate, Chequeno, TransactionType, ChequeDate, 
+                    CreatedBy, CreatedAt, UpdatedAt, AlterId
                 ) OUTPUT inserted.ContraAutoId VALUES (
                     DEFAULT, @ContraId, @Year_Id, @VoucherType, @ContraNo, @ContraVoucherNo, @ContraDate, 
                     @BranchId, @DebitAccount, @DebitAccountName, @CreditAccount, @CreditAccountName, @Amount, 
-                    @Narration, @ContraStatus, @BankName, @BankDate, @CreatedBy, GETDATE(), NULL, @AlterId
+                    @Narration, @ContraStatus, @BankName, @BankDate, @Chequeno, @TransactionType, @ChequeDate, 
+                    @CreatedBy, GETDATE(), NULL, @AlterId
                 );`
             );
 
@@ -166,7 +173,7 @@ const createContra = async (req, res) => {
             VoucherType,
             ContraNo,
             ContraVoucherNo,
-            ContraDate: contraDate,
+            ContraDate,
             BranchId,
             DebitAccount,
             DebitAccountName: DebitAccountName || null,
@@ -197,10 +204,13 @@ const editContra = async (req, res) => {
             Amount,
             Narration = null,
             ContraStatus,
-            BankName = ''
+            BankName = '',
+            Chequeno,
+            TransactionType,
         } = req.body || {};
 
         const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
+        const ChequeDate = req.body?.ChequeDate ? ISOString(req.body.ChequeDate) : null;
         const ContraDate = req.body?.ContraDate ? ISOString(req.body.ContraDate) : ISOString();
 
         const errors = [];
@@ -211,8 +221,6 @@ const editContra = async (req, res) => {
         if (!(Number(Amount) > 0)) errors.push("Amount");
         if (ContraStatus === undefined || ContraStatus === null || ContraStatus === "") errors.push("ContraStatus");
         if (errors.length) return invalidInput(res, "Enter Required Fields", { errors });
-
-        const contraDate = ContraDate ? ISOString(ContraDate) : ISOString();
 
         const hdrQ = await new sql.Request()
             .input("ContraAutoId", ContraAutoId)
@@ -229,7 +237,7 @@ const editContra = async (req, res) => {
 
         await new sql.Request(tx)
             .input("ContraAutoId", ContraAutoId)
-            .input("ContraDate", contraDate)
+            .input("ContraDate", ContraDate)
             .input("BranchId", BranchId)
             .input("DebitAccount", DebitAccount)
             .input("DebitAccountName", DebitAccountName || null)
@@ -238,6 +246,9 @@ const editContra = async (req, res) => {
             .input("Amount", Number(Amount))
             .input("BankName", BankName)
             .input("BankDate", BankDate)
+            .input("Chequeno", Chequeno)
+            .input("ChequeDate", ChequeDate)
+            .input("TransactionType", TransactionType)
             .input("Narration", Narration)
             .input("ContraStatus", ContraStatus)
             .query(`
@@ -254,6 +265,9 @@ const editContra = async (req, res) => {
                     ContraStatus = @ContraStatus,
                     BankName = @BankName,
                     BankDate = @BankDate,
+                    Chequeno = @Chequeno,
+                    ChequeDate = @ChequeDate,
+                    TransactionType = @TransactionType,
                     UpdatedAt = GETDATE(),
                     AlterId = AlterId + 1
                 WHERE ContraAutoId = @ContraAutoId;`
@@ -268,7 +282,7 @@ const editContra = async (req, res) => {
             VoucherType,
             ContraNo,
             ContraVoucherNo,
-            ContraDate: contraDate,
+            ContraDate,
             BranchId,
             DebitAccount,
             DebitAccountName: DebitAccountName || null,
