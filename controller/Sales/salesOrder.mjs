@@ -648,7 +648,7 @@ const SaleOrder = () => {
 
     const getSaleOrder = async (req, res) => {
     try {
-        const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType } = req.query;
+        const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, OrderStatus } = req.query;
 
         const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -663,7 +663,7 @@ const SaleOrder = () => {
             .input('VoucherType', VoucherType);
 
         const result = await request.query(`
-            -- Step 1: Declare and populate filtered sales orders
+            -- Step 1: Filtered Sales Orders
             DECLARE @FilteredOrders TABLE (So_Id INT);
             INSERT INTO @FilteredOrders (So_Id)
             SELECT so.So_Id
@@ -692,7 +692,7 @@ const SaleOrder = () => {
             LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
             WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
 
-            -- Step 3: Product Details
+            -- Step 3: Sales Order Product Details
             SELECT 
                 si.*,
                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
@@ -705,7 +705,7 @@ const SaleOrder = () => {
             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
             WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
 
-            -- Step 4: Staff involved
+            -- Step 4: Staff Involved
             SELECT 
                 sosi.So_Id, 
                 sosi.Involved_Emp_Id,
@@ -713,13 +713,11 @@ const SaleOrder = () => {
                 c.Cost_Center_Name AS EmpName,
                 cc.Cost_Category AS EmpType
             FROM tbl_Sales_Order_Staff_Info AS sosi
-            LEFT JOIN tbl_ERP_Cost_Center AS c
-                ON c.Cost_Center_Id = sosi.Involved_Emp_Id
-            LEFT JOIN tbl_ERP_Cost_Category cc
-                ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+            LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
             WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
 
-            -- Step 5: Delivery General Info (✅ with custom status check)
+            -- Step 5: Delivery General Info
             SELECT 
                 dgi.*,
                 rm.Retailer_Name AS Retailer_Name,
@@ -729,19 +727,7 @@ const SaleOrder = () => {
                     SELECT SUM(collected_amount)
                     FROM tbl_Sales_Receipt_Details_Info
                     WHERE bill_id = dgi.Do_Id
-                ), 0) AS receiptsTotalAmount,
-
-                CASE 
-                    WHEN NOT EXISTS (
-                        SELECT 1
-                        FROM tbl_Sales_Delivery_Stock_Info AS di
-                        WHERE di.Delivery_Order_Id = dgi.Do_Id
-                          AND ISNULL(di.Bill_Qty, 0) <> ISNULL(di.Act_Qty, 0)
-                    ) 
-                    THEN 'Completed'
-                    ELSE 'New'
-                END AS CustomDeliveryStatus
-
+                ), 0) AS receiptsTotalAmount
             FROM tbl_Sales_Delivery_Gen_Info AS dgi
             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
             LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
@@ -762,14 +748,24 @@ const SaleOrder = () => {
             WHERE oi.Delivery_Order_Id IN (
                 SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
                 WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
-            );`
-        );
+            );
+        `);
 
         const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
 
         if (OrderData.length > 0) {
             const resData = OrderData.map(order => {
+                const orderProducts = ProductDetails.filter(p => isEqualNumber(p.Sales_Order_Id, order.So_Id));
                 const deliveryList = DeliveryData.filter(d => isEqualNumber(d.So_No, order.So_Id));
+
+                const totalOrderedQty = orderProducts.reduce((sum, p) => sum + toNumber(p.Bill_Qty), 0);
+                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                    const deliveredItems = DeliveryItems.filter(p => isEqualNumber(p.Delivery_Order_Id, d.Do_Id));
+                    return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
+                }, 0);
+
+                const orderStatus = totalDeliveredQty >= totalOrderedQty ? 'completed' : 'pending';
+
                 const mappedDeliveries = deliveryList.map(d => ({
                     ...d,
                     InvoicedProducts: DeliveryItems.filter(p => isEqualNumber(p.Delivery_Order_Id, d.Do_Id)).map(prod => ({
@@ -780,7 +776,8 @@ const SaleOrder = () => {
 
                 return {
                     ...order,
-                    Products_List: ProductDetails.filter(p => isEqualNumber(p.Sales_Order_Id, order.So_Id)).map(p => ({
+                    OrderStatus: orderStatus,
+                    Products_List: orderProducts.map(p => ({
                         ...p,
                         ProductImageUrl: getImage('products', p.Product_Image_Name)
                     })),
@@ -789,7 +786,12 @@ const SaleOrder = () => {
                 };
             });
 
-            dataFound(res, resData);
+          
+            const filteredData = OrderStatus
+                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+                : resData;
+
+            dataFound(res, filteredData);
         } else {
             noData(res);
         }
@@ -799,7 +801,7 @@ const SaleOrder = () => {
     }
 };
 
-    
+
     const getDeliveryorder = async (req, res) => {
         try {
             const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType } = req.query;
