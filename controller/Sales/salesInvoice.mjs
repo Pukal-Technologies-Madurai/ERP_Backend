@@ -2386,34 +2386,34 @@ const SalesInvoice = () => {
 
 const createSalesTransaction = async (req, res) => {
     const {
-        transactionType, // 'order' | 'invoice' | 'both'
+        transactionType, 
         Retailer_Id,
         Sales_Person_Id = 0,
         Branch_Id,
         Narration = null,
         Created_by,
-        ProductList = [],     // for Sales Order
-        Product_Array = [],   // for Sales Invoice (Delivery)
-        GST_Inclusive = 1,    // 0 exclusive, 1 inclusive, 2 zero tax
+        ProductList = [],     
+        Product_Array = [],  
+        GST_Inclusive = 1, 
         IS_IGST = 0,
         Voucher_Type,
-        staff_Involved_List = [], // for Sales Order staff involved
-        Staffs_Array = [],        // for Sales Invoice staff list
-        Expence_Array = [],       // for invoice expenses (delivery)
+        staff_Involved_List = [], 
+        Staffs_Array = [],      
+        Expence_Array = [],     
         Pre_Id,
-        So_No,                    // optional if both -> generated
+        So_No,              
         Cancel_status = 1,
         Stock_Item_Ledger_Name = '',
         Round_off = 0
     } = req.body;
 
-    // Basic validations
     if (
         !checkIsNumber(Retailer_Id) ||
         !checkIsNumber(Created_by) ||
-        !checkIsNumber(Voucher_Type)
+        !checkIsNumber(Voucher_Type) || 
+        !checkIsNumber(Branch_Id)
     ) {
-        return invalidInput(res, 'Retailer_Id, Created_by, VoucherType are required');
+        return invalidInput(res, 'Retailer_Id, Created_by, VoucherType,Branch_Id are required');
     }
 
     if ((transactionType === 'order' || transactionType === 'both') && !checkIsNumber(Sales_Person_Id)) {
@@ -2421,7 +2421,6 @@ const createSalesTransaction = async (req, res) => {
     }
 
     if (transactionType === 'invoice' && !checkIsNumber(So_No)) {
-        // if transactionType === 'both', So_No will be generated below so this check only for pure invoice
         return invalidInput(res, 'So_No is required for invoice creation');
     }
 
@@ -2433,14 +2432,12 @@ const createSalesTransaction = async (req, res) => {
     const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
 
     try {
-        // Products master for HSN/GST details
         const productsData = (await getProducts()).dataArray || [];
         const Alter_Id = Math.floor(Math.random() * 999999);
 
-        // transaction date (use So_Date or Do_Date if provided)
         const transactionDate = ISOString(req?.body?.So_Date || req?.body?.Do_Date) || ISOString();
 
-        // year lookup
+       
         const yearData = await new sql.Request()
             .input('TransactionDate', transactionDate)
             .query(`
@@ -2453,7 +2450,7 @@ const createSalesTransaction = async (req, res) => {
         if (yearData.recordset.length === 0) throw new Error('Year_Id not found');
         const { Year_Id, Year_Desc } = yearData.recordset[0];
 
-        // voucher code
+      
         const voucherData = await new sql.Request()
             .input('Voucher_Type', Voucher_Type)
             .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Voucher_Type`);
@@ -2461,19 +2458,16 @@ const createSalesTransaction = async (req, res) => {
         const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
         if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
 
-        // begin transaction
         await transaction.begin();
 
         let soId = null, doId = null, soInvNo = null, doInvNo = null;
 
-        /* ---------------------- CREATE SALES ORDER ---------------------- */
         if (transactionType === 'order' || transactionType === 'both') {
-            // get next So_Id
+          
             const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
             if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id');
             soId = So_Id_Get.MaxId;
 
-            // next branch inv id for SO (per year + voucher type)
             const So_Branch_Inv_Id = Number((await new sql.Request()
                 .input('So_Year', Year_Id)
                 .input('Voucher_Type', Voucher_Type)
@@ -2487,17 +2481,16 @@ const createSalesTransaction = async (req, res) => {
 
             if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
 
-            // create SO invoice number
+           
             soInvNo = `${VoucherCode}/${createPadString(So_Branch_Inv_Id, 6)}/${Year_Desc}`;
 
 const orderTotals = ProductList.reduce((acc, item) => {
-    // Get rate and quantity safely
+  
     const itemRate = RoundNumber(item?.Item_Rate ?? item?.Rate ?? 0);
     const billQty = RoundNumber(item?.Bill_Qty ?? item?.Qty ?? 0);
     const Amount = Multiplication(billQty, itemRate);
     const discount = toNumber(item?.Disc_Val) || 0;
 
-    // Skip GST calculation if bill is non-taxable
     if (isNotTaxableBill) {
         acc.TotalValue = Addition(acc.TotalValue, Addition(Amount, -discount));
         acc.TotalTax = Addition(acc.TotalTax, 0);
@@ -2505,22 +2498,18 @@ const orderTotals = ProductList.reduce((acc, item) => {
         return acc;
     }
 
-    // Find product GST percentage
     const product = findProductDetails(productsData, item.Item_Id);
     const gstPercentage = isEqualNumber(IS_IGST, 1)
         ? (product?.Igst_P ?? product?.Gst_P ?? 0)
         : (product?.Gst_P ?? 0);
 
-    // Use fallback tax if product GST not available
     const taxPerc = (product && product.Gst_P != null)
         ? gstPercentage
         : (toNumber(item?.Tax_Rate) || toNumber(item?.Tax_Per) || 0);
 
-    // Calculate GST once per item
     const totalAfterDiscount = Addition(Amount, -discount);
     const taxInfo = calculateGSTDetails(totalAfterDiscount, taxPerc, isInclusive ? 'remove' : 'add');
 
-    // Add to running totals
     acc.TotalValue = Addition(acc.TotalValue, taxInfo.without_tax ?? 0);
     acc.TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount ?? 0);
     acc.TotalInvoice = Addition(acc.TotalInvoice, taxInfo.with_tax ?? 0);
@@ -2528,15 +2517,12 @@ const orderTotals = ProductList.reduce((acc, item) => {
     return acc;
 }, { TotalValue: 0, TotalTax: 0, TotalInvoice: 0 });
 
-// Final rounded invoice value
 const Total_Invoice_value1 = RoundNumber(orderTotals.TotalInvoice);
 
-// Round-off if needed
 const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_value1);
 
 
 
-            // create SO general info insert
             const soRequest = new sql.Request(transaction)
                 .input('So_Id', soId)
                 .input('So_Inv_No', soInvNo)
@@ -2584,7 +2570,6 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
             const soRes = await soRequest.query(soInsertQuery);
             if (soRes.rowsAffected[0] === 0) throw new Error('Failed to create order, Try again.');
 
-            // insert SO stock info rows from ProductList
             for (let i = 0; i < ProductList.length; i++) {
                 const product = ProductList[i];
                 const productDetails = findProductDetails(productsData, product.Item_Id);
@@ -2647,7 +2632,6 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                 if (soStockRes.rowsAffected[0] === 0) throw new Error('Failed to create order stock row, Try again.');
             }
 
-            // insert staff involved for Sales Order (if any)
             for (const staff of toArray(staff_Involved_List)) {
                 const staffReq = new sql.Request(transaction)
                     .input('So_Id', sql.Int, soId)
@@ -2659,16 +2643,15 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                     VALUES (@So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id);
                 `);
             }
-        } // end sales order
+        } 
 
-        /* ---------------------- CREATE SALES INVOICE (DELIVERY) ---------------------- */
         if (transactionType === 'invoice' || transactionType === 'both') {
-            // Do_Id
+        
             const getDo_Id = await getNextId({ table: 'tbl_Sales_Delivery_Gen_Info', column: 'Do_Id' });
             if (!getDo_Id.status || !checkIsNumber(getDo_Id.MaxId)) throw new Error('Failed to get Do_Id');
             doId = getDo_Id.MaxId;
 
-            // Do_No (branch/year/voucher)
+           
             const Do_No = Number((await new sql.Request()
                 .input('Do_Year', Year_Id)
                 .input('Voucher_Type', Voucher_Type)
@@ -2684,7 +2667,7 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
 
             doInvNo = `${VoucherCode}/${createPadString(Do_No, 6)}/${Year_Desc}`;
 
-            // calculate totals for invoice using Product_Array
+          
             const invoiceTotals = (() => {
                 const productTax = Product_Array.reduce((acc, item) => {
                     const itemRate = RoundNumber(item?.Item_Rate ?? item?.Rate ?? 0);
@@ -2708,7 +2691,7 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                     return acc;
                 }, { TotalValue: 0, TotalTax: 0, TotalInvoice: 0 });
 
-                // expenses tax totals (if any)
+               
                 const invoiceExpencesTaxTotal = toArray(Expence_Array).reduce((acc, exp) => {
                     return Addition(acc, IS_IGST ? (exp?.Igst_Amo || 0) : Addition(exp?.Cgst_Amo || 0, exp?.Sgst_Amo || 0));
                 }, 0);
@@ -2749,7 +2732,7 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
             const SGST = isIGST ? 0 : invoiceTotals.TotalTax / 2;
             const IGST = isIGST ? invoiceTotals.TotalTax : 0;
 
-            // Insert DO general info
+        
             const doRequest = new sql.Request(transaction)
                 .input('Do_Id', doId)
                 .input('Do_Inv_No', doInvNo)
@@ -2797,7 +2780,7 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
             const doResult = await doRequest.query(doInsertQuery);
             if (doResult.rowsAffected[0] === 0) throw new Error('Failed to create general info in sales invoice');
 
-            // Insert delivery stock info (Product_Array)
+      
             const isSO = checkIsNumber(So_No) || transactionType === 'both';
 
             for (const [index, product] of Product_Array.entries()) {
@@ -2824,7 +2807,8 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                     .input('S_No', index + 1)
                     .input('Item_Id', product.Item_Id)
                     .input('Bill_Qty', Bill_Qty)
-                    .input('Act_Qty', toNumber(product?.Act_Qty) || Bill_Qty)
+                   
+                      .input('Act_Qty', Bill_Qty)
                     .input('Alt_Act_Qty', isSO ? toNumber(product?.Alt_Act_Qty) : toNumber(product?.Act_Qty) || Bill_Qty)
                     .input('Item_Rate', toNumber(Item_Rate))
                     .input('GoDown_Id', checkIsNumber(product?.GoDown_Id) ? Number(product?.GoDown_Id) : null)
@@ -2870,9 +2854,7 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
 
                 const result2 = await request2;
                 if (result2.rowsAffected[0] === 0) throw new Error('Failed to create order, Try again.');
-            } // end products loop
-
-            // Insert expense info (Expence_Array)
+            } 
             if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
                 for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                     const exp = Expence_Array[expInd];
@@ -2900,7 +2882,6 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                 }
             }
 
-            // Insert tax expenses (CGST/SGST/IGST/ROUNDOFF) mapped to default accounts
             const taxTypes = [
                 { expName: 'CGST', Value: CGST },
                 { expName: 'SGST', Value: SGST },
@@ -2959,9 +2940,8 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                         throw new Error('Failed to insert tax expense row');
                     }
                 }
-            } // end taxTypes
+            } 
 
-            // Insert Staffs_Array to tbl_Sales_Delivery_Staff_Info
             if (Array.isArray(Staffs_Array) && Staffs_Array.length > 0) {
                 for (const staff of Staffs_Array) {
                     const request = new sql.Request(transaction)
@@ -2983,7 +2963,6 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                 }
             }
 
-            // Update Pre-Sales Order if Pre_Id provided
             if (checkIsNumber(Pre_Id)) {
                 const updatePresalesOrder = new sql.Request(transaction)
                     .input('Pre_Id', toNumber(Pre_Id) || null)
@@ -2998,12 +2977,9 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
                     throw new Error('Failed to update Pre-Sales Order');
                 }
             }
-        } // end invoice
-
-        // commit transaction
+        } 
         await transaction.commit();
 
-        // prepare response
         let message = '';
         let data = {};
         if (transactionType === 'order') {
@@ -3019,7 +2995,7 @@ const Round_Off1 = RoundNumber(Math.round(Total_Invoice_value1) - Total_Invoice_
 
         return success(res, message, data);
     } catch (e) {
-        // rollback on error
+      
         try {
             if (transaction._aborted === false) await transaction.rollback();
         } catch (rbErr) {
@@ -3038,9 +3014,8 @@ const getSaleOrderWithDeliveries = async (req, res) => {
       return res.status(400).json({ success: false, message: "So_Id is required" });
     }
 
-    const pool = await sql.connect(); // Ensure config is already set globally
+    const pool = await sql.Request()
 
-    const result = await pool.request()
       .input("SoIdParam", sql.Int, So_Id)
       .query(`
         -- 1. Sales Order Details
@@ -3061,7 +3036,7 @@ const getSaleOrderWithDeliveries = async (req, res) => {
         LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = si.Item_Id
         WHERE si.Sales_Order_Id = @SoIdParam;
 
-        -- 3. Delivery Orders
+      
         SELECT 
             dgi.*, 
             st.Status AS DeliveryStatusName
