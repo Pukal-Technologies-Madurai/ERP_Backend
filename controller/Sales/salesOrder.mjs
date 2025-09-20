@@ -646,7 +646,7 @@ const SaleOrder = () => {
     // };
 
 
-    const getSaleOrder = async (req, res) => {
+const getSaleOrder = async (req, res) => {
     try {
         const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, OrderStatus } = req.query;
 
@@ -754,39 +754,59 @@ const SaleOrder = () => {
         const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
 
         if (OrderData.length > 0) {
-            const resData = OrderData.map(order => {
-                const orderProducts = ProductDetails.filter(p => isEqualNumber(p.Sales_Order_Id, order.So_Id));
-                const deliveryList = DeliveryData.filter(d => isEqualNumber(d.So_No, order.So_Id));
+       const resData = OrderData.map(order => {
+    const orderProducts = ProductDetails.filter(p =>
+        isEqualNumber(p.Sales_Order_Id, order.So_Id)
+    );
+    const deliveryList = DeliveryData.filter(d =>
+        isEqualNumber(d.So_No, order.So_Id)
+    );
 
-                const totalOrderedQty = orderProducts.reduce((sum, p) => sum + toNumber(p.Bill_Qty), 0);
-                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-                    const deliveredItems = DeliveryItems.filter(p => isEqualNumber(p.Delivery_Order_Id, d.Do_Id));
-                    return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
-                }, 0);
+    const totalOrderedQty = orderProducts.reduce(
+        (sum, p) => sum + toNumber(p.Bill_Qty),
+        0
+    );
+    const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+        const deliveredItems = DeliveryItems.filter(p =>
+            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+        );
+        return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
+    }, 0);
 
-                const orderStatus = totalDeliveredQty >= totalOrderedQty ? 'completed' : 'pending';
+    const orderStatus =
+        totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
 
-                const mappedDeliveries = deliveryList.map(d => ({
-                    ...d,
-                    InvoicedProducts: DeliveryItems.filter(p => isEqualNumber(p.Delivery_Order_Id, d.Do_Id)).map(prod => ({
-                        ...prod,
-                        ProductImageUrl: getImage('products', prod.Product_Image_Name)
-                    }))
-                }));
+    // ✅ Build full delivery + invoice products
+    const mappedDeliveries = deliveryList.map(d => {
+        const invoiceProducts = DeliveryItems.filter(p =>
+            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+        ).map(prod => ({
+            ...prod,
+            ProductImageUrl: getImage("products", prod.Product_Image_Name),
+        }));
 
-                return {
-                    ...order,
-                    OrderStatus: orderStatus,
-                    Products_List: orderProducts.map(p => ({
-                        ...p,
-                        ProductImageUrl: getImage('products', p.Product_Image_Name)
-                    })),
-                    Staff_Involved_List: StaffInvolved.filter(s => isEqualNumber(s.So_Id, order.So_Id)),
-                    ConvertedInvoice: mappedDeliveries
-                };
-            });
+        return {
+            ...d,
+            InvoicedProducts: invoiceProducts,
+        };
+    });
 
-          
+    return {
+        ...order,
+        OrderStatus: orderStatus,
+        Products_List: orderProducts.map(p => ({
+            ...p,
+            ProductImageUrl: getImage("products", p.Product_Image_Name),
+        })),
+        Staff_Involved_List: StaffInvolved.filter(s =>
+            isEqualNumber(s.So_Id, order.So_Id)
+        ),
+        ConvertedInvoice: mappedDeliveries, // ✅ full delivery + all invoice product list
+    };
+});
+
+
+            // Filter by pending/completed if requested
             const filteredData = OrderStatus
                 ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
                 : resData;
@@ -800,6 +820,7 @@ const SaleOrder = () => {
         servError(e, res);
     }
 };
+
 
 
     const getDeliveryorder = async (req, res) => {
