@@ -114,12 +114,12 @@ const ArrivalMaster = () => {
                 .input('Created_By', toNumber(Created_By))
                 .query(`
                     INSERT INTO tbl_Trip_Arrival (
-                        Arr_Id, Arrival_Date, Batch_No, From_Location, To_Location, Concern, BillNo, BatchLocation,
+                        Arr_Id, Arrival_Date, From_Location, To_Location, Concern, BillNo, BatchLocation,
                         Product_Id, HSN_Code, QTY, KGS, Gst_Rate, Unit_Id, Units, Total_Value, 
                         GST_Inclusive, IS_IGST, Gst_P, Cgst_P, Sgst_P, Igst_P, Taxable_Value, Round_off,
                         Created_By
                     ) VALUES (
-                        @Arr_Id, @Arrival_Date, @Batch_No, @From_Location, @To_Location, @Concern, @BillNo, @BatchLocation,
+                        @Arr_Id, @Arrival_Date, @From_Location, @To_Location, @Concern, @BillNo, @BatchLocation,
                         @Product_Id, @HSN_Code, @QTY, @KGS, @Gst_Rate, @Unit_Id, @Units, @Total_Value, 
                         @GST_Inclusive, @IS_IGST, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @Taxable_Value, @Round_off,
                         @Created_By
@@ -154,7 +154,7 @@ const ArrivalMaster = () => {
             const request = new sql.Request()
                 .input('Arr_Id', Arr_Id)
                 .input('Arrival_Date', Arrival_Date ? ISOString(Arrival_Date) : ISOString())
-                .input('Batch_No', Batch_No)
+                // .input('Batch_No', Batch_No)
                 .input('From_Location', toNumber(From_Location))
                 .input('To_Location', toNumber(To_Location))
                 .input('Concern', Concern)
@@ -181,7 +181,7 @@ const ArrivalMaster = () => {
                     UPDATE tbl_Trip_Arrival
                     SET 
                         Arrival_Date = @Arrival_Date, 
-                        Batch_No = @Batch_No, 
+                        --Batch_No = @Batch_No, 
                         From_Location = @From_Location, 
                         To_Location = @To_Location, 
                         Concern = @Concern, 

@@ -298,8 +298,8 @@ const StockManagement = () => {
                     WHEN MATCHED THEN
                         UPDATE SET 
                             target.quantity = target.quantity + d.Quantity,
-                            target.rate     = d.Rate,                -- adjust if you want to keep existing
-                            target.trans_date = @trans_date
+                            --target.rate     = d.Rate,                -- adjust if you want to keep existing
+                            --target.trans_date = @trans_date
                     WHEN NOT MATCHED THEN
                         INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
                         VALUES (NEWID(), d.Dest_Batch_Lot_No, d.Dest_Item_Id, d.Dest_Goodown_Id, @trans_date, d.Quantity, d.Rate, @createdBy);
@@ -625,8 +625,8 @@ const StockManagement = () => {
                     WHEN MATCHED THEN
                         UPDATE SET 
                             target.quantity = target.quantity + d.Quantity,
-                            target.rate = d.Rate,
-                            target.trans_date = @trans_date
+                            --target.rate = d.Rate,
+                            --target.trans_date = @trans_date
                     WHEN NOT MATCHED THEN
                         INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
                         VALUES (NEWID(), d.Dest_Batch_Lot_No, d.Dest_Item_Id, d.Dest_Goodown_Id, @trans_date, d.Quantity, d.Rate, @createdBy);
