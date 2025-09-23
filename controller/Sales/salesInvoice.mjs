@@ -1,11 +1,11 @@
 import sql from 'mssql';
 import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
-import { failed, invalidInput, servError, dataFound, noData, sentData, success } from '../../res.mjs';
+import { invalidInput, servError, dataFound, noData, sentData, success } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
-import receiptMaster from '../Receipts/receiptMaster.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
+
 
 const SalesInvoice = () => {
 
@@ -1762,7 +1762,7 @@ const SalesInvoice = () => {
         }
 
         if (transactionType === 'invoice' && !checkIsNumber(So_Id)) {
-            return invalidInput(res, 'So_Id is required for invoice creation');
+            return invalidInput(res, 'So_No is required for invoice creation');
         }
 
         const transaction = new sql.Transaction();
