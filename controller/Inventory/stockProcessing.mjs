@@ -297,7 +297,7 @@ const StockManagement = () => {
                     AND target.godown_id= d.Dest_Goodown_Id
                     WHEN MATCHED THEN
                         UPDATE SET 
-                            target.quantity = target.quantity + d.Quantity,
+                            target.quantity = target.quantity + d.Quantity
                             --target.rate     = d.Rate,                -- adjust if you want to keep existing
                             --target.trans_date = @trans_date
                     WHEN NOT MATCHED THEN
@@ -624,7 +624,7 @@ const StockManagement = () => {
                     AND target.godown_id= d.Dest_Goodown_Id
                     WHEN MATCHED THEN
                         UPDATE SET 
-                            target.quantity = target.quantity + d.Quantity,
+                            target.quantity = target.quantity + d.Quantity
                             --target.rate = d.Rate,
                             --target.trans_date = @trans_date
                     WHEN NOT MATCHED THEN

@@ -6,47 +6,48 @@ import { checkIsNumber, ISOString, Subraction, createPadString, isValidDate, toN
 const tripActivities = () => {
 
     const createTripDetails = async (req, res) => {
-        const {
-            Branch_Id,
-            Vehicle_No = '',
-            Trip_ST_KM = '',
-            Trip_EN_KM = '',
-            Created_by = '',
-            PhoneNumber = '',
-            LoadingLoad = 0,
-            LoadingEmpty = 0,
-            UnloadingLoad = 0,
-            UnloadingEmpty = 0,
-            Godownlocation = 0,
-            BillType = '',
-            VoucherType = '',
-            Narration = '',
-            TripStatus = 'New',
-            Product_Array = [],
-            EmployeesInvolved = [],
-        } = req.body;
-
-        const Trip_Date = req.body?.Trip_Date ? ISOString(req.body.Trip_Date) : ISOString();
-        const StartTime = req.body?.StartTime ? new Date(req.body.StartTime) : new Date();
-        const EndTime = req.body?.EndTime ? new Date(req.body.EndTime) : new Date();
-
-        if (!checkIsNumber(Branch_Id) || !BillType || !checkIsNumber(VoucherType)) {
-            return invalidInput(res, 'Select Branch, BillType, VoucherType is required');
-        }
-        if (Trip_ST_KM && Trip_EN_KM && Number(Trip_ST_KM) > Number(Trip_EN_KM)) {
-            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
-        }
 
         const transaction = new sql.Transaction();
 
         try {
+            const {
+                Branch_Id,
+                Vehicle_No = '',
+                Trip_ST_KM = '',
+                Trip_EN_KM = '',
+                Created_by = '',
+                PhoneNumber = '',
+                LoadingLoad = 0,
+                LoadingEmpty = 0,
+                UnloadingLoad = 0,
+                UnloadingEmpty = 0,
+                Godownlocation = 0,
+                BillType = '',
+                VoucherType = '',
+                Narration = '',
+                TripStatus = 'New',
+                Product_Array = [],
+                EmployeesInvolved = [],
+            } = req.body;
+
+            const Trip_Date = req.body?.Trip_Date ? ISOString(req.body.Trip_Date) : ISOString();
+            const StartTime = req.body?.StartTime ? new Date(req.body.StartTime) : new Date();
+            const EndTime = req.body?.EndTime ? new Date(req.body.EndTime) : new Date();
+
+            if (!checkIsNumber(Branch_Id) || !BillType || !checkIsNumber(VoucherType)) {
+                return invalidInput(res, 'Select Branch, BillType, VoucherType is required');
+            }
+
+            if (Trip_ST_KM && Trip_EN_KM && Number(Trip_ST_KM) > Number(Trip_EN_KM)) {
+                return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
+            }
 
             // ------------------ Unique Trip_Id
 
             const Trip_Id = Number((await new sql.Request().query(`
                SELECT COALESCE(MAX(Trip_Id), 0) AS MaxId
-               FROM tbl_Trip_Master
-           `))?.recordset[0]?.MaxId) + 1;
+               FROM tbl_Trip_Master`
+            ))?.recordset[0]?.MaxId) + 1;
 
             if (!checkIsNumber(Trip_Id)) throw new Error('Failed to get Trip Id');
 
@@ -55,11 +56,9 @@ const tripActivities = () => {
             const getYearId = await new sql.Request()
                 .input('Trip_Date', Trip_Date)
                 .query(`
-                SELECT Id AS Year_Id, Year_Desc
-                FROM tbl_Year_Master
-                WHERE 
-                    Fin_Start_Date <= @Trip_Date 
-                    AND Fin_End_Date >= @Trip_Date`
+                    SELECT Id AS Year_Id, Year_Desc
+                    FROM tbl_Year_Master
+                    WHERE Fin_Start_Date <= @Trip_Date AND Fin_End_Date >= @Trip_Date`
                 );
 
             if (getYearId.recordset.length === 0) throw new Error('Year_Id not found');
@@ -72,10 +71,10 @@ const tripActivities = () => {
                 .input('VoucherType', VoucherType)
                 .input('Year_Id', Year_Id)
                 .query(`
-                SELECT COALESCE(MAX(T_No), 0) AS MaxId
-                FROM tbl_Trip_Master
-                WHERE VoucherType = @VoucherType
-                AND Year_Id = @Year_Id;`
+                    SELECT COALESCE(MAX(T_No), 0) AS MaxId
+                    FROM tbl_Trip_Master
+                    WHERE VoucherType = @VoucherType
+                    AND Year_Id = @Year_Id;`
                 ))?.recordset[0]?.MaxId) + 1;
 
             if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
@@ -85,9 +84,9 @@ const tripActivities = () => {
             const VoucherCodeGet = await new sql.Request()
                 .input('Vocher_Type_Id', VoucherType)
                 .query(`
-                SELECT Voucher_Code
-                FROM tbl_Voucher_Type
-                WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                    SELECT Voucher_Code
+                    FROM tbl_Voucher_Type
+                    WHERE Vocher_Type_Id = @Vocher_Type_Id`
                 );
 
             if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
@@ -139,25 +138,25 @@ const tripActivities = () => {
                 .input('Godownlocation', toNumber(Godownlocation))
                 .input('BillType', BillType)
                 .input('Narration', Narration)
-                .input('TripStatus', TripStatus)
+                .input('TripStatus', 'New')
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
                 .input('Trip_EN_KM', Number(Trip_EN_KM))
                 .input('Trip_Tot_Kms', toNumber(Trip_Tot_Kms))
                 .input('Created_By', Created_by)
                 .input('Created_At', new Date())
                 .query(`
-                   INSERT INTO tbl_Trip_Master (
+                    INSERT INTO tbl_Trip_Master (
                        Trip_Id, TR_INV_ID, Branch_Id, T_No, VoucherType, Year_Id, Challan_No, Trip_Date, Vehicle_No,
                        PhoneNumber, LoadingLoad, LoadingEmpty, UnloadingLoad, UnloadingEmpty, Narration, BillType,
                        StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Godownlocation, TripStatus,
                        Created_At, Created_By
-                   ) VALUES (
+                    ) VALUES (
                        @Trip_Id, @TR_INV_ID, @Branch_Id, @T_No, @VoucherType, @Year_Id, @Challan_No, @Trip_Date, @Vehicle_No,
                        @PhoneNumber, @LoadingLoad, @LoadingEmpty, @UnloadingLoad, @UnloadingEmpty, @Narration, @BillType,
                        @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_Tot_Kms, @Trip_EN_KM, @Godownlocation, @TripStatus,
                        @Created_At, @Created_By
-                   );
-               `);
+                    );`
+                );
 
             if (insertMaster.rowsAffected[0] === 0) {
                 throw new Error('Failed to insert into Trip Master');
@@ -167,14 +166,57 @@ const tripActivities = () => {
                 const product = Product_Array[i];
                 const result = await new sql.Request(transaction)
                     .input('Trip_Id', toNumber(Trip_Id))
+                    .input('Trip_Date', Trip_Date)
                     .input('Arrival_Id', toNumber(product?.Arrival_Id))
+                    .input('Batch_No', product?.Batch_No)
+                    .input('Product_Id', toNumber(product?.Product_Id))
+                    .input('QTY', toNumber(product?.QTY))
+                    .input('Gst_Rate', toNumber(product?.Gst_Rate))
+                    .input('From_Location', toNumber(product?.From_Location))
+                    .input('To_Location', toNumber(product?.To_Location))
+                    .input('Created_By', toNumber(Created_by))
                     .query(`
-                       INSERT INTO tbl_Trip_Details (
-                           Trip_Id, Arrival_Id
-                       ) VALUES (
-                           @Trip_Id, @Arrival_Id
-                       );
-                   `);
+                    -- trip update
+                        DECLARE @reference_id INT;
+                        INSERT INTO tbl_Trip_Details (
+                            Trip_Id, Arrival_Id
+                        ) VALUES (
+                            @Trip_Id, @Arrival_Id
+                        );
+                        SET @reference_id = SCOPE_IDENTITY();
+                        ${product?.Batch_No ? `
+                    -- batch update in arrival
+                            UPDATE tbl_Trip_Arrival
+                            SET Batch_No = @Batch_No
+                            WHERE Arr_Id = @Arrival_Id;
+                    -- Batch details
+                            MERGE tbl_Batch_Master AS target
+                            USING (SELECT @Batch_No AS batch, @Product_Id AS item_id, @To_Location AS godown_id) AS src
+                            ON  target.batch         = src.batch
+                                AND target.item_id   = src.item_id
+                                AND target.godown_id = src.godown_id
+                            WHEN MATCHED THEN 
+                                UPDATE SET target.quantity = target.quantity + @QTY
+                            WHEN NOT MATCHED THEN
+                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
+                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By);`
+                            : ''}
+                    -- if the bill type is Godown transfer
+                        ${(BillType === 'OTHER GODOWN' && product?.Batch_No) ? `
+                            DECLARE @batch_id uniqueidentifier = (
+                                SELECT TOP(1) id FROM tbl_Batch_Master
+                                WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
+                            );
+                            INSERT INTO tbl_Batch_Transaction (
+                                batch_id, batch, trans_date, item_id, godown_id, 
+                                quantity, type, reference_id, created_by
+                            ) VALUES (
+                                @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
+                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By
+                            );
+                        ` : ''}
+                        `
+                    );
 
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to insert into Trip Details');
             }
@@ -187,8 +229,8 @@ const tripActivities = () => {
                     .input('Cost_Center_Type_Id', employee.Cost_Center_Type_Id)
                     .query(`
                        INSERT INTO tbl_Trip_Employees (Trip_Id, Involved_Emp_Id, Cost_Center_Type_Id)
-                       VALUES (@Trip_Id, @Involved_Emp_Id, @Cost_Center_Type_Id);
-                   `);
+                       VALUES (@Trip_Id, @Involved_Emp_Id, @Cost_Center_Type_Id);`
+                    );
 
                 if (employeeData.rowsAffected[0] === 0) throw new Error('Failed to save employee data');
             }
@@ -204,6 +246,7 @@ const tripActivities = () => {
     };
 
     const updateTripDetails = async (req, res) => {
+
         const {
             Trip_Id,
             Branch_Id,
@@ -312,23 +355,104 @@ const tripActivities = () => {
 
             await new sql.Request(transaction)
                 .input('Trip_Id', Trip_Id)
+                .input('Updated_By', Updated_By)
                 .query(`
-                    DELETE FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id
-                    DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @Trip_Id`
+                    INSERT INTO tbl_Batch_Transaction (
+                        batch_id, batch, trans_date, item_id, godown_id, 
+                        quantity, type, reference_id, created_by
+                    ) 
+                    SELECT *
+                    FROM ( 
+                        SELECT
+                            (
+                                SELECT TOP(1) id FROM tbl_Batch_Master
+                                WHERE batch = ta.Batch_No AND item_id = ta.Product_Id AND godown_id = ta.To_Location
+                                ORDER BY id DESC
+                            ) batch_id,
+                            ta.Batch_No batch,
+                            GETDATE() trans_date,
+                            ta.Product_Id item_id,
+                            ta.To_Location godown_id,
+                            -ta.QTY quantity,
+                            'REVERSAL_TRIP_SHEET' type,
+                            td.Id reference_id,
+                            @Updated_By created_by
+                        FROM tbl_Trip_Details AS td
+                        LEFT JOIN tbl_Trip_Arrival as ta
+                            ON ta.Arr_Id = td.Arrival_Id
+                        WHERE 
+                            td.Trip_Id = @Trip_Id
+                            AND ta.Batch_No IS NOT NULL
+                            AND ta.Batch_No <> ''
+                    ) AS batchDetails
+                    WHERE batchDetails.batch_id IS NOT NULL;
+                    UPDATE tbl_Trip_Arrival
+                    SET Batch_No = null
+                    WHERE Arr_Id IN (
+                        SELECT Arrival_Id
+                        FROM tbl_Trip_Details
+                        WHERE Trip_Id = @Trip_Id
+                    );
+                -- deleteing for new insert
+                    DELETE FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id;
+                    DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @Trip_Id;`
                 );
 
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
                 const result = await new sql.Request(transaction)
                     .input('Trip_Id', toNumber(Trip_Id))
+                    .input('Trip_Date', Trip_Date)
                     .input('Arrival_Id', toNumber(product?.Arrival_Id))
+                    .input('Batch_No', product?.Batch_No)
+                    .input('Product_Id', toNumber(product?.Product_Id))
+                    .input('QTY', toNumber(product?.QTY))
+                    .input('Gst_Rate', toNumber(product?.Gst_Rate))
+                    .input('From_Location', toNumber(product?.From_Location))
+                    .input('To_Location', toNumber(product?.To_Location))
+                    .input('Created_By', toNumber(Updated_By))
                     .query(`
-                           INSERT INTO tbl_Trip_Details (
-                               Trip_Id, Arrival_Id
-                           ) VALUES (
-                               @Trip_Id, @Arrival_Id
-                           );
-                       `);
+                    -- trip update
+                        DECLARE @reference_id INT;
+                        INSERT INTO tbl_Trip_Details (
+                            Trip_Id, Arrival_Id
+                        ) VALUES (
+                            @Trip_Id, @Arrival_Id
+                        );
+                        SET @reference_id = SCOPE_IDENTITY();
+                        ${product?.Batch_No ? `
+                    -- batch update in arrival
+                            UPDATE tbl_Trip_Arrival
+                            SET Batch_No = @Batch_No
+                            WHERE Arr_Id = @Arrival_Id;
+                    -- Batch details
+                            MERGE tbl_Batch_Master AS target
+                            USING (SELECT @Batch_No AS batch, @Product_Id AS item_id, @To_Location AS godown_id) AS src
+                            ON  target.batch         = src.batch
+                                AND target.item_id   = src.item_id
+                                AND target.godown_id = src.godown_id
+                            WHEN MATCHED THEN 
+                                UPDATE SET target.quantity = target.quantity + @QTY
+                            WHEN NOT MATCHED THEN
+                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
+                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By);`
+                            : ''}
+                    -- if the bill type is Godown transfer
+                        ${(BillType === 'OTHER GODOWN' && product?.Batch_No) ? `
+                            DECLARE @batch_id uniqueidentifier = (
+                                SELECT TOP(1) id FROM tbl_Batch_Master
+                                WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
+                            );
+                            INSERT INTO tbl_Batch_Transaction (
+                                batch_id, batch, trans_date, item_id, godown_id, 
+                                quantity, type, reference_id, created_by
+                            ) VALUES (
+                                @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
+                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By
+                            );
+                        ` : ''}
+                        `
+                    );
 
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to insert into Trip Details');
             }
@@ -340,11 +464,12 @@ const tripActivities = () => {
                     .input('Involved_Emp_Id', employee.Involved_Emp_Id)
                     .input('Cost_Center_Type_Id', employee.Cost_Center_Type_Id)
                     .query(`
-                       INSERT INTO tbl_Trip_Employees
-                       (Trip_Id, Involved_Emp_Id, Cost_Center_Type_Id)
-                       VALUES
-                       (@Trip_Id, @Involved_Emp_Id, @Cost_Center_Type_Id)
-                   `);
+                        INSERT INTO tbl_Trip_Employees (
+                            Trip_Id, Involved_Emp_Id, Cost_Center_Type_Id
+                        ) VALUES (
+                            @Trip_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                        );`
+                    );
             }
 
             await transaction.commit();
