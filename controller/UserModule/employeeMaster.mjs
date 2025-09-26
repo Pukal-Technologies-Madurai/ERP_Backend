@@ -576,7 +576,7 @@ const EmployeeController = () => {
         }
     };
 
-    const employeeAttendanceModule = async (req, res) => {
+     const employeeAttendanceModule = async (req, res) => {
         const { FromDate, ToDate, FingerPrintId, EmpId } = req.query;
 
 
@@ -593,110 +593,117 @@ const EmployeeController = () => {
 
             if (EmpId && EmpId !== "0" && EmpId !== "ALL") {
                 const query = `
-                WITH RankedLogs AS (
-                   SELECT 
-                       em.User_Mgt_Id,          
-                       COALESCE(u.Name, '') AS username,  
-                       u.UDel_Flag,
-                       pd.EmployeeCode,        
-                       al.AttendanceDate AS LogDateTime,           
-                       CAST(al.AttendanceDate AS DATE) AS LogDate,  
-                       ROW_NUMBER() OVER (
-                           PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE) 
-                           ORDER BY al.AttendanceDate
-                       ) AS rn, 
-                       COUNT(*) OVER (
-                           PARTITION BY em.fingerPrintEmpId, CAST(al.AttendanceDate AS DATE)
-                       ) AS record_count  
-                   FROM tbl_Employee_Master em
-                   LEFT JOIN tbl_Users u ON u.UserId = em.User_Mgt_Id
-                   LEFT JOIN etimetracklite1.dbo.Employees pd 
-                       ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
-                   LEFT JOIN etimetracklite1.dbo.AttendanceLogs al 
-                       ON al.EmployeeId = pd.EmployeeId
-                   WHERE 
-                       COALESCE(u.UDel_Flag, 0) != 1 
-                       AND al.status != 'Resigned'
-               ),
-               DefaultLeaves AS (
-                   SELECT 
-                       CAST(Date AS DATE) AS DefaultLeaveDate
-                   FROM tbl_Default_Leave
-                   WHERE 
-                       Date >= CAST(@FromDate AS DATE)
-                       AND Date < CAST(@ToDate AS DATE)
-               ),
-               PunchDetails AS (
-                   SELECT 
-                       pd.EmployeeCode, 
-                       CAST(al.AttendanceDate AS DATE) AS LogDate,
-                       COALESCE(
-                           STRING_AGG(SUBSTRING(al.PunchRecords, 1, 5000), ', '), 
-                           '[]'
-                       ) AS PunchDateTimes
-                   FROM etimetracklite1.dbo.Employees pd 
-                   LEFT JOIN etimetracklite1.dbo.AttendanceLogs al 
-                       ON al.EmployeeId = pd.EmployeeId
-                   WHERE 
-                       al.status != 'Resigned'
-                       AND ISNULL(CAST(al.PunchRecords AS NVARCHAR(MAX)), '') <> ''
-                   GROUP BY pd.EmployeeCode, CAST(al.AttendanceDate AS DATE)
-               ),
-               LeaveDays AS (
-                   SELECT 
-                       lm.User_Id,
-                       DATEADD(DAY, n.number, CAST(lm.FromDate AS DATE)) AS LeaveDate
-                   FROM tbl_Leave_Master lm
-                   CROSS JOIN (
-                       SELECT number FROM master.dbo.spt_values 
-                       WHERE type = 'P' 
-                       AND number BETWEEN 0 AND 1000 
-                   ) n
-                   WHERE 
-                       lm.Status = 'Approved'
-                       AND DATEADD(DAY, n.number, CAST(lm.FromDate AS DATE)) <= CAST(lm.ToDate AS DATE)
-               )
-               SELECT 
-                   e.User_Mgt_Id, 
-                   COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
-                   COALESCE(rl.username, '') AS username,  
-                   rl.LogDate,
-                   COALESCE(ag.PunchDateTimes, '[]') AS AttendanceDetails, 
-                   COALESCE(MAX(rl.record_count), 0) AS TotalRecords,
-                   CASE 
-                       WHEN DATEPART(WEEKDAY, rl.LogDate) = 1 THEN 'H'
-                       WHEN EXISTS (
-                           SELECT 1 FROM LeaveDays ld
-                           WHERE COALESCE(ld.User_Id, -1) = e.User_Mgt_Id 
-                             AND ld.LeaveDate = rl.LogDate
-                       ) THEN 'L'
-                       WHEN EXISTS (
-                           SELECT 1 FROM DefaultLeaves dl
-                           WHERE dl.DefaultLeaveDate = rl.LogDate
-                       ) THEN 'DL'
-                       WHEN COALESCE(ag.PunchDateTimes, '') <> '' THEN 'P' 
-                       ELSE 'A' 
-                   END AS AttendanceStatus
-               FROM tbl_Employee_Master AS e
-               LEFT JOIN tbl_Employee_Designation AS d ON e.Designation = d.Designation_Id
-               LEFT JOIN tbl_Users AS u ON e.User_Mgt_Id = u.UserId
-               LEFT JOIN RankedLogs AS rl ON e.User_Mgt_Id = rl.User_Mgt_Id
-               LEFT JOIN PunchDetails AS ag 
-                   ON ag.EmployeeCode = rl.EmployeeCode 
-                   AND ag.LogDate = rl.LogDate
-               WHERE 
-                   rl.LogDate IS NOT NULL 
-                   AND rl.LogDate >= CAST(@FromDate AS DATETIME) 
-                   AND rl.LogDate < CAST(@ToDate AS DATETIME)
-                   AND rl.EmployeeCode = @EmpCode
-                   AND COALESCE(u.UDel_Flag, 0) != 1
-               GROUP BY 
-                   e.User_Mgt_Id, 
-                   d.Designation, 
-                   rl.username,  
-                   rl.LogDate, 
-                   ag.PunchDateTimes
-               ORDER BY rl.LogDate DESC;`;
+             WITH RankedLogs AS (
+    SELECT 
+        em.User_Mgt_Id,          
+        COALESCE(u.Name, '') AS username,  
+        u.UDel_Flag,
+        em.fingerPrintEmpId,
+        al.AttendanceDate AS LogDateTime,           
+        CAST(al.AttendanceDate AS DATE) AS LogDate,  
+        ROW_NUMBER() OVER (
+            PARTITION BY em.User_Mgt_Id, CAST(al.AttendanceDate AS DATE) 
+            ORDER BY al.AttendanceDate
+        ) AS rn, 
+        COUNT(*) OVER (
+            PARTITION BY em.User_Mgt_Id, CAST(al.AttendanceDate AS DATE)
+        ) AS record_count  
+    FROM tbl_Employee_Master em
+    LEFT JOIN tbl_Users u 
+        ON u.UserId = em.User_Mgt_Id
+    LEFT JOIN etimetracklite1.dbo.Employees pd 
+        ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+    LEFT JOIN etimetracklite1.dbo.AttendanceLogs al 
+        ON al.EmployeeId = pd.EmployeeId
+    WHERE 
+        COALESCE(u.UDel_Flag, 0) != 1 
+        AND al.status != 'Resigned'
+),
+DefaultLeaves AS (
+    SELECT 
+        CAST(Date AS DATE) AS DefaultLeaveDate
+    FROM tbl_Default_Leave
+    WHERE 
+        Date >= CAST(@FromDate AS DATE)
+        AND Date < CAST(@ToDate AS DATE)
+),
+PunchDetails AS (
+    SELECT 
+        em.User_Mgt_Id, 
+        CAST(al.AttendanceDate AS DATE) AS LogDate,
+        COALESCE(
+            STRING_AGG(SUBSTRING(al.PunchRecords, 1, 5000), ', '), 
+            '[]'
+        ) AS PunchDateTimes
+    FROM tbl_Employee_Master em
+    LEFT JOIN etimetracklite1.dbo.Employees pd 
+        ON CAST(pd.EmployeeCode AS NVARCHAR(50)) = em.fingerPrintEmpId
+    LEFT JOIN etimetracklite1.dbo.AttendanceLogs al 
+        ON al.EmployeeId = pd.EmployeeId
+    WHERE 
+        al.status != 'Resigned'
+        AND ISNULL(CAST(al.PunchRecords AS NVARCHAR(MAX)), '') <> ''
+    GROUP BY em.User_Mgt_Id, CAST(al.AttendanceDate AS DATE)
+),
+LeaveDays AS (
+    SELECT 
+        lm.User_Id,
+        DATEADD(DAY, n.number, CAST(lm.FromDate AS DATE)) AS LeaveDate
+    FROM tbl_Leave_Master lm
+    CROSS JOIN (
+        SELECT number 
+        FROM master.dbo.spt_values 
+        WHERE type = 'P' 
+          AND number BETWEEN 0 AND 1000 
+    ) n
+    WHERE 
+        lm.Status = 'Approved'
+        AND DATEADD(DAY, n.number, CAST(lm.FromDate AS DATE)) <= CAST(lm.ToDate AS DATE)
+)
+SELECT 
+    e.User_Mgt_Id, 
+    COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+    COALESCE(rl.username, '') AS username,  
+    rl.LogDate,
+    COALESCE(ag.PunchDateTimes, '[]') AS AttendanceDetails, 
+    COALESCE(MAX(rl.record_count), 0) AS TotalRecords,
+    CASE 
+        WHEN DATEPART(WEEKDAY, rl.LogDate) = 1 THEN 'H'
+        WHEN EXISTS (
+            SELECT 1 FROM LeaveDays ld
+            WHERE COALESCE(ld.User_Id, -1) = e.User_Mgt_Id 
+              AND ld.LeaveDate = rl.LogDate
+        ) THEN 'L'
+        WHEN EXISTS (
+            SELECT 1 FROM DefaultLeaves dl
+            WHERE dl.DefaultLeaveDate = rl.LogDate
+        ) THEN 'DL'
+        WHEN COALESCE(ag.PunchDateTimes, '') <> '' THEN 'P' 
+        ELSE 'A' 
+    END AS AttendanceStatus
+FROM tbl_Employee_Master AS e
+LEFT JOIN tbl_Employee_Designation AS d 
+    ON e.Designation = d.Designation_Id
+LEFT JOIN tbl_Users AS u 
+    ON e.User_Mgt_Id = u.UserId
+LEFT JOIN RankedLogs AS rl 
+    ON e.User_Mgt_Id = rl.User_Mgt_Id
+LEFT JOIN PunchDetails AS ag 
+    ON ag.User_Mgt_Id = rl.User_Mgt_Id
+   AND ag.LogDate = rl.LogDate
+WHERE 
+    rl.LogDate IS NOT NULL 
+    AND rl.LogDate >= CAST(@FromDate AS DATETIME) 
+    AND rl.LogDate < CAST(@ToDate AS DATETIME)
+   AND e.User_Mgt_Id = @EmpCode   -- if you want to filter a single employee
+    AND COALESCE(u.UDel_Flag, 0) != 1
+GROUP BY 
+    e.User_Mgt_Id, 
+    d.Designation, 
+    rl.username,  
+    rl.LogDate, 
+    ag.PunchDateTimes
+ORDER BY rl.LogDate DESC`;
 
                 const request = new sql.Request();
                 request.input("FromDate", sql.DateTime, FromDate);

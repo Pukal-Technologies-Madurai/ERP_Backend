@@ -3,7 +3,7 @@ import salesOrder from '../controller/Sales/salesOrder.mjs';
 import salesEntry from '../controller/Sales/salesEntry.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
-
+import salesReports from '../controller/Sales/reports.mjs';
 const SalesRouter = express.Router();
 
 SalesRouter.get('/saleOrder', salesOrder.getSaleOrder);
@@ -45,5 +45,14 @@ SalesRouter.get('/saleOrderReport',salesOrder.saleOrderReport)
 
 SalesRouter.post('/salesOrderSalesInvoice',salesInvoice.createSalesTransaction)
 SalesRouter.get('/salesInvoice/Details',salesInvoice.getSaleOrderWithDeliveries)
+
+
+
+
+
+
+
+SalesRouter.get('/lrReport',salesReports.getLRreport)
+SalesRouter.post('/lrReport',salesReports.costCenterUpdate)
 
 export default SalesRouter;
