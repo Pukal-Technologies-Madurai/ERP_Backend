@@ -121,14 +121,13 @@ const ClosingStockControll = () => {
             	    	St_Id = csgi.ST_Id
             	    FOR JSON PATH
             	), '[]') AS ProductCount
-                
             FROM
             	tbl_Closing_Stock_Gen_Info AS csgi
             WHERE 
-                csgi.Retailer_Id = @retailer_Id`;
+                csgi.Retailer_Id = @retailer_Id `;
 
             if (Number(Created_by) > 0) {
-                query += `AND csgi.Created_by = @Created_by`
+                query += ` AND csgi.Created_by = @Created_by `
             }
 
             const request = new sql.Request();

@@ -1,16 +1,16 @@
 import express from 'express';
-import purchaseOrder from '../controller/Purchase/purchaseOrder.mjs';
+import purchaseInvoice from '../controller/Purchase/purchaseInvoice.mjs';
 
 const PurchaseRoute = express.Router();
 
-PurchaseRoute.get('/purchaseOrder', purchaseOrder.getPurchaseOrder);
-PurchaseRoute.post('/purchaseOrder', purchaseOrder.purchaseOrderCreation);
-PurchaseRoute.put('/purchaseOrder', purchaseOrder.editPurchaseOrder);
-PurchaseRoute.delete('/purchaseOrder', purchaseOrder.cancelPurchaseOrder);
-PurchaseRoute.get('/purchaseOrder/involvedStaffs', purchaseOrder.getInvolvedStaffs);
+PurchaseRoute.get('/purchaseOrder', purchaseInvoice.getPurchaseOrder);
+PurchaseRoute.post('/purchaseOrder', purchaseInvoice.purchaseOrderCreation);
+PurchaseRoute.put('/purchaseOrder', purchaseInvoice.editPurchaseOrder);
+PurchaseRoute.delete('/purchaseOrder', purchaseInvoice.cancelPurchaseOrder);
+PurchaseRoute.get('/purchaseOrder/involvedStaffs', purchaseInvoice.getInvolvedStaffs);
 
-PurchaseRoute.get('/voucherType', purchaseOrder.getVoucherType);
-PurchaseRoute.get('/stockItemLedgerName', purchaseOrder.getStockItemLedgerName);
+PurchaseRoute.get('/voucherType', purchaseInvoice.getVoucherType);
+PurchaseRoute.get('/stockItemLedgerName', purchaseInvoice.getStockItemLedgerName);
 
 
 export default PurchaseRoute;

@@ -1,12 +1,100 @@
 import sql from 'mssql'
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, createPadString, Addition, toArray, Division } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, RoundNumber, createPadString, Addition, toArray, Division, toNumber } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
+
+function buildBulkPurchaseRows(Product_Array, productsData, { isInclusive, isNotTaxableBill, isIGST }) {
+    const stockRows = [];
+    const batchRows = [];
+
+    Product_Array.forEach((product, index) => {
+        const productDetails = findProductDetails(productsData, product.Item_Id) || {};
+        const pack = toNumber(productDetails.Pack) || 1;
+
+        const gstPercentage = isIGST ? toNumber(productDetails.Igst_P) : toNumber(productDetails.Gst_P);
+        const Taxble = isNotTaxableBill ? 0 : (gstPercentage > 0 ? 1 : 0);
+
+        const Bill_Qty = RoundNumber(toNumber(product?.Bill_Qty) || 0);
+        const Item_Rate = RoundNumber(toNumber(product?.Item_Rate) || 0);
+
+        // If Amount not provided, derive it as Qty * Rate
+        const AmountRaw = product?.Amount != null ? toNumber(product?.Amount) : (Bill_Qty * Item_Rate);
+        const Amount = RoundNumber(AmountRaw);
+
+        const taxType = isNotTaxableBill ? 'zerotax' : (isInclusive ? 'remove' : 'add');
+        const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+        const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+        const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+        const sgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0; // mirror CGST
+        const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+
+        const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+        const Sgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+        const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
+
+        const Free_Qty = RoundNumber(toNumber(product?.Free_Qty) || 0);
+        const Total_Qty = RoundNumber(Bill_Qty + Free_Qty);
+
+        const Bill_Alt_Qty = Division(Bill_Qty, pack);
+        const Alt_Act_Qty = Bill_Alt_Qty;
+
+        // ---------- Row for tbl_Purchase_Order_Inv_Stock_Info (bulk insert) ----------
+        stockRows.push({
+            DeliveryId: toNumber(product?.DeliveryId) || 0,
+            Location_Id: toNumber(product?.Location_Id) || 0,
+            S_No: index + 1,
+            Item_Id: toNumber(product?.Item_Id),
+            Bill_Qty,
+            Act_Qty: toNumber(product?.Act_Qty) || Bill_Qty,
+            Bill_Alt_Qty,
+            Alt_Act_Qty,
+            Unit_Id: product?.Unit_Id ?? '',
+            Bill_Alt_Unit_Id: product?.Unit_Id ?? '',
+            Act_unit_Id: product?.Unit_Id ?? '',
+            Alt_Unit_Id: product?.Unit_Id ?? '',
+            Unit_Name: product?.Unit_Name ?? '',
+            Bill_Alt_Unit_Name: product?.Unit_Name ?? '',
+            Act_unit_Nmae: product?.Unit_Name ?? '',
+            Alt_Unit_Name: product?.Unit_Name ?? '',
+            Batch_No: product?.Batch_No ?? '',
+            Taxable_Rate: RoundNumber(itemRateGst.base_amount),
+            Item_Rate,
+            Amount: RoundNumber(Amount),
+            Free_Qty,
+            Total_Qty,
+            Taxble,
+            HSN_Code: productDetails.HSN_Code ?? '',
+            Taxable_Amount: RoundNumber(gstInfo.base_amount),
+            Tax_Rate: RoundNumber(gstInfo.tax_per),
+            Cgst: RoundNumber(cgstPer),
+            Cgst_Amo: RoundNumber(Cgst_Amo),
+            Sgst: RoundNumber(sgstPer),
+            Sgst_Amo: RoundNumber(Sgst_Amo),
+            Igst: RoundNumber(igstPer),
+            Igst_Amo: RoundNumber(Igst_Amo),
+            Final_Amo: RoundNumber(gstInfo.with_tax)
+        });
+
+        // ---------- Row for tbl_Batch_Master (bulk MERGE) ----------
+        if (product?.Batch_No) {
+            batchRows.push({
+                batch: product?.Batch_No,
+                item_id: toNumber(product?.Item_Id),
+                godown_id: toNumber(product?.Location_Id) || 0,
+                quantity: Bill_Qty,
+                rate: Item_Rate
+            });
+        }
+    });
+
+    return { stockRows, batchRows };
+}
 
 const PurchaseOrder = () => {
 
@@ -188,95 +276,94 @@ const PurchaseOrder = () => {
                 throw new Error('Failed to create order, Try again.');
             }
 
-            for (let i = 0; i < Product_Array.length; i++) {
+            const { stockRows, batchRows } = buildBulkPurchaseRows(Product_Array, productsData, {
+                isInclusive,
+                isNotTaxableBill,
+                isIGST
+            });
 
-                const product = Product_Array[i];
-                const productDetails = findProductDetails(productsData, product.Item_Id)
-
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
-                const Taxble = gstPercentage > 0 ? 1 : 0;
-                const Bill_Qty = RoundNumber(product?.Bill_Qty);
-                const Item_Rate = RoundNumber(product?.Item_Rate);
-                const Amount = RoundNumber(product?.Amount);
-
-                const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
-                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
-
-                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
-                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
-                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
-                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
-
-                const Bill_Alt_Qty = Division(Bill_Qty, productDetails.Pack);
-
-                const request2 = new sql.Request(transaction)
-                    .input('DeliveryId', Number(product?.DeliveryId || 0))
-                    .input('Po_Inv_Date', Po_Inv_Date)
-                    .input('PIN_Id', PIN_Id)
-                    .input('Location_Id', Number(product?.Location_Id || 0))
-
-                    .input('S_No', i + 1)
-                    .input('Item_Id', product.Item_Id)
-
-                    .input('Bill_Qty', Bill_Qty)
-                    .input('Act_Qty', Number(product?.Act_Qty))
-                    .input('Bill_Alt_Qty', Bill_Alt_Qty)
-                    .input('Alt_Act_Qty', Bill_Alt_Qty)
-
-                    .input('Unit_Id', product.Unit_Id ?? '')
-                    .input('Bill_Alt_Unit_Id', product.Unit_Id ?? '')
-                    .input('Act_unit_Id', product.Unit_Id ?? '')
-                    .input('Alt_Unit_Id', product.Unit_Id ?? '')
-
-                    .input('Unit_Name', product.Unit_Name ?? '')
-                    .input('Bill_Alt_Unit_Name', product.Unit_Name ?? '')
-                    .input('Act_unit_Nmae', product.Unit_Name ?? '')
-                    .input('Alt_Unit_Name', product.Unit_Name ?? '')
-
-                    .input('Batch_No', product?.Batch_No ?? '')
-                    .input('Taxable_Rate', itemRateGst.base_amount)
-                    .input('Item_Rate', Item_Rate)
-                    .input('Amount', Amount)
-                    .input('Free_Qty', 0)
-                    .input('Total_Qty', Bill_Qty)
-                    .input('Taxble', Taxble)
-                    .input('HSN_Code', productDetails.HSN_Code)
-
-                    .input('Taxable_Amount', gstInfo.base_amount)
-                    .input('Tax_Rate', gstInfo.tax_per)
-                    .input('Cgst', cgstPer ?? 0)
-                    .input('Cgst_Amo', Cgst_Amo)
-                    .input('Sgst', cgstPer ?? 0)
-                    .input('Sgst_Amo', Cgst_Amo)
-                    .input('Igst', igstPer ?? 0)
-                    .input('Igst_Amo', Igst_Amo)
-                    .input('Final_Amo', gstInfo.with_tax)
-                    .input('Created_on', new Date())
-                    .query(`
-                        INSERT INTO tbl_Purchase_Order_Inv_Stock_Info (
-                            DeliveryId, PIN_Id, Po_Inv_Date, Location_Id, S_No, Item_Id,
-                            Bill_Qty, Act_Qty, Bill_Alt_Qty, Alt_Act_Qty,
-                            Unit_Id, Bill_Alt_Unit_Id, Act_unit_Id, Alt_Unit_Id,
-                            Unit_Name, Bill_Alt_Unit_Name, Act_unit_Nmae, Alt_Unit_Name, Batch_No,
-                            Taxable_Rate, Item_Rate, Amount, Free_Qty, Total_Qty, Taxble,
-                            HSN_Code, Taxable_Amount, Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
-                        ) VALUES (
-                            @DeliveryId, @PIN_Id, @Po_Inv_Date, @Location_Id, @S_No, @Item_Id,
-                            @Bill_Qty, @Act_Qty, @Bill_Alt_Qty, @Alt_Act_Qty,
-                            @Unit_Id, @Bill_Alt_Unit_Id, @Act_unit_Id, @Alt_Unit_Id,
-                            @Unit_Name, @Bill_Alt_Unit_Name, @Act_unit_Nmae, @Alt_Unit_Name, @Batch_No,
-                            @Taxable_Rate, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, @Taxble,
-                            @HSN_Code, @Taxable_Amount, @Tax_Rate, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
-                        );`
+            await new sql.Request(transaction)
+                .input('PIN_Id', sql.Int, PIN_Id)
+                .input('Po_Inv_Date', sql.DateTime, new Date(Po_Inv_Date))
+                .input('ProductJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: stockRows }))
+                .query(`
+                    INSERT INTO tbl_Purchase_Order_Inv_Stock_Info (
+                        DeliveryId, PIN_Id, Po_Inv_Date, Location_Id, S_No, Item_Id,
+                        Bill_Qty, Act_Qty, Bill_Alt_Qty, Alt_Act_Qty,
+                        Unit_Id, Bill_Alt_Unit_Id, Act_unit_Id, Alt_Unit_Id,
+                        Unit_Name, Bill_Alt_Unit_Name, Act_unit_Nmae, Alt_Unit_Name, Batch_No,
+                        Taxable_Rate, Item_Rate, Amount, Free_Qty, Total_Qty, Taxble,
+                        HSN_Code, Taxable_Amount, Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
                     )
+                    SELECT
+                        p.DeliveryId, @PIN_Id, @Po_Inv_Date, p.Location_Id, p.S_No, p.Item_Id,
+                        p.Bill_Qty, p.Act_Qty, p.Bill_Alt_Qty, p.Alt_Act_Qty,
+                        p.Unit_Id, p.Bill_Alt_Unit_Id, p.Act_unit_Id, p.Alt_Unit_Id,
+                        p.Unit_Name, p.Bill_Alt_Unit_Name, p.Act_unit_Nmae, p.Alt_Unit_Name, p.Batch_No,
+                        p.Taxable_Rate, p.Item_Rate, p.Amount, p.Free_Qty, p.Total_Qty, p.Taxble,
+                        p.HSN_Code, p.Taxable_Amount, p.Tax_Rate, p.Cgst, p.Cgst_Amo, p.Sgst, p.Sgst_Amo, p.Igst, p.Igst_Amo, p.Final_Amo, GETDATE()
+                    FROM OPENJSON(@ProductJson, '$.rows')
+                    WITH (
+                        DeliveryId INT '$.DeliveryId',
+                        Location_Id INT '$.Location_Id',
+                        S_No INT '$.S_No',
+                        Item_Id BIGINT '$.Item_Id',
+                        Bill_Qty DECIMAL(18,2) '$.Bill_Qty',
+                        Act_Qty DECIMAL(18,2) '$.Act_Qty',
+                        Bill_Alt_Qty DECIMAL(18,2) '$.Bill_Alt_Qty',
+                        Alt_Act_Qty DECIMAL(18,2) '$.Alt_Act_Qty',
+                        Unit_Id NVARCHAR(50) '$.Unit_Id',
+                        Bill_Alt_Unit_Id NVARCHAR(50) '$.Bill_Alt_Unit_Id',
+                        Act_unit_Id NVARCHAR(50) '$.Act_unit_Id',
+                        Alt_Unit_Id NVARCHAR(50) '$.Alt_Unit_Id',
+                        Unit_Name NVARCHAR(200) '$.Unit_Name',
+                        Bill_Alt_Unit_Name NVARCHAR(200) '$.Bill_Alt_Unit_Name',
+                        Act_unit_Nmae NVARCHAR(200) '$.Act_unit_Nmae',
+                        Alt_Unit_Name NVARCHAR(200) '$.Alt_Unit_Name',
+                        Batch_No NVARCHAR(200) '$.Batch_No',
+                        Taxable_Rate DECIMAL(18,2) '$.Taxable_Rate',
+                        Item_Rate DECIMAL(18,2) '$.Item_Rate',
+                        Amount DECIMAL(18,2) '$.Amount',
+                        Free_Qty DECIMAL(18,2) '$.Free_Qty',
+                        Total_Qty DECIMAL(18,2) '$.Total_Qty',
+                        Taxble BIT '$.Taxble',
+                        HSN_Code NVARCHAR(50) '$.HSN_Code',
+                        Taxable_Amount DECIMAL(18,2) '$.Taxable_Amount',
+                        Tax_Rate DECIMAL(18,2) '$.Tax_Rate',
+                        Cgst DECIMAL(18,2) '$.Cgst',
+                        Cgst_Amo DECIMAL(18,2) '$.Cgst_Amo',
+                        Sgst DECIMAL(18,2) '$.Sgst',
+                        Sgst_Amo DECIMAL(18,2) '$.Sgst_Amo',
+                        Igst DECIMAL(18,2) '$.Igst',
+                        Igst_Amo DECIMAL(18,2) '$.Igst_Amo',
+                        Final_Amo DECIMAL(18,2) '$.Final_Amo'
+                    ) AS p;`
+                );
 
-                const result2 = await request2;
-
-                if (result2.rowsAffected[0] === 0) {
-                    throw new Error('Failed to create order, Try again.');
-                }
-            }
+            await new sql.Request(transaction)
+                .input('Po_Inv_Date', sql.DateTime, new Date(Po_Inv_Date))
+                .input('Created_by', sql.Int, Created_by)
+                .input('BatchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchRows }))
+                .query(`
+                    MERGE tbl_Batch_Master AS target
+                    USING (
+                        SELECT p.batch, p.item_id, p.godown_id, p.quantity, p.rate
+                        FROM OPENJSON(@BatchJson, '$.rows')
+                        WITH (
+                            batch NVARCHAR(200) '$.batch',
+                            item_id BIGINT '$.item_id',
+                            godown_id BIGINT '$.godown_id',
+                            quantity DECIMAL(18,2) '$.quantity',
+                            rate DECIMAL(18,2) '$.rate'
+                        ) AS p
+                    ) AS src
+                    ON  target.batch = src.batch AND target.item_id = src.item_id AND target.godown_id = src.godown_id
+                    WHEN MATCHED THEN 
+                        UPDATE SET target.quantity = target.quantity + src.quantity
+                    WHEN NOT MATCHED THEN
+                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
+                        VALUES (NEWID(), src.batch, src.item_id, src.godown_id, @Po_Inv_Date, src.quantity, src.rate, @Created_by);`
+                );
 
             for (let i = 0; i < StaffArray.length; i++) {
                 const staff = StaffArray[i];
@@ -474,103 +561,129 @@ const PurchaseOrder = () => {
 
             await new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
+                .input('Created_by', Created_by)
                 .query(`
+                    INSERT INTO tbl_Batch_Transaction (
+                        batch_id, batch, trans_date, item_id, godown_id, 
+                        quantity, type, reference_id, created_by
+                    ) 
+                    SELECT *
+                    FROM ( 
+                        SELECT
+                            (
+                                SELECT TOP(1) id FROM tbl_Batch_Master
+                                WHERE batch = pis.Batch_No AND item_id = pis.Item_Id AND godown_id = pis.Location_Id
+                                ORDER BY id DESC
+                            ) batch_id,
+                            pis.Batch_No batch,
+                            GETDATE() trans_date,
+                            pis.Item_Id item_id,
+                            pis.Location_Id godown_id,
+                            -pis.Bill_Qty quantity,
+                            'REVERSAL_PURCHASE' type,
+                            pis.POI_St_Id reference_id,
+                            @Created_by created_by
+                        FROM tbl_Purchase_Order_Inv_Stock_Info AS pis
+                        WHERE 
+                            pis.PIN_Id = @PIN_Id
+                            AND pis.Batch_No IS NOT NULL
+                            AND pis.Batch_No <> ''
+                    ) AS batchDetails
+                    WHERE batchDetails.batch_id IS NOT NULL;
+                -- removing previous data
                     DELETE FROM tbl_Purchase_Order_Inv_Stock_Info WHERE PIN_Id = @PIN_Id
                     DELETE FROM tbl_Purchase_Order_Inv_Gen_Order WHERE PIN_Id = @PIN_Id
                     DELETE FROM tbl_Purchase_Order_Inv_Staff_Details WHERE PIN_Id = @PIN_Id
                 `);
 
-            const itemArray = toArray(Product_Array);
+            const { stockRows, batchRows } = buildBulkPurchaseRows(toArray(Product_Array), productsData, {
+                isInclusive,
+                isNotTaxableBill,
+                isIGST
+            });
 
-            for (let i = 0; i < itemArray.length; i++) {
-
-                const product = itemArray[i];
-                const productDetails = findProductDetails(productsData, product.Item_Id)
-
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? productDetails.Igst_P : productDetails.Gst_P;
-                const Taxble = gstPercentage > 0 ? 1 : 0;
-                const Bill_Qty = RoundNumber(product?.Bill_Qty);
-                const Item_Rate = RoundNumber(product.Item_Rate);
-                const Amount = RoundNumber(product?.Amount);
-
-                const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
-                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
-
-                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
-                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
-                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
-                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
-
-                const Bill_Alt_Qty = Division(Bill_Qty, productDetails.Pack);
-
-                const request2 = new sql.Request(transaction)
-                    .input('DeliveryId', Number(product?.DeliveryId || 0))
-                    .input('Po_Inv_Date', Po_Inv_Date)
-                    .input('PIN_Id', PIN_Id)
-                    .input('Location_Id', Number(product?.Location_Id || 0))
-
-                    .input('S_No', i + 1)
-                    .input('Item_Id', product.Item_Id)
-
-                    .input('Bill_Qty', Bill_Qty)
-                    .input('Act_Qty', Number(product?.Act_Qty))
-                    .input('Bill_Alt_Qty', Bill_Alt_Qty)
-                    .input('Alt_Act_Qty', Bill_Alt_Qty)
-
-                    .input('Unit_Id', product.Unit_Id ?? '')
-                    .input('Bill_Alt_Unit_Id', product.Unit_Id ?? '')
-                    .input('Act_unit_Id', product.Unit_Id ?? '')
-                    .input('Alt_Unit_Id', product.Unit_Id ?? '')
-
-                    .input('Unit_Name', product.Unit_Name ?? '')
-                    .input('Bill_Alt_Unit_Name', product.Unit_Name ?? '')
-                    .input('Act_unit_Nmae', product.Unit_Name ?? '')
-                    .input('Alt_Unit_Name', product.Unit_Name ?? '')
-
-                    .input('Batch_No', product?.Batch_No ?? '')
-                    .input('Taxable_Rate', itemRateGst.base_amount)
-                    .input('Item_Rate', Item_Rate)
-                    .input('Amount', Amount)
-                    .input('Free_Qty', 0)
-                    .input('Total_Qty', Bill_Qty)
-                    .input('Taxble', Taxble)
-                    .input('HSN_Code', productDetails.HSN_Code)
-
-                    .input('Taxable_Amount', gstInfo.base_amount)
-                    .input('Tax_Rate', gstInfo.tax_per)
-                    .input('Cgst', cgstPer ?? 0)
-                    .input('Cgst_Amo', Cgst_Amo)
-                    .input('Sgst', cgstPer ?? 0)
-                    .input('Sgst_Amo', Cgst_Amo)
-                    .input('Igst', igstPer ?? 0)
-                    .input('Igst_Amo', Igst_Amo)
-                    .input('Final_Amo', gstInfo.with_tax)
-                    .input('Created_on', new Date())
-                    .query(`
-                        INSERT INTO tbl_Purchase_Order_Inv_Stock_Info (
-                            DeliveryId, PIN_Id, Po_Inv_Date, Location_Id, S_No, Item_Id,
-                            Bill_Qty, Act_Qty, Bill_Alt_Qty, Alt_Act_Qty,
-                            Unit_Id, Bill_Alt_Unit_Id, Act_unit_Id, Alt_Unit_Id,
-                            Unit_Name, Bill_Alt_Unit_Name, Act_unit_Nmae, Alt_Unit_Name, Batch_No,
-                            Taxable_Rate, Item_Rate, Amount, Free_Qty, Total_Qty, Taxble,
-                            HSN_Code, Taxable_Amount, Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
-                        ) VALUES (
-                            @DeliveryId, @PIN_Id, @Po_Inv_Date, @Location_Id, @S_No, @Item_Id,
-                            @Bill_Qty, @Act_Qty, @Bill_Alt_Qty, @Alt_Act_Qty,
-                            @Unit_Id, @Bill_Alt_Unit_Id, @Act_unit_Id, @Alt_Unit_Id,
-                            @Unit_Name, @Bill_Alt_Unit_Name, @Act_unit_Nmae, @Alt_Unit_Name, @Batch_No,
-                            @Taxable_Rate, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, @Taxble,
-                            @HSN_Code, @Taxable_Amount, @Tax_Rate, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
-                        );`
+            await new sql.Request(transaction)
+                .input('PIN_Id', sql.Int, PIN_Id)
+                .input('Po_Inv_Date', sql.DateTime, new Date(Po_Inv_Date))
+                .input('ProductJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: stockRows }))
+                .query(`
+                    INSERT INTO tbl_Purchase_Order_Inv_Stock_Info (
+                        DeliveryId, PIN_Id, Po_Inv_Date, Location_Id, S_No, Item_Id,
+                        Bill_Qty, Act_Qty, Bill_Alt_Qty, Alt_Act_Qty,
+                        Unit_Id, Bill_Alt_Unit_Id, Act_unit_Id, Alt_Unit_Id,
+                        Unit_Name, Bill_Alt_Unit_Name, Act_unit_Nmae, Alt_Unit_Name, Batch_No,
+                        Taxable_Rate, Item_Rate, Amount, Free_Qty, Total_Qty, Taxble,
+                        HSN_Code, Taxable_Amount, Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
                     )
+                    SELECT
+                        p.DeliveryId, @PIN_Id, @Po_Inv_Date, p.Location_Id, p.S_No, p.Item_Id,
+                        p.Bill_Qty, p.Act_Qty, p.Bill_Alt_Qty, p.Alt_Act_Qty,
+                        p.Unit_Id, p.Bill_Alt_Unit_Id, p.Act_unit_Id, p.Alt_Unit_Id,
+                        p.Unit_Name, p.Bill_Alt_Unit_Name, p.Act_unit_Nmae, p.Alt_Unit_Name, p.Batch_No,
+                        p.Taxable_Rate, p.Item_Rate, p.Amount, p.Free_Qty, p.Total_Qty, p.Taxble,
+                        p.HSN_Code, p.Taxable_Amount, p.Tax_Rate, p.Cgst, p.Cgst_Amo, p.Sgst, p.Sgst_Amo, p.Igst, p.Igst_Amo, p.Final_Amo, GETDATE()
+                    FROM OPENJSON(@ProductJson, '$.rows')
+                    WITH (
+                        DeliveryId INT '$.DeliveryId',
+                        Location_Id INT '$.Location_Id',
+                        S_No INT '$.S_No',
+                        Item_Id BIGINT '$.Item_Id',
+                        Bill_Qty DECIMAL(18,2) '$.Bill_Qty',
+                        Act_Qty DECIMAL(18,2) '$.Act_Qty',
+                        Bill_Alt_Qty DECIMAL(18,2) '$.Bill_Alt_Qty',
+                        Alt_Act_Qty DECIMAL(18,2) '$.Alt_Act_Qty',
+                        Unit_Id NVARCHAR(50) '$.Unit_Id',
+                        Bill_Alt_Unit_Id NVARCHAR(50) '$.Bill_Alt_Unit_Id',
+                        Act_unit_Id NVARCHAR(50) '$.Act_unit_Id',
+                        Alt_Unit_Id NVARCHAR(50) '$.Alt_Unit_Id',
+                        Unit_Name NVARCHAR(200) '$.Unit_Name',
+                        Bill_Alt_Unit_Name NVARCHAR(200) '$.Bill_Alt_Unit_Name',
+                        Act_unit_Nmae NVARCHAR(200) '$.Act_unit_Nmae',
+                        Alt_Unit_Name NVARCHAR(200) '$.Alt_Unit_Name',
+                        Batch_No NVARCHAR(200) '$.Batch_No',
+                        Taxable_Rate DECIMAL(18,2) '$.Taxable_Rate',
+                        Item_Rate DECIMAL(18,2) '$.Item_Rate',
+                        Amount DECIMAL(18,2) '$.Amount',
+                        Free_Qty DECIMAL(18,2) '$.Free_Qty',
+                        Total_Qty DECIMAL(18,2) '$.Total_Qty',
+                        Taxble BIT '$.Taxble',
+                        HSN_Code NVARCHAR(50) '$.HSN_Code',
+                        Taxable_Amount DECIMAL(18,2) '$.Taxable_Amount',
+                        Tax_Rate DECIMAL(18,2) '$.Tax_Rate',
+                        Cgst DECIMAL(18,2) '$.Cgst',
+                        Cgst_Amo DECIMAL(18,2) '$.Cgst_Amo',
+                        Sgst DECIMAL(18,2) '$.Sgst',
+                        Sgst_Amo DECIMAL(18,2) '$.Sgst_Amo',
+                        Igst DECIMAL(18,2) '$.Igst',
+                        Igst_Amo DECIMAL(18,2) '$.Igst_Amo',
+                        Final_Amo DECIMAL(18,2) '$.Final_Amo'
+                    ) AS p;`
+                );
 
-                const result2 = await request2;
-
-                if (result2.rowsAffected[0] === 0) {
-                    throw new Error('Failed to create order, Try again.');
-                }
-            }
+            await new sql.Request(transaction)
+                .input('Po_Inv_Date', sql.DateTime, new Date(Po_Inv_Date))
+                .input('Created_by', sql.Int, Created_by)
+                .input('BatchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchRows }))
+                .query(`
+                    MERGE tbl_Batch_Master AS target
+                    USING (
+                        SELECT p.batch, p.item_id, p.godown_id, p.quantity, p.rate
+                        FROM OPENJSON(@BatchJson, '$.rows')
+                        WITH (
+                            batch NVARCHAR(200) '$.batch',
+                            item_id BIGINT '$.item_id',
+                            godown_id BIGINT '$.godown_id',
+                            quantity DECIMAL(18,2) '$.quantity',
+                            rate DECIMAL(18,2) '$.rate'
+                        ) AS p
+                    ) AS src
+                    ON  target.batch = src.batch AND target.item_id = src.item_id AND target.godown_id = src.godown_id
+                    WHEN MATCHED THEN 
+                        UPDATE SET target.quantity = target.quantity + src.quantity
+                    WHEN NOT MATCHED THEN
+                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
+                        VALUES (NEWID(), src.batch, src.item_id, src.godown_id, @Po_Inv_Date, src.quantity, src.rate, @Created_by);`
+                );
 
             for (let i = 0; i < StaffArray.length; i++) {
                 const staff = StaffArray[i];
@@ -622,7 +735,7 @@ const PurchaseOrder = () => {
             }
 
             await transaction.commit();
-            success(res, 'Changes Saved!')
+            success(res, 'Changes Saved!');
 
         } catch (e) {
             if (transaction._aborted === false) {

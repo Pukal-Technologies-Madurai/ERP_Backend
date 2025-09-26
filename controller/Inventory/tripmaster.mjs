@@ -364,11 +364,11 @@ const tripActivities = () => {
                     SELECT *
                     FROM ( 
                         SELECT
-                            (
+                            COALESCE((
                                 SELECT TOP(1) id FROM tbl_Batch_Master
                                 WHERE batch = ta.Batch_No AND item_id = ta.Product_Id AND godown_id = ta.To_Location
                                 ORDER BY id DESC
-                            ) batch_id,
+                            ), '') batch_id,
                             ta.Batch_No batch,
                             GETDATE() trans_date,
                             ta.Product_Id item_id,
@@ -385,7 +385,7 @@ const tripActivities = () => {
                             AND ta.Batch_No IS NOT NULL
                             AND ta.Batch_No <> ''
                     ) AS batchDetails
-                    WHERE batchDetails.batch_id IS NOT NULL;
+                    WHERE batchDetails.batch_id <> '';
                     UPDATE tbl_Trip_Arrival
                     SET Batch_No = null
                     WHERE Arr_Id IN (

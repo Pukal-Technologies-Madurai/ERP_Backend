@@ -600,7 +600,7 @@ const postSalesUsage = async (req, res) => {
             );
 
         await transaction.commit();
-        success(res, 'Godown transfer completed successfully');
+        success(res, 'Sales usage update successfully');
 
     } catch (err) {
         if (!transaction._aborted) await transaction.rollback();
