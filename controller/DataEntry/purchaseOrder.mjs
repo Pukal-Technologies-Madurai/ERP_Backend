@@ -1,7 +1,7 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, success, failed, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber, createPadString, isEqualNumber, ISOString } from '../../helper_functions.mjs';
-import { getLOL, getLOS, getNextId } from '../../middleware/miniAPIs.mjs';
+import { getNextId } from '../../middleware/miniAPIs.mjs';
 
 const PurchaseOrderDataEntry = () => {
 
