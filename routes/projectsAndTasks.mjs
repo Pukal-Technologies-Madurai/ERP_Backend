@@ -88,6 +88,6 @@ projectRoute.get('/task/work/barChart', taskWorks.taskWorkDetailsBarChart);
 // projectRoute.get('/task/work/employeeWorks', taskWorks.getEmployeeWorkedTask);   '''
 // router.get('/workReport', workController.getAllWorkedData); '''
 // router.get('/task/employeeInvolved', workController.EmployeeTaskDropDown);
-
+projectRoute.get('/processMaster/dropDown',taskWorks.getProcessDetails)
 
 export default projectRoute;

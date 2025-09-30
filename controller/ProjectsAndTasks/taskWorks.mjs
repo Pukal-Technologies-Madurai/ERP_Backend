@@ -95,10 +95,13 @@ const TaskWorks = () => {
 
             const {
                 Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
+                Process_Id,
                 Work_Dt, Work_Done, Start_Time, End_Time, Work_Status, Det_string
             } = req.body;
 
-            if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Emp_Id || !Work_Done || !Start_Time || !End_Time || !Work_Status) {
+            if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Emp_Id || 
+               
+                !Work_Done || !Start_Time || !End_Time || !Work_Status) {
                 return invalidInput(res, 'Project_Id, Sch_Id, Task_Levl_Id, Task_Id, Emp_Id, Work_Done, Start_Time, End_Time, Work_Status is required')
             }
 
@@ -115,6 +118,7 @@ const TaskWorks = () => {
             request.input('Task_Id', Task_Id)
             request.input('AN_No', AN_No)
             request.input('Emp_Id', Emp_Id)
+              request.input('Process_Id',Process_Id || 0)
             request.input('Work_Dt', Work_Dt || new Date())
             request.input('Work_Done', Work_Done)
             request.input('Start_Time', Start_Time)
@@ -123,12 +127,14 @@ const TaskWorks = () => {
             request.input('Entry_By', Emp_Id)
             request.input('Entry_Date', new Date());
             request.input('Det_string', Det_string);
+          
 
             const result = await request.execute('Work_SP')
             if (result.rowsAffected && result.rowsAffected[0] > 0) {
                 const Query = `DELETE FROM tbl_Task_Start_Time WHERE Emp_Id = '${Emp_Id}'`;
                 await sql.query(Query);
-                success(res, [], 'Work Saved');
+                // success(res, [], 'Work Saved');
+                   return success(res, 'Work Saved');
             } else {
                 failed(res, 'Failed to save work')
             }
@@ -375,12 +381,30 @@ const TaskWorks = () => {
         }
     }
 
+    const getProcessDetails=async(req,res)=>{
+         try {
+                   const request = new sql.Request()
+                        .query(`SELECT Id,Process_Name FROM tbl_Process_Master ORDER BY Id`)
+                   // WHERE Company_id = @comp
+       
+                   const result = await request;
+       
+                   if (result.recordset.length > 0) {
+                       dataFound(res, result.recordset)
+                   } else {
+                       noData(res)
+                   }
+               } catch (e) {
+                   servError(e, res)
+               }
+    }
     return {
         getAllWorkedData,
         postWorkedTask,
         getAllGroupedWorkedData,
         taskWorkDetailsPieChart,
         taskWorkDetailsBarChart,
+        getProcessDetails
     }
 }
 

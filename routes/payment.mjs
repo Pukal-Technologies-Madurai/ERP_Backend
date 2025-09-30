@@ -31,5 +31,5 @@ PaymentRouter.post('/debtorsCreditors', debtorsCreditors.getDebtorsCrditors)
 PaymentRouter.get('/getDebtorsCreditors', debtorsCreditors.getDebtorsCreditorsId);
 PaymentRouter.get('/getDebtorDetails', debtorsCreditors.getDebtorsCreditorsAll);
 
-
+PaymentRouter.get('/getDebtors',debtorsCreditors.getDebtors)
 export default PaymentRouter;
