@@ -183,12 +183,12 @@ const CustomerAPIs = () => {
                     .input('reqDate', reqDate)
                     .input('Acc_Id', toArray(LedgerArray).map(item => item.Ledger_Tally_Id).join(', '))
                     .query(`
-                        WITH LedgerList AS (
+                        WITH LatestOBDate AS (
+                            SELECT MAX(OB_Date) AS max_ob_date FROM tbl_OB_Date
+                        ), LedgerList AS (
                         	SELECT TRY_CAST(value AS INT) AS LedgerId
                             FROM STRING_SPLIT(@Acc_Id, ',')
                         	WHERE TRY_CAST(value AS INT) IS NOT NULL
-                        ), LatestOBDate AS (
-                            SELECT MAX(OB_Date) AS max_ob_date FROM tbl_OB_Date
                         ), LedgerDetails AS (
                             SELECT 
                                 lol.Ledger_Tally_Id,
@@ -204,8 +204,7 @@ const CustomerAPIs = () => {
                                 OR LTRIM(RTRIM(@Acc_Id)) = '' 
                         		OR lol.Ledger_Tally_Id IN (SELECT DISTINCT LedgerId FROM LedgerList)
                         	) 
-                        ),
-                        Sales_Invoice AS (
+                        ), Sales_Invoice AS (
                             SELECT 
                                 pig.Do_Id AS tally_id,
                                 pig.Do_Inv_No AS invoice_no,
