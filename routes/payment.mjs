@@ -4,6 +4,7 @@ import paymentDependency from '../controller/Payment/dataDependency.mjs';
 import paymentReport from '../controller/Payment/paymentReport.mjs';
 import debtorsCreditors from '../controller/Payment/debtorsCreditors.mjs';
 
+import bankPayment from '../controller/Payment/bankPayment.mjs';
 const PaymentRouter = express.Router();
 
 PaymentRouter.get('/paymentMaster', paymentMaster.getPayments);
@@ -32,4 +33,9 @@ PaymentRouter.get('/getDebtorsCreditors', debtorsCreditors.getDebtorsCreditorsId
 PaymentRouter.get('/getDebtorDetails', debtorsCreditors.getDebtorsCreditorsAll);
 
 PaymentRouter.get('/getDebtors',debtorsCreditors.getDebtors)
+
+
+PaymentRouter.post('/getStatement',bankPayment.fetchStatement) 
+PaymentRouter.post('/getToken',bankPayment.getToken)
+
 export default PaymentRouter;
