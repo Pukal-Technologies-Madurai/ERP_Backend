@@ -26,17 +26,17 @@ const getJournal = async (req, res) => {
                 FROM tbl_Journal_General_Info AS jgi
                 JOIN tbl_Journal_Entries_Info AS jei ON jei.JournalAutoId = jgi.JournalAutoId
                 WHERE 
-                	jgi.JournalDate BETWEEN @Fromdate AND @Todate
-                	${checkIsNumber(debit) ? ` AND jei.DrCr = 'Dr' AND jei.Acc_Id = @debit ` : ''}
-                	${checkIsNumber(credit) ? ` AND jei.DrCr = 'Cr' AND jei.Acc_Id = @credit ` : ''}
-                	${checkIsNumber(createdBy) ? ` AND jgi.CreatedBy = @createdBy ` : ''}
-                	${checkIsNumber(status) ? ` AND jgi.JournalStatus = @status ` : ''};
+                    jgi.JournalDate BETWEEN @Fromdate AND @Todate
+                    ${checkIsNumber(debit) ? ` AND jei.DrCr = 'Dr' AND jei.Acc_Id = @debit ` : ''}
+                    ${checkIsNumber(credit) ? ` AND jei.DrCr = 'Cr' AND jei.Acc_Id = @credit ` : ''}
+                    ${checkIsNumber(createdBy) ? ` AND jgi.CreatedBy = @createdBy ` : ''}
+                    ${checkIsNumber(status) ? ` AND jgi.JournalStatus = @status ` : ''};
             -- General Info
                 SELECT 
-                	jgi.*,
-                	v.Voucher_Type AS VoucherTypeGet,
-                	b.BranchName AS BranchGet,
-                	cb.Name AS CreatedByGet
+                    jgi.*,
+                    v.Voucher_Type AS VoucherTypeGet,
+                    b.BranchName AS BranchGet,
+                    cb.Name AS CreatedByGet
                 FROM tbl_Journal_General_Info AS jgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = jgi.VoucherType
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = jgi.BranchId
@@ -44,14 +44,14 @@ const getJournal = async (req, res) => {
                 WHERE jgi.JournalAutoId IN (SELECT DISTINCT JournalAutoId FROM @journalID);
             -- Entries Info
                 SELECT 
-                	jei.*,
-                	am.Account_name AS AccountNameGet
+                    jei.*,
+                    am.Account_name AS AccountNameGet
                 FROM tbl_Journal_Entries_Info AS jei
                 LEFT JOIN tbl_Account_Master AS am ON am.Acc_Id = jei.Acc_Id
                 WHERE jei.JournalAutoId IN (SELECT DISTINCT JournalAutoId FROM @journalID);
             -- Bill References Info
                 SELECT 
-                	jbi.*
+                    jbi.*
                 FROM tbl_Journal_Bill_Reference AS jbi
                 WHERE jbi.JournalAutoId IN (SELECT DISTINCT JournalAutoId FROM @journalID);`
             );
@@ -384,6 +384,7 @@ const editJournal = async (req, res) => {
         if (JournalStatus === undefined || JournalStatus === null || JournalStatus === "") errors.push("JournalStatus");
 
         const rows = toArray(Entries).map((r, idx) => ({
+            ClientLineId: r?.ClientLineId ?? r?.LineId ?? `tmp-${idx}-${Date.now()}`,
             LineId: r?.LineId ?? null,
             LineNum: Number(r?.LineNum || idx + 1),
             Acc_Id: Number(r?.Acc_Id),
@@ -396,6 +397,7 @@ const editJournal = async (req, res) => {
 
         if (rows.length === 0) errors.push("Entries");
         rows.forEach((r, i) => {
+            if (!r.ClientLineId) errors.push(`Entries[${i}].ClientLineId`);
             if (!r.Acc_Id) errors.push(`Entries[${i}].Acc_Id`);
             if (!(r.DrCr === "Dr" || r.DrCr === "Cr")) errors.push(`Entries[${i}].DrCr`);
             if (!(r.Amount > 0)) errors.push(`Entries[${i}].Amount`);
@@ -420,7 +422,8 @@ const editJournal = async (req, res) => {
 
         const refs = toArray(BillReferences).map((r, i) => ({
             autoGenId: r?.autoGenId ?? null,
-            LineId: r?.LineId ?? null,
+            ClientLineId: r?.ClientLineId ?? r?.LineId ?? null,
+            // LineId: r?.LineId ?? null,
             RefId: r?.RefId ?? null,
             RefNo: r?.RefNo ?? null,
             RefType: r?.RefType ?? null,
@@ -430,7 +433,7 @@ const editJournal = async (req, res) => {
         }));
         refs.forEach((r) => {
             if (!(r.Amount > 0)) errors.push(`BillReferences[${r.__i}].Amount`);
-            if (!r.LineId) errors.push(`BillReferences[${r.__i}].LineId(missing)`);
+            if (!r.ClientLineId) errors.push(`BillReferences[${r.__i}].ClientLineId(missing)`);
             if (!r.autoGenId) errors.push(`BillReferences[${r.__i}].autoGenId(missing)`);
         });
 
@@ -496,7 +499,8 @@ const editJournal = async (req, res) => {
                 );
                 INSERT INTO @Src (ClientLineId, LineId, LineNum, Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks)
                 SELECT
-                    JSON_VALUE(j.value, '$.LineId'),
+                    --JSON_VALUE(j.value, '$.LineId'),
+                    COALESCE(NULLIF(JSON_VALUE(j.value, '$.ClientLineId'), ''), JSON_VALUE(j.value, '$.LineId')),
                     TRY_CONVERT(UNIQUEIDENTIFIER, JSON_VALUE(j.value, '$.LineId')),
                     CAST(JSON_VALUE(j.value, '$.LineNum') AS INT),
                     CAST(JSON_VALUE(j.value, '$.Acc_Id') AS INT),
@@ -541,7 +545,7 @@ const editJournal = async (req, res) => {
                 WHEN NOT MATCHED BY SOURCE AND tgt.JournalAutoId = @JournalAutoId THEN
                     DELETE
                 OUTPUT
-                    src.ClientLineId,
+                    COALESCE(src.ClientLineId, CONVERT(NVARCHAR(100), inserted.LineId)),
                     inserted.LineId,
                     inserted.LineNum,
                     inserted.Acc_Id,
@@ -560,7 +564,8 @@ const editJournal = async (req, res) => {
                 INSERT INTO @RefSrcRaw (AutoGenId, ClientLineId, RefId, RefNo, RefType, BillRefNo, Amount)
                 SELECT
                     TRY_CONVERT(UNIQUEIDENTIFIER, JSON_VALUE(j.value, '$.autoGenId')),
-                    JSON_VALUE(j.value, '$.LineId'),
+                    --JSON_VALUE(j.value, '$.LineId'),
+                    COALESCE(NULLIF(JSON_VALUE(j.value, '$.ClientLineId'), ''), JSON_VALUE(j.value, '$.LineId')),
                     CAST(JSON_VALUE(j.value, '$.RefId') AS BIGINT),
                     JSON_VALUE(j.value, '$.RefNo'),
                     JSON_VALUE(j.value, '$.RefType'),

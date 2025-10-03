@@ -54,7 +54,7 @@ const getAccountPendingReference = async (req, res) => {
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
             .input('Acc_Id', sql.BigInt, Acc_Id)
-            .input('JournalAutoId', sql.UniqueIdentifier, JournalAutoId)
+            .input('JournalAutoId', sql.NVarChar(200), JournalAutoId)
             .query(`
                 DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
             -- OUTSTANDING SALES (Invoices + OB)
