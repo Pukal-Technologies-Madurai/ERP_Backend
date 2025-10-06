@@ -542,8 +542,8 @@ const editJournal = async (req, res) => {
                         DEFAULT, src.LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo,
                         @JournalDate, src.Acc_Id, src.AccountGet, src.isSundryParty, src.DrCr, src.Amount, src.Remarks
                     )
-                WHEN NOT MATCHED BY SOURCE AND tgt.JournalAutoId = @JournalAutoId THEN
-                    DELETE
+                --WHEN NOT MATCHED BY SOURCE AND tgt.JournalAutoId = @JournalAutoId THEN
+                --    DELETE
                 OUTPUT
                     COALESCE(src.ClientLineId, CONVERT(NVARCHAR(100), inserted.LineId)),
                     inserted.LineId,
@@ -561,6 +561,12 @@ const editJournal = async (req, res) => {
                     BillRefNo NVARCHAR(100),
                     Amount DECIMAL(18,2) NOT NULL
                 );
+                -- new code
+                DELETE tgt
+                FROM dbo.tbl_Journal_Entries_Info tgt
+                LEFT JOIN @Src src ON src.LineId IS NOT NULL AND src.LineId = tgt.LineId
+                WHERE tgt.JournalAutoId = @JournalAutoId AND src.LineId IS NULL;
+                -- new code
                 INSERT INTO @RefSrcRaw (AutoGenId, ClientLineId, RefId, RefNo, RefType, BillRefNo, Amount)
                 SELECT
                     TRY_CONVERT(UNIQUEIDENTIFIER, JSON_VALUE(j.value, '$.autoGenId')),

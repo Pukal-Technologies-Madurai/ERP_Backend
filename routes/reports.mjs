@@ -75,6 +75,7 @@ ReportRouter.get('/customerClosingStock/retailerBased', customerClosingStock.led
 ReportRouter.get('/customerClosingStock/retailerBased/detailedInfo', customerClosingStock.ledgerClosingStock);
 ReportRouter.get('/customerClosingStock/retailerBased/salesPersonGrouped', customerClosingStock.ledgerSalesPersonGroupingClosingStock);
 ReportRouter.get('/customerClosingStock/retailerBased/withLOL', customerClosingStock.ledgerBasedClosingStockWithLOL);
+ReportRouter.get('/customerClosingStock/itemWithRetailer', customerClosingStock.itemAndRetailerBasedReport);
 
 ReportRouter.get('/storageStock/itemWise', storageStockReport.getStorageStockItemWise);
 ReportRouter.get('/storageStock/godownWise', storageStockReport.getStorageStockGodownWise);

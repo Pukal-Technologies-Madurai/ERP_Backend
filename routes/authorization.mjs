@@ -1,7 +1,8 @@
 import express from 'express';
-import LoginController from '../controller/Authorization/login.mjs'; 
+import LoginController from '../controller/Authorization/login.mjs';
 import appMenu from '../controller/Authorization/appMenu.mjs';
 import authenticateToken from '../middleware/auth.mjs';
+import branchRight from '../controller/Authorization/branchRight.mjs';
 
 const AuthorizationRouter = express.Router();
 
@@ -28,6 +29,10 @@ AuthorizationRouter.put('/menuMaster', appMenu.updateMenu);
 
 // AuthorizationRouter.get('/companysAccess', companyAccess.getMYCompanyAccess);
 // AuthorizationRouter.post('/companysAccess', companyAccess.postCompanyAccess);
+
+AuthorizationRouter.get('/userBranches', branchRight.getUserBranches);
+AuthorizationRouter.post('/userBranches', branchRight.modifyUserBranch)
+AuthorizationRouter.post('/userBranches/saveAll', branchRight.saveAllUserBranches);
 
 
 export default AuthorizationRouter;

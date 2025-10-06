@@ -2,8 +2,6 @@ import sql from 'mssql';
 import { invalidInput, noData, sentData, servError } from '../../res.mjs';
 import { Addition, checkIsNumber, getDaysBetween, ISOString, LocalDate, toNumber } from '../../helper_functions.mjs';
 
-
-
 const getSoldItems = async (req, res) => {
 	try {
 		const request = new sql.Request()
@@ -923,6 +921,104 @@ const losBasedReport = async (req, res) => {
 	}
 }
 
+const itemAndRetailerBasedReport = async (req, res) => {
+
+	try {
+		const
+			Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+			Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+		const request = new sql.Request()
+			.input('Fromdate', Fromdate)
+			.input('Todate', Todate)
+			.query(`
+				WITH LatestDeliveryPerItem AS (
+					SELECT 
+						sdgi.Retailer_Id,
+						sdi.Item_Id,
+						sdgi.Do_Id,
+						sdgi.Do_Date,
+						sdi.Bill_Qty,
+						P.Product_Name,
+						sdi.Item_Rate AS Product_Rate,
+						del.Cost_Center_Name AS SalesPersonName,
+						ROW_NUMBER() OVER (
+							PARTITION BY sdgi.Retailer_Id, sdi.Item_Id
+							ORDER BY sdgi.Do_Date DESC
+						) AS rn
+					FROM tbl_Sales_Delivery_Stock_Info sdi
+					JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdi.Delivery_Order_Id = sdgi.Do_Id
+					LEFT JOIN tbl_ERP_Cost_Center AS del ON del.Cost_Center_Id = sdgi.Delivery_Person_Id 
+					JOIN tbl_Product_Master P ON P.Product_Id = sdi.Item_Id
+					WHERE 
+						sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+						AND sdi.Bill_Qty > 0
+				), LatestClosingPerItem AS (
+					SELECT 
+						csgi.Retailer_Id,
+						csi.Item_Id,
+						csgi.ST_Id,
+						csgi.ST_Date,
+						csi.ST_Qty,
+						P.Product_Name,
+						P.Product_Rate,
+						u.Name AS SalesPersonName,
+						ROW_NUMBER() OVER (
+							PARTITION BY csgi.Retailer_Id, csi.Item_Id
+							ORDER BY csgi.ST_Date DESC
+						) AS rn
+					FROM tbl_Closing_Stock_Info csi
+					JOIN tbl_Closing_Stock_Gen_Info csgi ON csi.ST_Id = csgi.ST_Id
+					JOIN tbl_Users AS u ON u.UserId = csgi.Created_by
+					JOIN tbl_Product_Master P ON P.Product_Id = csi.Item_Id
+					WHERE 
+						csgi.ST_Date BETWEEN @Fromdate AND @Todate
+						AND csi.ST_Qty > 0
+				), FilteredStock AS (
+					SELECT * FROM LatestClosingPerItem WHERE rn = 1
+				), FilteredDelivery AS (
+					SELECT * FROM LatestDeliveryPerItem WHERE rn = 1
+				)
+				SELECT 
+					COALESCE(FS.Retailer_Id, FD.Retailer_Id) AS Retailer_Id,
+					COALESCE(r.Retailer_Name, 'Not found') AS Retailer_Name,
+					COALESCE(FS.Item_Id, FD.Item_Id) AS Item_Id,
+					COALESCE(p.Product_Name, 'Not found') AS Item_Name,
+					FS.ST_Date,
+					FD.Do_Date,
+					FS.ST_Id,
+					FD.Do_Id,
+					FS.ST_Qty,
+					FD.Bill_Qty,
+					FS.Product_Rate AS ClosingRate,
+					FD.Product_Rate AS DeliveryRate,
+					FS.SalesPersonName AS ClosingStockBy,
+					FD.SalesPersonName AS DeliveredBy,
+					CASE 
+						WHEN FS.ST_Date IS NOT NULL AND (FD.Do_Date IS NULL OR FS.ST_Date > FD.Do_Date) THEN 
+							ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0)
+						WHEN FS.ST_Date IS NOT NULL AND FD.Do_Date IS NOT NULL AND FS.ST_Date <= FD.Do_Date THEN
+							ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0) + ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)
+						WHEN FS.ST_Date IS NULL AND FD.Do_Date IS NOT NULL THEN 
+							ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)
+						ELSE 0
+					END AS StockValueOfItem
+				FROM FilteredStock FS
+				FULL OUTER JOIN FilteredDelivery FD ON FS.Retailer_Id = FD.Retailer_Id AND FS.Item_Id = FD.Item_Id
+				LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = COALESCE(FS.Retailer_Id, FD.Retailer_Id)
+				LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = COALESCE(FS.Item_Id, FD.Item_Id)
+				ORDER BY r.Retailer_Name;`
+			);
+
+		const result = await request;
+
+		sentData(res, result.recordset);
+
+	} catch (e) {
+		servError(e, res);
+	}
+}
+
 export default {
 	getSoldItems,
 	searchWhoHasTheItem,
@@ -930,5 +1026,6 @@ export default {
 	ledgerBasedClosingStock,
 	ledgerSalesPersonGroupingClosingStock,
 	ledgerBasedClosingStockWithLOL,
-	losBasedReport
+	losBasedReport,
+	itemAndRetailerBasedReport
 }
