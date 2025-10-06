@@ -37,7 +37,7 @@ import district from '../controller/Masters/district.mjs';
 import voucherGroup from '../controller/Masters/voucherGroup.mjs';
 import prodGroup from '../controller/Masters/prodGroup.mjs';
 import defaultBanks from '../controller/Masters/defaultBanks.mjs';
-
+import processMaster from '../controller/Masters/processMaster.mjs'
 const MastersRouter = express.Router();
 
 MastersRouter.get('/company', company.getCompany);
@@ -301,5 +301,11 @@ MastersRouter.get('/defaultBanks', defaultBanks.getdefaultBanks);
 MastersRouter.get('/getCostCenter', costCenter.getCostCenter)
 MastersRouter.get('/erpCostCenter/dropDown', costCenter.getCostDropDown)
 MastersRouter.put('/costCenterupdate', costCenter.putCostcenter)
+
+
+MastersRouter.get('/processMaster',processMaster.getProcessDetails)
+MastersRouter.post('/processMaster',processMaster.postprocess)
+MastersRouter.put('/processMaster',processMaster.putProcess)
+MastersRouter.delete('/processMaster',processMaster.deleteProcess)
 
 export default MastersRouter;
