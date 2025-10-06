@@ -4,9 +4,9 @@ import { dataFound, noData, success, failed, servError, invalidInput } from '../
 
 const TaskWorks = () => {
 
-    const getAllWorkedData = async (req, res) => {
+  const getAllWorkedData = async (req, res) => {
         try {
-            const { Emp_Id = '', Project_Id = '', Task_Id = '' } = req.query;
+            const { Emp_Id = '', Project_Id = '', Task_Id = '',Process_Id='' } = req.query;
             const from = req.query.from ? ISOString(req.query.from) : ISOString();
             const to = req.query.to ? ISOString(req.query.to) : ISOString();
 
@@ -17,6 +17,7 @@ const TaskWorks = () => {
                     t.Task_Name,
                     u.Name AS EmployeeName,
                     s.Status AS WorkStatus,
+                    ISNULL(pm.Process_Name,'') as Process_Name,
                     COALESCE(
                         (SELECT Timer_Based FROM tbl_Task_Details WHERE AN_No = wm.AN_No), 
                         0
@@ -44,6 +45,8 @@ const TaskWorks = () => {
                     tbl_Users AS u ON u.UserId = wm.Emp_Id
                 LEFT JOIN
                     tbl_Status AS s ON s.Status_Id = wm.Work_Status
+                LEFT JOIN 
+                    tbl_Process_Master AS pm ON pm.Id=wm.Process_Id
                 LEFT JOIN
                     tbl_Task_Details AS td ON td.Task_Levl_Id = wm.Task_Levl_Id
                 WHERE 
@@ -61,6 +64,10 @@ const TaskWorks = () => {
                 query += ` 
                 AND wm.Task_Id = @Task_Id`;
             }
+            if (Boolean(Number(Process_Id))) {
+                query += ` 
+                AND wm.Process_Id = @Process_Id`;
+            }
 
             query += ` 
             AND CONVERT(DATE, Work_Dt) >= CONVERT(DATE, @from)`;
@@ -70,7 +77,8 @@ const TaskWorks = () => {
             const result = await new sql.Request()
                 .input('Emp_Id', sql.BigInt, Emp_Id)
                 .input('Project_Id', sql.BigInt, Project_Id)
-                .input('Task_Id', sql.BigInt, Task_Id)
+                .input('Task_Id', sql.BigInt, Task_Id) 
+                  .input('Process_Id', sql.BigInt, Process_Id) 
                 .input('from', sql.Date, from)
                 .input('to', sql.Date, to)
                 .query(query);
@@ -89,7 +97,7 @@ const TaskWorks = () => {
         }
     };
 
-    const postWorkedTask = async (req, res) => {
+      const postWorkedTask = async (req, res) => {
 
         try {
 
@@ -98,6 +106,7 @@ const TaskWorks = () => {
                 Process_Id,
                 Work_Dt, Work_Done, Start_Time, End_Time, Work_Status, Det_string
             } = req.body;
+
 
             if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Emp_Id || 
                
@@ -126,7 +135,7 @@ const TaskWorks = () => {
             request.input('Work_Status', Work_Status)
             request.input('Entry_By', Emp_Id)
             request.input('Entry_Date', new Date());
-            request.input('Det_string', Det_string);
+            request.input('Det_string', Det_string );
           
 
             const result = await request.execute('Work_SP')
