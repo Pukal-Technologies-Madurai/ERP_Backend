@@ -5,11 +5,12 @@ import { checkIsNumber } from '../../helper_functions.mjs';
 import { getUserIdByAuth } from '../../middleware/miniAPIs.mjs';
 import userController from '../../controller/Masters/user.mjs';
 
-dotenv.config();
-const DATABASE = "ERP_DB_SMT_TEST";
+dotenv.config(); 
 
 const branchRight = () => {
-
+    /**
+     * GET user branch rights
+     */
     const getUserBranches = async (req, res) => {
         try {
             const { UserId } = req.query;
@@ -23,8 +24,8 @@ const branchRight = () => {
                     CASE WHEN ubr.User_Id IS NULL THEN 0 ELSE 1 END AS HasAccess,
                     ISNULL(ubr.Created_by, 0) AS Created_by,
                     ubr.Created_at
-                FROM [${DATABASE}].[dbo].[tbl_Branch_Master] b
-                LEFT JOIN [${DATABASE}].[dbo].[tbl_userbranchrights] ubr
+                FROM dbo.tbl_Branch_Master b
+                LEFT JOIN dbo.tbl_userbranchrights ubr
                     ON ubr.Branch_Id = b.BranchId AND ubr.User_Id = @UserId
                 ORDER BY b.BranchName
             `;
@@ -58,7 +59,7 @@ const branchRight = () => {
 
         try {
             await transaction.begin();
-            const performingUserId = await getUserIdByAuth(Auth) || 0;
+            const performingUserId = (await getUserIdByAuth(Auth)) || 0;
 
             if (accessFlag === 1) {
                 const existsReq = new sql.Request(transaction);
@@ -67,7 +68,7 @@ const branchRight = () => {
 
                 const existsQ = `
                     SELECT TOP 1 1 as ExistsFlag
-                    FROM [${DATABASE}].[dbo].[tbl_userbranchrights]
+                    FROM dbo.tbl_userbranchrights
                     WHERE User_Id = @UserId AND Branch_Id = @BranchId
                 `;
                 const existsRes = await existsReq.query(existsQ);
@@ -79,7 +80,7 @@ const branchRight = () => {
                     ins.input('Created_by', sql.Int, Number(performingUserId));
 
                     const insertQ = `
-                        INSERT INTO [${DATABASE}].[dbo].[tbl_userbranchrights]
+                        INSERT INTO dbo.tbl_userbranchrights
                             (Branch_Id, User_Id, Created_by, Created_at)
                         VALUES
                             (@BranchId, @UserId, @Created_by, GETDATE())
@@ -102,7 +103,7 @@ const branchRight = () => {
                 delReq.input('BranchId', sql.Int, Number(BranchId));
 
                 const deleteQ = `
-                    DELETE FROM [${DATABASE}].[dbo].[tbl_userbranchrights]
+                    DELETE FROM dbo.tbl_userbranchrights
                     WHERE User_Id = @UserId AND Branch_Id = @BranchId
                 `;
                 await delReq.query(deleteQ);
@@ -133,7 +134,7 @@ const branchRight = () => {
         const transaction = new sql.Transaction();
         try {
             await transaction.begin();
-            const performingUserId = await getUserIdByAuth(Auth) || 0;
+            const performingUserId = (await getUserIdByAuth(Auth)) || 0;
 
             for (const branch of Branches) {
                 if (!checkIsNumber(branch.BranchId)) continue;
@@ -145,7 +146,7 @@ const branchRight = () => {
                     existsReq.input('BranchId', sql.Int, Number(branch.BranchId));
                     const existsQ = `
                         SELECT TOP 1 1 as ExistsFlag
-                        FROM [${DATABASE}].[dbo].[tbl_userbranchrights]
+                        FROM dbo.tbl_userbranchrights
                         WHERE User_Id = @UserId AND Branch_Id = @BranchId
                     `;
                     const existsRes = await existsReq.query(existsQ);
@@ -157,7 +158,7 @@ const branchRight = () => {
                         ins.input('Created_by', sql.Int, Number(performingUserId));
 
                         const insertQ = `
-                            INSERT INTO [${DATABASE}].[dbo].[tbl_userbranchrights]
+                            INSERT INTO dbo.tbl_userbranchrights
                                 (Branch_Id, User_Id, Created_by, Created_at)
                             VALUES
                                 (@BranchId, @UserId, @Created_by, GETDATE())
@@ -169,7 +170,7 @@ const branchRight = () => {
                     delReq.input('UserId', sql.Int, Number(UserId));
                     delReq.input('BranchId', sql.Int, Number(branch.BranchId));
                     const deleteQ = `
-                        DELETE FROM [${DATABASE}].[dbo].[tbl_userbranchrights]
+                        DELETE FROM dbo.tbl_userbranchrights
                         WHERE User_Id = @UserId AND Branch_Id = @BranchId
                     `;
                     await delReq.query(deleteQ);
