@@ -123,36 +123,6 @@ const externalAPIStockJournal = async (req, res) => {
     }
 }
 
-const externalAPIStockJournalAdmin = async (req, res) => {
-    try {
-        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-
-        const request = new sql.Request()
-            .input('Fromdate', req.query.Fromdate)
-            .input('Todate', req.query.Todate)
-            .input('Company_Id', 0)
-            .input('Vouche_Id', 0)
-            .execute('Online_Stock_Journal_Admin_API')
-
-        const result = await request;
-        if (result.recordset.length > 0) {
-            const stockjournal = JSON.parse(result.recordset[0]?.Stock);
-            const removeCurlyBrase = toArray(stockjournal?.Stock_Journal).map(journal => ({
-                ...journal,
-                SOURCEENTRIES: cleanArray(toArray(journal?.SOURCEENTRIES)),
-                DESTINATIONENTRIES: cleanArray(toArray(journal?.DESTINATIONENTRIES))
-            }));
-
-            dataFound(res, { Stock_Journal: removeCurlyBrase });
-        } else {
-            noData(res)
-        }
-    } catch (e) {
-        servError(e, res)
-    }
-}
-
 const externalAPIReceipt = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
@@ -239,7 +209,7 @@ const externalAPIJournal = async (req, res) => {
                     billrefrence: JSON.parse(cr.billrefrence),
                 })),
             }));
-                    
+
 
             dataFound(res, secondLevelParsed);
         } else {
@@ -264,7 +234,7 @@ const externalAPIContra = async (req, res) => {
 
         if (result.recordset.length > 0) {
             const contra = result.recordset;
-            
+
             dataFound(res, toArray(contra));
         } else {
             noData(res)
@@ -275,6 +245,35 @@ const externalAPIContra = async (req, res) => {
 }
 
 // -------- Admin API ---------------
+
+const tallyAdminSaleAPI = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Sales_Admin_API')
+
+        const result = await request;
+        if (result.recordset.length > 0) {
+
+            const sales = JSON.parse(result.recordset[0]?.SALES)
+            dataFound(res, sales)
+            // dataFound(res, sales.map(sale => ({
+            //     ...sale,
+            //     ALLINVENTORYENTRIES: JSON.parse(sale.ALLINVENTORYENTRIES),
+            //     LEDGERENTRIES: JSON.parse(sale.LEDGERENTRIES),
+            // })));
+
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
 
 const tallyAdminPurchaseAPI = async (req, res) => {
     try {
@@ -305,7 +304,7 @@ const tallyAdminPurchaseAPI = async (req, res) => {
     }
 }
 
-const tallyAdminSaleAPI = async (req, res) => {
+const tallyAdminStockJournalAPI = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -313,19 +312,63 @@ const tallyAdminSaleAPI = async (req, res) => {
         const request = new sql.Request()
             .input('Fromdate', req.query.Fromdate)
             .input('Todate', req.query.Todate)
-            .execute('Online_Sales_Admin_API')
+            .input('Company_Id', 0)
+            .input('Vouche_Id', 0)
+            .execute('Online_Stock_Journal_Admin_API')
 
         const result = await request;
         if (result.recordset.length > 0) {
+            const stockjournal = JSON.parse(result.recordset[0]?.Stock);
+            const removeCurlyBrase = toArray(stockjournal?.Stock_Journal).map(journal => ({
+                ...journal,
+                SOURCEENTRIES: cleanArray(toArray(journal?.SOURCEENTRIES)),
+                DESTINATIONENTRIES: cleanArray(toArray(journal?.DESTINATIONENTRIES))
+            }));
 
-            const sales = JSON.parse(result.recordset[0]?.SALES)
-            dataFound(res, sales)
-            // dataFound(res, sales.map(sale => ({
-            //     ...sale,
-            //     ALLINVENTORYENTRIES: JSON.parse(sale.ALLINVENTORYENTRIES),
-            //     LEDGERENTRIES: JSON.parse(sale.LEDGERENTRIES),
-            // })));
+            dataFound(res, { Stock_Journal: removeCurlyBrase });
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
 
+const tallyJournalAdminApi = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Journal_Admin_API');
+
+        const result = await request;
+        const journal = result.recordset;
+
+        if (result.recordset.length > 0) {
+
+            const firstLevelParsed = journal.map(jou => ({
+                ...jou,
+                DR_ledgerentries: JSON.parse(jou.DR_ledgerentries),
+                CR_ledgerentries: JSON.parse(jou.CR_ledgerentries),
+            }));
+
+            const secondLevelParsed = firstLevelParsed.map(jou => ({
+                ...jou,
+                DR_ledgerentries: jou.DR_ledgerentries.map(dr => ({
+                    ...dr,
+                    billrefrence: JSON.parse(dr.billrefrence),
+                })),
+                CR_ledgerentries: jou.CR_ledgerentries.map(cr => ({
+                    ...cr,
+                    billrefrence: JSON.parse(cr.billrefrence),
+                })),
+            }));
+
+
+            dataFound(res, secondLevelParsed);
         } else {
             noData(res)
         }
@@ -374,7 +417,7 @@ const tallyAdminReceiptAPI = async (req, res) => {
 
         if (result.recordset.length > 0) {
             const receipt = JSON.parse(result.recordset[0]?.Receipt);
-            
+
             dataFound(res, toArray(receipt.Receipt).map(receipt => ({
                 ...receipt,
                 billrefrence: JSON.parse(receipt.billrefrence),
@@ -387,20 +430,213 @@ const tallyAdminReceiptAPI = async (req, res) => {
     }
 }
 
+// -------- Update API ---------------
+
+const tallySalesUpdateAPI = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Sales_Update_API')
+
+        const result = await request;
+        if (result.recordset.length > 0) {
+
+            const sales = JSON.parse(result.recordset[0]?.SALES)
+            dataFound(res, sales)
+            // dataFound(res, sales.map(sale => ({
+            //     ...sale,
+            //     ALLINVENTORYENTRIES: JSON.parse(sale.ALLINVENTORYENTRIES),
+            //     LEDGERENTRIES: JSON.parse(sale.LEDGERENTRIES),
+            // })));
+
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+const tallyPurchaseUpdateAPI = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Purchase_Update_API')
+
+        const result = await request;
+        if (result.recordset.length > 0) {
+            const sales = JSON.parse(result.recordset[0]?.SALES)
+            dataFound(res, sales)
+
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+const tallyJournalUpdateApi = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Journal_Update_API');
+
+        const result = await request;
+        const journal = result.recordset;
+
+        if (result.recordset.length > 0) {
+
+            const firstLevelParsed = journal.map(jou => ({
+                ...jou,
+                DR_ledgerentries: JSON.parse(jou.DR_ledgerentries),
+                CR_ledgerentries: JSON.parse(jou.CR_ledgerentries),
+            }));
+
+            const secondLevelParsed = firstLevelParsed.map(jou => ({
+                ...jou,
+                DR_ledgerentries: jou.DR_ledgerentries.map(dr => ({
+                    ...dr,
+                    billrefrence: JSON.parse(dr.billrefrence),
+                })),
+                CR_ledgerentries: jou.CR_ledgerentries.map(cr => ({
+                    ...cr,
+                    billrefrence: JSON.parse(cr.billrefrence),
+                })),
+            }));
+
+
+            dataFound(res, secondLevelParsed);
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+const tallyPaymentUpdateAPI = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Payment_Update_API')
+
+        const result = await request;
+        if (result.recordset.length > 0) {
+            const payment = result.recordset;
+
+            dataFound(res, payment.map(pay => ({
+                ...pay,
+                BILL_REFERENCE: JSON.parse(pay.BILL_REFERENCE)
+            })));
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+const tallyReceiptUpdateAPI = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Receipt_Update_API');
+
+        const result = await request;
+
+        if (result.recordset.length > 0) {
+            const receipt = JSON.parse(result.recordset[0]?.Receipt);
+
+            dataFound(res, toArray(receipt.Receipt).map(receipt => ({
+                ...receipt,
+                billrefrence: JSON.parse(receipt.billrefrence),
+            })));
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+const tallyStockJournalUpdateAPI = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .input('Company_Id', 0)
+            .input('Vouche_Id', 0)
+            .execute('Online_Stock_Journal_Update_API')
+
+        const result = await request;
+        if (result.recordset.length > 0) {
+            const stockjournal = JSON.parse(result.recordset[0]?.Stock);
+            const removeCurlyBrase = toArray(stockjournal?.Stock_Journal).map(journal => ({
+                ...journal,
+                SOURCEENTRIES: cleanArray(toArray(journal?.SOURCEENTRIES)),
+                DESTINATIONENTRIES: cleanArray(toArray(journal?.DESTINATIONENTRIES))
+            }));
+
+            dataFound(res, { Stock_Journal: removeCurlyBrase });
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+
 export default {
     externalAPI,
     externalAPIPurchase,
     externalAPISaleOrder,
     externalAPIStockJournal,
-    externalAPIStockJournalAdmin,
     externalAPIReceipt,
     externalAPIPayment,
     externalAPIJournal,
     externalAPIContra,
-
+    
     // -- admin api
     tallyAdminPurchaseAPI,
     tallyAdminSaleAPI,
+    tallyAdminStockJournalAPI,
     tallyAdminPaymentAPI,
     tallyAdminReceiptAPI,
+    tallyJournalAdminApi,
+
+
+    // -- update api
+
+    tallySalesUpdateAPI,
+    tallyPurchaseUpdateAPI,
+    tallyJournalUpdateApi,
+    tallyPaymentUpdateAPI,
+    tallyReceiptUpdateAPI,
+    tallyStockJournalUpdateAPI
+
 };

@@ -101,6 +101,6 @@ export const sentData = (res, data = [], others = {}) => {
     if (data.length > 0) {
         dataFound(res, data, 'data found', others);
     } else {
-        noData(res);
+        noData(res, 'No data', others);
     }
 } 

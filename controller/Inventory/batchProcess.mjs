@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, success, invalidInput, sentData } from '../../res.mjs';
-import { checkIsNumber, getDaysBetween, ISOString, stringCompare, toNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, getDaysBetween, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
 
 // material inward
 
@@ -10,9 +10,14 @@ const getUnAssignedBatchFromMaterialInward = async (req, res) => {
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+        const { fromGodown = null, toGodown = null, item = null } = req.query;
+
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
+            .input('fromGodown', sql.Int, fromGodown)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
             .query(`
                 SELECT 
                 	--TOP (200)
@@ -42,12 +47,38 @@ const getUnAssignedBatchFromMaterialInward = async (req, res) => {
                 	TRIM(COALESCE(ar.Batch_No, '')) = ''
                 	AND CONVERT(DATE, tm.Trip_Date) BETWEEN @Fromdate AND @Todate
                 	AND tm.billType = 'MATERIAL INWARD'
-                ORDER BY tm.Trip_Date ASC;`
+                    ${checkIsNumber(fromGodown) ? ` AND ar.From_Location = @fromGodown ` : ''}
+                    ${checkIsNumber(toGodown) ? ` AND ar.To_Location = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND ar.Product_Id = @item ` : ''}
+                ORDER BY tm.Trip_Date ASC;
+                -- filter values
+                -- From godowns
+                SELECT DISTINCT ta.From_Location AS value, fg.Godown_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ta.From_Location
+                ORDER BY fg.Godown_Name;
+                -- To godowns
+                SELECT DISTINCT ta.To_Location AS value, tg.Godown_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.To_Location
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Product_Id AS value, p.Product_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Product_Id
+                ORDER BY p.Product_Name;`
             );
 
         const result = await request;
 
-        sentData(res, result.recordset);
+        const [outstanding, fromGodowns, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodowns: toArray(fromGodowns),
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
+
     } catch (e) {
         servError(e, res);
     }
@@ -132,13 +163,17 @@ const getUnAssignedBatchProcessingSource = async (req, res) => {
         const
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+        
+        const { fromGodown = null, toGodown = null, item = null } = req.query;
 
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
+            .input('fromGodown', sql.Int, fromGodown)
+            .input('item', sql.Int, item)
             .query(`
                 SELECT 
-                	TOP (200)
+                	--TOP (200)
                 	prd.PRS_Id AS uniquId,
                 	pr.PR_Id AS moduleId,
                 	pr.Process_date AS eventDate,
@@ -162,12 +197,31 @@ const getUnAssignedBatchProcessingSource = async (req, res) => {
                 WHERE 
                 	TRIM(COALESCE(prd.Sour_Batch_Lot_No, '')) = ''
                 	AND pr.Process_date BETWEEN @Fromdate AND @Todate
-                ORDER BY pr.Process_date ASC;`
+                    ${checkIsNumber(fromGodown) ? ` AND prd.Sour_Goodown_Id = @fromGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND prd.Sour_Item_Id = @item ` : ''}
+                ORDER BY pr.Process_date ASC;
+                -- filter values
+                -- From godowns
+                SELECT DISTINCT ta.Sour_Goodown_Id AS value, fg.Godown_Name AS label
+                FROM tbl_Processing_Source_Details AS ta
+                JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ta.Sour_Goodown_Id
+                ORDER BY fg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Sour_Item_Id AS value, p.Product_Name AS label
+                FROM tbl_Processing_Source_Details AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Sour_Item_Id
+                ORDER BY p.Product_Name;`
             );
 
         const result = await request;
 
-        sentData(res, result.recordset);
+        const [outstanding, fromGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodowns: toArray(fromGodowns),
+            toGodowns: [],
+            items: toArray(items)
+        });
     } catch (e) {
         servError(e, res);
     }
@@ -247,12 +301,17 @@ const getUnAssignedBatchProcessing = async (req, res) => {
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+        const { fromGodown = null, toGodown = null, item = null } = req.query;
+
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
+            .input('fromGodown', sql.Int, fromGodown)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
             .query(`
                 SELECT 
-                	TOP (200)
+                	--TOP (200)
                 	prd.PRD_Id AS uniquId,
                 	pr.PR_Id AS moduleId,
                 	pr.Process_date AS eventDate,
@@ -277,12 +336,31 @@ const getUnAssignedBatchProcessing = async (req, res) => {
                 WHERE 
                 	TRIM(COALESCE(prd.Dest_Batch_Lot_No, '')) = ''
                 	AND pr.Process_date BETWEEN @Fromdate AND @Todate
-                ORDER BY pr.Process_date ASC;`
+                    ${checkIsNumber(toGodown) ? ` AND prd.Dest_Goodown_Id = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND prd.Dest_Item_Id = @item ` : ''}
+                ORDER BY pr.Process_date ASC;
+                -- filter values
+                -- To godowns
+                SELECT DISTINCT ta.Dest_Goodown_Id AS value, tg.Godown_Name AS label
+                FROM tbl_Processing_Destin_Details AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.Dest_Goodown_Id
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Dest_Item_Id AS value, p.Product_Name AS label
+                FROM tbl_Processing_Destin_Details AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Dest_Item_Id
+                ORDER BY p.Product_Name;`
             );
 
         const result = await request;
 
-        sentData(res, result.recordset);
+        const [outstanding, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodowns: [],
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
     } catch (e) {
         servError(e, res);
     }
@@ -368,12 +446,17 @@ const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+        const { fromGodown = null, toGodown = null, item = null } = req.query;
+
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
+            .input('fromGodown', sql.Int, fromGodown)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
             .query(`
                 SELECT 
-                	TOP (200)
+                	--TOP (200)
                 	ar.Arr_Id AS uniquId,
                 	tm.Trip_Id AS moduleId,
                 	tm.Trip_Date AS eventDate,
@@ -401,12 +484,38 @@ const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
                 	TRIM(COALESCE(ar.Batch_No, '')) = ''
                 	AND CONVERT(DATE, tm.Trip_Date) BETWEEN @Fromdate AND @Todate
                 	AND tm.billType = 'OTHER GODOWN'
-                ORDER BY tm.Trip_Date ASC;`
+                    ${checkIsNumber(fromGodown) ? ` AND ar.From_Location = @fromGodown ` : ''}
+                    ${checkIsNumber(toGodown) ? ` AND ar.To_Location = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND ar.Product_Id = @item ` : ''}
+                ORDER BY tm.Trip_Date ASC;
+                -- filter values
+                -- From godowns
+                SELECT DISTINCT ta.From_Location AS value, fg.Godown_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ta.From_Location
+                ORDER BY fg.Godown_Name;
+                -- To godowns
+                SELECT DISTINCT ta.To_Location AS value, tg.Godown_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.To_Location
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Product_Id AS value, p.Product_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Product_Id
+                ORDER BY p.Product_Name;`
             );
 
         const result = await request;
 
-        sentData(res, result.recordset);
+        const [outstanding, fromGodowns, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodowns: toArray(fromGodowns),
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
+        
     } catch (e) {
         servError(e, res);
     }
@@ -499,12 +608,17 @@ const getUnAssignedBatchSales = async (req, res) => {
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+        const { fromGodown = null, toGodown = null, item = null } = req.query;
+
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
+            .input('fromGodown', sql.Int, fromGodown)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
             .query(`
                 SELECT 
-                	TOP (200)
+                	--TOP (200)
                 	sdi.DO_St_Id AS uniquId,
                 	sd.Do_Id AS moduleId,
                 	sd.Do_Date AS eventDate,
@@ -530,12 +644,32 @@ const getUnAssignedBatchSales = async (req, res) => {
                 	TRIM(COALESCE(sdi.Batch_Name, '')) = ''
                 	AND sd.Do_Date BETWEEN @Fromdate AND @Todate
                     AND sd.Cancel_status <> 0
-                ORDER BY sd.Do_Date ASC;`
+                    ${checkIsNumber(toGodown) ? ` AND sdi.GoDown_Id = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND sdi.Item_Id = @item ` : ''}
+                ORDER BY sd.Do_Date ASC;
+                -- filter values
+                -- To godowns
+                SELECT DISTINCT ta.GoDown_Id AS value, tg.Godown_Name AS label
+                FROM tbl_Sales_Delivery_Stock_Info AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.GoDown_Id
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Item_Id AS value, p.Product_Name AS label
+                FROM tbl_Sales_Delivery_Stock_Info AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Item_Id
+                ORDER BY p.Product_Name;`
             );
 
         const result = await request;
 
-        sentData(res, result.recordset);
+        const [outstanding, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodown: [],
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
+
     } catch (e) {
         servError(e, res);
     }
@@ -616,12 +750,17 @@ const getUnAssignedBatchPurchase = async (req, res) => {
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+        const { fromGodown = null, toGodown = null, item = null } = req.query;
+
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
+            .input('fromGodown', sql.Int, fromGodown)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
             .query(`
                 SELECT 
-                	TOP (200)
+                	--TOP (200)
                 	psi.POI_St_Id AS uniquId,
                 	pui.PIN_Id AS moduleId,
                 	pui.Po_Entry_Date AS eventDate,
@@ -646,12 +785,32 @@ const getUnAssignedBatchPurchase = async (req, res) => {
                 	TRIM(COALESCE(psi.Batch_No, '')) = ''
                 	AND pui.Po_Entry_Date BETWEEN @Fromdate AND @Todate
 					AND pui.Cancel_status = 0
-                ORDER BY pui.Po_Entry_Date ASC;`
+                    ${checkIsNumber(toGodown) ? ` AND psi.Location_Id = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND psi.Item_Id = @item ` : ''}
+                ORDER BY pui.Po_Entry_Date ASC;
+                -- filter values
+                -- To godowns
+                SELECT DISTINCT ta.Location_Id AS value, tg.Godown_Name AS label
+                FROM tbl_Purchase_Order_Inv_Stock_Info AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.Location_Id
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Item_Id AS value, p.Product_Name AS label
+                FROM tbl_Purchase_Order_Inv_Stock_Info AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Item_Id
+                ORDER BY p.Product_Name;`
             );
 
         const result = await request;
 
-        sentData(res, result.recordset);
+        const [outstanding, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodown: [],
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
+
     } catch (e) {
         servError(e, res);
     }

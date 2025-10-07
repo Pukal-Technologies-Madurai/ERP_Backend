@@ -25,7 +25,7 @@ ReportRouter.get('/salesReport/ledger/groupSales', dbconnect, stockAndPurchase.l
 ReportRouter.get('/salesReport/ledger/itemDetails', dbconnect, stockAndPurchase.salesItemDetails);
 ReportRouter.get('/salesReport/products', dbconnect, stockAndPurchase.porductBasedSalesResult);
 
-
+// --- tally pull apis
 ReportRouter.get('/tally-test-api-sales', tallyPullAPI.externalAPI);
 ReportRouter.get('/tally-test-api-purchase', tallyPullAPI.externalAPIPurchase);
 ReportRouter.get('/tally-test-api-saleOrder', tallyPullAPI.externalAPISaleOrder);
@@ -36,11 +36,21 @@ ReportRouter.get('/tally-test-api-journal', tallyPullAPI.externalAPIJournal);
 ReportRouter.get('/tally-test-api-contra', tallyPullAPI.externalAPIContra);
 
 //---- admin api -- 
-ReportRouter.get('/tally-stockJournal-admin-api', tallyPullAPI.externalAPIStockJournalAdmin);
+ReportRouter.get('/tally-stockJournal-admin-api', tallyPullAPI.tallyAdminStockJournalAPI);
 ReportRouter.get('/tally-purchase-admin-api', tallyPullAPI.tallyAdminPurchaseAPI);
 ReportRouter.get('/tally-sales-admin-api', tallyPullAPI.tallyAdminSaleAPI);
 ReportRouter.get('/tally-payment-admin-api', tallyPullAPI.tallyAdminPaymentAPI);
 ReportRouter.get('/tally-receipt-admin-api', tallyPullAPI.tallyAdminReceiptAPI);
+ReportRouter.get('/tally-journal-admin-api', tallyPullAPI.tallyAdminReceiptAPI);
+
+//---- update api --
+
+ReportRouter.get('/tally-sales-update-api', tallyPullAPI.tallySalesUpdateAPI);
+ReportRouter.get('/tally-purchase-update-api', tallyPullAPI.tallyPurchaseUpdateAPI);
+ReportRouter.get('/tally-journal-update-api', tallyPullAPI.tallyJournalUpdateApi);
+ReportRouter.get('/tally-payment-update-api', tallyPullAPI.tallyPaymentUpdateAPI);
+ReportRouter.get('/tally-receipt-update-api', tallyPullAPI.tallyReceiptUpdateAPI);
+ReportRouter.get('/tally-stockJournal-update-api', tallyPullAPI.tallyStockJournalUpdateAPI);
 
 
 ReportRouter.get('/template', template.getTemplates);
