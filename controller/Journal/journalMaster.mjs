@@ -561,11 +561,13 @@ const editJournal = async (req, res) => {
                     BillRefNo NVARCHAR(100),
                     Amount DECIMAL(18,2) NOT NULL
                 );
-                -- new code
+                -- new code for delete not present in update payload
                 DELETE tgt
-                FROM dbo.tbl_Journal_Entries_Info tgt
-                LEFT JOIN @Src src ON src.LineId IS NOT NULL AND src.LineId = tgt.LineId
-                WHERE tgt.JournalAutoId = @JournalAutoId AND src.LineId IS NULL;
+                FROM dbo.tbl_Journal_Entries_Info AS tgt
+                LEFT JOIN @LineMap AS lm ON lm.LineId = tgt.LineId
+                WHERE 
+                    tgt.JournalAutoId = @JournalAutoId
+                    AND lm.LineId IS NULL;
                 -- new code
                 INSERT INTO @RefSrcRaw (AutoGenId, ClientLineId, RefId, RefNo, RefType, BillRefNo, Amount)
                 SELECT

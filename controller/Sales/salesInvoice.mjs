@@ -817,7 +817,8 @@ const SalesInvoice = () => {
                         Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
                         Trans_Type = @Trans_Type,
                         Alter_Id = @Alter_Id,
-                        Altered_by = @Altered_by
+                        Altered_by = @Altered_by,
+                        Alterd_on = GETDATE()
                     WHERE
                         Do_Id = @Do_Id`
                 );

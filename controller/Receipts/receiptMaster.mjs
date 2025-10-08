@@ -371,6 +371,7 @@ const ReceiptMaster = () => {
                         remarks = @remarks,
                         status = @status,
                         altered_by = @altered_by,
+                        alterd_on = GETDATE(),
                         is_new_ref = @is_new_ref,
                         is_journal_type = @is_journal_type,
                         transaction_type = @transaction_type,

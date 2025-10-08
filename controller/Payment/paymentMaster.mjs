@@ -374,6 +374,7 @@ const PaymentMaster = () => {
                         remarks = @remarks,
                         status = @status,
                         altered_by = @altered_by,
+                        alterd_on = GETDATE(),
                         Alter_Id = @Alter_Id
                     WHERE
                         pay_id = @pay_id;`

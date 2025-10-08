@@ -546,7 +546,7 @@ const PurchaseOrder = () => {
                         Narration = @Narration,  
                         Altered_by = @Altered_by, 
                         Alter_Id = @Alter_Id, 
-                        Alterd_on = @Alterd_on,
+                        Alterd_on = GETDATE(),
                         Trans_Type = @Trans_Type
                     WHERE
                         PIN_Id = @PIN_Id;
