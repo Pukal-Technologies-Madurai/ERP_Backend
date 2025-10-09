@@ -507,8 +507,6 @@ const SaleOrder = () => {
         }
     }
 
-
-
     // const getSaleOrder = async (req, res) => {
     //     try {
     //         const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType } = req.query;
@@ -646,23 +644,23 @@ const SaleOrder = () => {
     // };
 
 
-const getSaleOrder = async (req, res) => {
-    try {
-        const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, OrderStatus } = req.query;
+    const getSaleOrder = async (req, res) => {
+        try {
+            const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, OrderStatus } = req.query;
 
-        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
-        const request = new sql.Request()
-            .input('Fromdate', Fromdate)
-            .input('Todate', Todate)
-            .input('retailer', Retailer_Id)
-            .input('cancel', Cancel_status)
-            .input('creater', Created_by)
-            .input('salesPerson', Sales_Person_Id)
-            .input('VoucherType', VoucherType);
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('retailer', Retailer_Id)
+                .input('cancel', Cancel_status)
+                .input('creater', Created_by)
+                .input('salesPerson', Sales_Person_Id)
+                .input('VoucherType', VoucherType);
 
-        const result = await request.query(`
+            const result = await request.query(`
             -- Step 1: Filtered Sales Orders
             DECLARE @FilteredOrders TABLE (So_Id INT);
             INSERT INTO @FilteredOrders (So_Id)
@@ -751,77 +749,75 @@ const getSaleOrder = async (req, res) => {
             );
         `);
 
-        const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
+            const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
 
-        if (OrderData.length > 0) {
-       const resData = OrderData.map(order => {
-    const orderProducts = ProductDetails.filter(p =>
-        isEqualNumber(p.Sales_Order_Id, order.So_Id)
-    );
-    const deliveryList = DeliveryData.filter(d =>
-        isEqualNumber(d.So_No, order.So_Id)
-    );
+            if (OrderData.length > 0) {
+                const resData = OrderData.map(order => {
+                    const orderProducts = ProductDetails.filter(p =>
+                        isEqualNumber(p.Sales_Order_Id, order.So_Id)
+                    );
+                    const deliveryList = DeliveryData.filter(d =>
+                        isEqualNumber(d.So_No, order.So_Id)
+                    );
 
-    const totalOrderedQty = orderProducts.reduce(
-        (sum, p) => sum + toNumber(p.Bill_Qty),
-        0
-    );
-    const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-        const deliveredItems = DeliveryItems.filter(p =>
-            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
-        );
-        return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
-    }, 0);
+                    const totalOrderedQty = orderProducts.reduce(
+                        (sum, p) => sum + toNumber(p.Bill_Qty),
+                        0
+                    );
+                    const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                        const deliveredItems = DeliveryItems.filter(p =>
+                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+                        );
+                        return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
+                    }, 0);
 
-    const orderStatus =
-        totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+                    const orderStatus =
+                        totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
 
-    // ✅ Build full delivery + invoice products
-    const mappedDeliveries = deliveryList.map(d => {
-        const invoiceProducts = DeliveryItems.filter(p =>
-            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
-        ).map(prod => ({
-            ...prod,
-            ProductImageUrl: getImage("products", prod.Product_Image_Name),
-        }));
+                    // ✅ Build full delivery + invoice products
+                    const mappedDeliveries = deliveryList.map(d => {
+                        const invoiceProducts = DeliveryItems.filter(p =>
+                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+                        ).map(prod => ({
+                            ...prod,
+                            ProductImageUrl: getImage("products", prod.Product_Image_Name),
+                        }));
 
-        return {
-            ...d,
-            InvoicedProducts: invoiceProducts,
-        };
-    });
+                        return {
+                            ...d,
+                            InvoicedProducts: invoiceProducts,
+                        };
+                    });
 
-    return {
-        ...order,
-        OrderStatus: orderStatus,
-        Products_List: orderProducts.map(p => ({
-            ...p,
-            ProductImageUrl: getImage("products", p.Product_Image_Name),
-        })),
-        Staff_Involved_List: StaffInvolved.filter(s =>
-            isEqualNumber(s.So_Id, order.So_Id)
-        ),
-        ConvertedInvoice: mappedDeliveries, // ✅ full delivery + all invoice product list
-    };
-});
+                    return {
+                        ...order,
+                        OrderStatus: orderStatus,
+                        Products_List: orderProducts.map(p => ({
+                            ...p,
+                            ProductImageUrl: getImage("products", p.Product_Image_Name),
+                        })),
+                        Staff_Involved_List: StaffInvolved.filter(s =>
+                            isEqualNumber(s.So_Id, order.So_Id)
+                        ),
+                        ConvertedInvoice: mappedDeliveries, // ✅ full delivery + all invoice product list
+                    };
+                });
 
 
-            // Filter by pending/completed if requested
-            const filteredData = OrderStatus
-                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
-                : resData;
+                // Filter by pending/completed if requested
+                const filteredData = OrderStatus
+                    ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+                    : resData;
 
-            dataFound(res, filteredData);
-        } else {
-            noData(res);
+                dataFound(res, filteredData);
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            servError(e, res);
         }
-
-    } catch (e) {
-        servError(e, res);
-    }
-};
-
-
+    };
 
     const getDeliveryorder = async (req, res) => {
         try {
@@ -1685,17 +1681,16 @@ const getSaleOrder = async (req, res) => {
         }
     };
 
+    const saleOrderReport = async (req, res) => {
+        try {
+            const Fromdate = req.query.Fromdate
+                ? ISOString(req.query.Fromdate)
+                : ISOString();
+            const Todate = req.query.Todate
+                ? ISOString(req.query.Todate)
+                : ISOString();
 
-        const saleOrderReport = async (req, res) => {
-      try {
-        const Fromdate = req.query.Fromdate
-          ? ISOString(req.query.Fromdate)
-          : ISOString();
-        const Todate = req.query.Todate
-          ? ISOString(req.query.Todate)
-          : ISOString();
-    
-        const salesQuery = `
+            const salesQuery = `
           SELECT DISTINCT
               fnd.Product_Id,
               fnd.Product_Name,
@@ -1712,48 +1707,49 @@ const getSaleOrder = async (req, res) => {
                 ON stl.Pro_Id = fnd.Product_Id
           ORDER BY fnd.BranchName, fnd.Product_Name;
         `;
-    
-        const salesRequest = new sql.Request()
-          .input("Fromdate", sql.DateTime, Fromdate)
-          .input("Todate", sql.DateTime, Todate);
-    
-        const salesResult = await salesRequest.query(salesQuery);
-    
-      
-const groupedData = salesResult.recordset.reduce((branchAcc, item) => {
-  const branchKey = item.BranchId || 0;
 
-  if (!branchAcc[branchKey]) {
-    branchAcc[branchKey] = {
-      BranchId: item.BranchId,
-      BranchName: item.BranchName,
-      Products: [],
+            const salesRequest = new sql.Request()
+                .input("Fromdate", sql.DateTime, Fromdate)
+                .input("Todate", sql.DateTime, Todate);
+
+            const salesResult = await salesRequest.query(salesQuery);
+
+
+            const groupedData = salesResult.recordset.reduce((branchAcc, item) => {
+                const branchKey = item.BranchId || 0;
+
+                if (!branchAcc[branchKey]) {
+                    branchAcc[branchKey] = {
+                        BranchId: item.BranchId,
+                        BranchName: item.BranchName,
+                        Products: [],
+                    };
+                }
+
+                branchAcc[branchKey].Products.push({
+                    Product_Id: item.Product_Id,
+                    Product_Name: item.Product_Name,
+                    Stock_Item: item.Stock_Item,
+                    Item_Name_Modified: item.Item_Name_Modified,
+                    Stock_Group: item.Stock_Group,
+                    S_Sub_Group_1: item.S_Sub_Group_1,
+                    Grade_Item_Group: item.Grade_Item_Group,
+                    Sales_Quantity: item.Sales_Quantity,
+                });
+
+                return branchAcc;
+            }, {});
+
+
+            const resultArray = Object.values(groupedData);
+            sentData(res, resultArray);
+
+        } catch (e) {
+            console.error("Error in sales report:", e);
+            servError(e, res);
+        }
     };
-  }
 
-  branchAcc[branchKey].Products.push({
-    Product_Id: item.Product_Id,
-    Product_Name: item.Product_Name,
-    Stock_Item: item.Stock_Item,
-    Item_Name_Modified: item.Item_Name_Modified,
-    Stock_Group: item.Stock_Group,
-    S_Sub_Group_1: item.S_Sub_Group_1,
-    Grade_Item_Group: item.Grade_Item_Group,
-    Sales_Quantity: item.Sales_Quantity,
-  });
-
-  return branchAcc;
-}, {});
-
-    
-  const resultArray = Object.values(groupedData);
-sentData(res, resultArray);
-
-      } catch (e) {
-        console.error("Error in sales report:", e);
-        servError(e, res);
-      }
-    };
     return {
         saleOrderCreation,
         getSaleOrder,
