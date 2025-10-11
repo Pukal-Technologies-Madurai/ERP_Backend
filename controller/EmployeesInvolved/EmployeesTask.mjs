@@ -473,11 +473,10 @@ const employeesTasks = () => {
             const result = await new sql.Request()
                 .input('comp', Company_id)
                 .query(`
-  SELECT 
+                         SELECT 
                         User_Mgt_Id as UserId, Emp_Name as Name 
                     FROM 
                         tbl_Employee_Master
-                  
                     
                 `);
 

@@ -76,6 +76,7 @@ projectRoute.get('/task/assignEmployee/task/dropDown', taskActivity.getAssignedT
 projectRoute.post('/task/assignEmployee', taskActivity.assignTaskForEmployee);
 projectRoute.put('/task/assignEmployee', taskActivity.modifyTaskAssignedForEmployee);
 
+projectRoute.get('/task/workDetails',taskWorks.getAllNewFormatData)
 projectRoute.get('/task/work', taskWorks.getAllWorkedData);
 projectRoute.post('/task/work', taskWorks.postWorkedTask);
 

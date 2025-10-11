@@ -19,7 +19,7 @@ const EmployeeAndTasks = () => {
             if (result.recordset.length > 0) {
                 return dataFound(res, result.recordset)
             } else {
-                return failed(res, 'no data');
+                return noData(res)
             }
         } catch (e) {
             servError(e, res);
