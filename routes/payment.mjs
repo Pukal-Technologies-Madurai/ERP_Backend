@@ -34,8 +34,12 @@ PaymentRouter.get('/getDebtorDetails', debtorsCreditors.getDebtorsCreditorsAll);
 PaymentRouter.get('/getDebtors',debtorsCreditors.getDebtors)
 
 
+PaymentRouter.post('/fetch-statement', bankStatement.fetchStatement);
+PaymentRouter.post('/decrypt', bankStatement.decrypt);      
+PaymentRouter.post('/encrypt', bankStatement.encrypt);     
+PaymentRouter.get('/token', bankStatement.getToken);      
 
-PaymentRouter.post('/getToken',bankStatement.getToken)
-PaymentRouter.post('/getStatement',bankStatement.fetchStatement)
+PaymentRouter.post('/syncStatement',bankStatement.syncStatement)
+PaymentRouter.get('/getBankStatement',bankStatement.getBankStatement)
 
 export default PaymentRouter;
