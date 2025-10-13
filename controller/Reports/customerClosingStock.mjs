@@ -978,36 +978,48 @@ const itemAndRetailerBasedReport = async (req, res) => {
 					SELECT * FROM LatestClosingPerItem WHERE rn = 1
 				), FilteredDelivery AS (
 					SELECT * FROM LatestDeliveryPerItem WHERE rn = 1
+				), Summary AS (
+					SELECT 
+						COALESCE(FS.Retailer_Id, FD.Retailer_Id) AS Retailer_Id,
+						COALESCE(r.Retailer_Name, 'Not found') AS Retailer_Name,
+						COALESCE(FS.Item_Id, FD.Item_Id) AS Item_Id,
+						COALESCE(p.Product_Name, 'Not found') AS Item_Name,
+						FS.ST_Date,
+						FD.Do_Date,
+						FS.ST_Id,
+						FD.Do_Id,
+						FS.ST_Qty,
+						FD.Bill_Qty,
+						FS.Product_Rate AS ClosingRate,
+						FD.Product_Rate AS DeliveryRate,
+						FS.SalesPersonName AS ClosingStockBy,
+						FD.SalesPersonName AS DeliveredBy,
+						CASE 
+							WHEN FS.ST_Date IS NOT NULL AND (FD.Do_Date IS NULL OR FS.ST_Date > FD.Do_Date) THEN 
+								ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0)
+							WHEN FS.ST_Date IS NOT NULL AND FD.Do_Date IS NOT NULL AND FS.ST_Date <= FD.Do_Date THEN
+								ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0) + ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)
+							WHEN FS.ST_Date IS NULL AND FD.Do_Date IS NOT NULL THEN 
+								ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)
+							ELSE 0
+						END AS StockValueOfItem
+					FROM FilteredStock FS
+					FULL OUTER JOIN FilteredDelivery FD ON FS.Retailer_Id = FD.Retailer_Id AND FS.Item_Id = FD.Item_Id
+					LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = COALESCE(FS.Retailer_Id, FD.Retailer_Id)
+					LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = COALESCE(FS.Item_Id, FD.Item_Id)
+					--ORDER BY r.Retailer_Name
+				), RetailerLastSalesDate AS (
+					SELECT 
+						sd.Retailer_Id,
+						MAX(sd.Do_Date) Do_Date
+					FROM tbl_Sales_Delivery_Gen_Info AS sd
+					WHERE sd.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM Summary WHERE Retailer_Id IS NOT NULL)
+					GROUP BY sd.Retailer_Id
 				)
-				SELECT 
-					COALESCE(FS.Retailer_Id, FD.Retailer_Id) AS Retailer_Id,
-					COALESCE(r.Retailer_Name, 'Not found') AS Retailer_Name,
-					COALESCE(FS.Item_Id, FD.Item_Id) AS Item_Id,
-					COALESCE(p.Product_Name, 'Not found') AS Item_Name,
-					FS.ST_Date,
-					FD.Do_Date,
-					FS.ST_Id,
-					FD.Do_Id,
-					FS.ST_Qty,
-					FD.Bill_Qty,
-					FS.Product_Rate AS ClosingRate,
-					FD.Product_Rate AS DeliveryRate,
-					FS.SalesPersonName AS ClosingStockBy,
-					FD.SalesPersonName AS DeliveredBy,
-					CASE 
-						WHEN FS.ST_Date IS NOT NULL AND (FD.Do_Date IS NULL OR FS.ST_Date > FD.Do_Date) THEN 
-							ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0)
-						WHEN FS.ST_Date IS NOT NULL AND FD.Do_Date IS NOT NULL AND FS.ST_Date <= FD.Do_Date THEN
-							ISNULL(FS.ST_Qty, 0) * ISNULL(FS.Product_Rate, 0) + ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)
-						WHEN FS.ST_Date IS NULL AND FD.Do_Date IS NOT NULL THEN 
-							ISNULL(FD.Bill_Qty, 0) * ISNULL(FD.Product_Rate, 0)
-						ELSE 0
-					END AS StockValueOfItem
-				FROM FilteredStock FS
-				FULL OUTER JOIN FilteredDelivery FD ON FS.Retailer_Id = FD.Retailer_Id AND FS.Item_Id = FD.Item_Id
-				LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = COALESCE(FS.Retailer_Id, FD.Retailer_Id)
-				LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = COALESCE(FS.Item_Id, FD.Item_Id)
-				ORDER BY r.Retailer_Name;`
+				SELECT s.*, lsd.Do_Date AS lastSalesDate
+				FROM Summary AS s
+				LEFT JOIN RetailerLastSalesDate AS lsd ON lsd.Retailer_Id = s.Retailer_Id
+				ORDER BY s.Retailer_Name`
 			);
 
 		const result = await request;
