@@ -4,6 +4,86 @@ import { dataFound, noData, success, failed, servError, invalidInput } from '../
 
 const TaskWorks = () => {
 
+    const getAllNewFormatData=async(req,res)=>{
+          try {
+        const { Emp_Id = null, Project_Id = null, Task_Id = null, Process_Id = null } = req.query;
+        const from = req.query.from ? ISOString(req.query.from) : ISOString();
+        const to = req.query.to ? ISOString(req.query.to) : ISOString();
+
+        const query = `
+SELECT
+    wm.*,
+    CASE 
+        WHEN wm.Project_Id != 1 THEN ISNULL(p.Project_Name, '')
+        ELSE ISNULL(wm.Additional_Project, '')
+    END AS Project_Name,
+    CASE 
+        WHEN wm.Task_Id != 1 THEN ISNULL(t.Task_Name, '')
+        ELSE ISNULL(wm.Additional_Task, '')
+    END AS Task_Name,
+    u.Name AS EmployeeName,
+    s.Status AS WorkStatus,
+    ISNULL(pm.Process_Name, '') as Process_Name,
+    COALESCE(
+        (SELECT Timer_Based FROM tbl_Task_Details WHERE AN_No = wm.AN_No), 
+        0
+    ) AS Timer_Based,
+    COALESCE((
+        SELECT
+            wpm.*,
+            tpm.Paramet_Name,
+            tpm.Paramet_Data_Type
+        FROM
+            tbl_Work_Paramet_DT AS wpm
+            LEFT JOIN tbl_Paramet_Master AS tpm ON tpm.Paramet_Id = wpm.Param_Id 
+        WHERE
+            wpm.Work_Id = wm.Work_Id
+        FOR JSON PATH
+    ), '[]') AS Work_Param
+FROM 
+    tbl_Work_Master AS wm
+    LEFT JOIN tbl_Project_Master AS p ON p.Project_Id = wm.Project_Id
+    LEFT JOIN tbl_Task AS t ON t.Task_Id = wm.Task_Id
+    LEFT JOIN tbl_Users AS u ON u.UserId = wm.Emp_Id
+    LEFT JOIN tbl_Status AS s ON s.Status_Id = wm.Work_Status
+    LEFT JOIN tbl_Process_Master AS pm ON pm.Id = wm.Process_Id
+    LEFT JOIN tbl_Task_Details AS td ON td.Task_Levl_Id = wm.Task_Levl_Id AND wm.AN_No = td.AN_No
+WHERE 
+    (wm.AN_No = td.AN_No OR wm.AN_No = 0)
+    AND CONVERT(DATE, wm.Work_Dt) >= CONVERT(DATE, @from)
+    AND CONVERT(DATE, wm.Work_Dt) <= CONVERT(DATE, @to)
+    AND (@Emp_Id IS NULL OR wm.Emp_Id = @Emp_Id)
+    AND (@Project_Id IS NULL OR wm.Project_Id = @Project_Id)
+    AND (@Task_Id IS NULL OR wm.Task_Id = @Task_Id)
+    AND (@Process_Id IS NULL OR wm.Process_Id = @Process_Id)
+ORDER BY 
+    wm.Work_Dt DESC, 
+    wm.Start_Time DESC`;
+
+        const result = await new sql.Request()
+            .input('Emp_Id', sql.BigInt, Emp_Id)
+            .input('Project_Id', sql.BigInt, Project_Id)
+            .input('Task_Id', sql.BigInt, Task_Id)
+            .input('Process_Id', sql.BigInt, Process_Id)
+            .input('from', sql.Date, from)
+            .input('to', sql.Date, to)
+            .query(query);
+
+        if (result.recordset.length > 0) {
+            const parsed = result.recordset.map(o => ({
+                ...o,
+                Work_Param: o.Work_Param && o.Work_Param !== '[]' ? JSON.parse(o.Work_Param) : []
+            }));
+            dataFound(res, parsed);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        servError(e, res);
+    }
+
+    }
+
   const getAllWorkedData = async (req, res) => {
         try {
             const { Emp_Id = '', Project_Id = '', Task_Id = '',Process_Id='' } = req.query;
@@ -11,13 +91,19 @@ const TaskWorks = () => {
             const to = req.query.to ? ISOString(req.query.to) : ISOString();
 
             let query = `
-                SELECT
-                    wm.*,
-                    p.Project_Name,
-                    t.Task_Name,
-                    u.Name AS EmployeeName,
-                    s.Status AS WorkStatus,
-                    ISNULL(pm.Process_Name,'') as Process_Name,
+             SELECT
+    wm.*,
+    CASE 
+        WHEN wm.Project_Id != 1 THEN ISNULL(p.Project_Name, '')
+        ELSE ISNULL(wm.Additional_Project, '')
+    END AS Project_Name,
+    CASE 
+        WHEN wm.Task_Id != 1 THEN ISNULL(t.Task_Name, '')
+        ELSE ISNULL(wm.Additional_Task, '')
+    END AS Task_Name,
+    u.Name AS EmployeeName,
+    s.Status AS WorkStatus,
+    ISNULL(pm.Process_Name, '') as Process_Name,
                     COALESCE(
                         (SELECT Timer_Based FROM tbl_Task_Details WHERE AN_No = wm.AN_No), 
                         0
@@ -104,7 +190,8 @@ const TaskWorks = () => {
             const {
                 Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
                 Process_Id,
-                Work_Dt, Work_Done, Start_Time, End_Time, Work_Status, Det_string
+                Work_Dt, Work_Done, Start_Time, End_Time, Work_Status, Det_string,
+                ProjectName,TaskName
             } = req.body;
 
 
@@ -127,15 +214,17 @@ const TaskWorks = () => {
             request.input('Task_Id', Task_Id)
             request.input('AN_No', AN_No)
             request.input('Emp_Id', Emp_Id)
-              request.input('Process_Id',Process_Id || 0)
+            request.input('Process_Id',Process_Id || 0)
             request.input('Work_Dt', Work_Dt || new Date())
             request.input('Work_Done', Work_Done)
             request.input('Start_Time', Start_Time)
             request.input('End_Time', End_Time)
             request.input('Work_Status', Work_Status)
             request.input('Entry_By', Emp_Id)
-            request.input('Entry_Date', new Date());
-            request.input('Det_string', Det_string );
+            request.input('Entry_Date', new Date())
+            request.input('Det_string', Det_string )
+            request.input('Additional_Project',ProjectName)
+            request.input('Additional_Task',TaskName)
           
 
             const result = await request.execute('Work_SP')
@@ -408,6 +497,7 @@ const TaskWorks = () => {
                }
     }
     return {
+        getAllNewFormatData,
         getAllWorkedData,
         postWorkedTask,
         getAllGroupedWorkedData,
