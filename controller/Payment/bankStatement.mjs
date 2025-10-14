@@ -1,6 +1,4 @@
 import { webcrypto, createPrivateKey, createPublicKey } from 'crypto';
-globalThis.crypto = webcrypto;
-
 import fs from 'fs';
 import path from 'path';
 import fetch from 'node-fetch';
@@ -11,20 +9,16 @@ import { ISOString } from '../../helper_functions.mjs';
 import sql from 'mssql';
 import { fileURLToPath } from 'url';
 
-
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const convertPrivateKeyToPKCS8 = (keyPem) => {
-
     try {
         const keyObject = createPrivateKey({ key: keyPem, format: 'pem' });
         const pkcs8Key = keyObject.export({ type: 'pkcs8', format: 'pem' });
 
         return pkcs8Key;
     } catch (err) {
-
         throw err;
     }
 };
@@ -34,14 +28,11 @@ const saveConvertedKey = (pkcs8Key) => {
     const convertedKeyPath = path.resolve('../../../certs/erpsmt_pkcs8.pem');
     try {
         fs.writeFileSync(convertedKeyPath, pkcs8Key);
-
         return convertedKeyPath;
     } catch (error) {
-
         return null;
     }
 };
-
 
 const loadPublicKeyFromCert = async () => {
     // const certPath = path.resolve('../../BANK_STATEMENT/certs/tmbank2025.crt');
@@ -54,18 +45,14 @@ const loadPublicKeyFromCert = async () => {
     return spkiPem.replace(/\r\n/g, '\n');
 };
 
-
 const loadPrivateKey = async () => {
     // const convertedKeyPath = path.resolve('../../BANK_STATEMENT/certs/erpsmt_pkcs8.pem');
     const convertedKeyPath = path.resolve(__dirname, '../../certs/erpsmt_pkcs8.pem');
     if (fs.existsSync(convertedKeyPath)) {
-
         const keyPem = fs.readFileSync(convertedKeyPath, 'utf8').trim();
         if (keyPem.includes('BEGIN PRIVATE KEY')) {
-
             return importPKCS8(keyPem, 'RSA-OAEP-256');
         }
-
     }
 
     // const originalKeyPath = path.resolve('../../BANK_STATEMENT/certs/erpsmt.pem');
@@ -74,13 +61,11 @@ const loadPrivateKey = async () => {
     const keyPem = fs.readFileSync(originalKeyPath, 'utf8').trim();
 
     if (keyPem.includes('BEGIN PRIVATE KEY')) {
-
         saveConvertedKey(keyPem);
         return importPKCS8(keyPem, 'RSA-OAEP-256');
     }
 
     if (keyPem.includes('BEGIN RSA PRIVATE KEY')) {
-
         const pkcs8Key = convertPrivateKeyToPKCS8(keyPem);
         saveConvertedKey(pkcs8Key);
         return importPKCS8(pkcs8Key, 'RSA-OAEP-256');
@@ -88,7 +73,6 @@ const loadPrivateKey = async () => {
 
     throw new Error('Unrecognized private key format');
 };
-
 
 const JWEEncrypt = async (payloadObj) => {
     if (!payloadObj) throw new Error('JWEEncrypt: payload is required');
@@ -104,7 +88,6 @@ const JWEEncrypt = async (payloadObj) => {
     return jweCompact;
 };
 
-
 const JWEDecrypt = async (jweToken) => {
     if (!jweToken) throw new Error('JWEDecrypt: JWE token required');
 
@@ -114,7 +97,6 @@ const JWEDecrypt = async (jweToken) => {
     const result = decoder.decode(plaintext);
     return result;
 };
-
 
 const getToken = async () => {
     const TOKEN_URL = 'https://tmb.apiuat.tmbank.in/tmb-api-external/uat-ext/accountstatement/oauth2/token';
@@ -130,7 +112,6 @@ const getToken = async () => {
         grant_type: 'client_credentials',
     });
 
-
     const res = await fetch(TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -144,20 +125,14 @@ const getToken = async () => {
     return data.access_token;
 };
 
-
 const fetchStatement = async (req, res) => {
     try {
         const { accountNo, startDate, endDate } = req.body;
         if (!accountNo || !startDate || !endDate) return invalidInput(res, 'Missing required fields');
 
-
-
-
         const accessToken = await getToken();
 
-
         const encryptedRequest = await JWEEncrypt({ accountNo, startDate, endDate });
-
 
         const SERVICE_URL = 'https://tmb.apiuat.tmbank.in/tmb-api-external/uat-ext/tmb_accountstatement_api/fetchstatement';
         const apiRes = await fetch(SERVICE_URL, {
@@ -173,8 +148,6 @@ const fetchStatement = async (req, res) => {
 
         const text = await apiRes.text();
 
-
-
         if (!apiRes.ok) {
             console.error('TMB API error:', text);
             return invalidInput(res, `TMB API failed: ${apiRes.status}`);
@@ -183,21 +156,17 @@ const fetchStatement = async (req, res) => {
         const jsonResponse = JSON.parse(text);
         if (!jsonResponse.Response) return invalidInput(res, 'No Response field in TMB API response');
 
-
         const decrypted = await JWEDecrypt(jsonResponse.Response);
 
-
-
-
         let parsedData;
+
         try {
             parsedData = JSON.parse(decrypted);
         } catch (err) {
-
             return invalidInput(res, 'Decrypted response is not valid JSON');
         }
-        dataFound(res, parsedData);
 
+        dataFound(res, parsedData);
 
     } catch (err) {
         console.error('fetchStatement error:', err);
@@ -393,7 +362,7 @@ const getBankStatement = async (req, res) => {
         let query = `SELECT * FROM tbl_Bank_Transactions WHERE TranDate BETWEEN @FromDate AND @ToDate ORDER BY TranDate DESC`;
 
         const result = await request.query(query);
-
+        console.log("result", result)
 
         sentData(res, result.recordset)
 
