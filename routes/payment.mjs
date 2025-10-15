@@ -39,6 +39,7 @@ PaymentRouter.post('/decrypt', bankStatement.decrypt);
 PaymentRouter.post('/encrypt', bankStatement.encrypt);     
 PaymentRouter.get('/token', bankStatement.getToken);      
 
+
 PaymentRouter.post('/syncStatement',bankStatement.syncStatement)
 PaymentRouter.get('/getBankStatement',bankStatement.getBankStatement)
 
