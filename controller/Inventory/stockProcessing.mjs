@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { servError, dataFound, noData, success, invalidInput, sentData } from '../../res.mjs';
-import { checkIsNumber, createPadString, isEqualNumber, ISOString, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, createPadString, filterableText, isEqualNumber, ISOString, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
 
 const StockManagement = () => {
 
@@ -120,6 +120,8 @@ const StockManagement = () => {
             if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
 
             const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
+
+            if (filterableText(Voucher_Code).length === 0) throw new Error('Failed to get Voucher_Code');
 
             const PR_Inv_Id = Voucher_Code + '/' + createPadString(P_No, 6) + '/' + Year_Desc;
 
@@ -242,7 +244,11 @@ const StockManagement = () => {
                     UPDATE s
                     SET s.Batch_Id = bm.id
                     FROM @SourceOut s
-                    JOIN tbl_Batch_Master bm ON bm.batch = s.Sour_Batch_Lot_No AND bm.item_id = s.Sour_Item_Id AND bm.godown_id = s.Sour_Goodown_Id;
+                    JOIN tbl_Batch_Master bm ON 
+                        bm.batch = s.Sour_Batch_Lot_No 
+                        AND bm.item_id = s.Sour_Item_Id 
+                        AND bm.godown_id = s.Sour_Goodown_Id
+                    WHERE bm.batch IS NOT NULL AND bm.batch <> '';
                     /* =================== Source batch consumption =================== */
                     INSERT INTO tbl_Batch_Transaction (
                         batch_id, batch, trans_date, item_id, godown_id, 
@@ -251,8 +257,14 @@ const StockManagement = () => {
                     SELECT 
                         s.Batch_Id, s.Sour_Batch_Lot_No, @trans_date, s.Sour_Item_Id, s.Sour_Goodown_Id, 
                         s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy
-                    FROM @SourceOut s
-                    WHERE s.Batch_Id IS NOT NULL;
+                    FROM (
+                        SELECT * 
+                        FROM @SourceOut
+                        WHERE 
+                            Batch_Id IS NOT NULL 
+                            AND Sour_Batch_Lot_No IS NOT NULL 
+                            AND Sour_Batch_Lot_No <> ''
+                    ) s
                     /* ====================================== */
                     /* =================== Destination =================== */
                     /* ====================================== */
@@ -291,7 +303,11 @@ const StockManagement = () => {
                     ) AS j;
                     /* ==================== Destination Batch production (upsert) ==================== */
                     MERGE tbl_Batch_Master AS target
-                    USING @DestOut AS d
+                    USING (
+                        SELECT *
+                        FROM @DestOut
+                        WHERE Dest_Batch_Lot_No IS NOT NULL AND Dest_Batch_Lot_No <> ''
+                    ) AS d
                     ON  target.batch    = d.Dest_Batch_Lot_No
                     AND target.item_id  = d.Dest_Item_Id
                     AND target.godown_id= d.Dest_Goodown_Id

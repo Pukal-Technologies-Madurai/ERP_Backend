@@ -15,7 +15,7 @@ const voucherType = () => {
                     FROM tbl_Voucher_Type vt
 	                LEFT JOIN tbl_Branch_Master bm 
                         ON bm.BranchId = vt.Branch_Id
-                    WHERE Vocher_Type_Id IS NOT NULL
+                    WHERE Vocher_Type_Id IS NOT NULL AND (Voucher_Code IS NOT NULL AND Voucher_Code <> '')
                     ${module ? ' AND Type = @module ' : ''}`
                 );
 

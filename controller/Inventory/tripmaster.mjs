@@ -1,7 +1,7 @@
 
 import sql from 'mssql'
 import { servError, dataFound, noData, success, invalidInput } from '../../res.mjs';
-import { checkIsNumber, ISOString, Subraction, createPadString, isValidDate, toNumber } from '../../helper_functions.mjs'
+import { checkIsNumber, ISOString, Subraction, createPadString, isValidDate, toNumber, filterableText } from '../../helper_functions.mjs'
 
 const tripActivities = () => {
 
@@ -184,7 +184,7 @@ const tripActivities = () => {
                             @Trip_Id, @Arrival_Id
                         );
                         SET @reference_id = SCOPE_IDENTITY();
-                        ${product?.Batch_No ? `
+                        ${filterableText(product?.Batch_No) ? `
                     -- batch update in arrival
                             UPDATE tbl_Trip_Arrival
                             SET Batch_No = @Batch_No
@@ -202,7 +202,7 @@ const tripActivities = () => {
                                 VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By);`
                             : ''}
                     -- if the bill type is Godown transfer
-                        ${(BillType === 'OTHER GODOWN' && product?.Batch_No) ? `
+                        ${(BillType === 'OTHER GODOWN' && filterableText(product?.Batch_No)) ? `
                             DECLARE @batch_id uniqueidentifier = (
                                 SELECT TOP(1) id FROM tbl_Batch_Master
                                 WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
@@ -420,7 +420,7 @@ const tripActivities = () => {
                             @Trip_Id, @Arrival_Id
                         );
                         SET @reference_id = SCOPE_IDENTITY();
-                        ${product?.Batch_No ? `
+                        ${filterableText(product?.Batch_No) ? `
                     -- batch update in arrival
                             UPDATE tbl_Trip_Arrival
                             SET Batch_No = @Batch_No
@@ -438,7 +438,7 @@ const tripActivities = () => {
                                 VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By);`
                             : ''}
                     -- if the bill type is Godown transfer
-                        ${(BillType === 'OTHER GODOWN' && product?.Batch_No) ? `
+                        ${(BillType === 'OTHER GODOWN' && filterableText(product?.Batch_No)) ? `
                             DECLARE @batch_id uniqueidentifier = (
                                 SELECT TOP(1) id FROM tbl_Batch_Master
                                 WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
