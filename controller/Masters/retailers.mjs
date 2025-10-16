@@ -562,39 +562,26 @@ const RetailerControll = () => {
                 COALESCE(modify.Name, '') AS lastModifiedBy,
                 COALESCE(created.Name, '') AS createdBy,
                 COALESCE((
-                    SELECT 
-                        TOP (1) *
-                    FROM 
-                        tbl_Retailers_Locations
-                    WHERE
-                        Retailer_Id = rm.Retailer_Id
-                        AND
-                        isActiveLocation = 1
+                    SELECT TOP (1) *
+                    FROM tbl_Retailers_Locations
+                    WHERE Retailer_Id = rm.Retailer_Id AND isActiveLocation = 1 
                     FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-                ), '{}') AS VERIFIED_LOCATION
-            FROM
-                tbl_Retailers_Master AS rm
-            LEFT JOIN
-                tbl_Route_Master AS rom
-                ON rom.Route_Id = rm.Route_Id
-            LEFT JOIN
-                tbl_Area_Master AS am
-                ON am.Area_Id = rm.Area_Id
-            LEFT JOIN
-                tbl_State_Master AS sm
-                ON sm.State_Id = rm.State_Id
-            LEFT JOIN
-                tbl_Company_Master AS cm
-                ON cm.Company_id = rm.Company_Id
-            LEFT JOIN
-                tbl_Users AS modify
-                ON modify.UserId = rm.Updated_By
-            LEFT JOIN
-                tbl_Users AS created
-                ON created.UserId = rm.Created_By
-            WHERE
-            	rm.Retailer_Id = @retail
-            `;
+                ), '{}') AS VERIFIED_LOCATION,
+                COALESCE(lol.Party_Name, '') AS Party_Name,
+                COALESCE(lol.Party_Location, '') AS Party_Location,
+                COALESCE(lol.Party_Mailing_Name, '') AS retailerTamilName,
+                COALESCE(lol.Party_Mailing_Address, '') AS Party_Mailing_Address,
+                COALESCE(lol.GST_No, '') AS GST_No,
+                COALESCE(lol.Route_Name, '') AS Route_Name
+            FROM tbl_Retailers_Master AS rm
+            LEFT JOIN tbl_Route_Master AS rom ON rom.Route_Id = rm.Route_Id
+            LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+            LEFT JOIN tbl_State_Master AS sm ON sm.State_Id = rm.State_Id
+            LEFT JOIN tbl_Company_Master AS cm ON cm.Company_id = rm.Company_Id
+            LEFT JOIN tbl_Users AS modify ON modify.UserId = rm.Updated_By
+            LEFT JOIN tbl_Users AS created ON created.UserId = rm.Created_By
+            LEFT JOIN  tbl_Ledger_LOL AS lol  ON lol.Ret_Id = rm.Retailer_Id
+            WHERE rm.Retailer_Id = @retail;`;
 
             const request = new sql.Request();
             request.input('retail', Retailer_Id);
