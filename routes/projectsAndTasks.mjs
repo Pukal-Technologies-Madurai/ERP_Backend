@@ -91,4 +91,7 @@ projectRoute.get('/task/work/barChart', taskWorks.taskWorkDetailsBarChart);
 // router.get('/task/employeeInvolved', workController.EmployeeTaskDropDown);
 projectRoute.get('/processMaster/dropDown',taskWorks.getProcessDetails)
 
+
+projectRoute.get('/tasks/project/dropdown',taskActivity.getProjectDropDown)
+
 export default projectRoute;
