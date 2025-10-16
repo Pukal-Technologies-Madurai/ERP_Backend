@@ -1012,8 +1012,12 @@ const itemAndRetailerBasedReport = async (req, res) => {
 					SELECT 
 						sd.Retailer_Id,
 						MAX(sd.Do_Date) Do_Date
-					FROM tbl_Sales_Delivery_Gen_Info AS sd
-					WHERE sd.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM Summary WHERE Retailer_Id IS NOT NULL)
+					FROM LatestClosingPerItem as cls
+					LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sd ON sd.Retailer_Id = cls.Retailer_Id
+					LEFT JOIN tbl_Sales_Delivery_Stock_Info AS sdi ON sdi.Delivery_Order_Id = sd.Do_Id
+					WHERE 
+						cls.Retailer_Id = sd.Retailer_Id
+						AND cls.Item_Id = sdi.Item_Id
 					GROUP BY sd.Retailer_Id
 				)
 				SELECT s.*, lsd.Do_Date AS lastSalesDate
