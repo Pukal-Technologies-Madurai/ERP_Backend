@@ -161,10 +161,10 @@ ORDER BY
             AND CONVERT(DATE, Work_Dt) <= CONVERT(DATE, @to) ORDER BY wm.Start_Time`;
 
             const result = await new sql.Request()
-                .input('Emp_Id', sql.BigInt, Emp_Id)
-                .input('Project_Id', sql.BigInt, Project_Id)
-                .input('Task_Id', sql.BigInt, Task_Id) 
-                  .input('Process_Id', sql.BigInt, Process_Id) 
+                .input('Emp_Id', Emp_Id)
+                .input('Project_Id', Project_Id)
+                .input('Task_Id', Task_Id) 
+                  .input('Process_Id', Process_Id) 
                 .input('from', sql.Date, from)
                 .input('to', sql.Date, to)
                 .query(query);

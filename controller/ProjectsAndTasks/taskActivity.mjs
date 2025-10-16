@@ -281,6 +281,40 @@ const TaskActivity = () => {
         }
     }
 
+
+const getProjectDropDown = async (req, res) => {
+        const { Company_id } = req.query;
+
+        if (!checkIsNumber(Company_id)) {
+            return invalidInput(res, 'Company_id is required');
+        }
+
+        try {
+            const query = `
+            SELECT 
+               pm.Project_Id,
+               pm.Project_Name
+            FROM 
+                tbl_Project_Master pm
+            where Company_id=@Company_id
+          `;
+
+            const request = new sql.Request();
+            request.input('Company_id', Company_id);
+
+            const result = await request.query(query);
+
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset)
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
+
     return {
         getEmployeeAssignedInTheTask,
         assignTaskForEmployee,
@@ -289,6 +323,7 @@ const TaskActivity = () => {
         getTaskAssignedUsers,
         getAssignedTasks,
         getFilteredUsersBasedOnTasks,
+        getProjectDropDown
     }
 }
 
