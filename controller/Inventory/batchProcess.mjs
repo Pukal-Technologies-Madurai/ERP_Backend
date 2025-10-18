@@ -245,6 +245,8 @@ const postBatchInProcessingSource = async (req, res) => {
             .input('createdBy', sql.Int, createdBy)
             .input('trans_date', sql.Date, trans_date)
             .query(`
+            -- latest obid
+                DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
             -- Parse input JSON into temp table
                 CREATE TABLE #Parsed (
                     batch_id NVARCHAR(150),
@@ -272,9 +274,9 @@ const postBatchInProcessingSource = async (req, res) => {
                 );
             -- Insert transfer out transaction
                 INSERT INTO tbl_Batch_Transaction (
-                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by
+                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
                 )
-                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'CONSUMPTION', moduleId, @createdBy
+                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'CONSUMPTION', moduleId, @createdBy, @openingId
                 FROM #Parsed;
             -- Update Sales
                 UPDATE pr
@@ -540,6 +542,8 @@ const postOtherGodownTransfer = async (req, res) => {
             .input('createdBy', sql.Int, createdBy)
             .input('trans_date', sql.Date, trans_date)
             .query(`
+            -- latest obid
+                DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
             -- Parse input JSON into temp table
                 CREATE TABLE #Parsed (
                     batch_id NVARCHAR(150),
@@ -567,9 +571,9 @@ const postOtherGodownTransfer = async (req, res) => {
                 );
             -- Insert transfer out transaction
                 INSERT INTO tbl_Batch_Transaction (
-                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by
+                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
                 )
-                SELECT batch_id, batch, @trans_date, item_id, from_godown, quantity, 'OTHER GODOWN', moduleId, @createdBy
+                SELECT batch_id, batch, @trans_date, item_id, from_godown, quantity, 'OTHER GODOWN', moduleId, @createdBy, @openingId
                 FROM #Parsed;
             -- Ensure the batch exists in destination godown (if not, insert)
                 MERGE tbl_Batch_Master AS target
@@ -694,6 +698,8 @@ const postSalesUsage = async (req, res) => {
             .input('createdBy', sql.Int, createdBy)
             .input('trans_date', sql.Date, trans_date)
             .query(`
+            -- latest obid
+                DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
             -- Parse input JSON into temp table
                 CREATE TABLE #Parsed (
                     batch_id NVARCHAR(150),
@@ -721,9 +727,9 @@ const postSalesUsage = async (req, res) => {
                 );
             -- Insert transfer out transaction
                 INSERT INTO tbl_Batch_Transaction (
-                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by
+                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
                 )
-                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'SALES', moduleId, @createdBy
+                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'SALES', moduleId, @createdBy, @openingId
                 FROM #Parsed;
             -- Update Sales
                 UPDATE s
@@ -902,6 +908,9 @@ const getBatchStockBalance = async (req, res) => {
             .input('Todate', sql.Date, Todate)
             .input('Product_Id', sql.Int, Product_Id)
             .query(`
+            --  opening date
+                DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
+	            DECLARE @openingDate DATE = (SELECT TOP (1) OB_Date FROM tbl_OB_ST_Date WHERE OB_Id = @openingId);
             -- only useable quantity details
                 DECLARE @batchDetails TABLE (id uniqueidentifier, consumedQuantity DECIMAL(18, 2));
             -- filters
@@ -911,7 +920,11 @@ const getBatchStockBalance = async (req, res) => {
                 	COALESCE(SUM(bt.quantity), 0) AS consumedQuantity
                 FROM tbl_Batch_Master AS bm
                 LEFT JOIN tbl_Batch_Transaction AS bt ON bt.batch_id = bm.id
-                WHERE bm.id IS NOT NULL
+                WHERE 
+                    bm.id IS NOT NULL
+                    AND bm.ob_id = @openingId
+                    AND LTRIM(RTRIM(bm.batch)) <> '' 
+                    AND bm.batch IS NOT NULL
                 ${stringCompare(dateBased, 'yes') ? ` AND CONVERT(DATE, bm.trans_date) BETWEEN @Fromdate AND @Todate ` : ''}
                 ${checkIsNumber(Product_Id) ? ` AND bm.item_id = @Product_Id ` : ''}
                 GROUP BY bm.id, bm.quantity

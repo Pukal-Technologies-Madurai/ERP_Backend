@@ -563,9 +563,11 @@ const PurchaseOrder = () => {
                 .input('PIN_Id', PIN_Id)
                 .input('Created_by', Created_by)
                 .query(`
+                -- latest obid
+                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                     INSERT INTO tbl_Batch_Transaction (
                         batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by
+                        quantity, type, reference_id, created_by, ob_id
                     ) 
                     SELECT *
                     FROM ( 
@@ -582,7 +584,8 @@ const PurchaseOrder = () => {
                             -pis.Bill_Qty quantity,
                             'REVERSAL_PURCHASE' type,
                             pis.POI_St_Id reference_id,
-                            @Created_by created_by
+                            @Created_by created_by,
+                            @openingId
                         FROM tbl_Purchase_Order_Inv_Stock_Info AS pis
                         WHERE 
                             pis.PIN_Id = @PIN_Id

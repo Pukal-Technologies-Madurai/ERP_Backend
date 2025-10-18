@@ -673,7 +673,6 @@ const SaleOrder = () => {
                 ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
                 ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
                 ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''};
-
             -- Step 2: Sales Order General Info
             SELECT 
                 so.*, 
@@ -689,11 +688,11 @@ const SaleOrder = () => {
             LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
             LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
             WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
-
             -- Step 3: Sales Order Product Details
             SELECT 
                 si.*,
                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
                 COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
                 COALESCE(u.Units, 'not available') AS UOM,
                 COALESCE(b.Brand_Name, 'not available') AS BrandGet
@@ -702,7 +701,6 @@ const SaleOrder = () => {
             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
             WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
-
             -- Step 4: Staff Involved
             SELECT 
                 sosi.So_Id, 
@@ -714,7 +712,6 @@ const SaleOrder = () => {
             LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
             LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
             WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
-
             -- Step 5: Delivery General Info
             SELECT 
                 dgi.*,
@@ -731,7 +728,6 @@ const SaleOrder = () => {
             LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
             LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
             WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
-
             -- Step 6: Delivery Product Details
             SELECT 
                 oi.*,

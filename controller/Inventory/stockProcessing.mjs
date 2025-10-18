@@ -191,6 +191,8 @@ const StockManagement = () => {
                     StaffInvolve
                 }))
                 .query(`
+                    -- latest obid
+                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                     DECLARE @SourceOut TABLE (
                         PRS_Id BIGINT,
                         Sour_Item_Id BIGINT,
@@ -252,11 +254,11 @@ const StockManagement = () => {
                     /* =================== Source batch consumption =================== */
                     INSERT INTO tbl_Batch_Transaction (
                         batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by
+                        quantity, type, reference_id, created_by, ob_id
                     )
                     SELECT 
                         s.Batch_Id, s.Sour_Batch_Lot_No, @trans_date, s.Sour_Item_Id, s.Sour_Goodown_Id, 
-                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy
+                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy, @openingId
                     FROM (
                         SELECT * 
                         FROM @SourceOut
@@ -465,6 +467,8 @@ const StockManagement = () => {
                     StaffInvolve
                 }))
                 .query(`
+                    -- latest obid
+                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                     -- removing previous quantity in batch
                     DECLARE @OldSource TABLE (
                         PRS_Id BIGINT,
@@ -510,19 +514,21 @@ const StockManagement = () => {
                     WHERE d.PR_Id = @PR_Id;
                     /* ===================== negative quantity inserting ================== */
                     -- If you historically wrote a CONSUMPTION row with +Qty, the negative here cancels it out.
-                    INSERT INTO tbl_Batch_Transaction
-                        (batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by)
+                    INSERT INTO tbl_Batch_Transaction (
+                        batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
+                    )
                     SELECT
                         os.Batch_Id, os.Batch, @trans_date, os.Item_Id, os.Godown_Id,
-                        -os.Qty, 'REVERSAL_CONSUMPTION', os.PRS_Id, @createdBy
+                        -os.Qty, 'REVERSAL_CONSUMPTION', os.PRS_Id, @createdBy, @openingId
                     FROM @OldSource os
                     WHERE os.Batch_Id IS NOT NULL;
                     /* ===================== destination removal ================== */
-                    INSERT INTO tbl_Batch_Transaction
-                        (batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by)
+                    INSERT INTO tbl_Batch_Transaction (
+                        batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
+                    )
                     SELECT
                         od.Batch_Id, od.Batch, @trans_date, od.Item_Id, od.Godown_Id,
-                        -od.Qty, 'REVERSAL_PRODUCTION', od.PRD_Id, @createdBy
+                        -od.Qty, 'REVERSAL_PRODUCTION', od.PRD_Id, @createdBy, @openingId
                     FROM @OldDest od
                     WHERE od.Batch_Id IS NOT NULL;
                     /* ===================== Deleting Previous Data ===================== */
@@ -589,11 +595,11 @@ const StockManagement = () => {
                     /* =================== Source batch consumption =================== */
                     INSERT INTO tbl_Batch_Transaction (
                         batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by
+                        quantity, type, reference_id, created_by, ob_id
                     )
                     SELECT 
                         s.Batch_Id, s.Sour_Batch_Lot_No, @trans_date, s.Sour_Item_Id, s.Sour_Goodown_Id, 
-                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy
+                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy, @openingId
                     FROM @SourceOut s
                     WHERE s.Batch_Id IS NOT NULL;
                     /* ====================================== */

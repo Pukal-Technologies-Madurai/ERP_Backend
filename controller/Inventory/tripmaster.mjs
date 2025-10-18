@@ -203,16 +203,18 @@ const tripActivities = () => {
                             : ''}
                     -- if the bill type is Godown transfer
                         ${(BillType === 'OTHER GODOWN' && filterableText(product?.Batch_No)) ? `
+                            -- latest obid
+                            DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                             DECLARE @batch_id uniqueidentifier = (
                                 SELECT TOP(1) id FROM tbl_Batch_Master
                                 WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
                             );
                             INSERT INTO tbl_Batch_Transaction (
                                 batch_id, batch, trans_date, item_id, godown_id, 
-                                quantity, type, reference_id, created_by
+                                quantity, type, reference_id, created_by, ob_id
                             ) VALUES (
                                 @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
-                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By
+                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By, @openingId
                             );
                         ` : ''}
                         `
@@ -357,9 +359,11 @@ const tripActivities = () => {
                 .input('Trip_Id', Trip_Id)
                 .input('Updated_By', Updated_By)
                 .query(`
+                -- latest obid
+                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                     INSERT INTO tbl_Batch_Transaction (
                         batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by
+                        quantity, type, reference_id, created_by, ob_id
                     ) 
                     SELECT *
                     FROM ( 
@@ -376,7 +380,8 @@ const tripActivities = () => {
                             -ta.QTY quantity,
                             'REVERSAL_TRIP_SHEET' type,
                             td.Id reference_id,
-                            @Updated_By created_by
+                            @Updated_By created_by,
+                            @openingId
                         FROM tbl_Trip_Details AS td
                         LEFT JOIN tbl_Trip_Arrival as ta
                             ON ta.Arr_Id = td.Arrival_Id
@@ -443,12 +448,14 @@ const tripActivities = () => {
                                 SELECT TOP(1) id FROM tbl_Batch_Master
                                 WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
                             );
+                            -- latest obid
+                            DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                             INSERT INTO tbl_Batch_Transaction (
                                 batch_id, batch, trans_date, item_id, godown_id, 
-                                quantity, type, reference_id, created_by
+                                quantity, type, reference_id, created_by, ob_id
                             ) VALUES (
                                 @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
-                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By
+                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By, @openingId
                             );
                         ` : ''}
                         `

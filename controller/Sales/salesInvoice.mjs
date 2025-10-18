@@ -380,8 +380,10 @@ const SalesInvoice = () => {
                     .input('batchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchCreationDetails }))
                     .input('Created_by', sql.BigInt, Created_by)
                     .query(`
-                        ;INSERT INTO tbl_Batch_Transaction (
-                            batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by
+                        -- latest obid
+                        DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
+                        INSERT INTO tbl_Batch_Transaction (
+                            batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
                         )
                         SELECT b.*
                         FROM (
@@ -398,7 +400,8 @@ const SalesInvoice = () => {
                                 ISNULL(p.Bill_Qty, 0) AS quantity,
                                 'SALES' AS type,
                                 p.DO_St_Id AS reference_id,
-                                @Created_by  AS created_by
+                                @Created_by  AS created_by,
+                                @openingId
                             FROM OPENJSON(@batchJson, '$.rows')
                             WITH (
                                 DO_St_Id   INT            '$.DO_St_Id',
@@ -833,31 +836,15 @@ const SalesInvoice = () => {
                 .input('Do_Id', Do_Id)
                 .input('created_by', sql.BigInt, Altered_by)
                 .query(`
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by
-                    ) 
-                    SELECT *
-                    FROM ( 
-                        SELECT
-                            COALESCE((
-                                SELECT TOP(1) id 
-                                FROM tbl_Batch_Master
-                                WHERE batch = sd.Batch_Name AND item_id = sd.Item_Id AND godown_id = sd.GoDown_Id
-                                ORDER BY id DESC
-                            ), NULL) AS batch_id,
-                            COALESCE(sd.Batch_Name, '') batch,
-                            GETDATE() trans_date,
-                            sd.Item_Id item_id,
-                            sd.GoDown_Id godown_id,
-                            -sd.Bill_Qty quantity,
-                            'REVERSAL_SALES' type,
-                            sd.DO_St_Id reference_id,
-                            @created_by created_by
+                    DELETE FROM tbl_Batch_Transaction 
+                    WHERE reference_id IN (
+                        SELECT Delivery_Order_Id 
                         FROM tbl_Sales_Delivery_Stock_Info AS sd
-                        WHERE sd.Delivery_Order_Id = @Do_Id AND sd.Batch_Name <> '' AND sd.Batch_Name IS NOT NULL
-                    ) AS batchDetails
-                    WHERE batchDetails.batch_id IS NOT NULL;
+                        WHERE 
+                            sd.Delivery_Order_Id = @Do_Id 
+                            AND sd.Batch_Name IS NOT NULL 
+                            AND LTRIM(RTRIM(sd.Batch_Name)) <> ''
+                    )
                     DELETE FROM tbl_Sales_Delivery_Stock_Info WHERE Delivery_Order_Id = @Do_Id;
                     DELETE FROM tbl_Sales_Delivery_Expence_Info WHERE Do_Id = @Do_Id;
                     DELETE FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = @Do_Id;`
@@ -958,8 +945,10 @@ const SalesInvoice = () => {
                     .input('batchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchCreationDetails }))
                     .input('Created_by', sql.BigInt, Altered_by)
                     .query(`
-                        ;INSERT INTO tbl_Batch_Transaction (
-                            batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by
+                        -- latest obid
+                        DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
+                        INSERT INTO tbl_Batch_Transaction (
+                            batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
                         )
                         SELECT b.*
                         FROM (
@@ -976,7 +965,8 @@ const SalesInvoice = () => {
                                 ISNULL(p.Bill_Qty, 0) AS quantity,
                                 'SALES' AS type,
                                 p.DO_St_Id AS reference_id,
-                                @Created_by  AS created_by
+                                @Created_by  AS created_by,
+                                @openingId
                             FROM OPENJSON(@batchJson, '$.rows')
                             WITH (
                                 DO_St_Id   INT            '$.DO_St_Id',
@@ -2637,3 +2627,36 @@ const SalesInvoice = () => {
 }
 
 export default SalesInvoice();
+
+
+
+
+                    // DECLARE @batchTransaction TABLE (
+                    //     batch_id uniqueidentifier, batch nvarchar(50), trans_date date, item_id bigint, godown_id bigint, 
+                    //     quantity decimal(18, 2), type nvarchar(50), reference_id nvarchar(100), created_by nvarchar(100)
+                    // );
+                    // INSERT INTO @batchTransaction (
+                    //     batch_id, batch, trans_date, item_id, godown_id, 
+                    //     quantity, type, reference_id, created_by
+                    // ) 
+                    // SELECT *
+                    // FROM ( 
+                    //     SELECT
+                    //         COALESCE((
+                    //             SELECT TOP(1) id 
+                    //             FROM tbl_Batch_Master
+                    //             WHERE batch = sd.Batch_Name AND item_id = sd.Item_Id AND godown_id = sd.GoDown_Id
+                    //             ORDER BY id DESC
+                    //         ), NULL) AS batch_id,
+                    //         COALESCE(sd.Batch_Name, '') batch,
+                    //         GETDATE() trans_date,
+                    //         sd.Item_Id item_id,
+                    //         sd.GoDown_Id godown_id,
+                    //         -sd.Bill_Qty quantity,
+                    //         'REVERSAL_SALES' type,
+                    //         sd.DO_St_Id reference_id,
+                    //         @created_by created_by
+                    //     FROM tbl_Sales_Delivery_Stock_Info AS sd
+                    //     WHERE sd.Delivery_Order_Id = @Do_Id AND sd.Batch_Name <> '' AND sd.Batch_Name IS NOT NULL
+                    // ) AS batchDetails
+                    // WHERE batchDetails.batch_id IS NOT NULL;
