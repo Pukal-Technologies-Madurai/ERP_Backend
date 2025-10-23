@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { dataFound, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat, createPadString, toNumber, toArray } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, Subraction, Multiplication, RoundNumber, Addition, NumberFormat, createPadString, toNumber, toArray, isValidObject } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -273,7 +273,60 @@ const SaleOrder = () => {
 
             await transaction.commit();
 
-            success(res, 'Order Created!')
+            const getCreatedSaleOrder = new sql.Request()
+                .input('So_Id', So_Id)
+                .query(`
+                    -- general info
+                    SELECT 
+                        so.*, 
+                        COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                        COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                        COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                        COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                        COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                    FROM tbl_Sales_Order_Gen_Info AS so
+                    LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+                    LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+                    LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+                    LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+                    WHERE so.So_Id = @So_Id;
+                    -- product details
+                    SELECT 
+                        si.*,
+                        COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                        COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+                        COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                        COALESCE(u.Units, 'not available') AS UOM,
+                        COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                    FROM tbl_Sales_Order_Stock_Info AS si
+                    LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                    LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+                    LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                    WHERE si.Sales_Order_Id = @So_Id;
+                    -- Staff Involved
+                    SELECT 
+                        sosi.So_Id, 
+                        sosi.Involved_Emp_Id,
+                        sosi.Cost_Center_Type_Id,
+                        c.Cost_Center_Name AS EmpName,
+                        cc.Cost_Category AS EmpType
+                    FROM tbl_Sales_Order_Staff_Info AS sosi
+                    LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+                    LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+                    WHERE sosi.So_Id = @So_Id;`
+                );
+
+            const createdSaleOrder = await getCreatedSaleOrder;
+
+            return success(res, 'Order Created!', [], {
+                createdSaleOrder: {
+                    generalInfo: isValidObject(createdSaleOrder.recordsets[0][0]) ? createdSaleOrder.recordsets[0][0] : {},
+                    productDetails: toArray(createdSaleOrder.recordsets[1]),
+                    staffInvolved: toArray(createdSaleOrder.recordsets[2]),
+                },
+            })
+
         } catch (e) {
             if (transaction._aborted === false) {
                 await transaction.rollback();
