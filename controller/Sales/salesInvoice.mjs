@@ -1755,78 +1755,144 @@ const SalesInvoice = () => {
         }
     }
 
-    const getSalesInvoiceMobile = async (req, res) => {
-        try {
-            const {
-                Retailer_Id,
-                Cancel_status,
-                Created_by,
-                VoucherType,
-                Fromdate,
-                Todate
-            } = req.query;
+      const getSalesInvoiceMobile = async (req, res) => {
+    try {
+        const { Retailer_Id, Cancel_status = 0, Created_by, VoucherType, Branch_Id, User_Id } = req.query;
 
-            const fromDate = Fromdate
-                ? new Date(Fromdate).toISOString().slice(0, 10)
-                : new Date().toISOString().slice(0, 10);
-            const toDate = Todate
-                ? new Date(Todate).toISOString().slice(0, 10)
-                : new Date().toISOString().slice(0, 10);
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
-            const request = new sql.Request()
-                .input('Fromdate', sql.Date, fromDate)
-                .input('Todate', sql.Date, toDate)
-                .input('Retailer_Id', sql.Int, Retailer_Id || null)
-                .input('Cancel_status', sql.Int, Cancel_status || null)
-                .input('Created_by', sql.Int, Created_by || null)
-                .input('VoucherType', sql.Int, VoucherType || null);
+        // Step 1: Fetch default account exclusion list
+        const getCurrespondingAccount = await new sql.Request().query(`
+            SELECT Acc_Id 
+            FROM tbl_Default_AC_Master 
+            WHERE Type = 'DEFAULT' AND Acc_Id IS NOT NULL;
+        `);
+        const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
 
-            const sqlQuery = `
-            SELECT
-                COALESCE((
-                    SELECT
-                        COUNT(DISTINCT sdgi.Do_Id) AS Total_Invoices,
-                        SUM(sdgi.Total_Invoice_value) AS Total_Invoice_Value
-                    FROM tbl_Sales_Delivery_Gen_Info sdgi
-                    WHERE sdgi.Do_Date BETWEEN @Fromdate AND @Todate
-                        AND (@Retailer_Id IS NULL OR sdgi.Retailer_Id = @Retailer_Id)
-                        AND (@Cancel_status IS NULL OR sdgi.Cancel_status = @Cancel_status)
-                        AND (@Created_by IS NULL OR sdgi.Created_by = @Created_by)
-                        AND (@VoucherType IS NULL OR sdgi.Voucher_Type = @VoucherType)
-                    FOR JSON PATH
-                ), '[]') AS Total,
-                COALESCE((
-                    SELECT
-                        sdgi.Retailer_Id,
-                        COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                        COUNT(DISTINCT sdgi.Do_Id) AS Invoice_Count,
-                        SUM(sdgi.Total_Invoice_value) AS Total_Invoice_Value
-                    FROM tbl_Sales_Delivery_Gen_Info sdgi
-                    LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
-                    WHERE sdgi.Do_Date BETWEEN @Fromdate AND @Todate
-                        AND (@Retailer_Id IS NULL OR sdgi.Retailer_Id = @Retailer_Id)
-                        AND (@Cancel_status IS NULL OR sdgi.Cancel_status = @Cancel_status)
-                        AND (@Created_by IS NULL OR sdgi.Created_by = @Created_by)
-                        AND (@VoucherType IS NULL OR sdgi.Voucher_Type = @VoucherType)
-                    GROUP BY sdgi.Retailer_Id, rm.Retailer_Name
-                    FOR JSON PATH
-                ), '[]') AS Summary;`;
+        // Step 2: Handle Branch filtering
+        let branchCondition = '';
 
-            const result = await request.query(sqlQuery);
+        if (User_Id) {
+            const getBranches = await new sql.Request()
+                .input('User_Id', User_Id)
+                .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
+            
+            const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
 
-            if (result.recordset.length > 0) {
-                const row = result.recordset[0];
-                return dataFound(res, {
-                    Total: row.Total ? JSON.parse(row.Total) : [],
-                    Summary: row.Summary ? JSON.parse(row.Summary) : []
-                });
-            } else {
-                return noData(res);
+            if (Branch_Id) {
+                // User passed specific branch(es)
+                const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
+                const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
+
+                if (finalBranches.length) {
+                    branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
+                } else {
+                    // selected branch not allowed → no data
+                    return res.json({ data: [], message: "No data", success: true, others: {} });
+                }
+            } else if (allowedBranches.length) {
+                // No branch passed → return all allowed branches
+                branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
             }
-        } catch (e) {
-            servError(e, res);
         }
-    };
+
+        // Step 3: Filtered Invoice IDs
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
+            .input('retailer', Retailer_Id)
+            .input('cancel', Cancel_status)
+            .input('creater', Created_by)
+            .input('VoucherType', VoucherType)
+            .query(`
+                DECLARE @FilteredInvoice TABLE (Do_Id INT);
+
+                INSERT INTO @FilteredInvoice (Do_Id)
+                SELECT Do_Id
+                FROM tbl_Sales_Delivery_Gen_Info
+                WHERE 
+                    Do_Date BETWEEN @Fromdate AND @Todate
+                    ${Retailer_Id ? ' AND Retailer_Id = @retailer ' : ''}
+                    ${Cancel_status ? ' AND Cancel_status = @cancel ' : ''}
+                    ${Created_by ? ' AND Created_by = @creater ' : ''}
+                    ${VoucherType ? ' AND Voucher_Type = @VoucherType ' : ''}
+                    ${branchCondition};
+
+                -- Sales general info
+                SELECT 
+                    sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                    sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                    sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, 
+                    sdgi.Total_Expences, sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                    sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                FROM tbl_Sales_Delivery_Gen_Info sdgi
+                LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = sdgi.Branch_Id
+                LEFT JOIN tbl_Users cb ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_Voucher_Type v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
+
+                -- product details
+                SELECT
+                    oi.*, pm.Product_Id,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Item_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Delivery_Stock_Info oi
+                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM u ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Brand_Master b ON b.Brand_Id = pm.Brand
+                WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+
+                -- expense details
+                SELECT 
+                    exp.*, em.Account_name AS Expence_Name, 
+                    CASE WHEN exp.Expence_Value_DR > 0 THEN -exp.Expence_Value_DR ELSE exp.Expence_Value_CR END AS Expence_Value
+                FROM tbl_Sales_Delivery_Expence_Info exp
+                LEFT JOIN tbl_Account_Master em ON em.Acc_Id = exp.Expense_Id
+                WHERE exp.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                ${excludeList ? ` AND exp.Expense_Id NOT IN (${excludeList})` : ''};
+
+                -- staff involved
+                SELECT 
+                    stf.*, e.Cost_Center_Name AS Emp_Name, cc.Cost_Category AS Involved_Emp_Type
+                FROM tbl_Sales_Delivery_Staff_Info stf
+                LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = stf.Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+            `);
+
+        const result = await request;
+
+        const SalesGeneralInfo = toArray(result.recordsets[0]);
+        const Products_List = toArray(result.recordsets[1]);
+        const Expence_Array = toArray(result.recordsets[2]);
+        const Staffs_Array = toArray(result.recordsets[3]);
+
+        if (SalesGeneralInfo.length > 0) {
+            const resData = SalesGeneralInfo.map(row => ({
+                ...row,
+                Products_List: Products_List.filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)),
+                Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+                Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+            }));
+
+            dataFound(res, resData);
+        } else {
+            noData(res);
+        }
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
 
     const salesInvoiceReport = async (req, res) => {
         try {
