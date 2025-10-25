@@ -1,0 +1,167 @@
+ERP 4.0 — Requirement Analysis
+Frontend
+
+    1. React (Vite) with TypeScript — major refactor of all pages
+    2. Deprecated package cleanup — identify outdated React dependencies and replace with modern alternatives, update related logic
+    3. Performance optimization — identify and optimize slow-loading pages
+    4. Reuse backend table objects (Sequelize models) on frontend for consistent data structures
+    5. Project-module-based file structure organization
+    6. JWT authentication integration
+    7. New base layout / home wrapper for session maintenance (e.g., Header, Navbar, persistent session state)
+
+Backend
+    1. New Menu Management module
+    2. Enhanced Role-Based Access Control (RBAC) — driven by new menu masters (module-based access for user / user-type)
+    3. User-based API access using menu permissions
+    4. Module-based file structure (standardized project structure)
+    5. JWT authentication for login & session management
+    6. Sequelize ORM integration (database models)
+    7. Sequelize-based CRUD APIs (GET, POST, PUT, DELETE) — mainly for masters & transactional data (not reports)
+    8. Deprecated package cleanup
+    9. API performance tuning (with priority on report/generation APIs)
+    10. API documentation — Swagger (optional or extend existing doc if already present)
+
+Others
+    1. Split Task Management & Tally Integration modules from ERP core
+    2. Integrate & validate frontend/backend components delivered by other developers
+    3. Testing & test case coverage
+
+Estimated Time:
+
+    1. Enviroinment setup for both Frontend & Backend - 4 days
+        > TypeScript, New Packages
+        - initial setup 1 or 2 days
+        - when the app needs some additional requirements we need to work on it (+1 day)
+        - testing and bug fixing (1 days)
+
+    2. Masters: 23 days
+        > 30 screens with Typescript (+5 for misscount = 35 screens)
+        - 2 masters per day = 17 days.
+        - testing and bug fixing (5 screen per day) 6 days
+
+    3. Access Control & Menu management & User Session - 5 days
+        - User rights (TS) - new development, testing - 1 day (Frontend, Backend)
+        - UserType - new development, testing - 1 day (Frontend, Backend)
+        - User & UserType based app rights with JWT Session - 2 day
+        - user based api access using JWT & user rights - 1 day
+
+    4. Deprecation & bug fixes - 4 days
+        - alternative solution for deprecated packages in various module - 2 days
+        - implementing new packages and new developments - 2 days
+
+    5. Sale order 3 days
+        > Data entry
+        > POST, PUT, DELETE with sequalizer (with bulk insert and update)
+        > Optimized sql for get with pagination
+        - Backend 1 day
+        - Fronted with Typescript 1 day
+        - testing & bug fixes 1 day
+
+    6. Sales 3 days
+        > POST, PUT, DELETE with sequalizer (with bulk insert and update)
+        > Optimized sql for get with pagination
+        > gst calculation with typescript (round off issues)
+        > Trip sheet 
+        > Arrival entry
+        > LR (entry & report)
+        - Backend 3 day
+        - Fronted with Typescript 4 day
+        - testing & bug fixes 2 day   
+
+    7. Purchase order 4 days
+        > Data entry
+        > POST, PUT, DELETE with sequalizer (with bulk insert and update)
+        > new sql for get with pagination
+        > Trip Sheet (Frontend, Backend)
+        - Backend 1 day
+        - Trip sheet with Typescript, Backend 1 day
+        - Fronted with Typescript 1 day
+        - purchase order reports - less than a day
+        - testing & bug fixes 1 day  
+
+    8. Purchase 4 days
+        > POST, PUT, DELETE with sequalizer 
+        > Optimized sql for get with pagination
+        > gst calculation with typescript (round off issues)
+        - data entry - frontend 1
+        - CRUD with sequalizer with typescript 1 day (with bulk insert and update)
+        - testing & bug fixes 1 day  
+
+    9. Receipt 4 to 5 days
+        > Data entry
+        > POST, PUT, DELETE with sequalizer (with bulk insert and update)
+        > Optimized sql for get with pagination
+        > payment reports
+        - Typescript implementation - 1 days frontend
+        - sequalizer, Typescript implementation - 1 days backend
+        - receipt dependency integration (journal outstanding, payment outstanding, opening balance) - 1 or 2 days
+        - reports - 1 day (backend, frontend)
+        - testing & bug fixes 1 day  
+
+    10. Payment 4 to 5 days
+        > Data entry
+        > POST, PUT, DELETE with sequalizer (with bulk insert and update)
+        > Optimized sql for get with pagination
+        - Typescript implementation - 1 days frontend
+        - sequalizer, Typescript implementation - 1 days backend
+        - payment dependency integration (journal outstanding, receipt outstanding, opening balance) - 1 or 2 days
+        - 3 reports - 1.5 days (backend, frontend)
+        - testing & bug fixes 1 day  
+
+    11. Journal 5 to 7 days
+        > Data Entry
+        > POST, PUT, DELETE with sequalizer (with bulk insert and update)
+        > Optimized sql for get with pagination
+        - Typescript implementation - 1 days frontend
+        - sequalizer, Typescript implementation - 1 or 2 days backend
+        - payment dependency integration (journal outstanding, receipt outstanding, payment outstanding, pening balance) - 1 or 2 day
+        - reports - 1 days (backend, frontend)
+        - testing & bug fixes 1 day
+
+    12. Contra 2 to 3 days
+        > Data entry
+        > POST, PUT, DELETE with sequalizer (with bulk insert and update)
+        > Optimized sql for get with pagination
+        - Typescript implementation - 1 days frontend
+        - sequalizer, Typescript implementation - 1 days backend
+        - testing & bug fixes 1 day
+    
+    13. CRM 3 days
+        > 8 reports 4 per day
+        > visit logs data entry
+        > sales person & user Attendance
+        - reports 2 days with sequalizer and typescript (frontend & backend)
+        - visit logs data entry - 1 day (frontend & backend)
+
+    14. Inventoray & reports - 4 days
+        > Stock journal & processing stock journal & trip sheet
+        > Type script implementation - frontend
+        > sequalizer implementation - backend
+        > inventory reports 
+        - stock journal (frontend & backend) - 1 day
+        - processing stock journal (frontend & backend) - 1 day
+        - arrival (material inward & stock transfer for trip sheet)
+        - reports 3* 1 or 2 report per day - 1 to 2 days
+        - testing & bug fixes 1 day
+
+    15. Tally modules: 5 to 7 days
+        > LOL, LOS LOM(ERP - Tally comparison)
+        > reports 
+        - 8 reports (+2 for misscount) 3 to 4 reports days per stored procedure (if we use sequalizer we can optimize it takes various time) - 2 to 3 days
+        - data comparison, data sync, syncd details reports (sales * 3, purchase * 2) - 2 to 3 days
+        - testing & bug fixes - 1 day
+
+    16. Batch management 6 to 10 days
+        > batch - missing creation & allocation list * 6  
+        > batch management - crud (opening balance, new data entry) (frontend, backend)
+        > batch report (consumption and stock reports - new development)
+        - data entry (sequalizer, typescript in frontend, backend) -1 day
+        - bulk insert, update in each module with sequalizer (1 or 2 per day * 6 module) - 3 to 6 days
+        - pagination listing * 6 - 2 to 3 days
+
+    17. Others 11 to 19 days
+        > code integration and validations - 3 to 5 days
+        > branch wise access - 1 to 2 days
+        > dashboard reports - 1 to 2 days
+        > analytics & notification modules - (using costcenter, createdby, updatedby) - 2 to 3 days (based on 13 modules)
+        > report templates - 4 to 5 days (documentations 1 to 2 days)

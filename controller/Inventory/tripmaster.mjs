@@ -381,7 +381,7 @@ const tripActivities = () => {
                             'REVERSAL_TRIP_SHEET' type,
                             td.Id reference_id,
                             @Updated_By created_by,
-                            @openingId
+                            @openingId as ob_id
                         FROM tbl_Trip_Details AS td
                         LEFT JOIN tbl_Trip_Arrival as ta
                             ON ta.Arr_Id = td.Arrival_Id

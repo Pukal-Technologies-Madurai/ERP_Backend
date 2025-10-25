@@ -585,7 +585,7 @@ const PurchaseOrder = () => {
                             'REVERSAL_PURCHASE' type,
                             pis.POI_St_Id reference_id,
                             @Created_by created_by,
-                            @openingId
+                            @openingId ob_id
                         FROM tbl_Purchase_Order_Inv_Stock_Info AS pis
                         WHERE 
                             pis.PIN_Id = @PIN_Id
