@@ -529,13 +529,92 @@ const ReceiptMaster = () => {
         }
     }
 
-    // const get 
+      //Api for Mobile
+ const getReceiptMobile = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+        const { voucher, debit, credit, receipt_type, createdBy, status, transaction_type, Branch_Id } = req.query;
+
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
+            .input('voucher', voucher)
+            .input('debit', debit)
+            .input('credit', credit)
+            .input('receipt_type', receipt_type)
+            .input('transaction_type', transaction_type)
+            .input('createdBy', createdBy)
+            .input('status', status)
+            .input('Branch_Id', Branch_Id)
+            .query(`
+                SELECT 
+                    rgi.*,
+                    vt.Voucher_Type,
+                    vt.Branch_Id,
+                    COALESCE(debAcc.Account_name, 'Not found') AS DebitAccountGet,
+                    COALESCE(creAcc.Account_name, 'Not found') AS CreditAccountGet,
+                    COALESCE(u.Name, 'Not found') AS CreatedByGet,
+                    (
+                        SELECT COALESCE(SUM(Credit_Amo), 0)
+                        FROM tbl_Receipt_Bill_Info rbi
+                        WHERE 
+                            rbi.receipt_id = rgi.receipt_id
+                            AND rbi.receipt_no = rgi.receipt_invoice_no
+                    ) + (
+                        SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
+                        FROM tbl_Payment_Bill_Info AS pb
+                        JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+                        WHERE 
+                            rgi.status <> 0
+                            AND pb.pay_bill_id = rgi.receipt_id
+                            AND pb.bill_name = rgi.receipt_invoice_no
+                    ) + (
+                        SELECT COALESCE(SUM(jr.Amount), 0)
+                        FROM dbo.tbl_Journal_Bill_Reference jr
+                        JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                        JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                        WHERE 
+                            jh.JournalStatus <> 0
+                            AND je.Acc_Id = rgi.credit_ledger
+                            AND je.DrCr   = 'Dr'
+                            AND jr.RefId = rgi.receipt_id 
+                            AND jr.RefNo = rgi.receipt_invoice_no
+                            AND jr.RefType = 'RECEIPT'
+                    ) AS TotalReferencedAmount
+                FROM tbl_Receipt_General_Info AS rgi
+                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = rgi.receipt_voucher_type_id
+                LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
+                LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = rgi.credit_ledger
+                LEFT JOIN tbl_Users AS u ON u.UserId = rgi.created_by
+                WHERE
+                    rgi.receipt_date BETWEEN @Fromdate AND @Todate
+                    ${checkIsNumber(voucher) ? ' AND rgi.receipt_voucher_type_id = @voucher ' : ''}
+                    ${checkIsNumber(debit) ? ' AND rgi.debit_ledger = @debit ' : ''}
+                    ${checkIsNumber(credit) ? ' AND rgi.credit_ledger = @credit ' : ''}
+                    ${checkIsNumber(receipt_type) ? ' AND rgi.receipt_bill_type = @receipt_type ' : ''}
+                    ${checkIsNumber(createdBy) ? ' AND rgi.created_by = @createdBy ' : ''}
+                    ${transaction_type ? ' AND rgi.transaction_type = @transaction_type ' : ''}
+                    ${checkIsNumber(status) ? ' AND rgi.status = @status ' : ''}
+                    ${checkIsNumber(Branch_Id) ? ' AND vt.Branch_Id = @Branch_Id ' : ''}
+                ORDER BY 
+                    rgi.receipt_date DESC, rgi.created_on DESC;
+            `);
+
+        const result = await request;
+        sentData(res, result.recordset);
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
 
     return {
         getReceipts,
         createReceipt,
         updateReceipt,
         addAgainstRef,
+        getReceiptMobile
     }
 }
 

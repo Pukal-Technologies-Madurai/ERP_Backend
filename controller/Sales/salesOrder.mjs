@@ -1657,71 +1657,195 @@ const SaleOrder = () => {
         }
     }
 
-    const getSaleOrderMobile = async (req, res) => {
+     const getSaleOrderMobile = async (req, res) => {
         try {
-            const FromDate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-            const ToDate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
-            const product = req.query?.Product;
-            const brand = req.query?.Brand_Id
+            const {
+                Retailer_Id,
+                Cancel_status = 0,
+                Created_by,
+                Sales_Person_Id,
+                VoucherType,
+                OrderStatus,
+                User_Id,
+                Branch_Id,
+            } = req.query;
+
+            // ✅ Safe date handling
+            const Fromdate = req.query?.Fromdate || new Date().toISOString().split("T")[0];
+            const Todate = req.query?.Todate || new Date().toISOString().split("T")[0];
+
             const request = new sql.Request()
-                .input('FromDate', FromDate)
-                .input('ToDate', ToDate);
+                .input("Fromdate", sql.DateTime, Fromdate)
+                .input("Todate", sql.DateTime, Todate)
+                .input("Retailer_Id", sql.Int, Retailer_Id || null)
+                .input("Cancel_status", sql.Int, Cancel_status)
+                .input("Created_by", sql.Int, Created_by || null)
+                .input("Sales_Person_Id", sql.Int, Sales_Person_Id || null)
+                .input("VoucherType", sql.Int, VoucherType || null)
+                .input("User_Id", sql.Int, User_Id || null)
+                .input("Branch_Id", sql.Int, Branch_Id || null);
 
-            let productCondition = "";
-            let BrandCondition = "";
-            if (product && !isNaN(product)) {
-                productCondition = "AND pm.Product_Id = @Product";
-                request.input('Product', product);
+            // ✅ Branch Rights Logic using exact table name
+            let branchFilter = "";
+            if (Branch_Id && !isNaN(Branch_Id)) {
+                // Single branch selected
+                branchFilter = "AND so.Branch_Id = @Branch_Id";
+            } else if (req.query.BranchIds) {
+                // Multiple branches selected (comma separated)
+                const ids = req.query.BranchIds.split(",").map(id => parseInt(id.trim())).filter(Boolean);
+                if (ids.length > 0) {
+                    branchFilter = `AND so.Branch_Id IN (${ids.join(",")})`;
+                }
+            } else if (User_Id && !isNaN(User_Id)) {
+                // No branch selected → fetch allowed branches for the logged-in user
+                branchFilter = `
+        AND so.Branch_Id IN (
+            SELECT Branch_Id 
+            FROM tbl_userbranchrights 
+            WHERE User_Id = @User_Id
+        )
+    `;
             }
-            if (brand && !isNaN(brand)) {
-                BrandCondition = "AND bm.Brand_Id = @Brand";
-                request.input('Brand', brand);
-            }
 
-            const sqlQuery = `
-                SELECT
-                    COALESCE((
-                        SELECT 
-                            pm.Product_Id,
-                            pm.Product_Name,
-                            bm.Brand_Id,
-                            bm.Brand_Name,
-                           COUNT(DISTINCT so.So_Id) AS Total_Orders,
-                           SUM( sos.Final_Amo) AS Total_Invoice_Value
-                        FROM tbl_Sales_Order_Gen_Info AS so
-                        LEFT JOIN tbl_Sales_Order_Stock_Info AS sos ON sos.Sales_Order_Id = so.So_Id
-                        LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sos.Item_Id
-                        LEFT JOIN tbl_Brand_Master AS bm ON bm.Brand_Id = pm.Brand
-                        WHERE so.So_Date >= @FromDate AND so.So_Date <= @ToDate
-                        ${productCondition}
-                        ${BrandCondition}
-                        GROUP BY pm.Product_Name, bm.Brand_Name, pm.Product_Id, bm.Brand_Id
-                        FOR JSON PATH
-                    ), '[]') AS Summary,
-                    COALESCE((
-                        SELECT
-                             COUNT(DISTINCT so.So_Id) AS Total_Orders,  
-                            SUM( sos.Final_Amo) AS Total_Amount 
-                        FROM tbl_Sales_Order_Gen_Info AS so
-                        LEFT JOIN tbl_Sales_Order_Stock_Info AS sos ON sos.Sales_Order_Id = so.So_Id
-                        LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sos.Item_Id
-                        LEFT JOIN tbl_Brand_Master AS bm ON bm.Brand_Id = pm.Brand
-                        WHERE so.So_Date >= @FromDate AND so.So_Date <= @ToDate
-                        ${productCondition}
-                        ${BrandCondition}
-                        FOR JSON PATH
-                    ), '[]') AS Totals`;
+            // ✅ Main SQL Query (web-equivalent + branch-based filtering)
+            const result = await request.query(`
+            -- Step 1: Filter Orders
+            DECLARE @FilteredOrders TABLE (So_Id INT);
+            INSERT INTO @FilteredOrders (So_Id)
+            SELECT so.So_Id
+            FROM tbl_Sales_Order_Gen_Info AS so
+            WHERE 
+                CONVERT(DATE, so.So_Date) 
+                    BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                ${Retailer_Id ? "AND so.Retailer_Id = @Retailer_Id" : ""}
+                ${Cancel_status !== undefined ? "AND so.Cancel_status = @Cancel_status" : ""}
+                ${Created_by ? "AND so.Created_by = @Created_by" : ""}
+                ${Sales_Person_Id ? "AND so.Sales_Person_Id = @Sales_Person_Id" : ""}
+                ${VoucherType ? "AND so.VoucherType = @VoucherType" : ""}
+                ${branchFilter};
 
-            const result = await request.query(sqlQuery);
+            -- Step 2: Order Header Info
+            SELECT 
+                so.*,
+                rm.Retailer_Name,
+                sp.Name AS Sales_Person_Name,
+                bm.BranchName AS Branch_Name,
+                cb.Name AS Created_BY_Name,
+                v.Voucher_Type AS VoucherTypeGet
+            FROM tbl_Sales_Order_Gen_Info AS so
+            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+            LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+            LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = so.Branch_Id
+            LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+            LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
 
-            if (result.recordset.length > 0) {
-                const row = result.recordset[0];
-                const parsed = {
-                    ...row,
-                    Summary: JSON.parse(row.Summary),
-                    Totals: JSON.parse(row.Totals),
-                };
-                dataFound(res, parsed);
+            -- Step 3: Order Products
+            SELECT 
+                si.*,
+                pm.Product_Name,
+                pm.Product_Image_Name,
+                u.Units AS UOM,
+                b.Brand_Name AS BrandGet
+            FROM tbl_Sales_Order_Stock_Info AS si
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            -- Step 4: Staff Involved
+            SELECT 
+                sosi.So_Id, 
+                sosi.Involved_Emp_Id,
+                sosi.Cost_Center_Type_Id,
+                c.Cost_Center_Name AS EmpName,
+                cc.Cost_Category AS EmpType
+            FROM tbl_Sales_Order_Staff_Info AS sosi
+            LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+            WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            -- Step 5: Delivery Info
+            SELECT 
+                dgi.*,
+                rm.Retailer_Name,
+                bm.BranchName AS Branch_Name,
+                st.Status AS DeliveryStatusName,
+                COALESCE((SELECT SUM(collected_amount)
+                    FROM tbl_Sales_Receipt_Details_Info
+                    WHERE bill_id = dgi.Do_Id), 0) AS receiptsTotalAmount
+            FROM tbl_Sales_Delivery_Gen_Info AS dgi
+            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+            LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+            LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+            WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+
+            -- Step 6: Delivery Products
+            SELECT 
+                oi.*,
+                pm.Product_Name,
+                pm.Product_Image_Name,
+                u.Units AS UOM,
+                b.Brand_Name AS BrandGet
+            FROM tbl_Sales_Delivery_Stock_Info AS oi
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE oi.Delivery_Order_Id IN (
+                SELECT Do_Id 
+                FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+            );
+        `);
+
+            // ✅ Extract datasets (6 queries)
+            const [
+                OrderData,
+                ProductDetails,
+                StaffInvolved,
+                DeliveryData,
+                DeliveryItems,
+            ] = result.recordsets.map((rs) => rs || []);
+
+            if (OrderData.length > 0) {
+                const resData = OrderData.map((order) => {
+                    const orderProducts = ProductDetails.filter((p) => p.Sales_Order_Id === order.So_Id);
+                    const deliveryList = DeliveryData.filter((d) => d.So_No === order.So_Id);
+
+                    const totalOrderedQty = orderProducts.reduce((sum, p) => sum + (p.Bill_Qty || 0), 0);
+                    const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                        const deliveredItems = DeliveryItems.filter((p) => p.Delivery_Order_Id === d.Do_Id);
+                        return sum + deliveredItems.reduce((s, p) => s + (p.Bill_Qty || 0), 0);
+                    }, 0);
+
+                    const orderStatus = totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+
+                    const mappedDeliveries = deliveryList.map((d) => ({
+                        ...d,
+                        InvoicedProducts: DeliveryItems.filter((p) => p.Delivery_Order_Id === d.Do_Id).map((prod) => ({
+                            ...prod,
+                            ProductImageUrl: getImage("products", prod.Product_Image_Name),
+                        })),
+                    }));
+
+                    return {
+                        ...order,
+                        OrderStatus: orderStatus,
+                        Products_List: orderProducts.map((p) => ({
+                            ...p,
+                            ProductImageUrl: getImage("products", p.Product_Image_Name),
+                        })),
+                        Staff_Involved_List: StaffInvolved.filter((s) => s.So_Id === order.So_Id),
+                        ConvertedInvoice: mappedDeliveries,
+                    };
+                });
+
+                // ✅ Apply order status filter (if any)
+                const filteredData = OrderStatus
+                    ? resData.filter((o) => o.OrderStatus === OrderStatus.toLowerCase())
+                    : resData;
+
+                dataFound(res, filteredData);
             } else {
                 noData(res);
             }

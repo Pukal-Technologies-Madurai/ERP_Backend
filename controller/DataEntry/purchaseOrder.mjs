@@ -850,6 +850,160 @@ const PurchaseOrderDataEntry = () => {
         }
     };
 
+    const getPurchaseOrderMobile = async (req, res) => {
+    try {
+        const {
+            User_Id,
+            Branch_Id,
+        } = req.query;
+
+        const Fromdate = ISOString(req.query?.Fromdate ? req.query?.Fromdate : new Date());
+        const Todate = ISOString(req.query?.Todate ? req.query?.Todate : new Date());
+
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
+            .input('User_Id', User_Id ? parseInt(User_Id) : null)
+            .input('Branch_Id', Branch_Id ? parseInt(Branch_Id) : null);
+
+        // Branch filter logic
+        let branchFilter = '';
+        if (Branch_Id && !isNaN(Branch_Id)) {
+            branchFilter = 'AND pgi.BranchId = @Branch_Id';
+        } else if (User_Id && !isNaN(User_Id)) {
+            branchFilter = `
+                AND pgi.BranchId IN (
+                    SELECT BranchId
+                    FROM tbl_userbranchrights
+                    WHERE User_Id = @User_Id
+                )
+            `;
+        }
+
+        const result = await request.query(`
+            -------------------------table variable declaration----------
+            DECLARE @FilteredOrders TABLE (Sno INT);
+            -------------------------filtering invoices and inserting into table variable
+            INSERT INTO @FilteredOrders (Sno)
+            SELECT pgi.Sno
+            FROM tbl_PurchaseOrderGeneralDetails AS pgi
+            WHERE CONVERT(DATE, pgi.TradeConfirmDate) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+            ${branchFilter};
+
+            -------------------------general info------------------------- 
+            SELECT 
+                pgi.*,
+                COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
+                COALESCE(lol.Party_District, 'Not found') AS Party_District
+            FROM tbl_PurchaseOrderGeneralDetails AS pgi
+            LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pgi.PartyId
+            LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ledger_Tally_Id = r.ERP_Id
+            WHERE pgi.Sno IN (SELECT Sno FROM @FilteredOrders);
+
+            -------------------------Stock Details---------------------------
+            SELECT 
+                i.*,
+                COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
+                COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
+            FROM tbl_PurchaseOrderItemDetails AS i
+            LEFT JOIN tbl_Product_Master AS p ON i.ItemId = p.Product_Id
+            LEFT JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
+            WHERE i.OrderId IN (SELECT Sno FROM @FilteredOrders);
+
+            -------------------------Delivery details------------------------------
+            SELECT 
+                d.*,
+                COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
+                COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
+            FROM tbl_PurchaseOrderDeliveryDetails AS d
+            LEFT JOIN tbl_Product_Master AS p ON d.ItemId = p.Product_Id
+            LEFT JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
+            WHERE d.OrderId IN (SELECT Sno FROM @FilteredOrders);
+
+            -------------------------Transporter Details--------------------
+            SELECT *
+            FROM tbl_PurchaseOrderTranspoterDetails
+            WHERE OrderId IN (SELECT Sno FROM @FilteredOrders)
+            ORDER BY indexValue;
+
+            -------------------------Staff Details -------------------------
+            SELECT 
+                stf.*,
+                COALESCE(e.Cost_Center_Name, 'Not found') AS Emp_Name,
+                COALESCE(cc.Cost_Category, 'Not found') AS Cost_Category
+            FROM tbl_PurchaseOrderEmployeesInvolved AS stf
+            LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = stf.EmployeeId
+            LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = stf.CostType
+            WHERE stf.OrderId IN (SELECT Sno FROM @FilteredOrders);
+
+            -------------------------Invoice Orders---------------------------
+            SELECT 
+                igo.PIN_Id,
+                igo.Order_Id,
+                isd.Item_Id,
+                isd.Bill_Qty,
+                isd.DeliveryId
+            FROM tbl_Purchase_Order_Inv_Gen_Order AS igo
+            LEFT JOIN tbl_Purchase_Order_Inv_Stock_Info AS isd
+                ON isd.PIN_Id = igo.PIN_Id
+            WHERE igo.Order_Id IN (SELECT Sno FROM @FilteredOrders);
+        `);
+
+        const [
+            generalInfo, productDetails, deliveryDetails,
+            transporterDetails, Staffdetails, invoicedOrders
+        ] = result.recordsets;
+
+        if (generalInfo.length > 0) {
+            const extractedData = generalInfo.map(o => ({
+                ...o,
+                ConvertedAsInvoices: invoicedOrders.filter(fil => isEqualNumber(fil.Order_Id, o.Sno)),
+                ItemDetails: productDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                DeliveryDetails: deliveryDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                TranspoterDetails: transporterDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                StaffDetails: Staffdetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno))
+            }));
+
+            const productWiseStatus = extractedData.map(o => ({
+                ...o,
+                DeliveryDetails: o.DeliveryDetails.map(item => ({
+                    pendingInvoiceWeight: Number(item?.Weight) - Number(o.ConvertedAsInvoices.filter(
+                        itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
+                            && isEqualNumber(itmFil.DeliveryId, item.Trip_Item_SNo)
+                            && isEqualNumber(itmFil.Order_Id, item.OrderId)
+                    ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
+                    convertableQuantity: o.DeliveryDetails.filter(
+                        itmFil => isEqualNumber(itmFil.ItemId, item.ItemId)
+                            && isEqualNumber(itmFil.OrderId, item.OrderId)
+                            && isEqualNumber(itmFil.Trip_Item_SNo, item.Trip_Item_SNo)
+                    ).reduce((itemAcc, deliveredItem) => {
+                        return Number(itemAcc) + Number(deliveredItem.Weight)
+                    }, 0) - Number(o.ConvertedAsInvoices.filter(
+                        itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
+                    ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
+                    ...item,
+                })),
+            }))
+
+            const OrderWiseStatus = productWiseStatus.map(order => ({
+                IsConvertedAsInvoice: order.DeliveryDetails.reduce(
+                    (acc, dItem) => acc + Number(dItem.convertableQuantity), 0
+                ) <= 0 ? 1 : 0,
+                isConvertableArrivalExist: order.DeliveryDetails.reduce(
+                    (acc, dItem) => acc + Number(dItem.pendingInvoiceWeight), 0
+                ) > 0 ? 1 : 0,
+                ...order,
+            }))
+
+            dataFound(res, OrderWiseStatus);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
     return {
         getPurchaseOrder,
         createPurchaseOrder,
@@ -858,7 +1012,8 @@ const PurchaseOrderDataEntry = () => {
         updateArrivalDetails,
         deleteOrderPermanantly,
         getDeliveryByPartyId,
-        getPartyForInvoice
+        getPartyForInvoice,
+        getPurchaseOrderMobile
     }
 }
 

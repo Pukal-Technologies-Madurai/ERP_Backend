@@ -945,6 +945,148 @@ const PurchaseOrder = () => {
         }
     }
 
+    const getPurchaseInvoiceMobile = async (req, res) => {
+        try {
+            const {
+                Retailer_Id,
+                Cancel_status = 0,
+                VoucherType,
+                Cost_Center_Type_Id,
+                Involved_Emp_Id,
+                filterItems,
+                Branch_Id,
+                User_Id,
+            } = req.query;
+
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+
+            // --- Branch filtering ---
+            let branchCondition = '';
+
+            if (User_Id) {
+                const getBranches = await new sql.Request()
+                    .input('User_Id', User_Id)
+                    .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
+
+                const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
+
+                // Parse Branch_Id if provided, otherwise use all allowed branches
+                const branchIds = Branch_Id && Branch_Id.trim() !== ''
+                    ? Branch_Id.split(',').map(Number).filter(n => !isNaN(n))
+                    : allowedBranches;
+
+                // Only keep branchIds that user has access to
+                const finalBranches = allowedBranches.length
+                    ? branchIds.filter(b => allowedBranches.includes(b))
+                    : branchIds; 
+
+                if (finalBranches.length) {
+                    branchCondition = ` AND pigi.Branch_Id IN (${finalBranches.join(',')}) `;
+                } else {
+                    // No branches to fetch -> return empty
+                    return res.json({ data: [], message: "No data", success: true, others: {} });
+                }
+            }
+
+            // --- Main Query ---
+            const request = new sql.Request()
+                .input('from', Fromdate)
+                .input('to', Todate)
+                .input('Retailer_Id', Retailer_Id)
+                .input('Cancel_status', Cancel_status)
+                .input('VoucherType', VoucherType)
+                .input('Cost_Center_Type_Id', Cost_Center_Type_Id)
+                .input('Involved_Emp_Id', Involved_Emp_Id)
+                .input('filterItems', filterItems)
+                .query(`
+                DECLARE @FilteredPurchase TABLE (PIN_Id INT);
+
+                INSERT INTO @FilteredPurchase (PIN_Id)
+                SELECT DISTINCT pigi.PIN_Id
+                FROM tbl_Purchase_Order_Inv_Gen_Info AS pigi
+                LEFT JOIN tbl_Purchase_Order_Inv_Staff_Details AS pisd ON pigi.PIN_Id = pisd.PIN_Id
+                LEFT JOIN tbl_Purchase_Order_Inv_Stock_Info AS pisi ON pisi.PIN_Id = pigi.PIN_Id
+                WHERE
+                    pigi.Po_Entry_Date BETWEEN @from AND @to
+                    ${checkIsNumber(Retailer_Id) ? ' AND pigi.Retailer_Id = @Retailer_Id' : ''}
+                    ${checkIsNumber(Cancel_status) ? ' AND pigi.Cancel_status = @Cancel_status' : ''}
+                    ${checkIsNumber(VoucherType) ? ' AND pigi.Voucher_Type = @VoucherType' : ''}
+                    ${checkIsNumber(Cost_Center_Type_Id) ? ' AND pisd.Cost_Center_Type_Id = @Cost_Center_Type_Id' : ''}
+                    ${checkIsNumber(Involved_Emp_Id) ? ' AND pisd.Involved_Emp_Id = @Involved_Emp_Id' : ''}
+                    ${checkIsNumber(filterItems) ? ' AND pisi.Item_Id = @filterItems ' : ''}
+                    ${branchCondition};
+
+                -- Purchase General Info
+                SELECT 
+                    pigi.*,
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                FROM tbl_Purchase_Order_Inv_Gen_Info AS pigi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = pigi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = pigi.Branch_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = pigi.Created_by
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pigi.Voucher_Type
+                WHERE pigi.PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)
+                ORDER BY CONVERT(DATE, pigi.Po_Entry_Date) DESC;
+
+                -- Purchase Product Details
+                SELECT
+                    oi.*,
+                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+                    COALESCE(pm.Product_Image_Name, 'unknown') AS Product_Image_Name,
+                    COALESCE(pdd.OrderId, '') AS OrderId
+                FROM tbl_Purchase_Order_Inv_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS pdd ON pdd.Id = oi.DeliveryId
+                WHERE oi.PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase);
+
+                -- Purchase Staff Info
+                SELECT 
+                    s.*,
+                    e.Cost_Center_Name AS Involved_Emp_Name,
+                    cc.Cost_Category AS Involved_Emp_Type
+                FROM tbl_Purchase_Order_Inv_Staff_Details AS s
+                LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = s.Involved_Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = s.Cost_Center_Type_Id
+                WHERE s.PIN_Id IN (SELECT PIN_Id FROM @FilteredPurchase);
+
+                -- From Purchase Order indicator
+                SELECT DISTINCT PIN_Id
+                FROM tbl_Purchase_Order_Inv_Gen_Order
+                WHERE PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase);
+            `);
+
+            const result = await request;
+
+            const PurchaseInfo = toArray(result.recordsets[0]);
+            const Products_List = toArray(result.recordsets[1]);
+            const Staff_List = toArray(result.recordsets[2]);
+            const FromPurchseOrder = toArray(result.recordsets[3]);
+
+            if (PurchaseInfo.length > 0) {
+                const finalResult = PurchaseInfo.map(p => ({
+                    ...p,
+                    Products_List: Products_List.filter(prod => isEqualNumber(prod.PIN_Id, p.PIN_Id)).map(pp => ({
+                        ...pp,
+                        ProductImageUrl: getImage('products', pp.Product_Image_Name)
+                    })),
+                    Staff_List: Staff_List.filter(stf => isEqualNumber(stf.PIN_Id, p.PIN_Id)),
+                    isFromPurchaseOrder: checkIsNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.PIN_Id)
+                }));
+
+                dataFound(res, finalResult);
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
     return {
         purchaseOrderCreation,
         editPurchaseOrder,
@@ -952,7 +1094,8 @@ const PurchaseOrder = () => {
         getPurchaseOrder,
         getVoucherType,
         getStockItemLedgerName,
-        getInvolvedStaffs
+        getInvolvedStaffs,
+        getPurchaseInvoiceMobile
     }
 }
 

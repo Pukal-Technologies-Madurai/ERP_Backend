@@ -77,7 +77,7 @@ dataEntryRouter.delete('/purchaseOrderEntry', purchaseOrder.deleteOrderPermanant
 dataEntryRouter.get('/purchaseOrderEntry/delivery/partyBased', purchaseOrder.getDeliveryByPartyId);
 dataEntryRouter.put('/purchaseOrderEntry/ArrivalUpdate', purchaseOrder.updateArrivalDetails);
 dataEntryRouter.get('/pendingPartyInvoice', purchaseOrder.getPartyForInvoice);
-
+dataEntryRouter.get('/purchaseOrderMobile',purchaseOrder.getPurchaseOrderMobile);
 
 dataEntryRouter.get('/costCenter', costCenter.getCostCenter);
 dataEntryRouter.post('/costCenter', costCenter.createCostCenter);

@@ -9,6 +9,7 @@ const PaymentRouter = express.Router();
 PaymentRouter.get('/paymentMaster', paymentMaster.getPayments);
 PaymentRouter.post('/paymentMaster', paymentMaster.createGeneralInfoPayments);
 PaymentRouter.put('/paymentMaster', paymentMaster.updateGeneralInfoPayments);
+PaymentRouter.get('/paymentMasterMobile',paymentMaster.getPaymentMobile);
 
 PaymentRouter.get('/paymentMaster/filtersValues', paymentDependency.getFilterValues);
 PaymentRouter.get('/paymentMaster/adjesments', paymentDependency.getPaymentAdjesments);
