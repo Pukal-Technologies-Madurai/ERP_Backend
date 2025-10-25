@@ -28,6 +28,7 @@ ReceiptsRouter.get('/receiptMaster/adjesments', dataDependency.getReceiptAdjesme
 ReceiptsRouter.get('/receiptMaster/againstRef', dataDependency.getReceiptBillInfo);
 ReceiptsRouter.get('/receiptMaster/againstRef/costingInfo', dataDependency.getReceiptCostingInfo);
 ReceiptsRouter.post('/receiptMaster/againstRef', receiptMaster.addAgainstRef);
+ReceiptsRouter.get('/receiptMasterMobile',receiptMaster.getReceiptMobile);
 
 ReceiptsRouter.get('/getCustomerWhoHasBills', dataDependency.getSalesInvoicedCustomers);
 ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt', dataDependency.getPendingReceipts);

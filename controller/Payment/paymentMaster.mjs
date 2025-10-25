@@ -528,13 +528,84 @@ const PaymentMaster = () => {
         }
     }
 
-    // const get 
+    const getPaymentMobile = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+        const { voucher, debit, credit, payment_type, createdBy, status, Branch_Id } = req.query;
+
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
+            .input('voucher', voucher)
+            .input('debit', debit)
+            .input('credit', credit)
+            .input('payment_type', payment_type)
+            .input('createdBy', createdBy)
+            .input('status', status)
+            .input('Branch_Id', Branch_Id)
+            .query(`
+                SELECT 
+                    pgi.*,
+                    vt.Voucher_Type,
+                    vt.Branch_Id,
+                    debAcc.Account_name AS DebitAccountGet,
+                    creAcc.Account_name AS CreditAccountGet,
+                    (
+                        SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
+                        FROM tbl_Receipt_Bill_Info AS rbi
+                        JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
+                        WHERE 
+                            rgi.status <> 0
+                            AND rbi.bill_id = pgi.pay_id
+                            AND rbi.bill_name = pgi.payment_invoice_no
+                    ) + (
+                        SELECT COALESCE(SUM(Debit_Amo), 0)
+                        FROM tbl_Payment_Bill_Info pbi
+                        WHERE pbi.payment_id = pgi.pay_id
+                    ) + (
+                        SELECT COALESCE(SUM(jr.Amount), 0)
+                        FROM dbo.tbl_Journal_Bill_Reference jr
+                        JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                        JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
+                        WHERE jh.JournalStatus <> 0
+                            AND je.Acc_Id = pgi.debit_ledger
+                            AND je.DrCr = 'Cr'
+                            AND jr.RefId = pgi.pay_id 
+                            AND jr.RefNo = pgi.payment_invoice_no
+                            AND jr.RefType = 'PAYMENT'
+                    ) AS TotalReferencedAmount
+                FROM tbl_Payment_General_Info AS pgi
+                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
+                LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
+                LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
+                WHERE
+                    pgi.payment_date BETWEEN @Fromdate AND @Todate
+                    ${checkIsNumber(voucher) ? ' AND pgi.payment_voucher_type_id = @voucher ' : ''}
+                    ${checkIsNumber(debit) ? ' AND pgi.debit_ledger = @debit ' : ''}
+                    ${checkIsNumber(credit) ? ' AND pgi.credit_ledger = @credit ' : ''}
+                    ${checkIsNumber(payment_type) ? ' AND pgi.pay_bill_type = @payment_type ' : ''}
+                    ${checkIsNumber(createdBy) ? ' AND pgi.created_by = @createdBy ' : ''}
+                    ${checkIsNumber(status) ? ' AND pgi.status = @status ' : ''}
+                    ${checkIsNumber(Branch_Id) ? ' AND vt.Branch_Id = @Branch_Id ' : ''}
+                ORDER BY 
+                    pgi.payment_date DESC, pgi.created_on DESC;
+            `);
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+    } catch (e) {
+        servError(e, res);
+    }
+};
 
     return {
         getPayments,
         createGeneralInfoPayments,
         updateGeneralInfoPayments,
         addAgainstRef,
+        getPaymentMobile
     }
 }
 
