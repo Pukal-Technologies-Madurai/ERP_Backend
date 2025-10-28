@@ -123,4 +123,6 @@ ReportRouter.get('/expenseReport', expences.getExpences)
 ReportRouter.post('/expenseByAccId', expences.expensesExpandable)
 ReportRouter.post('/smtreports', deliveryReports.closingReport)
 
+
+ReportRouter.post('/syncPosPending',deliveryReports.SyncPosPending)
 export default ReportRouter;

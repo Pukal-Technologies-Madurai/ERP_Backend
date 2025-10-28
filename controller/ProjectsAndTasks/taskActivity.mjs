@@ -282,38 +282,97 @@ const TaskActivity = () => {
     }
 
 
+// const getProjectDropDown = async (req, res) => {
+//         const { Company_id } = req.query;
+
+//         if (!checkIsNumber(Company_id)) {
+//             return invalidInput(res, 'Company_id is required');
+//         }
+
+//         try {
+//             const query = `
+//             SELECT 
+//                pm.Project_Id,
+//                pm.Project_Name
+//             FROM 
+//                 tbl_Project_Master pm
+//             where Company_id=@Company_id
+//           `;
+
+//             const request = new sql.Request();
+//             request.input('Company_id', Company_id);
+
+//             const result = await request.query(query);
+
+//             if (result.recordset.length > 0) {
+//                 dataFound(res, result.recordset)
+//             } else {
+//                 noData(res)
+//             }
+//         } catch (e) {
+//             servError(e, res)
+//         }
+//     }
+
 const getProjectDropDown = async (req, res) => {
-        const { Company_id } = req.query;
+    const { Company_id, User_Id } = req.query;
 
-        if (!checkIsNumber(Company_id)) {
-            return invalidInput(res, 'Company_id is required');
-        }
-
-        try {
-            const query = `
-            SELECT 
-               pm.Project_Id,
-               pm.Project_Name
-            FROM 
-                tbl_Project_Master pm
-            where Company_id=@Company_id
-          `;
-
-            const request = new sql.Request();
-            request.input('Company_id', Company_id);
-
-            const result = await request.query(query);
-
-            if (result.recordset.length > 0) {
-                dataFound(res, result.recordset)
-            } else {
-                noData(res)
-            }
-        } catch (e) {
-            servError(e, res)
-        }
+    if (!checkIsNumber(Company_id)) {
+        return invalidInput(res, 'Company_id is required');
     }
 
+    try {
+        let query, request;
+
+        if (User_Id && checkIsNumber(User_Id)) {
+        
+            query = `
+            SELECT DISTINCT
+                pm.Project_Id,
+                pm.Project_Name
+            FROM 
+                tbl_Project_Master pm
+            INNER JOIN 
+                tbl_Project_Employee pe ON pm.Project_Id = pe.Project_Id
+            WHERE 
+                pm.Company_id = @Company_id 
+                AND pe.User_Id = @User_Id
+            ORDER BY 
+                pm.Project_Name
+            `;
+
+            request = new sql.Request();
+            request.input('Company_id', Company_id);
+            request.input('User_Id', User_Id);
+        } else {
+            // For admin or when no User_Id provided - get all projects
+            query = `
+            SELECT 
+                pm.Project_Id,
+                pm.Project_Name
+            FROM 
+                tbl_Project_Master pm
+            WHERE 
+                pm.Company_id = @Company_id
+            ORDER BY 
+                pm.Project_Name
+            `;
+
+            request = new sql.Request();
+            request.input('Company_id', Company_id);
+        }
+
+        const result = await request.query(query);
+
+        if (result.recordset.length > 0) {
+            dataFound(res, result.recordset)
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
 
     return {
         getEmployeeAssignedInTheTask,

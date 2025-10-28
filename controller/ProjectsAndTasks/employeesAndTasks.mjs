@@ -234,7 +234,75 @@ const EmployeeAndTasks = () => {
             servError(e, res);
         }
     }
+ const EmptaskDetails = async (req, res) => {
+    const { Emp_Id, startDate, endDate } = req.query;
 
+    if (!startDate || !endDate) {
+        return invalidInput(res, 'startDate and endDate are required');
+    }
+
+    try {
+    
+        let query = `
+            SELECT 
+                td.*,
+                (SELECT Name FROM tbl_Users WHERE UserId = td.Assigned_Emp_Id) AS Assigned_Name,
+                (SELECT Name FROM tbl_Users WHERE UserId = td.Emp_Id) AS EmployeeName,
+                (
+                    SELECT 
+                        u.Name 
+                    FROM 
+                        tbl_Users AS u 
+                    JOIN
+                        tbl_Project_Master p
+                        ON u.UserId = p.Project_Head 
+                    WHERE 
+                        p.Project_Id = td.Project_Id
+                ) AS Project_Head_Name,
+                (SELECT Task_Name FROM tbl_Task WHERE Task_Id = td.Task_Id) AS Task_Name,
+                (SELECT Task_Desc FROM tbl_Task WHERE Task_Id = td.Task_Id) AS Task_Desc,
+                (SELECT Project_Name FROM tbl_Project_Master WHERE Project_Id = td.Project_Id) AS Project_Name
+            FROM 
+                tbl_Task_Details AS td
+            WHERE 
+                (
+                    CONVERT(DATE, td.Est_Start_Dt) <= CONVERT(DATE, @endDate)
+                    AND CONVERT(DATE, td.Est_End_Dt) >= CONVERT(DATE, @startDate)
+                )
+        `;
+
+       
+        if (Emp_Id && Number(Emp_Id)) {
+            query += ` AND td.Emp_Id = @emp `;
+        }
+
+        query += ` ORDER BY CONVERT(TIME, td.Sch_Time, 108)`;
+
+        const request = new sql.Request();
+        request.input('startDate', startDate);
+        request.input('endDate', endDate);
+
+        if (Emp_Id && Number(Emp_Id)) {
+            request.input('emp', Emp_Id);
+        }
+
+        const result = await request.query(query);
+
+        if (result.recordset.length > 0) {
+          
+            const formattedData = result.recordset.map(o => ({
+                ...o,
+                Param_Dts: o.Param_Dts ? JSON.parse(o.Param_Dts) : null
+            }));
+            return dataFound(res, formattedData);
+        } else {
+            return noData(res);
+        }
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
     return {
         getTaskStartTime,
         postStartTime,
@@ -242,6 +310,7 @@ const EmployeeAndTasks = () => {
         getMyTasks,
         todayTasks,
         EmployeeTaskDropDown,
+        EmptaskDetails
     }
 }
 

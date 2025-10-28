@@ -67,6 +67,8 @@ projectRoute.get('/task/startTask', employeesAndTasks.getTaskStartTime);
 projectRoute.post('/task/startTask', employeesAndTasks.postStartTime);
 projectRoute.delete('/task/startTask', employeesAndTasks.deleteTaskTime);
 
+projectRoute.get('/tasks/assignedTask',employeesAndTasks.EmptaskDetails)
+
 projectRoute.get('/task/workedDetails', taskActivity.getWorkedDetailsForTask);
 projectRoute.get('/task/workedUsers/dropDown',taskActivity.getFilteredUsersBasedOnTasks)
 

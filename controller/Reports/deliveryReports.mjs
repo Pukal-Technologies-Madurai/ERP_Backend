@@ -282,7 +282,70 @@ const closingReport = async (req, res) => {
 };
 
 
+
+const SyncPosPending = async (req, res) => {
+  const dataArray = Array.isArray(req.body) ? req.body : [];
+ 
+  if (!Array.isArray(dataArray) || dataArray.length === 0) {
+    return res.status(400).json({ success: false, message: "Invalid or empty data array" });
+  }
+
+  const transaction = new sql.Transaction();
+  let transactionBegun = false;
+
+  try {
+    await transaction.begin();
+    transactionBegun = true;
+
+    for (const data of dataArray) {
+      const retailerResult = await new sql.Request(transaction)
+        .input("Acc_Id", data.Acc_Id)
+        .query(`
+          SELECT Retailer_Id 
+          FROM tbl_Retailers_Master 
+          WHERE AC_Id = @Acc_Id
+        `);
+
+      if (!retailerResult.recordset.length) {
+        console.warn(`No Retailer found for Acc_Id: ${data.Acc_Id}`);
+        continue; 
+      }
+
+      const retailerId = retailerResult.recordSet[0].Retailer_Id;
+
+      await new sql.Request(transaction)
+        .input("Above_30Days", data.Above_30_Days_Pending_Amt || 0)
+        .input("Total_Outstanding", data.Overall_Outstanding_Amt || 0)
+        .input("Retailer_Id", retailerId)
+        .query(`
+          UPDATE tbl_ERP_POS_Master
+          SET 
+            Above_30Days = @Above_30Days,
+            Total_Outstanding = @Total_Outstanding
+          WHERE Retailer_Id = @Retailer_Id
+        `);
+    }
+
+    await transaction.commit();
+    success(res, `Data synced successfully updated)`);
+
+  } catch (err) {
+    // Only rollback if transaction was successfully begun
+    if (transactionBegun) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackErr) {
+        console.error('Rollback failed:', rollbackErr);
+      }
+    }
+    servError(err, res, "Data sync error");
+  }
+};
+
+
+
 export default {
     getNonConvertedSales,
     closingReport,
+     SyncPosPending
 };
