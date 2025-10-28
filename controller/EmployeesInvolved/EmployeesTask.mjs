@@ -613,62 +613,97 @@ const postEmployeesProjects = async (req, res) => {
 };
 
 
-    const assignTaskForEmployee = async (req, res) => {
-        const {
-            Project_Id, Sch_Id, Task_Levl_Id, Task_Id, Assigned_Emp_Id, Emp_Id, 
-            Sch_Period, Sch_Time, EN_Time, Est_Start_Dt, Est_End_Dt, Ord_By = 1, 
-            Timer_Based = 0, Is_Repitative = 0, Sch_Type, RepeatDays = {}
-        } = req.body;
+const assignTaskForEmployee = async (req, res) => {
+    const {
+        Project_Id, Sch_Id, Task_Levl_Id, Task_Id, Assigned_Emp_Id, Emp_Id, 
+        Sch_Period, Sch_Time, EN_Time, Est_Start_Dt, Est_End_Dt, Ord_By = 1, 
+        Timer_Based = 0, Is_Repitative = 0, Sch_Type, RepeatDays = {}
+    } = req.body;
 
-    
-        if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Assigned_Emp_Id || !Emp_Id || 
-            !Sch_Period || !Sch_Time || !EN_Time || !Est_Start_Dt || !Est_End_Dt || !Sch_Type) {
-            return res.status(400).json({ error: "All fields must be defined for task assignment." });
+ 
+    if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Assigned_Emp_Id || !Emp_Id || 
+        !Sch_Period || !Sch_Time || !EN_Time || !Est_Start_Dt || !Est_End_Dt || !Sch_Type) {
+        return invalidInput(res, 'All required fields must be provided');
+    }
+
+
+    if (new Date(Est_Start_Dt) >= new Date(Est_End_Dt)) {
+        return invalidInput(res, 'Estimated end date must be after start date');
+    }
+
+    try {
+        const request = new sql.Request();
+
+        const checkDuplicateQuery = `
+            SELECT COUNT(*) as duplicateCount 
+            FROM tbl_Task_Details 
+            WHERE Project_Id = @Project_Id 
+            AND Sch_Id = @Sch_Id 
+            AND Task_Id = @Task_Id 
+            AND Emp_Id = @Emp_Id           
+            AND NOT (Est_End_Dt < @Est_Start_Dt OR Est_Start_Dt > @Est_End_Dt)
+        `;
+
+        request.input('Project_Id', sql.BigInt, parseInt(Project_Id));
+        request.input('Sch_Id', sql.BigInt, parseInt(Sch_Id));
+        request.input('Task_Id', sql.BigInt, parseInt(Task_Id));
+        request.input('Emp_Id', sql.Int, parseInt(Emp_Id));
+        request.input('Est_Start_Dt', sql.DateTime, Est_Start_Dt);
+        request.input('Est_End_Dt', sql.DateTime, Est_End_Dt);
+
+        const duplicateResult = await request.query(checkDuplicateQuery);
+       
+        if (duplicateResult.recordset[0].duplicateCount > 0) {
+            return invalidInput(res, 'This task is already assigned to the same employee');
         }
-    
-        try {
-            const request = new sql.Request();
-    
-            request.input('Mode', sql.TinyInt, 1);  
-            request.input('AN_No', sql.BigInt, ''); 
-            request.input('Project_Id', sql.BigInt, parseInt(Project_Id));
-            request.input('Sch_Id', sql.BigInt, parseInt(Sch_Id));
-            request.input('Task_Levl_Id', sql.BigInt, parseInt(Task_Levl_Id));
-            request.input('Task_Id', sql.BigInt, parseInt(Task_Id));
-            request.input('Assigned_Emp_Id', sql.Int, parseInt(Assigned_Emp_Id));
-            request.input('Emp_Id', sql.Int, parseInt(Emp_Id));
-            request.input('Task_Assign_dt', sql.DateTime, new Date().toISOString().split('T')[0]);
-            request.input('Sch_Period', sql.NVarChar(50), Sch_Period);
-            request.input('Sch_Time', sql.NVarChar(50), Sch_Time);
-            request.input('EN_Time', sql.NVarChar(50), EN_Time);
-            request.input('Est_Start_Dt', sql.DateTime, Est_Start_Dt);
-            request.input('Est_End_Dt', sql.DateTime, Est_End_Dt);
-            request.input('Ord_By', sql.Int, parseInt(Ord_By));
-            request.input('Timer_Based', sql.Int, Boolean(Number(Timer_Based)) ? 1 : 0);
-            request.input('Invovled_Stat', sql.Int, 1); 
-            request.input('Is_Repitative', sql.Int, Boolean(Number(Is_Repitative)) ? 1 : 0);
-            request.input('Sch_Type', sql.Int, parseInt(Sch_Type));
-    
-            request.input('IS_Rep_Monday', sql.Int, RepeatDays.Mon ? 1 : 0);
-            request.input('IS_Rep_Tuesday', sql.Int, RepeatDays.Tue ? 1 : 0);
-            request.input('IS_Rep_Wednesday', sql.Int, RepeatDays.Wed ? 1 : 0);
-            request.input('IS_Rep_Thursday', sql.Int, RepeatDays.Thu ? 1 : 0);
-            request.input('Is_Rep_Friday', sql.Int, RepeatDays.Fri ? 1 : 0);
-            request.input('Is_Rep_Saturday', sql.Int, RepeatDays.Sat ? 1 : 0);
-            request.input('Is_Rep_Sunday', sql.Int, RepeatDays.Sun ? 1 : 0);
-    
-            const result = await request.execute('Task_Assign_SP');
-    
-            if (result.rowsAffected[0] > 0) {
-                return success(res, [], 'Changes saved');
-            } else {
-                return failed(res, 'Failed to Assign');
-            }
-            
-        } catch (e) {
-            return servError(e, res);
+
+     
+        const assignRequest = new sql.Request();
+
+  
+        assignRequest.input('Mode', sql.TinyInt, 1);  
+        assignRequest.input('AN_No', sql.BigInt, null); 
+        assignRequest.input('Project_Id', sql.BigInt, parseInt(Project_Id));
+        assignRequest.input('Sch_Id', sql.BigInt, parseInt(Sch_Id));
+        assignRequest.input('Task_Levl_Id', sql.BigInt, parseInt(Task_Levl_Id));
+        assignRequest.input('Task_Id', sql.BigInt, parseInt(Task_Id));
+        assignRequest.input('Assigned_Emp_Id', sql.Int, parseInt(Assigned_Emp_Id));
+        assignRequest.input('Emp_Id', sql.Int, parseInt(Emp_Id));
+        assignRequest.input('Task_Assign_dt', sql.DateTime, new Date());
+        assignRequest.input('Sch_Period', sql.NVarChar(50), Sch_Period);
+        assignRequest.input('Sch_Time', sql.NVarChar(50), Sch_Time);
+        assignRequest.input('EN_Time', sql.NVarChar(50), EN_Time);
+        assignRequest.input('Est_Start_Dt', sql.DateTime, Est_Start_Dt);
+        assignRequest.input('Est_End_Dt', sql.DateTime, Est_End_Dt);
+        assignRequest.input('Ord_By', sql.Int, parseInt(Ord_By));
+        assignRequest.input('Timer_Based', sql.Int, Boolean(Number(Timer_Based)) ? 1 : 0);
+        assignRequest.input('Invovled_Stat', sql.Int, 1); 
+        assignRequest.input('Is_Repitative', sql.Int, Boolean(Number(Is_Repitative)) ? 1 : 0);
+        assignRequest.input('Sch_Type', sql.Int, parseInt(Sch_Type));
+
+     
+        assignRequest.input('IS_Rep_Monday', sql.Int, RepeatDays.Mon ? 1 : 0);
+        assignRequest.input('IS_Rep_Tuesday', sql.Int, RepeatDays.Tue ? 1 : 0);
+        assignRequest.input('IS_Rep_Wednesday', sql.Int, RepeatDays.Wed ? 1 : 0);
+        assignRequest.input('IS_Rep_Thursday', sql.Int, RepeatDays.Thu ? 1 : 0);
+        assignRequest.input('Is_Rep_Friday', sql.Int, RepeatDays.Fri ? 1 : 0);
+        assignRequest.input('Is_Rep_Saturday', sql.Int, RepeatDays.Sat ? 1 : 0);
+        assignRequest.input('Is_Rep_Sunday', sql.Int, RepeatDays.Sun ? 1 : 0);
+
+
+        const result = await assignRequest.execute('Task_Assign_SP');
+
+        if (result.rowsAffected[0] > 0) {
+            return success(res, [], 'Task assigned successfully');
+        } else {
+            return failed(res, 'Failed to assign task');
         }
-    };
+        
+    } catch (error) {
+        console.error('Error assigning task:', error);
+        return servError(error, res);
+    }
+};
     
     const getEmployeeAssignedInTheTask = async (req, res) => {
         const { Task_Id, ProjectId,LevelId } = req.query;

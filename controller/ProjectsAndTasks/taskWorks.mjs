@@ -183,63 +183,165 @@ ORDER BY
         }
     };
 
-      const postWorkedTask = async (req, res) => {
+    //   const postWorkedTask = async (req, res) => {
 
-        try {
+    //     try {
 
-            const {
-                Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
-                Process_Id,
-                Work_Dt, Work_Done, Start_Time, End_Time, Work_Status, Det_string,
-                ProjectName,TaskName
-            } = req.body;
+    //         const {
+    //             Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
+    //             Process_Id,
+    //             Work_Dt, Work_Done, Start_Time, End_Time, Work_Status, Det_string,
+    //             ProjectName,TaskName
+    //         } = req.body;
 
 
-            if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Emp_Id || 
+    //         if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Emp_Id || 
                
-                !Work_Done || !Start_Time || !End_Time || !Work_Status) {
-                return invalidInput(res, 'Project_Id, Sch_Id, Task_Levl_Id, Task_Id, Emp_Id, Work_Done, Start_Time, End_Time, Work_Status is required')
-            }
+    //             !Work_Done || !Start_Time || !End_Time || !Work_Status) {
+    //             return invalidInput(res, 'Project_Id, Sch_Id, Task_Levl_Id, Task_Id, Emp_Id, Work_Done, Start_Time, End_Time, Work_Status is required')
+    //         }
 
-            if (Number(Mode) === 2 && Number(Work_Id) === 0) {
-                return invalidInput(res, 'Work_Id is required')
-            }
+    //         if (Number(Mode) === 2 && Number(Work_Id) === 0) {
+    //             return invalidInput(res, 'Work_Id is required')
+    //         }
 
-            const request = new sql.Request()
-            request.input('Mode', Mode || 1)
-            request.input('Work_Id', Work_Id)
-            request.input('Project_Id', Project_Id)
-            request.input('Sch_Id', Sch_Id)
-            request.input('Task_Levl_Id', Task_Levl_Id)
-            request.input('Task_Id', Task_Id)
-            request.input('AN_No', AN_No)
-            request.input('Emp_Id', Emp_Id)
-            request.input('Process_Id',Process_Id || 0)
-            request.input('Work_Dt', Work_Dt || new Date())
-            request.input('Work_Done', Work_Done)
-            request.input('Start_Time', Start_Time)
-            request.input('End_Time', End_Time)
-            request.input('Work_Status', Work_Status)
-            request.input('Entry_By', Emp_Id)
-            request.input('Entry_Date', new Date())
-            request.input('Det_string', Det_string )
-            request.input('Additional_Project',ProjectName)
-            request.input('Additional_Task',TaskName)
+    //         const request = new sql.Request()
+    //         request.input('Mode', Mode || 1)
+    //         request.input('Work_Id', Work_Id)
+    //         request.input('Project_Id', Project_Id)
+    //         request.input('Sch_Id', Sch_Id)
+    //         request.input('Task_Levl_Id', Task_Levl_Id)
+    //         request.input('Task_Id', Task_Id)
+    //         request.input('AN_No', AN_No)
+    //         request.input('Emp_Id', Emp_Id)
+    //         request.input('Process_Id',Process_Id || 0)
+    //         request.input('Work_Dt', Work_Dt || new Date())
+    //         request.input('Work_Done', Work_Done)
+    //         request.input('Start_Time', Start_Time)
+    //         request.input('End_Time', End_Time)
+    //         request.input('Work_Status', Work_Status)
+    //         request.input('Entry_By', Emp_Id)
+    //         request.input('Entry_Date', new Date())
+    //         request.input('Det_string', Det_string )
+    //         request.input('Additional_Project',ProjectName)
+    //         request.input('Additional_Task',TaskName)
           
 
-            const result = await request.execute('Work_SP')
-            if (result.rowsAffected && result.rowsAffected[0] > 0) {
-                const Query = `DELETE FROM tbl_Task_Start_Time WHERE Emp_Id = '${Emp_Id}'`;
-                await sql.query(Query);
-                // success(res, [], 'Work Saved');
-                   return success(res, 'Work Saved');
-            } else {
-                failed(res, 'Failed to save work')
-            }
-        } catch (e) {
-            servError(e, res)
+    //         const result = await request.execute('Work_SP')
+    //         if (result.rowsAffected && result.rowsAffected[0] > 0) {
+    //             const Query = `DELETE FROM tbl_Task_Start_Time WHERE Emp_Id = '${Emp_Id}'`;
+    //             await sql.query(Query);
+    //             // success(res, [], 'Work Saved');
+    //                return success(res, 'Work Saved');
+    //         } else {
+    //             failed(res, 'Failed to save work')
+    //         }
+    //     } catch (e) {
+    //         servError(e, res)
+    //     }
+    // }
+
+
+ const postWorkedTask = async (req, res) => {
+    try {
+        const {
+            Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
+            Process_Id,
+            Work_Dt, Work_Done, Start_Time, End_Time, Work_Status, Det_string,
+            ProjectName, TaskName
+        } = req.body;
+
+      
+        if (!Project_Id || !Sch_Id || !Task_Levl_Id || !Task_Id || !Emp_Id || 
+            !Work_Done || !Start_Time || !End_Time || !Work_Status) {
+            return invalidInput(res, 'Project_Id, Sch_Id, Task_Levl_Id, Task_Id, Emp_Id, Work_Done, Start_Time, End_Time, Work_Status is required')
         }
+
+       
+        const isValidTimeFormat = (timeStr) => {
+            if (!timeStr || typeof timeStr !== 'string') return false;
+            
+            
+            const cleanTime = timeStr.trim();
+            const parts = cleanTime.split(':');
+            
+      
+            if (parts.length !== 2) return false;
+            
+            const hours = parseInt(parts[0], 10);
+            const minutes = parseInt(parts[1], 10);
+            
+    
+            if (isNaN(hours) || isNaN(minutes)) return false;
+            
+
+            if (hours < 0 || hours > 23) return false;
+            if (minutes < 0 || minutes > 59) return false;
+            
+            return true;
+        };
+
+
+        if (!isValidTimeFormat(Start_Time)) {
+            return invalidInput(res, 'Start_Time must be in valid HH:MM format (00:00 to 23:59)')
+        }
+
+        if (!isValidTimeFormat(End_Time)) {
+            return invalidInput(res, 'End_Time must be in valid HH:MM format (00:00 to 23:59)')
+        }
+
+   
+        const formatTime = (timeStr) => {
+            const parts = timeStr.split(':');
+            const hours = parts[0].padStart(2, '0');
+            const minutes = parts[1].padStart(2, '0');
+            return `${hours}:${minutes}`;
+        };
+
+        const formattedStartTime = formatTime(Start_Time);
+        const formattedEndTime = formatTime(End_Time);
+
+      
+        
+      
+
+        if (Number(Mode) === 2 && Number(Work_Id) === 0) {
+            return invalidInput(res, 'Work_Id is required for Mode 2')
+        }
+
+        const request = new sql.Request()
+        request.input('Mode', Mode || 1)
+        request.input('Work_Id', Work_Id)
+        request.input('Project_Id', Project_Id)
+        request.input('Sch_Id', Sch_Id)
+        request.input('Task_Levl_Id', Task_Levl_Id)
+        request.input('Task_Id', Task_Id)
+        request.input('AN_No', AN_No)
+        request.input('Emp_Id', Emp_Id)
+        request.input('Process_Id', Process_Id || 0)
+        request.input('Work_Dt', Work_Dt || new Date())
+        request.input('Work_Done', Work_Done)
+        request.input('Start_Time', formattedStartTime) 
+        request.input('End_Time', formattedEndTime)   
+        request.input('Work_Status', Work_Status)
+        request.input('Entry_By', Emp_Id)
+        request.input('Entry_Date', new Date())
+        request.input('Det_string', Det_string)
+        request.input('Additional_Project', ProjectName)
+        request.input('Additional_Task', TaskName)
+
+        const result = await request.execute('Work_SP')
+        if (result.rowsAffected && result.rowsAffected[0] > 0) {
+            const Query = `DELETE FROM tbl_Task_Start_Time WHERE Emp_Id = '${Emp_Id}'`;
+            await sql.query(Query);
+            return success(res, 'Work Saved');
+        } else {
+            failed(res, 'Failed to save work')
+        }
+    } catch (e) {
+        servError(e, res)
     }
+}
 
     const getAllGroupedWorkedData = async (req, res) => {
         try {
