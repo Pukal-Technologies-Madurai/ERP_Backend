@@ -37,7 +37,10 @@ import district from '../controller/Masters/district.mjs';
 import voucherGroup from '../controller/Masters/voucherGroup.mjs';
 import prodGroup from '../controller/Masters/prodGroup.mjs';
 import defaultBanks from '../controller/Masters/defaultBanks.mjs';
-import processMaster from '../controller/Masters/processMaster.mjs'
+import processMaster from '../controller/Masters/processMaster.mjs';
+import accountMasterSales from "../controller/Masters/accountMasterSales.mjs";
+
+
 const MastersRouter = express.Router();
 
 MastersRouter.get('/company', company.getCompany);
@@ -307,5 +310,15 @@ MastersRouter.get('/processMaster',processMaster.getProcessDetails)
 MastersRouter.post('/processMaster',processMaster.postprocess)
 MastersRouter.put('/processMaster',processMaster.putProcess)
 MastersRouter.delete('/processMaster',processMaster.deleteProcess)
+
+
+
+MastersRouter.get("/accountMasterSales", accountMasterSales.getAccountMasterSales);
+MastersRouter.post("/accountMasterSales", accountMasterSales.insertAccountMasterSales);
+MastersRouter.put("/accountMasterSales", accountMasterSales.updateAccountMasterSales);
+MastersRouter.delete("/accountMasterSales", accountMasterSales.deleteAccountMasterSales);
+
+MastersRouter.get("/accountMasterSales/accounts", accountMasterSales.getAccountDropdown);
+MastersRouter.get("/accountMasterSales/salespersons", accountMasterSales.getSalesPersonDropdown);
 
 export default MastersRouter;
