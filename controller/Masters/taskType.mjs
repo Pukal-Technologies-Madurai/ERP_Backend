@@ -36,55 +36,75 @@ const taskTypeControlelr = () => {
         }
     }
 
-    const postTaskType = async (req, res) => {
-        const { Task_Type } = req.body;
+const postTaskType = async (req, res) => {
+    const { Mode, Task_Type_Id, Task_Type, Project_Id, Est_StartTime, Est_EndTime, Status } = req.body;
 
-        if (!Task_Type) {
-            return invalidInput(res, 'Task_Type is required')
+    if (!Task_Type) {
+        return invalidInput(res, 'Task_Type is required')
+    }
+    
+    if (!Project_Id) {
+        return invalidInput(res, 'Project_Id is required')
+    }
+
+    try {
+        const result = await new sql.Request()
+            .input('Mode', Mode || 1)
+            .input('Task_Type_Id', Task_Type_Id || 0)
+            .input('Task_Type', Task_Type)
+            .input('Project_Id', Project_Id)
+            .input('Est_StartTime', Est_StartTime ? new Date(Est_StartTime) : new Date())
+            .input('Est_EndTime', Est_EndTime ? new Date(Est_EndTime) : new Date())
+            .input('Status', Status || 1)
+            .execute('Task_Type_SP')
+
+        if (result.rowsAffected[0] > 0) {
+            success(res, 'Task type added successfully', { Task_Type_Id: result.recordset[0] })
+        } else {
+            failed(res, 'Failed to add task type');
         }
+    } catch (e) {
+        servError(e, res)
+    }
+};
 
-        try {
-            const result = await new sql.Request()
-                .input('Mode', 1)
-                .input('Task_Type_Id', 0)
-                .input('Task_Type', Task_Type)
-                .execute('Task_Type_SP')
-
-            if (result.rowsAffected[0] > 0) {
-                success(res, 'Task type added successfully')
-            } else {
-                failed(res, 'Failed to add task type');
-            }
-        } catch (e) {
-            servError(e, res)
-        }
-    };
 
     const editTaskType = async (req, res) => {
-        const { Task_Type_Id, Task_Type } = req.body;
+      const { Mode, Task_Type_Id, Task_Type, Project_Id, Est_StartTime, Est_EndTime, Status } = req.body;
 
-        if (!Task_Type_Id || !Task_Type) {
-            return invalidInput(res, 'Task_Type_Id, Task_Type is required')
+    if (!Task_Type_Id) {
+        return invalidInput(res, 'Task_Type_Id is required')
+    }
+    
+    if (!Task_Type) {
+        return invalidInput(res, 'Task_Type is required')
+    }
+    
+    if (!Project_Id) {
+        return invalidInput(res, 'Project_Id is required')
+    }
+
+    try {
+        const result = await new sql.Request()
+            .input('Mode', Mode || 2)
+            .input('Task_Type_Id', Task_Type_Id)
+            .input('Task_Type', Task_Type)
+            .input('Project_Id', Project_Id)
+            .input('Est_StartTime', Est_StartTime ? new Date(Est_StartTime) : new Date())
+            .input('Est_EndTime', Est_EndTime ? new Date(Est_EndTime) : new Date())
+            .input('Status', Status || 1)
+            .execute('Task_Type_SP')
+
+        if (result.rowsAffected[0] > 0) {
+            success(res, 'Task type updated successfully')
+        } else {
+            failed(res, 'Failed to update task type');
         }
+    } catch (e) {
+        servError(e, res)
+    }
+};
 
-        try {
-            const result = await new sql.Request()
-                .input('Mode', 2)
-                .input('Task_Type_Id', Task_Type_Id)
-                .input('Task_Type', Task_Type)
-                .execute('Task_Type_SP')
-            
-
-            if (result.rowsAffected[0] > 0) {
-                success(res, 'Task type updated successfully')
-            } else {
-                failed(res, 'Failed to update task type');
-            }
-
-        } catch (e) {
-            servError(e, res)
-        }
-    };
 
     const deleteTaskType = async (req, res) => {
         const { Task_Type_Id } = req.body;

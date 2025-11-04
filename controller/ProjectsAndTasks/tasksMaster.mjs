@@ -4,30 +4,41 @@ import { checkIsNumber, isEqualNumber } from '../../helper_functions.mjs';
 
 const taskModule = () => {
 
-    const getTaskDropDown = async (req, res) => {
-        const { Company_id } = req.query;
+const getTaskDropDown = async (req, res) => {
+    const { Company_id, Task_Group_Id } = req.query;
 
-        // if (!checkIsNumber(Company_id)) {
-        //     return invalidInput(res, 'Company_id is required');
-        // }
-
-        try {
-            const request = new sql.Request()
-                .input('comp', Company_id)
-                .query(`SELECT Task_Id, Task_Name FROM tbl_Task ORDER BY Task_Name`)
-            // WHERE Company_id = @comp
-
-            const result = await request;
-
-            if (result.recordset.length > 0) {
-                dataFound(res, result.recordset)
-            } else {
-                noData(res)
-            }
-        } catch (e) {
-            servError(e, res)
-        }
+    // Validate Company_id
+    if (!Company_id) {
+        return invalidInput(res, 'Company_id.... is required');
     }
+
+    // Validate and parse Task_Group_Id
+    let taskGroupId = null;
+    if (Task_Group_Id && Task_Group_Id !== 'undefined' && !isNaN(Task_Group_Id)) {
+        taskGroupId = parseInt(Task_Group_Id);
+    } else {
+        return invalidInput(res, 'Valid Task_Group_Id is required');
+    }
+
+    try {
+        const request = new sql.Request()
+            .input('comp', sql.Int, Company_id)
+            .input('Task_Group_Id', sql.Int, taskGroupId)
+            .query(`SELECT Task_Id, Task_Name FROM tbl_Task 
+                    WHERE Company_Id = @comp AND Task_Group_Id = @Task_Group_Id
+                    ORDER BY Task_Name`);
+
+        const result = await request;
+
+        if (result.recordset.length > 0) {
+            dataFound(res, result.recordset)
+        } else {
+            noData(res)
+        }
+    } catch (e) {
+        servError(e, res)
+    }
+}
 
     const getTasks = async (req, res) => {
         const { Company_id } = req.query;
