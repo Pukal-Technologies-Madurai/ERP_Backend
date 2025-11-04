@@ -21,6 +21,9 @@ projectRoute.get('/statusList', projectMaster.getStatusList);
 projectRoute.get('/project/newAbstract', projectMaster.getProjectAbstractProjectId);
 projectRoute.get('/project/newProjectAbstract', projectMaster.newProjectAbstract);
 
+projectRoute.get('/project/AbstractNew', projectMaster.projectAbstractTaskNew);
+
+
 projectRoute.get('/project/schedule/newscheduleType', projectSchedule.newgetScheduleType);
 projectRoute.get('/project/schedule/scheduleType', projectSchedule.getScheduleType);
 projectRoute.get('/project/schedule', projectSchedule.getSchedule);
@@ -95,5 +98,7 @@ projectRoute.get('/processMaster/dropDown',taskWorks.getProcessDetails)
 
 
 projectRoute.get('/tasks/project/dropdown',taskActivity.getProjectDropDown)
+
+projectRoute.get('/project/schedule/ListingDetailsAbstract',projectSchedule.getScheduleProjectidActivity)
 
 export default projectRoute;
