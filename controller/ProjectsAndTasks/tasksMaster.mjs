@@ -5,7 +5,10 @@ import { checkIsNumber, isEqualNumber } from '../../helper_functions.mjs';
 const taskModule = () => {
 
 const getTaskDropDown = async (req, res) => {
-    const { Company_id, Task_Group_Id } = req.query;
+    const { Company_id
+        // , 
+        // Task_Group_Id 
+    } = req.query;
 
     // Validate Company_id
     if (!Company_id) {
@@ -13,21 +16,22 @@ const getTaskDropDown = async (req, res) => {
     }
 
     // Validate and parse Task_Group_Id
-    let taskGroupId = null;
-    if (Task_Group_Id && Task_Group_Id !== 'undefined' && !isNaN(Task_Group_Id)) {
-        taskGroupId = parseInt(Task_Group_Id);
-    } else {
-        return invalidInput(res, 'Valid Task_Group_Id is required');
-    }
+    // let taskGroupId = null;
+    // if (Task_Group_Id && Task_Group_Id !== 'undefined' && !isNaN(Task_Group_Id)) {
+    //     taskGroupId = parseInt(Task_Group_Id);
+    // } else {
+    //     return invalidInput(res, 'Valid Task_Group_Id is required');
+    // }
 
     try {
         const request = new sql.Request()
             .input('comp', sql.Int, Company_id)
-            .input('Task_Group_Id', sql.Int, taskGroupId)
+            // .input('Task_Group_Id', sql.Int, taskGroupId)
             .query(`SELECT Task_Id, Task_Name FROM tbl_Task 
-                    WHERE Company_Id = @comp AND Task_Group_Id = @Task_Group_Id
+                    WHERE Company_Id = @comp 
+                   
                     ORDER BY Task_Name`);
-
+ //  AND Task_Group_Id = @Task_Group_Id
         const result = await request;
 
         if (result.recordset.length > 0) {
