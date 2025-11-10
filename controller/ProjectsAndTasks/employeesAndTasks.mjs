@@ -94,17 +94,18 @@ const EmployeeAndTasks = () => {
 
     const getMyTasks = async (req, res) => {
         const { Emp_Id, reqDate } = req.query;
-
+   
         if (!checkIsNumber(Emp_Id)) {
             return invalidInput(res, 'Emp_Id is required');
         }
 
         try {
             const request = new sql.Request()
+        
                 .input('Work_Date', reqDate ? ISOString(reqDate) : ISOString())
                 .input('Emp_Id', Emp_Id)
                 .query(`
-                    SELECT  
+                   SELECT  
                         T.*, 
                         W.SNo,
                         W.Work_Id,
@@ -121,7 +122,7 @@ const EmployeeAndTasks = () => {
                             FOR JSON PATH
                         ), '[]') AS Param_Dts
                     FROM 
-                        Task_Details_Fill_Fn() T 
+                        Task_Details_Today_Fn(@Work_Date) T 
                     LEFT JOIN 
                         Work_Master_Daily_Fn(@Work_Date, @Emp_Id) W 
                         ON T.AN_No = W.AN_No
@@ -244,31 +245,58 @@ const EmployeeAndTasks = () => {
     try {
     
         let query = `
-            SELECT 
-                td.*,
-                (SELECT Name FROM tbl_Users WHERE UserId = td.Assigned_Emp_Id) AS Assigned_Name,
-                (SELECT Name FROM tbl_Users WHERE UserId = td.Emp_Id) AS EmployeeName,
-                (
-                    SELECT 
-                        u.Name 
-                    FROM 
-                        tbl_Users AS u 
-                    JOIN
-                        tbl_Project_Master p
-                        ON u.UserId = p.Project_Head 
-                    WHERE 
-                        p.Project_Id = td.Project_Id
-                ) AS Project_Head_Name,
-                (SELECT Task_Name FROM tbl_Task WHERE Task_Id = td.Task_Id) AS Task_Name,
-                (SELECT Task_Desc FROM tbl_Task WHERE Task_Id = td.Task_Id) AS Task_Desc,
-                (SELECT Project_Name FROM tbl_Project_Master WHERE Project_Id = td.Project_Id) AS Project_Name
-            FROM 
-                tbl_Task_Details AS td
-            WHERE 
-                (
-                    CONVERT(DATE, td.Est_Start_Dt) <= CONVERT(DATE, @endDate)
-                    AND CONVERT(DATE, td.Est_End_Dt) >= CONVERT(DATE, @startDate)
-                )
+SELECT 
+    td.Id,
+    td.AN_No,
+    td.Project_Id,
+    td.Sch_Id,
+    td.Task_Levl_Id,
+    td.Task_Id,
+    td.Assigned_Emp_Id,
+    td.Emp_Id,
+    td.Task_Assign_dt,
+    td.Sch_Period,
+    td.Sch_Time,
+    td.EN_Time,
+    td.Est_Start_Dt,
+    td.Est_End_Dt,
+    td.Ord_By,
+    td.Timer_Based,
+    td.Invovled_Stat,
+    td.Is_Repitative,
+    td.Sch_Type,
+    -- MAKE SURE THESE DAY FLAGS ARE INCLUDED:
+    td.IS_Rep_Monday,
+    td.IS_Rep_Tuesday,
+    td.IS_Rep_Wednesday,
+    td.IS_Rep_Thursday,
+    td.Is_Rep_Friday,
+    td.Is_Rep_Saturday,
+    td.Is_Rep_Sunday,
+    (SELECT Name FROM tbl_Users WHERE UserId = td.Assigned_Emp_Id) AS Assigned_Name,
+    (SELECT Name FROM tbl_Users WHERE UserId = td.Emp_Id) AS EmployeeName,
+    (
+        SELECT 
+            u.Name 
+        FROM 
+            tbl_Users AS u 
+        JOIN
+            tbl_Project_Master p
+            ON u.UserId = p.Project_Head 
+        WHERE 
+            p.Project_Id = td.Project_Id
+    ) AS Project_Head_Name,
+    (SELECT Task_Name FROM tbl_Task WHERE Task_Id = td.Task_Id) AS Task_Name,
+    (SELECT Task_Desc FROM tbl_Task WHERE Task_Id = td.Task_Id) AS Task_Desc,
+    (SELECT Project_Name FROM tbl_Project_Master WHERE Project_Id = td.Project_Id) AS Project_Name
+FROM 
+    tbl_Task_Details AS td
+WHERE 
+    (
+        CONVERT(DATE, td.Est_Start_Dt) <= @endDate
+        AND CONVERT(DATE, td.Est_End_Dt) >= @startDate
+    )
+
         `;
 
        

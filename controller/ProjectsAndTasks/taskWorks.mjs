@@ -13,6 +13,8 @@ const TaskWorks = () => {
         const query = `
 SELECT
     wm.*,
+    	p.Project_Name,
+	t.Task_Name,
     CASE 
         WHEN wm.Project_Id != 1 THEN ISNULL(p.Project_Name, '')
         ELSE ISNULL(wm.Additional_Project, '')
@@ -93,6 +95,8 @@ ORDER BY
             let query = `
              SELECT
     wm.*,
+    p.Project_Name,
+    t.Task_Name,
     CASE 
         WHEN wm.Project_Id != 1 THEN ISNULL(p.Project_Name, '')
         ELSE ISNULL(wm.Additional_Project, '')

@@ -542,27 +542,53 @@ const employeesTasks = () => {
             const result = await new sql.Request()
                 .input('Project_Id', sql.Int, Project_Id)
                 .query(`
-                     SELECT 
+   
+                    SELECT 
                         e.UserId,
                         e.Name,
-                        COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+                        e.UserTypeId,
+						ut.UserType,
+						COALESCE(ed.Designation, 'NOT FOUND') AS Designation_Name,
                         COALESCE(b.BranchName, 'NOT FOUND') AS BranchName
                        
                     FROM 
                         tbl_Project_Employee AS pe
                     JOIN 
                         tbl_Users AS e ON pe.User_Id = e.UserId
-                    LEFT JOIN 
-                        tbl_Employee_Designation AS d ON e.UserTypeId = d.Designation_Id
                  
                     LEFT JOIN 
                         tbl_Branch_Master AS b ON e.BranchId = b.BranchId
+					LEFT JOIN tbl_User_Type as ut ON ut.Id=e.UserTypeId
+
+					LEFT JOIN tbl_Employee_Master em ON em.User_Mgt_Id=pe.User_Id
+					LEFT JOIN tbl_Employee_Designation ed ON ed.Designation_Id=em.Designation
                     WHERE 
-                        pe.Project_Id = @Project_Id
+                       pe.Project_Id = @Project_Id
                     ORDER BY 
-                        e.Name
+                         e.Name
                         
                 `);
+
+                                 //  SELECT 
+                    //     e.UserId,
+                    //     e.Name,
+                    //     COALESCE(d.Designation, 'NOT FOUND') AS Designation_Name, 
+                    //     COALESCE(b.BranchName, 'NOT FOUND') AS BranchName
+                       
+                    // FROM 
+                    //     tbl_Project_Employee AS pe
+                    // JOIN 
+                    //     tbl_Users AS e ON pe.User_Id = e.UserId
+                    // LEFT JOIN 
+                    //     tbl_Employee_Designation AS d ON e.UserTypeId = d.Designation_Id
+                 
+                    // LEFT JOIN 
+                    //     tbl_Branch_Master AS b ON e.BranchId = b.BranchId
+                    // WHERE 
+                    //     pe.Project_Id = @Project_Id
+                    // ORDER BY 
+                    //     e.Name
+
 
             if (result.recordset.length > 0) {
                 return dataFound(res, result.recordset);
