@@ -79,9 +79,9 @@ const PurchaseOrderDataEntry = () => {
             const result = await request;
 
             const [
-                generalInfo, productDetails, deliveryDetails, 
-                transporterDetails, Staffdetails, invoicedOrders 
-            ] = result.recordsets; 
+                generalInfo, productDetails, deliveryDetails,
+                transporterDetails, Staffdetails, invoicedOrders
+            ] = result.recordsets;
 
             if (generalInfo.length > 0) {
                 const extractedData = generalInfo.map(o => ({
@@ -150,6 +150,9 @@ const PurchaseOrderDataEntry = () => {
             PaymentCondition = '',
             Remarks = '',
             OrderStatus = '',
+            Discount = 0,
+            QualityCondition = '',
+            PaymentDays = 0,
             CreatedBy = ''
         } = req?.body?.OrderDetails;
 
@@ -212,16 +215,19 @@ const PurchaseOrderDataEntry = () => {
                 .input('PaymentCondition', PaymentCondition)
                 .input('Remarks', Remarks)
                 .input('OrderStatus', OrderStatus)
+                .input('Discount', Discount)
+                .input('QualityCondition', QualityCondition)
+                .input('PaymentDays', PaymentDays)
                 .input('CreatedBy', CreatedBy)
                 .query(`
                     INSERT INTO tbl_PurchaseOrderGeneralDetails (
                         Sno, Id, PoYear, BranchId, PO_ID,
                         LoadingDate, TradeConfirmDate, OwnerId, OwnerName, BrokerId, BrokerName, PartyId, PartyName, 
-                        PartyAddress, PaymentCondition, Remarks, OrderStatus, CreatedBy
+                        PartyAddress, PaymentCondition, Remarks, OrderStatus, CreatedBy, Discount, QualityCondition, PaymentDays
                     ) VALUES (
                         @Sno, @Id, @PoYear, @BranchId, @PO_ID,
                         @LoadingDate, @TradeConfirmDate, @OwnerId, @OwnerName, @BrokerId, @BrokerName, @PartyId, @PartyName, 
-                        @PartyAddress, @PaymentCondition, @Remarks, @OrderStatus, @CreatedBy
+                        @PartyAddress, @PaymentCondition, @Remarks, @OrderStatus, @CreatedBy, @Discount, @QualityCondition, @PaymentDays
                     );`
                 );
 
@@ -243,13 +249,13 @@ const PurchaseOrderDataEntry = () => {
                     .input('Units', item?.Units)
                     .input('Rate', Number(item?.Rate))
                     .input('DeliveryLocation', item?.DeliveryLocation)
-                    .input('Discount', Number(item?.Discount))
-                    .input('QualityCondition', item?.QualityCondition)
+                    // .input('Discount', Number(item?.Discount))
+                    // .input('QualityCondition', item?.QualityCondition)
                     .query(`
                         INSERT INTO tbl_PurchaseOrderItemDetails (
-                            Sno, OrderId, ItemId, ItemName, Weight, Units, Rate, DeliveryLocation, Discount, QualityCondition
+                            Sno, OrderId, ItemId, ItemName, Weight, Units, Rate, DeliveryLocation
                         ) VALUES (
-                            @Sno, @OrderId, @ItemId, @ItemName, @Weight, @Units, @Rate, @DeliveryLocation, @Discount, @QualityCondition
+                            @Sno, @OrderId, @ItemId, @ItemName, @Weight, @Units, @Rate, @DeliveryLocation
                         )
                     `);
 
@@ -375,6 +381,9 @@ const PurchaseOrderDataEntry = () => {
             PaymentCondition = '',
             Remarks = '',
             OrderStatus = '',
+            Discount = 0,
+            QualityCondition = '',
+            PaymentDays = 0,
             CreatedBy = ''
         } = req.body.OrderDetails;
 
@@ -403,6 +412,9 @@ const PurchaseOrderDataEntry = () => {
                 .input('PaymentCondition', PaymentCondition)
                 .input('Remarks', Remarks)
                 .input('OrderStatus', OrderStatus)
+                .input('Discount', Discount)
+                .input('QualityCondition', QualityCondition)
+                .input('PaymentDays', PaymentDays)
                 .input('CreatedBy', CreatedBy)
                 .query(`
                     UPDATE tbl_PurchaseOrderGeneralDetails
@@ -410,7 +422,8 @@ const PurchaseOrderDataEntry = () => {
                         OwnerId = @OwnerId, BrokerId = @BrokerId, 
                         OwnerName = @OwnerName, BrokerName = @BrokerName, PartyId = @PartyId, PartyName = @PartyName,
                         PartyAddress = @PartyAddress, PaymentCondition = @PaymentCondition, 
-                        Remarks = @Remarks, OrderStatus = @OrderStatus, CreatedBy = @CreatedBy
+                        Remarks = @Remarks, OrderStatus = @OrderStatus, CreatedBy = @CreatedBy, 
+                        Discount = @Discount, QualityCondition = @QualityCondition, PaymentDays = @PaymentDays
                     WHERE Sno = @OrderId
                 `);
 
@@ -851,36 +864,36 @@ const PurchaseOrderDataEntry = () => {
     };
 
     const getPurchaseOrderMobile = async (req, res) => {
-    try {
-        const {
-            User_Id,
-            Branch_Id,
-        } = req.query;
+        try {
+            const {
+                User_Id,
+                Branch_Id,
+            } = req.query;
 
-        const Fromdate = ISOString(req.query?.Fromdate ? req.query?.Fromdate : new Date());
-        const Todate = ISOString(req.query?.Todate ? req.query?.Todate : new Date());
+            const Fromdate = ISOString(req.query?.Fromdate ? req.query?.Fromdate : new Date());
+            const Todate = ISOString(req.query?.Todate ? req.query?.Todate : new Date());
 
-        const request = new sql.Request()
-            .input('Fromdate', Fromdate)
-            .input('Todate', Todate)
-            .input('User_Id', User_Id ? parseInt(User_Id) : null)
-            .input('Branch_Id', Branch_Id ? parseInt(Branch_Id) : null);
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('User_Id', User_Id ? parseInt(User_Id) : null)
+                .input('Branch_Id', Branch_Id ? parseInt(Branch_Id) : null);
 
-        // Branch filter logic
-        let branchFilter = '';
-        if (Branch_Id && !isNaN(Branch_Id)) {
-            branchFilter = 'AND pgi.BranchId = @Branch_Id';
-        } else if (User_Id && !isNaN(User_Id)) {
-            branchFilter = `
+            // Branch filter logic
+            let branchFilter = '';
+            if (Branch_Id && !isNaN(Branch_Id)) {
+                branchFilter = 'AND pgi.BranchId = @Branch_Id';
+            } else if (User_Id && !isNaN(User_Id)) {
+                branchFilter = `
                 AND pgi.BranchId IN (
                     SELECT BranchId
                     FROM tbl_userbranchrights
                     WHERE User_Id = @User_Id
                 )
             `;
-        }
+            }
 
-        const result = await request.query(`
+            const result = await request.query(`
             -------------------------table variable declaration----------
             DECLARE @FilteredOrders TABLE (Sno INT);
             -------------------------filtering invoices and inserting into table variable
@@ -949,60 +962,60 @@ const PurchaseOrderDataEntry = () => {
             WHERE igo.Order_Id IN (SELECT Sno FROM @FilteredOrders);
         `);
 
-        const [
-            generalInfo, productDetails, deliveryDetails,
-            transporterDetails, Staffdetails, invoicedOrders
-        ] = result.recordsets;
+            const [
+                generalInfo, productDetails, deliveryDetails,
+                transporterDetails, Staffdetails, invoicedOrders
+            ] = result.recordsets;
 
-        if (generalInfo.length > 0) {
-            const extractedData = generalInfo.map(o => ({
-                ...o,
-                ConvertedAsInvoices: invoicedOrders.filter(fil => isEqualNumber(fil.Order_Id, o.Sno)),
-                ItemDetails: productDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
-                DeliveryDetails: deliveryDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
-                TranspoterDetails: transporterDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
-                StaffDetails: Staffdetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno))
-            }));
+            if (generalInfo.length > 0) {
+                const extractedData = generalInfo.map(o => ({
+                    ...o,
+                    ConvertedAsInvoices: invoicedOrders.filter(fil => isEqualNumber(fil.Order_Id, o.Sno)),
+                    ItemDetails: productDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    DeliveryDetails: deliveryDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    TranspoterDetails: transporterDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    StaffDetails: Staffdetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno))
+                }));
 
-            const productWiseStatus = extractedData.map(o => ({
-                ...o,
-                DeliveryDetails: o.DeliveryDetails.map(item => ({
-                    pendingInvoiceWeight: Number(item?.Weight) - Number(o.ConvertedAsInvoices.filter(
-                        itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
-                            && isEqualNumber(itmFil.DeliveryId, item.Trip_Item_SNo)
-                            && isEqualNumber(itmFil.Order_Id, item.OrderId)
-                    ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
-                    convertableQuantity: o.DeliveryDetails.filter(
-                        itmFil => isEqualNumber(itmFil.ItemId, item.ItemId)
-                            && isEqualNumber(itmFil.OrderId, item.OrderId)
-                            && isEqualNumber(itmFil.Trip_Item_SNo, item.Trip_Item_SNo)
-                    ).reduce((itemAcc, deliveredItem) => {
-                        return Number(itemAcc) + Number(deliveredItem.Weight)
-                    }, 0) - Number(o.ConvertedAsInvoices.filter(
-                        itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
-                    ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
-                    ...item,
-                })),
-            }))
+                const productWiseStatus = extractedData.map(o => ({
+                    ...o,
+                    DeliveryDetails: o.DeliveryDetails.map(item => ({
+                        pendingInvoiceWeight: Number(item?.Weight) - Number(o.ConvertedAsInvoices.filter(
+                            itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
+                                && isEqualNumber(itmFil.DeliveryId, item.Trip_Item_SNo)
+                                && isEqualNumber(itmFil.Order_Id, item.OrderId)
+                        ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
+                        convertableQuantity: o.DeliveryDetails.filter(
+                            itmFil => isEqualNumber(itmFil.ItemId, item.ItemId)
+                                && isEqualNumber(itmFil.OrderId, item.OrderId)
+                                && isEqualNumber(itmFil.Trip_Item_SNo, item.Trip_Item_SNo)
+                        ).reduce((itemAcc, deliveredItem) => {
+                            return Number(itemAcc) + Number(deliveredItem.Weight)
+                        }, 0) - Number(o.ConvertedAsInvoices.filter(
+                            itmFil => isEqualNumber(itmFil.Item_Id, item.ItemId)
+                        ).reduce((invAcc, inv) => Number(invAcc) + Number(inv.Bill_Qty), 0)),
+                        ...item,
+                    })),
+                }))
 
-            const OrderWiseStatus = productWiseStatus.map(order => ({
-                IsConvertedAsInvoice: order.DeliveryDetails.reduce(
-                    (acc, dItem) => acc + Number(dItem.convertableQuantity), 0
-                ) <= 0 ? 1 : 0,
-                isConvertableArrivalExist: order.DeliveryDetails.reduce(
-                    (acc, dItem) => acc + Number(dItem.pendingInvoiceWeight), 0
-                ) > 0 ? 1 : 0,
-                ...order,
-            }))
+                const OrderWiseStatus = productWiseStatus.map(order => ({
+                    IsConvertedAsInvoice: order.DeliveryDetails.reduce(
+                        (acc, dItem) => acc + Number(dItem.convertableQuantity), 0
+                    ) <= 0 ? 1 : 0,
+                    isConvertableArrivalExist: order.DeliveryDetails.reduce(
+                        (acc, dItem) => acc + Number(dItem.pendingInvoiceWeight), 0
+                    ) > 0 ? 1 : 0,
+                    ...order,
+                }))
 
-            dataFound(res, OrderWiseStatus);
-        } else {
-            noData(res);
+                dataFound(res, OrderWiseStatus);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
         }
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    };
 
     return {
         getPurchaseOrder,

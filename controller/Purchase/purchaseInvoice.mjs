@@ -102,7 +102,8 @@ const PurchaseOrder = () => {
         const {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
-            Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off
+            Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
+            QualityCondition = '', PaymentDays = 0
         } = req.body;
 
         const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();
@@ -258,15 +259,20 @@ const PurchaseOrder = () => {
                 .input('Alterd_on', new Date())
                 .input('Trans_Type', 'INSERT')
                 .input('Alter_Id', Alter_Id)
+                .input('Discount', Discount)
+                .input('QualityCondition', QualityCondition)
+                .input('PaymentDays', PaymentDays)
                 .query(`
                     INSERT INTO tbl_Purchase_Order_Inv_Gen_Info (
                         PIN_Id, PO_Inv_Id, PO_Inv_Year, Ref_Po_Inv_No, Branch_Id, Po_Inv_No, Po_Inv_Date, Po_Entry_Date, Retailer_Id, GST_Inclusive, 
                         IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Round_off, Total_Before_Tax, Total_Tax, Total_Invoice_value, Narration, 
-                        Cancel_status, Created_by, Altered_by, Created_on, Alterd_on, Trans_Type, Alter_Id, Voucher_Type, Stock_Item_Ledger_Name
+                        Cancel_status, Created_by, Altered_by, Created_on, Alterd_on, Trans_Type, Alter_Id, Voucher_Type, Stock_Item_Ledger_Name,
+                        Discount, QualityCondition, PaymentDays
                     ) VALUES (
                         @PIN_Id, @PO_Inv_Id, @PO_Inv_Year, @Ref_Po_Inv_No, @Branch_Id, @Po_Inv_No, @Po_Inv_Date, @Po_Entry_Date, @Retailer_Id, @GST_Inclusive, 
                         @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Round_off, @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Narration, 
-                        @Cancel_status, @Created_by, @Altered_by, @Created_on, @Alterd_on, @Trans_Type, @Alter_Id, @Voucher_Type, @Stock_Item_Ledger_Name
+                        @Cancel_status, @Created_by, @Altered_by, @Created_on, @Alterd_on, @Trans_Type, @Alter_Id, @Voucher_Type, @Stock_Item_Ledger_Name,
+                        @Discount, @QualityCondition, @PaymentDays
                     )`
                 );
 
@@ -429,7 +435,8 @@ const PurchaseOrder = () => {
         const {
             PIN_Id, Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
-            Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off
+            Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
+            QualityCondition = '', PaymentDays = 0
         } = req.body;
 
         const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
@@ -522,7 +529,9 @@ const PurchaseOrder = () => {
 
                 .input('Alterd_on', new Date())
                 .input('Trans_Type', 'UPDATE')
-
+                .input('Discount', Discount)
+                .input('QualityCondition', QualityCondition)
+                .input('PaymentDays', PaymentDays)
                 .query(`
                     UPDATE 
                         tbl_Purchase_Order_Inv_Gen_Info
@@ -547,7 +556,10 @@ const PurchaseOrder = () => {
                         Altered_by = @Altered_by, 
                         Alter_Id = @Alter_Id, 
                         Alterd_on = GETDATE(),
-                        Trans_Type = @Trans_Type
+                        Trans_Type = @Trans_Type,
+                        Discount = @Discount, 
+                        QualityCondition = @QualityCondition, 
+                        PaymentDays = @PaymentDays
                     WHERE
                         PIN_Id = @PIN_Id;
                     `
@@ -979,7 +991,7 @@ const PurchaseOrder = () => {
                 // Only keep branchIds that user has access to
                 const finalBranches = allowedBranches.length
                     ? branchIds.filter(b => allowedBranches.includes(b))
-                    : branchIds; 
+                    : branchIds;
 
                 if (finalBranches.length) {
                     branchCondition = ` AND pigi.Branch_Id IN (${finalBranches.join(',')}) `;
