@@ -495,14 +495,15 @@ const ProjectScheduler = () => {
                     .input('Sch_Project_Id', sql.Int, Project_Id)
                     .input('Sch_Type_Id',sql.Int,Sch_Type_Id)
                     .input('Task_Id', sql.Int, task.Task_Id)
-                    .query(`SELECT * FROM tbl_Project_Sch_Task_DT WHERE Sch_Project_Id = @Sch_Project_Id AND Task_Id = @Task_Id AND Sch_Type_Id=@Sch_Type_Id`);
+                    .input('Task_Group_Id',task.Task_Group_Id)
+                    .query(`SELECT * FROM tbl_Project_Sch_Task_DT WHERE Sch_Project_Id = @Sch_Project_Id AND Task_Id = @Task_Id AND Type_Task_Id=@Task_Group_Id AND @Sch_Type_Id=@Sch_Type_Id`);
     
-                if (existingTaskResult.recordset.length > 0) {
-                    return {
-                        message: `Task ${task.Task_Name} already exists for this project.`,
-                        status: 'warning'
-                    };
-                }
+                // if (existingTaskResult.recordset.length > 0) {
+                //     return {
+                //         message: `Task ${task.Task_Name} already exists for this project.`,
+                //         status: 'warning'
+                //     };
+                // }
     
                 const taskStartTime = task.Task_Start_Time ? new Date(task.Task_Start_Time) : new Date();
                 const taskEndTime = task.Task_End_Time ? new Date(task.Task_End_Time) : new Date();
@@ -560,176 +561,17 @@ const ProjectScheduler = () => {
     
     
 
- const getScheduleProjectid = async (req, res) => {
-        const { Project_Id,Task_Type_Id } = req.query;
+//  const getScheduleProjectid = async (req, res) => {
+//         const { Project_Id,Task_Type_Id } = req.query;
     
-        if (!checkIsNumber(Project_Id)) {
-            return invalidInput(res, 'Project_Id is required');
-        }
+//         if (!checkIsNumber(Project_Id)) {
+//             return invalidInput(res, 'Project_Id is required');
+//         }
     
-        const getProjectScheduleQuery = 
+//         const getProjectScheduleQuery = 
 
-
-
-
-     ` SELECT 
-    ps.[Sch_Id],
-    ps.[Sch_No],
-    ps.[Sch_Date],
-    ps.[Project_Id],
-    ps.[Sch_By],
-    ps.[Sch_Type_Id],
-    ps.[Sch_Est_Start_Date],
-    ps.[Sch_Est_End_Date],
-    p.[Project_Name],
-    p.[Project_Desc],
-
-    (
-        SELECT DISTINCT
-            tt.[Sch_Type_Id] AS SchTypeId,
-            tt.[Sch_Type] AS SchType,
-
-            -- Task Counts for each SchType
-            (
-                SELECT 
-                    COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Sch_Type_Id, pt.Sch_Project_Id)) AS TotalTasks,
-                    COALESCE(
-                        (SELECT COUNT(CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
-                         FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
-                         WHERE wm.Sch_Type = tt.Sch_Type_Id
-                         AND wm.Project_Id = ps.Project_Id),
-                        0
-                    ) AS CompletedTasks
-                FROM tbl_Project_Sch_Task_DT pt
-                LEFT JOIN tbl_Work_Master wm ON wm.Task_Id = pt.Task_Id 
-                                                 AND wm.Task_Levl_Id = pt.Task_Levl_Id
-                WHERE pt.Sch_Project_Id = p.Project_Id
-                AND pt.Sch_Type_Id = tt.Sch_Type_Id
-                AND pt.Sch_Type_Id NOT IN (4, 5, 6, 0)
-                FOR JSON PATH
-            ) AS TaskCountsInSchType,
-
-            (
-                SELECT DISTINCT
-                    ttt.[Task_Type_Id],
-                    ttt.[Task_Type] AS Task_Type,
-
-                    -- Task Metrics for each Task Type
-                    (
-                        SELECT 
-                            COUNT(DISTINCT CONCAT(pt_inner.Task_Id, pt_inner.Sch_Project_Id)) AS TotalTasks, 
-                            COALESCE(
-                                (
-                                    SELECT COUNT( CONCAT( wm.Task_Id, wm.Sch_Type, wm.Task_Levl_Id, wm.AN_No, wm.Emp_Id))
-                                    FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
-                                    WHERE wm.Sch_Type = tt.Sch_Type_Id
-                                      AND wm.Project_Id = ps.Project_Id
-                                ),
-                                0
-                            ) AS CompletedTasks
-                        FROM tbl_Project_Sch_Task_DT pt_inner
-                        LEFT JOIN tbl_Work_Master wm 
-                            ON wm.Task_Id = pt_inner.Task_Id AND wm.Task_Levl_Id = pt_inner.Task_Levl_Id
-                        WHERE pt_inner.Sch_Id = ps.Sch_Id
-                        AND pt_inner.Sch_Type_Id = tt.Sch_Type_Id
-                        AND pt_inner.Task_Id IN (
-                            SELECT t.Task_Id
-                            FROM tbl_Task t
-                            WHERE t.Task_Group_Id = ttt.Task_Type_Id
-                            AND (@Task_Type_Id IS NULL OR t.Task_Group_Id = @Task_Type_Id)
-                        )
-                        GROUP BY pt_inner.Sch_Id, pt_inner.Sch_Type_Id
-                        FOR JSON PATH
-                    ) AS TaskMetrics,
-
-                    -- Task Details for each task within the task type group
-                    (
-                        SELECT DISTINCT
-                            pt.[A_Id],
-                            pt.[Sch_Project_Id],
-                            pt.[Task_Levl_Id],
-                            pt.[Task_Id],
-                            pt.[Task_Sch_Duaration],
-                            pt.[Task_Start_Time],
-                            pt.[Task_End_Time],
-                            pt.[Task_Est_Start_Date],
-                            pt.[Task_Est_End_Date],
-                            pt.[Task_Sch_Status] AS TaskSchStatus_Id,
-                            pt.[Levl_Id],
-                            pt.[Task_Sch_Del_Flag],
-                            t.[Task_Name],
-                            t.[Task_Desc],
-                            pt.[Sch_Id] AS TaskSchId,
-                            s.[Status] AS TaskSchStatus,
-                            pt.[Sch_Type_Id],
-                            t.Task_Group_Id,
-
-                            -- Employee assignment details for each task
-                            (
-                                SELECT DISTINCT
-                                    td.Emp_Id AS User_Id, 
-                                    u.Name
-                                FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) td
-                                LEFT JOIN tbl_Users u ON td.Emp_Id = u.UserId
-                                WHERE td.Task_Id = pt.Task_Id
-                                    AND td.Task_Levl_Id = pt.Task_Levl_Id
-                                    AND td.Project_Id = pt.Sch_Project_Id
-                                FOR JSON PATH
-                            ) AS AssignedEmployees
-
-                        FROM tbl_Project_Sch_Task_DT pt
-                        JOIN tbl_Task t ON pt.Task_Id = t.Task_Id
-                        JOIN tbl_Status s ON s.Status_Id = pt.Task_Sch_Status
-                        WHERE pt.Sch_Id = ps.Sch_Id
-                        AND pt.Sch_Type_Id = tt.Sch_Type_Id
-                        AND t.Task_Group_Id = ttt.Task_Type_Id
-                        AND (@Task_Type_Id IS NULL OR t.Task_Group_Id = @Task_Type_Id)
-                        FOR JSON PATH
-                    ) AS Tasks
-                FROM tbl_Task_Type ttt
-                WHERE EXISTS (
-                    SELECT 1 
-                    FROM tbl_Project_Sch_Task_DT pt
-                    WHERE pt.Sch_Id = ps.Sch_Id
-                      AND pt.Sch_Type_Id = tt.Sch_Type_Id
-                      AND pt.Task_Id IN (
-                          SELECT t.Task_Id
-                          FROM tbl_Task t
-                          WHERE t.Task_Group_Id = ttt.Task_Type_Id
-                          AND (@Task_Type_Id IS NULL OR t.Task_Group_Id = @Task_Type_Id)
-                      )
-                )
-                AND (@Task_Type_Id IS NULL OR ttt.Task_Type_Id = @Task_Type_Id)
-                FOR JSON PATH
-            ) AS TaskTypeGroups
-        FROM tbl_Project_Sch_Type tt
-        LEFT JOIN tbl_Project_Sch_Task_DT pt 
-            ON pt.Sch_Id = ps.Sch_Id
-            AND pt.Sch_Type_Id = tt.Sch_Type_Id
-        WHERE tt.Sch_Type_Id IS NOT NULL
-        AND tt.Sch_Type_Id NOT IN (4, 5, 6, 0)
-        FOR JSON PATH
-    ) AS SchTypes
-
-FROM tbl_Project_Schedule ps
-JOIN tbl_Project_Master p ON ps.Project_Id = p.Project_Id
-JOIN tbl_Status s ON ps.Sch_Status = s.Status_Id
-WHERE ps.Project_Id = @proid
-AND (@Task_Type_Id IS NULL OR EXISTS (
-    SELECT 1 
-    FROM tbl_Project_Sch_Task_DT pt
-    JOIN tbl_Task t ON pt.Task_Id = t.Task_Id
-    WHERE pt.Sch_Id = ps.Sch_Id
-    AND t.Task_Group_Id = @Task_Type_Id
-))
-ORDER BY ps.Sch_Id
-`
-
-
-
-
-
-//  `SELECT 
+// `
+// SELECT DISTINCT
 //     ps.[Sch_Id],
 //     ps.[Sch_No],
 //     ps.[Sch_Date],
@@ -740,66 +582,58 @@ ORDER BY ps.Sch_Id
 //     ps.[Sch_Est_End_Date],
 //     p.[Project_Name],
 //     p.[Project_Desc],
+//     s.[Status] AS ScheduleStatus,
 
 //     (
 //         SELECT DISTINCT
 //             tt.[Sch_Type_Id] AS SchTypeId,
 //             tt.[Sch_Type] AS SchType,
 
-//             -- Task Counts for each SchType
 //             (
 //                 SELECT 
 //                     COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Sch_Type_Id, pt.Sch_Project_Id)) AS TotalTasks,
 //                     COALESCE(
-//                         (SELECT COUNT(CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
-//                          FROM dbo.Work_Details_Today_Fn() wm
+//                         (SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
+//                          FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
 //                          WHERE wm.Sch_Type = tt.Sch_Type_Id
 //                          AND wm.Project_Id = ps.Project_Id),
 //                         0
 //                     ) AS CompletedTasks
 //                 FROM tbl_Project_Sch_Task_DT pt
-//                 LEFT JOIN tbl_Work_Master wm ON wm.Task_Id = pt.Task_Id 
-//                                                 AND wm.Task_Levl_Id = pt.Task_Levl_Id
 //                 WHERE pt.Sch_Project_Id = p.Project_Id
 //                 AND pt.Sch_Type_Id = tt.Sch_Type_Id
 //                 AND pt.Sch_Type_Id NOT IN (4, 5, 6, 0)
 //                 FOR JSON PATH
 //             ) AS TaskCountsInSchType,
 
-//             -- Task Type Groups for each SchType
 //             (
 //                 SELECT DISTINCT
 //                     ttt.[Task_Type_Id],
-//                     ttt.[Task_Type] AS Task_Type,
+//                     ttt.[Task_Type],
 
-                  
-//                  (
-//                 SELECT 
-//                     COUNT(DISTINCT CONCAT(pt_inner.Task_Id, pt_inner.Sch_Project_Id)) AS TotalTasks, 
-//                     COALESCE(
-//                         (
-//                     SELECT COUNT( CONCAT( wm.Task_Id,wm.Sch_Type,wm.Task_Levl_Id,wm.AN_No,wm.Emp_Id))
-//                     FROM dbo.Work_Details_Today_Fn() wm
-//                          WHERE wm.Sch_Type = tt.Sch_Type_Id
-//                          AND wm.Project_Id = ps.Project_Id),
-//                         0
-//                     ) AS CompletedTasks
-//                 FROM tbl_Project_Sch_Task_DT pt_inner
-//                 LEFT JOIN tbl_Work_Master wm 
-//                     ON wm.Task_Id = pt_inner.Task_Id AND wm.Task_Levl_Id = pt_inner.Task_Levl_Id
-//                 WHERE pt_inner.Sch_Id = ps.Sch_Id
-//                 AND pt_inner.Sch_Type_Id = tt.Sch_Type_Id
-//                 AND pt_inner.Task_Id IN (
-//                     SELECT t.Task_Id
-//                     FROM tbl_Task t
-//                     WHERE t.Task_Group_Id = ttt.Task_Type_Id
-//                 )
-//                 GROUP BY pt_inner.Sch_Id, pt_inner.Sch_Type_Id
-//                 FOR JSON PATH
-//             ) AS TaskMetrics,
+//                     (
+//                         SELECT 
+//                             COUNT(DISTINCT CONCAT(pt_inner.Task_Id, pt_inner.Sch_Project_Id)) AS TotalTasks, 
+//                             COALESCE(
+//                                 (
+//                                     SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Sch_Type, wm.Task_Levl_Id, wm.AN_No, wm.Emp_Id))
+//                                     FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
+//                                     WHERE wm.Sch_Type = tt.Sch_Type_Id
+//                                       AND wm.Project_Id = ps.Project_Id
+//                                 ),
+//                                 0
+//                             ) AS CompletedTasks
+//                         FROM tbl_Project_Sch_Task_DT pt_inner
+//                         WHERE pt_inner.Sch_Id = ps.Sch_Id
+//                         AND pt_inner.Sch_Type_Id = tt.Sch_Type_Id
+//                         AND pt_inner.Task_Id IN (
+//                             SELECT DISTINCT t.Task_Id
+//                             FROM tbl_Task t
+//                             WHERE t.Task_Group_Id = ttt.Task_Type_Id
+//                         )
+//                         FOR JSON PATH
+//                     ) AS TaskMetrics,
 
-
-//                     -- Task Details for each task within the task type group
 //                     (
 //                         SELECT DISTINCT
 //                             pt.[A_Id],
@@ -817,48 +651,59 @@ ORDER BY ps.Sch_Id
 //                             t.[Task_Name],
 //                             t.[Task_Desc],
 //                             pt.[Sch_Id] AS TaskSchId,
-//                             s.[Status] AS TaskSchStatus,
+//                             s2.[Status] AS TaskSchStatus,
 //                             pt.[Sch_Type_Id],
+//                             t.Task_Group_Id,
+//                             ttt_inner.Task_Type_Id,
+//                             ttt_inner.Task_Type,
 
-//                             -- Employee assignment details for each task
 //                             (
 //                                 SELECT DISTINCT
 //                                     td.Emp_Id AS User_Id, 
 //                                     u.Name
-//                                 FROM  dbo.Task_Details_Today_Fn() td
-//                                 JOIN tbl_Users u ON td.Emp_Id = u.UserId
+                             
+//                                	FROM tbl_Task_Details td
+//                                 LEFT JOIN tbl_Users u ON td.Emp_Id = u.UserId
 //                                 WHERE td.Task_Id = pt.Task_Id
 //                                     AND td.Task_Levl_Id = pt.Task_Levl_Id
 //                                     AND td.Project_Id = pt.Sch_Project_Id
 //                                 FOR JSON PATH
 //                             ) AS AssignedEmployees
+
 //                         FROM tbl_Project_Sch_Task_DT pt
 //                         JOIN tbl_Task t ON pt.Task_Id = t.Task_Id
-//                         JOIN tbl_Status s ON s.Status_Id = pt.Task_Sch_Status
+//                         JOIN tbl_Status s2 ON s2.Status_Id = pt.Task_Sch_Status
+//                         JOIN tbl_Task_Type ttt_inner ON pt.Type_Task_Id = ttt_inner.Task_Type_Id
 //                         WHERE pt.Sch_Id = ps.Sch_Id
 //                         AND pt.Sch_Type_Id = tt.Sch_Type_Id
 //                         AND t.Task_Group_Id = ttt.Task_Type_Id
+//                      AND pt.Type_Task_Id=@Task_Type_Id
 //                         FOR JSON PATH
 //                     ) AS Tasks
+
 //                 FROM tbl_Task_Type ttt
 //                 WHERE EXISTS (
 //                     SELECT 1 
 //                     FROM tbl_Project_Sch_Task_DT pt
 //                     WHERE pt.Sch_Id = ps.Sch_Id
-//                     AND pt.Sch_Type_Id = tt.Sch_Type_Id
-//                     AND pt.Task_Id IN (
-//                         SELECT t.Task_Id
-//                         FROM tbl_Task t
-//                         WHERE t.Task_Group_Id = ttt.Task_Type_Id
-//                     )
+//                       AND pt.Sch_Type_Id = tt.Sch_Type_Id
+//                       AND pt.Task_Id IN (
+//                           SELECT DISTINCT t.Task_Id
+//                           FROM tbl_Task t
+//                           WHERE t.Task_Group_Id = ttt.Task_Type_Id
+//                       )
 //                 )
 //                 FOR JSON PATH
 //             ) AS TaskTypeGroups
+
 //         FROM tbl_Project_Sch_Type tt
-//         LEFT JOIN tbl_Project_Sch_Task_DT pt 
-//             ON pt.Sch_Id = ps.Sch_Id
+//         WHERE EXISTS (
+//             SELECT 1 
+//             FROM tbl_Project_Sch_Task_DT pt 
+//             WHERE pt.Sch_Id = ps.Sch_Id
 //             AND pt.Sch_Type_Id = tt.Sch_Type_Id
-//         WHERE tt.Sch_Type_Id IS NOT NULL
+//         )
+//         AND tt.Sch_Type_Id IS NOT NULL
 //         AND tt.Sch_Type_Id NOT IN (4, 5, 6, 0)
 //         FOR JSON PATH
 //     ) AS SchTypes
@@ -867,41 +712,294 @@ ORDER BY ps.Sch_Id
 // JOIN tbl_Project_Master p ON ps.Project_Id = p.Project_Id
 // JOIN tbl_Status s ON ps.Sch_Status = s.Status_Id
 // WHERE ps.Project_Id =@proid
-// ORDER BY ps.Sch_Id
-// `
+// ORDER BY ps.Sch_Id`
 
 
-        try {
-            const request = new sql.Request();
-            request.input('proid', sql.BigInt, Project_Id);
-            request.input('Task_Type_Id',Task_Type_Id)
-            const result = await request.query(getProjectScheduleQuery);
+//         try {
+//             const request = new sql.Request();
+//             request.input('proid', sql.BigInt, Project_Id);
+//             request.input('Task_Type_Id',Task_Type_Id)
+//             const result = await request.query(getProjectScheduleQuery);
+ 
+//  if (result.recordset.length > 0) {
+//                 const parsed = result.recordset.map(o => ({
+//                     ...o,
+//                     SchTypes: JSON.parse(o?.SchTypes)
+//                 }))
+//                 dataFound(res, parsed);
+//             } else {
+//                 noData(res);
+//             }
+//         } catch (e) {
+//             servError(e, res);
+//         }
+//     };
     
-    //         if (result.recordset.length > 0) {
-    //             dataFound(res, result.recordset);
-    //         } else {
-    //             noData(res);
-    //         }
-    //     } catch (error) {
-    //         servError(error, res);
-    //     }
-    // };
- if (result.recordset.length > 0) {
-                const parsed = result.recordset.map(o => ({
-                    ...o,
-                    SchTypes: JSON.parse(o?.SchTypes)
-                }))
-                dataFound(res, parsed);
-            } else {
-                noData(res);
-            }
-        } catch (e) {
-            servError(e, res);
+    
+
+
+ const getScheduleProjectid = async (req, res) => {
+        const { Project_Id,Task_Type_Id } = req.query;
+    
+        if (!checkIsNumber(Project_Id)) {
+            return invalidInput(res, 'Project_Id is required');
         }
-    };
+    
+        const getProjectScheduleQuery = 
+
+`SELECT 
+    ps.[Sch_Id],
+    ps.[Sch_No],
+    ps.[Sch_Date],
+    ps.[Project_Id],
+    ps.[Sch_By],
+    ps.[Sch_Type_Id],
+    ps.[Sch_Est_Start_Date],
+    ps.[Sch_Est_End_Date],
+    p.[Project_Name],
+    p.[Project_Desc],
+
+    (
+        SELECT * FROM (
+            -- Existing SchTypes
+            SELECT DISTINCT
+                tt.[Sch_Type_Id] AS SchTypeId,
+                tt.[Sch_Type] AS SchType,
+
+                -- Task Counts for each SchType
+                (
+                    SELECT 
+                        COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Sch_Type_Id, pt.Sch_Project_Id)) AS TotalTasks,
+                        COALESCE(
+                            (SELECT COUNT(CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
+                             FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
+                             WHERE wm.Sch_Type = tt.Sch_Type_Id
+                             AND wm.Project_Id = ps.Project_Id),
+                            0
+                        ) AS CompletedTasks
+                    FROM tbl_Project_Sch_Task_DT pt
+                    LEFT JOIN tbl_Work_Master wm ON wm.Task_Id = pt.Task_Id 
+                                                     AND wm.Task_Levl_Id = pt.Task_Levl_Id
+                    WHERE pt.Sch_Project_Id = p.Project_Id
+                    AND pt.Sch_Type_Id = tt.Sch_Type_Id
+                    AND pt.Sch_Type_Id NOT IN (4, 5, 6, 0)
+                    FOR JSON PATH
+                ) AS TaskCountsInSchType,
+
+                -- Task Details for all tasks within the schedule type
+                (
+                    SELECT DISTINCT
+                        pt.[A_Id],
+                        pt.[Sch_Project_Id],
+                        pt.[Task_Levl_Id],
+                        pt.[Task_Id],
+                        pt.[Task_Sch_Duaration],
+                        pt.[Task_Start_Time],
+                        pt.[Task_End_Time],
+                        pt.[Task_Est_Start_Date],
+                        pt.[Task_Est_End_Date],
+                        pt.[Task_Sch_Status] AS TaskSchStatus_Id,
+                        pt.[Levl_Id],
+                        pt.[Task_Sch_Del_Flag],
+                        t.[Task_Name],
+                        t.[Task_Desc],
+                        pt.[Sch_Id] AS TaskSchId,
+                        s.[Status] AS TaskSchStatus,
+                        pt.[Sch_Type_Id],
+                        t.Task_Group_Id,
+                        ttt.Task_Type_Id,
+                        ttt.Task_Type,
+
+                        -- Employee assignment details for each task
+                        (
+                            SELECT DISTINCT
+                                td.Emp_Id AS User_Id, 
+                                u.Name
+                            --FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) td
+                            FROM tbl_Task_Details td
+                            LEFT JOIN tbl_Users u ON td.Emp_Id = u.UserId
+                            WHERE td.Task_Id = pt.Task_Id
+                                AND td.Task_Levl_Id = pt.Task_Levl_Id
+                                AND td.Project_Id = pt.Sch_Project_Id
+                            FOR JSON PATH
+                        ) AS AssignedEmployees
+
+                    FROM tbl_Project_Sch_Task_DT pt
+                    JOIN tbl_Task t ON pt.Task_Id = t.Task_Id
+                    JOIN tbl_Status s ON s.Status_Id = pt.Task_Sch_Status
+                    LEFT JOIN tbl_Task_Type ttt ON pt.Type_Task_Id = ttt.Task_Type_Id
+                    WHERE pt.Sch_Id = ps.Sch_Id
+					AND pt.Type_Task_Id=@Task_Type_Id
+                    AND pt.Sch_Type_Id = tt.Sch_Type_Id
+                    FOR JSON PATH
+                ) AS Tasks
+
+            FROM tbl_Project_Sch_Type tt
+            LEFT JOIN tbl_Project_Sch_Task_DT pt 
+                ON pt.Sch_Id = ps.Sch_Id
+                AND pt.Sch_Type_Id = tt.Sch_Type_Id
+            WHERE tt.Sch_Type_Id IS NOT NULL
+            AND tt.Sch_Type_Id NOT IN (4, 5, 6, 0)
+
+            UNION ALL
+
+            -- ALL SchType - ONLY SHOW WHEN @Task_Type_Id = 0
+            SELECT 
+                -1 AS SchTypeId,
+                'ALL' AS SchType,
+
+                -- Task Counts for ALL SchType
+                (
+                    SELECT 
+                        COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Sch_Type_Id, pt.Sch_Project_Id)) AS TotalTasks,
+                        COALESCE(
+                            (SELECT COUNT(CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
+                             FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
+                             WHERE wm.Project_Id = ps.Project_Id
+                             AND wm.Sch_Type IN (SELECT Sch_Type_Id FROM tbl_Project_Sch_Type WHERE Sch_Type_Id NOT IN (4, 5, 6, 0))),
+                            0
+                        ) AS CompletedTasks
+                    FROM tbl_Project_Sch_Task_DT pt
+                    LEFT JOIN tbl_Work_Master wm ON wm.Task_Id = pt.Task_Id 
+                                                     AND wm.Task_Levl_Id = pt.Task_Levl_Id
+                    WHERE pt.Sch_Project_Id = p.Project_Id
+                    AND pt.Sch_Type_Id NOT IN (4, 5, 6, 0)
+                    FOR JSON PATH
+                ) AS TaskCountsInSchType,
+
+                -- Task Details for ALL tasks across all schedule types
+              (
+                    SELECT DISTINCT
+                        pt.[A_Id],
+                        pt.[Sch_Project_Id],
+                        pt.[Task_Levl_Id],
+                        pt.[Task_Id],
+                        pt.[Task_Sch_Duaration],
+                        pt.[Task_Start_Time],
+                        pt.[Task_End_Time],
+                        pt.[Task_Est_Start_Date],
+                        pt.[Task_Est_End_Date],
+                        pt.[Task_Sch_Status] AS TaskSchStatus_Id,
+                        pt.[Levl_Id],
+                        pt.[Task_Sch_Del_Flag],
+                        t.[Task_Name],
+                        t.[Task_Desc],
+                        pt.[Sch_Id] AS TaskSchId,
+                        s.[Status] AS TaskSchStatus,
+                        pt.[Sch_Type_Id],
+                        t.Task_Group_Id,
+                        ttt.Task_Type_Id,
+                        ttt.Task_Type,
+
+                        -- Employee assignment details for each task
+                        (
+                            SELECT DISTINCT
+                                td.Emp_Id AS User_Id, 
+                                u.Name
+                             FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) td
+                            LEFT JOIN tbl_Users u ON td.Emp_Id = u.UserId
+                            WHERE td.Task_Id = pt.Task_Id
+                                AND td.Project_Id = pt.Sch_Project_Id
+                            FOR JSON PATH
+                        ) AS AssignedEmployees
+
+                    FROM tbl_Project_Sch_Task_DT pt
+                    JOIN tbl_Task t ON pt.Task_Id = t.Task_Id
+                    JOIN tbl_Status s ON s.Status_Id = pt.Task_Sch_Status
+                    LEFT JOIN tbl_Task_Type ttt ON pt.Type_Task_Id = ttt.Task_Type_Id
+                    WHERE pt.Sch_Id = ps.Sch_Id
+                    AND pt.Sch_Type_Id NOT IN (4, 5, 6, 0)
+                     AND (@Task_Type_Id = 0 OR ttt.Task_Type_Id = @Task_Type_Id)
+                    FOR JSON PATH
+                ) AS Tasks
+       
+        ) AS CombinedSchTypes
+        FOR JSON PATH
+    ) AS SchTypes
+
+FROM tbl_Project_Schedule ps
+JOIN tbl_Project_Master p ON ps.Project_Id = p.Project_Id
+JOIN tbl_Status s ON ps.Sch_Status = s.Status_Id
+WHERE ps.Project_Id = @proid 
+ORDER BY ps.Sch_Id`
+
+    try {
+     
+        const request = new sql.Request();
+        request.input('proid', Project_Id);
+        request.input('Task_Type_Id', Task_Type_Id);
+
+        const result = await request.query(getProjectScheduleQuery);
+
+        if (result.recordset.length > 0) {
+            const parsed = result.recordset.map(row => {
+                const parsedRow = { ...row };
+                
+     
+                if (row.SchTypes) {
+                    try {
+                        parsedRow.SchTypes = JSON.parse(row.SchTypes);
+                        
+                        if (Array.isArray(parsedRow.SchTypes)) {
+                            parsedRow.SchTypes = parsedRow.SchTypes.map(schType => {
+                                if (schType.TaskCounts) {
+                                    try {
+                                        schType.TaskCounts = JSON.parse(schType.TaskCounts);
+                                    } catch (e) {
+                                        console.warn('Failed to parse TaskCounts:', schType.TaskCounts);
+                                        schType.TaskCounts = { TotalTasks: 0, CompletedTasks: 0 };
+                                    }
+                                }
+                                
+                             
+                                if (schType.Tasks) {
+                                    try {
+                                        schType.Tasks = JSON.parse(schType.Tasks);
+                                       
+                     
+                                        if (Array.isArray(schType.Tasks)) {
+                                            schType.Tasks = schType.Tasks.map(task => {
+                                                if (task.AssignedEmployees) {
+                                                    try {
+                                                  
+                                                        task.AssignedEmployees = task.AssignedEmployees;
+                                                    } catch (e) {
+                                                        console.warn('Failed to parse AssignedEmployees:', task.AssignedEmployees);
+                                                        task.AssignedEmployees = [];
+                                                    }
+                                                }
+                                                return task;
+                                            });
+                                        }
+                                    } catch (e) {
+                                        console.warn('Failed to parse Tasks:', schType.Tasks);
+                                        schType.Tasks = [];
+                                    }
+                                }
+                                
+                                return schType;
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse SchTypes:', row.SchTypes);
+                        parsedRow.SchTypes = [];
+                    }
+                }
+                
+                return parsedRow;
+            });
+            
+            dataFound(res, parsed);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        console.error('Database error:', e);
+        servError(e, res);
+    }
+};
     
     
-  
     const getScheduleProjectidActivity = async (req, res) => {
         const { Project_Id } = req.query;
     
