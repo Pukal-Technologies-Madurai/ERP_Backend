@@ -21,6 +21,7 @@ SalesRouter.get('/salesInvoice/expenceAccount', salesInvoice.getSalesExpenceAcco
 
 SalesRouter.get('/saleOrderMobile', salesOrder.getSaleOrderMobile);
 SalesRouter.get('/salesInvoiceMobile', salesInvoice.getSalesInvoiceMobile);
+SalesRouter.get('/salesFilterDropdown',salesInvoice.getMobileReportDropdowns)
 
 SalesRouter.get('/salesInvoice/tallySync', salesInvoice.salesTallySync);
 SalesRouter.get('/salesInvoice', salesInvoice.getSalesInvoice);

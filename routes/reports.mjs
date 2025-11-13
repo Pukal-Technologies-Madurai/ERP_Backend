@@ -13,6 +13,9 @@ import nagalReports from '../controller/Reports/nakalReports.mjs';
 import reportsColumnVisiblity from '../controller/Reports/reportsColumnVisiblity.mjs';
 import deliveryReports from '../controller/Reports/deliveryReports.mjs';
 import expences from '../controller/Masters/expences.mjs';
+import templateMobile from '../controller/Reports/templateMobile.mjs';
+
+
 
 const ReportRouter = express.Router();
 
@@ -92,6 +95,14 @@ ReportRouter.get('/storageStock/godownWise', storageStockReport.getStorageStockG
 ReportRouter.get('/itemGroup/stockInfo', storageStockReport.itemGroupWiseClosingDetails);
 ReportRouter.get('/itemGroup/stockInfo/grouped', storageStockReport.StockGroupWiseClosingDetails);
 
+
+
+ReportRouter.get('/storageStock/itemWiseMobile', storageStockReport.getStorageStockItemWiseMobile);
+ReportRouter.get('/storageStock/godownWiseMobile', storageStockReport.getStorageStockGodownWiseMobile);
+ReportRouter.get('/itemGroup/stockInfoMobile', storageStockReport.itemGroupWiseClosingDetailsMobile);
+
+
+
 ReportRouter.get('/brokerageReport/getInvolvedBroker', costCenterReports.getBrokerInvolvedInPurchase);
 ReportRouter.get('/brokerageReport/purchaseInvoice', costCenterReports.purchaseBrokerageReport);
 ReportRouter.get('/brokerageReport/salesInvoice', costCenterReports.salesDeliveryBrokerageReport);
@@ -125,4 +136,15 @@ ReportRouter.post('/smtreports', deliveryReports.closingReport)
 
 
 ReportRouter.post('/syncPosPending',deliveryReports.SyncPosPending)
+
+
+
+ReportRouter.get('/templateMobile', templateMobile.getMobileTemplates);
+ReportRouter.post('templateMobile/executeQuery', dbconnect, templateMobile.executeMobileTemplateSQL);
+ReportRouter.post('/templateMobile',templateMobile.insertMobileTemplate),
+ReportRouter.put('/templateMobile',templateMobile.updateMobileTemplate),
+ReportRouter.delete('/templateMobile', templateMobile.deleteMobileTemplate);
+ReportRouter.post('templateMobile/templateState', templateMobile.saveMobileReportState);
+ReportRouter.get('/tablesAndColumnsMobile', templateMobile.getTablesandColumnsForMobileReport)
+
 export default ReportRouter;
