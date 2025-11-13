@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { ISOString } from '../../helper_functions.mjs';
+import { ISOString, toNumber } from '../../helper_functions.mjs';
 import { sentData, servError } from '../../res.mjs';
 
 const PaymentReports = () => {
@@ -179,10 +179,215 @@ const PaymentReports = () => {
         }
     }
 
+    const paymentDue = async (req, res) => {
+        try {
+
+            const request = new sql.Request()
+                .query(`
+                    DECLARE @OB_Date DATE = (
+                    	SELECT MAX(OB_Date) FROM tbl_OB_Date
+                    );
+                    SELECT 
+                    	a.Account_name as retailerName,
+                    	COALESCE(v.Voucher_Type, '') voucherTypeGet,
+                    	inv.*,
+                    	inv.paymentReference + inv.journalReference AS totalReference
+                    FROM (
+                        SELECT 
+                            pig.PIN_Id id,
+                    		pig.Voucher_Type voucherType,
+                            pig.Po_Inv_No voucherNumber,
+                            pig.Ref_Po_Inv_No AS refNumber,
+                    		pig.Po_Inv_Date billDate,
+                            pig.Po_Entry_Date AS entryDate,
+                            a.Acc_Id vendorAccId,
+                    		COALESCE(pig.QualityCondition, '') qualityCondition,
+                    		COALESCE(pig.PaymentDays, 0) paymentDays,
+                    		COALESCE(pig.Discount, 0) discount,
+                            pig.Total_Invoice_value invoiceValue,
+                            'INV' AS dataSource,
+                            COALESCE((
+                                SELECT SUM(pb.Debit_Amo) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                JOIN tbl_Payment_General_Info AS pgi
+                                    ON pgi.pay_id = pb.payment_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    -- AND pgi.pay_bill_type = 1
+                                    AND pb.pay_bill_id = pig.PIN_Id
+                                    AND pb.bill_name = pig.Po_Inv_No
+                            ), 0) AS paymentReference,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = a.Acc_Id
+                                    AND je.DrCr   = 'Dr'
+                                    AND jr.RefId = pig.PIN_Id 
+                                    AND jr.RefNo = pig.Po_Inv_No
+                                    AND jr.RefType = 'PURCHASE'
+                            ), 0) AS journalReference
+                        FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
+                        JOIN tbl_Retailers_Master AS r
+                        ON r.Retailer_Id = pig.Retailer_Id
+                        JOIN tbl_Account_Master AS a
+                        ON a.ERP_Id = R.ERP_Id
+                        WHERE 
+                            pig.Cancel_status = 0
+                            AND pig.Po_Entry_Date >= @OB_Date
+                        UNION ALL
+                    -- from purchase invoice
+                        SELECT 
+                            cb.OB_Id AS id, 
+                    		null voucherType,
+                            cb.bill_no voucherNo, 
+                            cb.bill_no refNo, 
+                            cb.bill_date billDate, 
+                            cb.bill_date entryDate, 
+                            cb.Retailer_id vendorAccId,
+                    		'' qualityCondition,
+                    		0 paymentDays,
+                    		0 discount,
+                            cb.cr_amount invoiceValue, 
+                            'OB' AS dataSource,
+                        	COALESCE((
+                                SELECT SUM(pb.Debit_Amo) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    -- AND pgi.pay_bill_type = 1
+                                    AND pb.pay_bill_id = cb.OB_Id
+                                    AND pb.bill_name = cb.bill_no
+                                    -- AND pgi.payment_date >= @OB_Date
+                            ), 0) AS paymentReference,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = cb.Retailer_id
+                                    AND je.DrCr   = 'Dr'
+                                    AND jr.RefId = cb.OB_Id 
+                                    AND jr.RefNo = cb.bill_no
+                                    AND jr.RefType = 'PURCHASE-OB'
+                            ), 0) AS journalReference
+                        FROM tbl_Ledger_Opening_Balance AS cb
+                        WHERE 
+                            cb.OB_date >= @OB_Date 
+                            AND cb.dr_amount = 0
+                    	UNION ALL
+                    -- receipt outstanding
+                    	SELECT 
+                    		rgi.receipt_id id,
+                    		rgi.receipt_voucher_type_id voucherType,
+                    		rgi.receipt_invoice_no voucherNo,
+                    		rgi.receipt_invoice_no refNo,
+                    		rgi.receipt_date billDate,
+                    		rgi.receipt_date entryDate,
+                    		rgi.credit_ledger vendorAccId,
+                    		'' qualityCondition,
+                    		0 paymentDays,
+                    		0 discount,
+                    		rgi.credit_amount invoiceValue,
+                    		'RECEIPT' AS dataSource,
+                    		(
+                                SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
+                                FROM tbl_Receipt_Bill_Info AS rbi
+                                WHERE 
+                                    rbi.receipt_id = rgi.receipt_id
+                                    AND rbi.receipt_no = rgi.receipt_invoice_no
+                            ) + (
+                                SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
+                                FROM tbl_Payment_Bill_Info AS pb
+                                JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pb.pay_bill_id = rgi.receipt_id
+                                    AND pb.bill_name = rgi.receipt_invoice_no
+                            ) AS paymentReference,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = rgi.credit_ledger
+                                    AND je.DrCr   = 'Dr'
+                                    AND jr.RefId = rgi.receipt_id
+                                    AND jr.RefNo = rgi.receipt_invoice_no
+                            ), 0) AS journalReference
+                    	FROM tbl_Receipt_General_Info AS rgi
+                    	WHERE
+                    		rgi.receipt_date >= @OB_Date
+                            AND rgi.status <> 0
+                    ) AS inv
+                    JOIN tbl_Account_Master AS a ON a.Acc_Id = inv.vendorAccId
+                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = inv.voucherType
+                    WHERE inv.paymentReference + inv.journalReference < inv.invoiceValue`);
+
+            const result = await request;
+
+            const withDue = result.recordset.map(row => {
+                const invoiceValue = toNumber(row.invoiceValue);
+                const discountAmount = (invoiceValue / 100) * toNumber(row.discount);
+                const amount = invoiceValue - discountAmount;
+                const paymentReference = toNumber(row.paymentReference);
+                const journalReference = toNumber(row.journalReference);
+                const totalReference = paymentReference + journalReference;
+                const dueAmount = amount - totalReference;
+
+                const paymentDays = toNumber(row.paymentDays);
+                const billDate = new Date(row.billDate);
+
+                let dueDate = null;
+                let daysRemaining = 'N/A';
+
+                if (paymentDays > 0) {
+                    dueDate = new Date(billDate);
+                    dueDate.setDate(dueDate.getDate() + paymentDays);
+
+                    const today = new Date();
+
+                    today.setHours(0, 0, 0, 0);
+                    dueDate.setHours(0, 0, 0, 0);
+
+                    const diffMs = dueDate.getTime() - today.getTime();
+                    daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                }
+
+
+                return {
+                    ...row,
+                    dueAmount,
+                    invoiceValue,
+                    discountAmount,
+                    amount,
+                    paymentReference,
+                    journalReference,
+                    totalReference,
+                    dueDate: dueDate ? ISOString(dueDate) : 'N/A',
+                    daysRemaining: dueDate ? daysRemaining : 'N/A'
+                };
+            });
+
+            sentData(res, withDue.sort((a, b) => a.daysRemaining - b.daysRemaining));
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getPendingPaymentReference,
         getAccountsTransaction,
         itemTotalExpenceWithStockGroup,
+        paymentDue
     }
 }
 
