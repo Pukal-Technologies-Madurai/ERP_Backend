@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { ISOString, toNumber } from '../../helper_functions.mjs';
+import { isEqualNumber, ISOString, toArray, toNumber } from '../../helper_functions.mjs';
 import { sentData, servError } from '../../res.mjs';
 
 const PaymentReports = () => {
@@ -334,6 +334,32 @@ const PaymentReports = () => {
 
             const result = await request;
 
+            const uniquePIN = new Set(result.recordset.map(row => row.id));
+
+            const purchaseItems = new sql.Request()
+                .input('PIN', sql.NVarChar(sql.MAX), Array.from(uniquePIN).join(','))
+                .query(`
+                    WITH receivedPin AS (
+                    	SELECT TRY_CAST(value AS INT) AS pinId
+                        FROM STRING_SPLIT(@PIN, ',')
+                        WHERE TRY_CAST(value AS INT) IS NOT NULL
+                    )
+                    SELECT
+                    	pod.PIN_Id id,
+                    	pod.S_No as orderNo,
+                    	pod.Item_Id itemId,
+                    	p.Product_Name itemName,
+                    	pod.Bill_Qty billQuantity,
+                    	pod.Item_Rate rate,
+                    	pod.Final_Amo amount
+                    FROM tbl_Purchase_Order_Inv_Stock_Info AS pod
+                    LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = pod.Item_Id
+                    WHERE PIN_ID IN (SELECT pinId FROM receivedPin)
+                    ORDER BY S_No;`
+                );
+
+            const itemDetails = toArray((await purchaseItems).recordset);
+
             const withDue = result.recordset.map(row => {
                 const invoiceValue = toNumber(row.invoiceValue);
                 const discountAmount = (invoiceValue / 100) * toNumber(row.discount);
@@ -347,7 +373,9 @@ const PaymentReports = () => {
                 const billDate = new Date(row.billDate);
 
                 let dueDate = null;
-                let daysRemaining = 'N/A';
+                let daysRemaining = '';
+
+                const itemData = itemDetails.filter(item => isEqualNumber(item?.id, row?.id))
 
                 if (paymentDays > 0) {
                     dueDate = new Date(billDate);
@@ -372,8 +400,9 @@ const PaymentReports = () => {
                     paymentReference,
                     journalReference,
                     totalReference,
-                    dueDate: dueDate ? ISOString(dueDate) : 'N/A',
-                    daysRemaining: dueDate ? daysRemaining : 'N/A'
+                    dueDate: dueDate ? ISOString(dueDate) : ISOString(row.entryDate),
+                    daysRemaining: dueDate ? daysRemaining : 'N/A',
+                    itemData: itemData
                 };
             });
 
