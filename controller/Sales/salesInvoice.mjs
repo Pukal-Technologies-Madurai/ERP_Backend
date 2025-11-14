@@ -1989,7 +1989,7 @@ const getSalesInvoiceMobile = async (req, res) => {
             const condition = buildFilterCondition(filterConfig, 'filter1');
             if (condition) {
                 mobileFilterConditions.push(condition);
-                console.log(`Applied filter1: ${condition}`);
+              
             }
         }
 
