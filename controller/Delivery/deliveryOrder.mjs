@@ -1230,82 +1230,264 @@ const DeliveryOrder = () => {
         }
     };
 
+    // const editmobileApi = async (req, res) => {
+    //     const {
+    //         Do_Id, Retailer_Id, Delivery_Person_Id,
+    //         Delivery_Status,
+    //         Delivery_Time, Delivery_Location, Delivery_Latitude, Delivery_Longitude, Payment_Mode, Payment_Status, Payment_Ref_No, Altered_by, Altered_on
+    //     } = req.body;
+
+    //     const Do_Date = ISOString(req?.body?.Do_Date);
+
+
+    //     if (
+    //         !checkIsNumber(Do_Id)
+    //         || !checkIsNumber(Delivery_Person_Id)
+
+    //     ) {
+    //         return invalidInput(res, 'Do_Id, Delivery_Person_Id is Required')
+    //     }
+
+    //     const transaction = new sql.Transaction();
+
+    //     try {
+
+    //         await transaction.begin();
+
+    //         const request = new sql.Request(transaction)
+    //             .input('doid', Do_Id)
+    //             .input('deliveryperson', Delivery_Person_Id)
+    //             .input('deliverystatus', Delivery_Status)
+    //             .input('deliveryTime', Delivery_Time)
+    //             .input('deliveryLocation', Delivery_Location)
+    //             .input('deliverylatitude', Delivery_Latitude)
+    //             .input('deliverylongitute', Delivery_Longitude)
+    //             .input('paymentMode', Payment_Mode)
+    //             .input('paymentStatus', Payment_Status)
+    //             .input('paymentrefno', Payment_Ref_No)
+    //             .input('Trans_Type', 'UPDATE')
+    //             .input('Altered_by', Altered_by)
+    //             .input('Alteron', new Date())
+    //             .query(`
+    //                 UPDATE
+    //                     tbl_Sales_Delivery_Gen_Info
+    //                 SET
+    //                     Delivery_Person_Id = @deliveryperson,
+    //                     Delivery_Time=@deliveryTime,
+    //                     Delivery_Status=@deliverystatus,
+    //                    Delivery_Location=@deliveryLocation,
+    //                    Delivery_Latitude=@deliverylatitude,
+    //                    Delivery_Longitude=@deliverylongitute,
+    //                    Payment_Mode=@paymentMode,
+    //                    Payment_Status=@paymentStatus,
+    //                    Payment_Ref_No=@paymentrefno,
+    //                     Trans_Type = @Trans_Type,
+    //                     Altered_by=@Altered_by,
+    //                     Alterd_on=@Alteron
+    //                 WHERE
+    //                     Do_Id = @doid;
+    //                 `
+    //             );
+
+    //         const result = await request;
+
+    //         if (result.rowsAffected[0] === 0) {
+
+    //             throw new Error('Failed to update order, Try again')
+    //         }
+
+    //         await transaction.commit();
+    //         success(res, 'Changes Saved!')
+
+    //     } catch (e) {
+    //         if (transaction._aborted === false) {
+    //             await transaction.rollback();
+    //         }
+    //         servError(e, res)
+    //     }
+    // }
+
     const editmobileApi = async (req, res) => {
-        const {
-            Do_Id, Retailer_Id, Delivery_Person_Id,
-            Delivery_Status,
-            Delivery_Time, Delivery_Location, Delivery_Latitude, Delivery_Longitude, Payment_Mode, Payment_Status, Payment_Ref_No, Altered_by, Altered_on
-        } = req.body;
+    const {
+        Do_Id, Retailer_Id, Delivery_Person_Id,
+        Delivery_Status, Delivery_Time, Delivery_Location, 
+        Delivery_Latitude, Delivery_Longitude, Payment_Mode, 
+        Payment_Status, Payment_Ref_No, Altered_by, Altered_on,
+        Product_Array 
+    } = req.body;
 
-        const Do_Date = ISOString(req?.body?.Do_Date);
+    const Do_Date = ISOString(req?.body?.Do_Date);
 
-
-        if (
-            !checkIsNumber(Do_Id)
-            || !checkIsNumber(Delivery_Person_Id)
-
-        ) {
-            return invalidInput(res, 'Do_Id, Delivery_Person_Id is Required')
-        }
-
-        const transaction = new sql.Transaction();
-
-        try {
-
-            await transaction.begin();
-
-            const request = new sql.Request(transaction)
-                .input('doid', Do_Id)
-                .input('deliveryperson', Delivery_Person_Id)
-                .input('deliverystatus', Delivery_Status)
-                .input('deliveryTime', Delivery_Time)
-                .input('deliveryLocation', Delivery_Location)
-                .input('deliverylatitude', Delivery_Latitude)
-                .input('deliverylongitute', Delivery_Longitude)
-                .input('paymentMode', Payment_Mode)
-                .input('paymentStatus', Payment_Status)
-                .input('paymentrefno', Payment_Ref_No)
-                .input('Trans_Type', 'UPDATE')
-                .input('Altered_by', Altered_by)
-                .input('Alteron', new Date())
-                .query(`
-                    UPDATE
-                        tbl_Sales_Delivery_Gen_Info
-                    SET
-                        Delivery_Person_Id = @deliveryperson,
-                        Delivery_Time=@deliveryTime,
-                        Delivery_Status=@deliverystatus,
-                       Delivery_Location=@deliveryLocation,
-                       Delivery_Latitude=@deliverylatitude,
-                       Delivery_Longitude=@deliverylongitute,
-                       Payment_Mode=@paymentMode,
-                       Payment_Status=@paymentStatus,
-                       Payment_Ref_No=@paymentrefno,
-                        Trans_Type = @Trans_Type,
-                        Altered_by=@Altered_by,
-                        Alterd_on=@Alteron
-                    WHERE
-                        Do_Id = @doid;
-                    `
-                );
-
-            const result = await request;
-
-            if (result.rowsAffected[0] === 0) {
-
-                throw new Error('Failed to update order, Try again')
-            }
-
-            await transaction.commit();
-            success(res, 'Changes Saved!')
-
-        } catch (e) {
-            if (transaction._aborted === false) {
-                await transaction.rollback();
-            }
-            servError(e, res)
-        }
+    if (!checkIsNumber(Do_Id) || !checkIsNumber(Delivery_Person_Id)) {
+        return invalidInput(res, 'Do_Id, Delivery_Person_Id is Required');
     }
+
+    const transaction = new sql.Transaction();
+
+    try {
+        await transaction.begin();
+
+      
+        const updateRequest = new sql.Request(transaction)
+            .input('doid', Do_Id)
+            .input('deliveryperson', Delivery_Person_Id)
+            .input('deliverystatus', Delivery_Status)
+            .input('deliveryTime', Delivery_Time)
+            .input('deliveryLocation', Delivery_Location)
+            .input('deliverylatitude', Delivery_Latitude)
+            .input('deliverylongitute', Delivery_Longitude)
+            .input('paymentMode', Payment_Mode)
+            .input('paymentStatus', Payment_Status)
+            .input('paymentrefno', Payment_Ref_No)
+            .input('Trans_Type', 'UPDATE')
+            .input('Altered_by', Altered_by)
+            .input('Alterd_on', new Date())
+            .query(`
+                UPDATE tbl_Sales_Delivery_Gen_Info
+                SET
+                    Delivery_Person_Id = @deliveryperson,
+                    Delivery_Time = @deliveryTime,
+                    Delivery_Status = @deliverystatus,
+                    Delivery_Location = @deliveryLocation,
+                    Delivery_Latitude = @deliverylatitude,
+                    Delivery_Longitude = @deliverylongitute,
+                    Payment_Mode = @paymentMode,
+                    Payment_Status = @paymentStatus,
+                    Payment_Ref_No = @paymentrefno,
+                    Trans_Type = @Trans_Type,
+                    Altered_by = @Altered_by,
+                    Alterd_on = @Alterd_on
+                WHERE Do_Id = @doid;
+            `);
+
+        const updateResult = await updateRequest;
+
+        if (updateResult.rowsAffected[0] === 0) {
+            throw new Error('Failed to update order, Try again');
+        }
+
+        const stockInfoRequest = new sql.Request(transaction)
+            .input('doid', Do_Id)
+            .query(`
+                SELECT 
+                   *
+                FROM tbl_Sales_Delivery_Stock_Info 
+                WHERE Delivery_Order_Id = @doid
+            `);
+
+        const stockInfoResult = await stockInfoRequest;
+        const originalStockItems = stockInfoResult.recordset;
+
+
+        if (Product_Array && Product_Array.length > 0) {
+            const missingItems = findMissingItems(originalStockItems, Product_Array);
+
+        
+            if (missingItems.length > 0) {
+                await insertMissingItemsIntoReturn(transaction, missingItems, Do_Id, Altered_by);
+            }
+        }
+
+        await transaction.commit();
+      if (Product_Array && Product_Array.length > 0) {
+            success(res, 'Changes Saved and return items processed!');
+        } else {
+            success(res, 'Changes Saved!');
+        }
+
+    } catch (e) {
+        if (transaction._aborted === false) {
+            await transaction.rollback();
+        }
+        servError(e, res);
+    }
+};
+
+
+function findMissingItems(originalItems, returnedItems) {
+    const missingItems = [];
+
+   
+    const returnedItemsMap = new Map();
+    returnedItems.forEach(item => {
+        returnedItemsMap.set(item.Item_Id, item);
+    });
+
+  
+    originalItems.forEach(originalItem => {
+        const returnedItem = returnedItemsMap.get(originalItem.Item_Id);
+        
+       
+        if (!returnedItem) {
+            missingItems.push(originalItem);
+        }
+    });
+
+    return missingItems;
+}
+
+
+async function insertMissingItemsIntoReturn(transaction, missingItems, deliveryOrderId, alteredBy) {
+    const currentDate = new Date();
+
+    for (const item of missingItems) {
+        const insertRequest = new sql.Request(transaction)
+            .input('Ret_Date', currentDate)
+            .input('Delivery_Order_Id', deliveryOrderId)
+            .input('GoDown_Id', item.GoDown_Id || null)
+            .input('S_No', item.S_No)
+            .input('Item_Id', item.Item_Id)
+            .input('Bill_Qty', item.Bill_Qty || 0)
+            .input('Act_Qty', item.Act_Qty || 0)
+            .input('Alt_Act_Qty', item.Alt_Act_Qty || 0)
+            .input('Taxable_Rate', item.Taxable_Rate || 0)
+            .input('Item_Rate', item.Item_Rate || 0)
+            .input('Amount', item.Amount || 0)
+            .input('Free_Qty', item.Free_Qty || 0)
+            .input('Total_Qty', item.Total_Qty || 0)
+            .input('Taxble', item.Taxble || 0)
+            .input('HSN_Code', item.HSN_Code || '')
+            .input('Unit_Id', item.Unit_Id || null)
+            .input('Unit_Name', item.Unit_Name || '')
+            .input('Act_unit_Id', item.Act_unit_Id || null)
+            .input('Alt_Act_Unit_Id', item.Alt_Act_Unit_Id || null)
+            .input('Taxable_Amount', item.Taxable_Amount || 0)
+            .input('Tax_Rate', item.Tax_Rate || 0)
+            .input('Cgst', item.Cgst || 0)
+            .input('Cgst_Amo', item.Cgst_Amo || 0)
+            .input('Sgst', item.Sgst || 0)
+            .input('Sgst_Amo', item.Sgst_Amo || 0)
+            .input('Igst', item.Igst || 0)
+            .input('Igst_Amo', item.Igst_Amo || 0)
+            .input('Final_Amo', item.Final_Amo || 0)
+            .input('Created_by', alteredBy)
+            .input('Altered_by', alteredBy)
+            .input('Created_on', currentDate)
+            .input('Alterd_on', new Date())
+            .query(`
+                INSERT INTO tbl_Sales_Return_Stock_Info (
+                    Ret_Date, Delivery_Order_Id, GoDown_Id, S_No, Item_Id, 
+                    Bill_Qty, Act_Qty, Alt_Act_Qty, Taxable_Rate, Item_Rate, 
+                    Amount, Free_Qty, Total_Qty, Taxble, HSN_Code, Unit_Id, 
+                    Unit_Name, Act_unit_Id, Alt_Act_Unit_Id, Taxable_Amount, 
+                    Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, 
+                    Final_Amo, Created_by, Altered_by, Created_on, Alterd_on
+                ) VALUES (
+                    @Ret_Date, @Delivery_Order_Id, @GoDown_Id, @S_No, @Item_Id,
+                    @Bill_Qty, @Act_Qty, @Alt_Act_Qty, @Taxable_Rate, @Item_Rate,
+                    @Amount, @Free_Qty, @Total_Qty, @Taxble, @HSN_Code, @Unit_Id,
+                    @Unit_Name, @Act_unit_Id, @Alt_Act_Unit_Id, @Taxable_Amount,
+                    @Tax_Rate, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo,
+                    @Final_Amo, @Created_by, @Altered_by, @Created_on, @Alterd_on
+                );
+            `);
+
+        await insertRequest;
+    }
+}
+
+
+
 
     const deliveryOrderTrip = async (req, res) => {
         const {
