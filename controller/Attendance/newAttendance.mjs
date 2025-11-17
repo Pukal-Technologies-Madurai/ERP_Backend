@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, invalidInput, success, failed } from '../../res.mjs';
-import { checkIsNumber, ISOString } from '../../helper_functions.mjs';
+import { checkIsNumber, ISOString, isEqualNumber } from '../../helper_functions.mjs';
 import { getUserType } from '../../middleware/miniAPIs.mjs';
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import getImageIfExist from '../../middleware/getImageIfExist.mjs';
@@ -141,49 +141,41 @@ const newAttendance = () => {
     }
 
     const getAttendanceHistory = async (req, res) => {
-        const { From, To, UserId, UserTypeID } = req.query;
+        const { UserId, UserTypeID, Branch_Id } = req.query;
 
-        if (!From || !To || !checkIsNumber(UserTypeID)) {
-            return invalidInput(res, 'From, To, UserTypeID is required')
+        const From = req.query?.From ? ISOString(req.query?.From) : ISOString();
+        const To = req.query?.To ? ISOString(req.query?.To) : ISOString();
+
+        if (!checkIsNumber(UserTypeID)) {
+            return invalidInput(res, 'UserTypeID is required')
         }
 
         const isSalesPerson = Number(UserTypeID) === 6
 
         try {
-            let query = `
-            SELECT
-            	a.*,
-            	u.Name AS User_Name
-            FROM
-            	tbl_Attendance AS a
-            	LEFT JOIN tbl_Users AS u
-            	ON u.UserId = a.UserId
-            WHERE
-            	CONVERT(DATE, a.Start_Date) >= CONVERT(DATE, @from)
-            	AND
-            	CONVERT(DATE, a.Start_Date) <= CONVERT(DATE, @to)`;
-
-            if (Number(UserId)) {
-                query += `
-                AND
-                a.UserId = @userid`;
-            }
-
-            if (UserTypeID == 3 || UserTypeID == 6) {
-                query += `
-                AND
-                a.IsSalesPerson = @isSalesPerson`;
-            }
-
-            query += `
-            ORDER BY CONVERT(DATETIME, a.Start_Date), a.UserId`
 
             const request = new sql.Request()
                 .input('from', From)
                 .input('to', To)
                 .input('userid', UserId)
                 .input('isSalesPerson', isSalesPerson)
-                .query(query)
+                .input('Branch_Id', Branch_Id)
+                .query(`
+                    SELECT
+                    	a.*,
+                    	u.Name AS User_Name,
+                        u.BranchId AS Branch_Id
+                    FROM
+                    	tbl_Attendance AS a
+                    	LEFT JOIN tbl_Users AS u ON u.UserId = a.UserId
+                    WHERE
+                    	CONVERT(DATE, a.Start_Date) >= CONVERT(DATE, @from)
+                    	AND CONVERT(DATE, a.Start_Date) <= CONVERT(DATE, @to)
+                        ${checkIsNumber(UserId) ? ' AND a.UserId = @userid ' : ''}
+                        ${checkIsNumber(Branch_Id) ? ' AND u.BranchId = @Branch_Id ' : ''}
+                        ${(isEqualNumber(UserTypeID, 3) || isEqualNumber(UserTypeID, 6)) ? ' AND a.IsSalesPerson = @isSalesPerson ' : ''}
+                        ORDER BY CONVERT(DATETIME, a.Start_Date), a.UserId `
+                );
 
             const result = await request;
 

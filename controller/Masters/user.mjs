@@ -282,7 +282,6 @@ const user = () => {
         const transaction = new sql.Transaction();
     
         try {
-            // check if user is already
             const checkUserExistsResult = await new sql.Request()
                 .input('UserName', UserName)
                 .input('UserId', UserId)
@@ -297,14 +296,8 @@ const user = () => {
                 return invalidInput(res, 'User already exists');
             }
 
-            // const getDBNameResult = await getCompanyDBName(Company_id);
-            // if (!getDBNameResult.success) {
-            //     return invalidInput(res, 'Company is not available');
-            // }
-            
             await transaction.begin();
     
-            // Update global user record
             const globalUpdateResult = await new sql.Request(transaction)
                 .input('UserId', UserId)
                 .input('Name', Name)
@@ -340,7 +333,8 @@ const user = () => {
                     SET Name = @Name,
                         UserName = @UserName,
                         UserTypeId = @UserTypeId,
-                        Password = @Password
+                        Password = @Password,
+                        BranchId = @BranchId
                     WHERE UserId = @UserId
                     AND Company_id = @Company_id;
                 `);

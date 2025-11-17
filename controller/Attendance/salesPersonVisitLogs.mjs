@@ -101,35 +101,28 @@ const VisitLogs = () => {
     }
 
     const getVisitedLogs = async (req, res) => {
-        const { reqDate, UserId } = req.query;
+        const { reqDate, UserId, Branch_Id } = req.query;
 
         try {
-            let query = `
-            SELECT
-            	logs.*,
-            	COALESCE((
-            		SELECT
-            			Name
-            		FROM
-            			tbl_Users
-            		WHERE
-            			UserId = logs.EntryBy
-            	), 'NOT FOUND') AS EntryByGet
-            FROM
-            	tbl_Daily_Call_Log AS logs
-            WHERE 
-                CONVERT(DATE, logs.EntryAt) = CONVERT(DATE, @reqDate)`;
-
-            if (checkIsNumber(UserId)) {
-                query += `AND logs.EntryBy = @entry`
-            }
-
             
-            const request = new sql.Request();
-            request.input('reqDate', reqDate || new Date());
-            request.input('entry', UserId);
+            const request = new sql.Request()
+                .input('reqDate', reqDate)
+                .input('entry', UserId)
+                .input('branch', Branch_Id)
+                .query(`
+                    SELECT
+                    	logs.*,
+                    	COALESCE(usr.Name, 'NOT FOUND') AS EntryByGet,
+                        COALESCE(usr.BranchId, 0) AS BranchId
+                    FROM tbl_Daily_Call_Log AS logs
+                    LEFT JOIN tbl_Users AS usr ON usr.UserId = logs.EntryBy
+                    WHERE 
+                        CONVERT(DATE, logs.EntryAt) = CONVERT(DATE, @reqDate)
+                        ${checkIsNumber(UserId) ? ' AND logs.EntryBy = @entry ' : ''} 
+                        ${checkIsNumber(Branch_Id) ? ' AND usr.BranchId = @branch ' : ''}`
+                );
 
-            const result = await request.query(query);
+            const result = await request;
 
             if (result.recordset.length > 0) {
                 const withImage = result.recordset.map(o => ({

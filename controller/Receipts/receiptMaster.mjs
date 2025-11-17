@@ -38,7 +38,7 @@ const ReceiptMaster = () => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
-            const { voucher, debit, credit, receipt_type, createdBy, status, transaction_type } = req.query
+            const { voucher, debit, credit, receipt_type, createdBy, status, transaction_type, Branch_Id } = req.query
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
@@ -48,12 +48,14 @@ const ReceiptMaster = () => {
                 .input('credit', credit)
                 .input('receipt_type', receipt_type)
                 .input('transaction_type', transaction_type)
+                .input('Branch_Id', Branch_Id)
                 .input('createdBy', createdBy)
                 .input('status', status)
                 .query(`
                     SELECT 
                         rgi.*,
                         vt.Voucher_Type,
+                        vt.Branch_Id,
                         COALESCE(debAcc.Account_name, 'Not found') AS DebitAccountGet,
                         COALESCE(creAcc.Account_name, 'Not found') AS CreditAccountGet,
                     	COALESCE(u.Name, 'Not found') AS CreatedByGet,
@@ -92,6 +94,7 @@ const ReceiptMaster = () => {
                     WHERE
                         rgi.receipt_date BETWEEN @Fromdate AND @Todate
                         ${checkIsNumber(voucher) ? ' AND rgi.receipt_voucher_type_id = @voucher ' : ''}
+                        ${checkIsNumber(Branch_Id) ? ' AND vt.Branch_Id = @Branch_Id ' : ''}
                         ${checkIsNumber(debit) ? ' AND rgi.debit_ledger = @debit ' : ''}
                         ${checkIsNumber(credit) ? ' AND rgi.credit_ledger = @credit ' : ''}
                         ${checkIsNumber(receipt_type) ? ' AND rgi.receipt_bill_type = @receipt_type ' : ''}
@@ -310,7 +313,7 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount, altered_by,
-                check_no, check_date, bank_name, bank_date, is_new_ref, is_journal_type = 0, transaction_type = '' 
+                check_no, check_date, bank_name, bank_date, is_new_ref, is_journal_type = 0, transaction_type = ''
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -529,25 +532,24 @@ const ReceiptMaster = () => {
         }
     }
 
-      //Api for Mobile
- const getReceiptMobile = async (req, res) => {
-    try {
-        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
-        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
-        const { voucher, debit, credit, receipt_type, createdBy, status, transaction_type, Branch_Id } = req.query;
+    const getReceiptMobile = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+            const { voucher, debit, credit, receipt_type, createdBy, status, transaction_type, Branch_Id } = req.query;
 
-        const request = new sql.Request()
-            .input('Fromdate', Fromdate)
-            .input('Todate', Todate)
-            .input('voucher', voucher)
-            .input('debit', debit)
-            .input('credit', credit)
-            .input('receipt_type', receipt_type)
-            .input('transaction_type', transaction_type)
-            .input('createdBy', createdBy)
-            .input('status', status)
-            .input('Branch_Id', Branch_Id)
-            .query(`
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('voucher', voucher)
+                .input('debit', debit)
+                .input('credit', credit)
+                .input('receipt_type', receipt_type)
+                .input('transaction_type', transaction_type)
+                .input('createdBy', createdBy)
+                .input('status', status)
+                .input('Branch_Id', Branch_Id)
+                .query(`
                 SELECT 
                     rgi.*,
                     vt.Voucher_Type,
@@ -601,12 +603,12 @@ const ReceiptMaster = () => {
                     rgi.receipt_date DESC, rgi.created_on DESC;
             `);
 
-        const result = await request;
-        sentData(res, result.recordset);
-    } catch (e) {
-        servError(e, res);
-    }
-};
+            const result = await request;
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    };
 
 
     return {

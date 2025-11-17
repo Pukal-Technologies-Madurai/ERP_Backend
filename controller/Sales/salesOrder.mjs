@@ -699,7 +699,7 @@ const SaleOrder = () => {
 
     const getSaleOrder = async (req, res) => {
         try {
-            const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, OrderStatus } = req.query;
+            const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, OrderStatus, Branch_Id } = req.query;
 
             const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -711,92 +711,94 @@ const SaleOrder = () => {
                 .input('cancel', Cancel_status)
                 .input('creater', Created_by)
                 .input('salesPerson', Sales_Person_Id)
-                .input('VoucherType', VoucherType);
+                .input('VoucherType', VoucherType)
+                .input('Branch_Id', Branch_Id);
 
             const result = await request.query(`
-            -- Step 1: Filtered Sales Orders
-            DECLARE @FilteredOrders TABLE (So_Id INT);
-            INSERT INTO @FilteredOrders (So_Id)
-            SELECT so.So_Id
-            FROM tbl_Sales_Order_Gen_Info AS so
-            WHERE 
-                CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
-                ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
-                ${checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @cancel ' : ''}
-                ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
-                ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
-                ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''};
-            -- Step 2: Sales Order General Info
-            SELECT 
-                so.*, 
-                COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
-                COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
-            FROM tbl_Sales_Order_Gen_Info AS so
-            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
-            LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
-            LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
-            LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
-            LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
-            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
-            -- Step 3: Sales Order Product Details
-            SELECT 
-                si.*,
-                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
-                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                COALESCE(u.Units, 'not available') AS UOM,
-                COALESCE(b.Brand_Name, 'not available') AS BrandGet
-            FROM tbl_Sales_Order_Stock_Info AS si
-            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
-            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
-            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-            WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
-            -- Step 4: Staff Involved
-            SELECT 
-                sosi.So_Id, 
-                sosi.Involved_Emp_Id,
-                sosi.Cost_Center_Type_Id,
-                c.Cost_Center_Name AS EmpName,
-                cc.Cost_Category AS EmpType
-            FROM tbl_Sales_Order_Staff_Info AS sosi
-            LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
-            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
-            WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
-            -- Step 5: Delivery General Info
-            SELECT 
-                dgi.*,
-                rm.Retailer_Name AS Retailer_Name,
-                bm.BranchName AS Branch_Name,
-                st.Status AS DeliveryStatusName,
-                COALESCE((
-                    SELECT SUM(collected_amount)
-                    FROM tbl_Sales_Receipt_Details_Info
-                    WHERE bill_id = dgi.Do_Id
-                ), 0) AS receiptsTotalAmount
-            FROM tbl_Sales_Delivery_Gen_Info AS dgi
-            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
-            LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
-            LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
-            WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
-            -- Step 6: Delivery Product Details
-            SELECT 
-                oi.*,
-                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                COALESCE(u.Units, 'not available') AS UOM,
-                COALESCE(b.Brand_Name, 'not available') AS BrandGet
-            FROM tbl_Sales_Delivery_Stock_Info AS oi
-            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-            WHERE oi.Delivery_Order_Id IN (
-                SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
-                WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+                -- Step 1: Filtered Sales Orders
+                DECLARE @FilteredOrders TABLE (So_Id INT);
+                INSERT INTO @FilteredOrders (So_Id)
+                SELECT so.So_Id
+                FROM tbl_Sales_Order_Gen_Info AS so
+                WHERE 
+                    CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                    ${checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
+                    ${checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @cancel ' : ''}
+                    ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
+                    ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
+                    ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''};
+                    ${checkIsNumber(Branch_Id) ? ' AND so.Branch_Id = @Branch_Id ' : ''};
+                -- Step 2: Sales Order General Info
+                SELECT 
+                    so.*, 
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                FROM tbl_Sales_Order_Gen_Info AS so
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+                LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+                LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+                WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+                -- Step 3: Sales Order Product Details
+                SELECT 
+                    si.*,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Order_Stock_Info AS si
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+                -- Step 4: Staff Involved
+                SELECT 
+                    sosi.So_Id, 
+                    sosi.Involved_Emp_Id,
+                    sosi.Cost_Center_Type_Id,
+                    c.Cost_Center_Name AS EmpName,
+                    cc.Cost_Category AS EmpType
+                FROM tbl_Sales_Order_Staff_Info AS sosi
+                LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+                WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+                -- Step 5: Delivery General Info
+                SELECT 
+                    dgi.*,
+                    rm.Retailer_Name AS Retailer_Name,
+                    bm.BranchName AS Branch_Name,
+                    st.Status AS DeliveryStatusName,
+                    COALESCE((
+                        SELECT SUM(collected_amount)
+                        FROM tbl_Sales_Receipt_Details_Info
+                        WHERE bill_id = dgi.Do_Id
+                    ), 0) AS receiptsTotalAmount
+                FROM tbl_Sales_Delivery_Gen_Info AS dgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+                LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+                WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+                -- Step 6: Delivery Product Details
+                SELECT 
+                    oi.*,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Delivery_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                WHERE oi.Delivery_Order_Id IN (
+                    SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
+                    WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+                );`
             );
-        `);
 
             const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
 
@@ -823,7 +825,6 @@ const SaleOrder = () => {
                     const orderStatus =
                         totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
 
-                    // ✅ Build full delivery + invoice products
                     const mappedDeliveries = deliveryList.map(d => {
                         const invoiceProducts = DeliveryItems.filter(p =>
                             isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
@@ -848,12 +849,10 @@ const SaleOrder = () => {
                         Staff_Involved_List: StaffInvolved.filter(s =>
                             isEqualNumber(s.So_Id, order.So_Id)
                         ),
-                        ConvertedInvoice: mappedDeliveries, // ✅ full delivery + all invoice product list
+                        ConvertedInvoice: mappedDeliveries, 
                     };
                 });
 
-
-                // Filter by pending/completed if requested
                 const filteredData = OrderStatus
                     ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
                     : resData;
@@ -1670,7 +1669,6 @@ const SaleOrder = () => {
                 Branch_Id,
             } = req.query;
 
-            // ✅ Safe date handling
             const Fromdate = req.query?.Fromdate || new Date().toISOString().split("T")[0];
             const Todate = req.query?.Todate || new Date().toISOString().split("T")[0];
 
