@@ -1307,44 +1307,282 @@ const DeliveryOrder = () => {
     //     }
     // }
 
-    const editmobileApi = async (req, res) => {
-    const {
-        Do_Id, Retailer_Id, Delivery_Person_Id,
-        Delivery_Status, Delivery_Time, Delivery_Location, 
-        Delivery_Latitude, Delivery_Longitude, Payment_Mode, 
-        Payment_Status, Payment_Ref_No, Altered_by, Altered_on,
-        Product_Array 
-    } = req.body;
-
-    const Do_Date = ISOString(req?.body?.Do_Date);
-
-    if (!checkIsNumber(Do_Id) || !checkIsNumber(Delivery_Person_Id)) {
-        return invalidInput(res, 'Do_Id, Delivery_Person_Id is Required');
-    }
-
+const editmobileApi = async (req, res) => {
     const transaction = new sql.Transaction();
 
     try {
+        const {
+            Do_Id, Retailer_Id, Delivery_Person_Id,
+            Delivery_Status, Delivery_Time, Delivery_Location, 
+            Delivery_Latitude, Delivery_Longitude, Payment_Mode, 
+            Payment_Status, Payment_Ref_No, Altered_by, Altered_on,
+            Product_Array,
+            Branch_Id, Narration, GST_Inclusive = 1, IS_IGST = 0
+        } = req.body;
+
+        const Do_Date = ISOString(req?.body?.Do_Date);
+        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+        const isInclusive = isEqualNumber(GST_Inclusive, 1);
+        const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+        const isIGST = isEqualNumber(IS_IGST, 1);
+        const taxType = isNotTaxableBill
+            ? "zerotax"
+            : isInclusive
+                ? "remove"
+                : "add";
+
+        if (!checkIsNumber(Do_Id) || !checkIsNumber(Delivery_Person_Id)) {
+            return invalidInput(res, 'Do_Id, Delivery_Person_Id is Required');
+        }
+
         await transaction.begin();
 
-      
-        const updateRequest = new sql.Request(transaction)
+     
+        const originalStockRequest = new sql.Request(transaction)
             .input('doid', Do_Id)
-            .input('deliveryperson', Delivery_Person_Id)
-            .input('deliverystatus', Delivery_Status)
-            .input('deliveryTime', Delivery_Time)
-            .input('deliveryLocation', Delivery_Location)
-            .input('deliverylatitude', Delivery_Latitude)
-            .input('deliverylongitute', Delivery_Longitude)
-            .input('paymentMode', Payment_Mode)
-            .input('paymentStatus', Payment_Status)
-            .input('paymentrefno', Payment_Ref_No)
-            .input('Trans_Type', 'UPDATE')
-            .input('Altered_by', Altered_by)
-            .input('Alterd_on', new Date())
             .query(`
+                SELECT 
+                   *
+                FROM tbl_Sales_Delivery_Stock_Info 
+                WHERE Delivery_Order_Id = @doid
+                ORDER BY S_No
+            `);
+
+        const originalStockResult = await originalStockRequest;
+        const originalStockItems = originalStockResult.recordset;
+
+        
+        const returnItems = [];
+        
+        if (Product_Array && Product_Array.length > 0) {
+            for (const originalItem of originalStockItems) {
+                const updatedItem = Product_Array.find(item => 
+                    Number(item.Item_Id) === Number(originalItem.Item_Id)
+                );
+
+                if (updatedItem) {
+                    const originalQty = Number(originalItem.Bill_Qty);
+                    const updatedQty = Number(updatedItem.Bill_Qty);
+                    
+                   
+                    if (updatedQty < originalQty) {
+                        const returnQty = originalQty - updatedQty;
+                        const returnRatio = returnQty / originalQty;
+                        
+                        const returnItem = {
+                            ...originalItem,
+                            Return_Qty: returnQty,
+                            Return_Amount: RoundNumber(Number(originalItem.Amount) * returnRatio),
+                            Return_Taxable_Amount: RoundNumber(Number(originalItem.Taxable_Amount) * returnRatio),
+                            Return_Cgst_Amo: RoundNumber(Number(originalItem.Cgst_Amo) * returnRatio),
+                            Return_Sgst_Amo: RoundNumber(Number(originalItem.Sgst_Amo) * returnRatio),
+                            Return_Igst_Amo: RoundNumber(Number(originalItem.Igst_Amo) * returnRatio),
+                            Return_Final_Amo: RoundNumber(Number(originalItem.Final_Amo) * returnRatio),
+                            Original_S_No: originalItem.S_No,
+                            Item_Rate: originalItem.Item_Rate,
+                            Taxable_Rate: originalItem.Taxable_Rate,
+                            Tax_Rate: originalItem.Tax_Rate,
+                            Cgst: originalItem.Cgst,
+                            Sgst: originalItem.Sgst,
+                            Igst: originalItem.Igst
+                        };
+                        
+                        returnItems.push(returnItem);
+                    }
+                } else {
+              
+                    const returnItem = {
+                        ...originalItem,
+                        Return_Qty: Number(originalItem.Bill_Qty),
+                        Return_Amount: Number(originalItem.Amount),
+                        Return_Taxable_Amount: Number(originalItem.Taxable_Amount),
+                        Return_Cgst_Amo: Number(originalItem.Cgst_Amo),
+                        Return_Sgst_Amo: Number(originalItem.Sgst_Amo),
+                        Return_Igst_Amo: Number(originalItem.Igst_Amo),
+                        Return_Final_Amo: Number(originalItem.Final_Amo),
+                        Original_S_No: originalItem.S_No
+                    };
+                    
+                    returnItems.push(returnItem);
+                }
+            }
+
+           
+            if (returnItems.length > 0) {
+                for (let i = 0; i < returnItems.length; i++) {
+                    const returnItem = returnItems[i];
+                    
+                    await new sql.Request(transaction)
+                        .input("Ret_Date", new Date())
+                        .input("Delivery_Order_Id", Do_Id)
+                        .input("GoDown_Id", returnItem.GoDown_Id)
+                        .input("S_No", i + 1)
+                        .input("Item_Id", returnItem.Item_Id)
+                        .input("Bill_Qty", returnItem.Return_Qty)
+                        .input("Act_Qty", returnItem.Return_Qty)
+                        .input("Alt_Act_Qty", returnItem.Return_Qty)
+                        .input("Taxable_Rate", returnItem.Taxable_Rate)
+                        .input("Item_Rate", returnItem.Item_Rate)
+                        .input("Amount", returnItem.Return_Amount)
+                        .input("Free_Qty", 0)
+                        .input("Total_Qty", returnItem.Return_Qty)
+                        .input("Taxble", returnItem.Taxble)
+                        .input("HSN_Code", returnItem.HSN_Code)
+                        .input("Unit_Id", returnItem.Unit_Id)
+                        .input("Unit_Name", returnItem.Unit_Name)
+                        .input("Act_unit_Id", returnItem.Act_unit_Id)
+                        .input("Alt_Act_Unit_Id", returnItem.Alt_Act_Unit_Id)
+                        .input("Taxable_Amount", returnItem.Return_Taxable_Amount)
+                        .input("Tax_Rate", returnItem.Tax_Rate)
+                        .input("Cgst", returnItem.Cgst)
+                        .input("Cgst_Amo", returnItem.Return_Cgst_Amo)
+                        .input("Sgst", returnItem.Sgst)
+                        .input("Sgst_Amo", returnItem.Return_Sgst_Amo)
+                        .input("Igst", returnItem.Igst)
+                        .input("Igst_Amo", returnItem.Return_Igst_Amo)
+                        .input("Final_Amo", returnItem.Return_Final_Amo)
+                        .input("Created_by", Altered_by)
+                        .input("Altered_by", Altered_by)
+                        .input("Created_on", new Date())
+                        .input("Alterd_on", new Date())
+                        .query(`
+                            INSERT INTO tbl_Sales_Return_Stock_Info (
+                                Ret_Date, Delivery_Order_Id, GoDown_Id, S_No, Item_Id, 
+                                Bill_Qty, Act_Qty, Alt_Act_Qty, Taxable_Rate, Item_Rate, Amount, 
+                                Free_Qty, Total_Qty, Taxble, HSN_Code, Unit_Id, Unit_Name, 
+                                Act_unit_Id, Alt_Act_Unit_Id, Taxable_Amount, Tax_Rate, 
+                                Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo,
+                                Created_by, Altered_by, Created_on, Alterd_on
+                            ) VALUES (
+                                @Ret_Date, @Delivery_Order_Id, @GoDown_Id, @S_No, @Item_Id, 
+                                @Bill_Qty, @Act_Qty, @Alt_Act_Qty, @Taxable_Rate, @Item_Rate, @Amount, 
+                                @Free_Qty, @Total_Qty, @Taxble, @HSN_Code, @Unit_Id, @Unit_Name, 
+                                @Act_unit_Id, @Alt_Act_Unit_Id, @Taxable_Amount, @Tax_Rate, 
+                                @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo,
+                                @Created_by, @Altered_by, @Created_on, @Alterd_on
+                            );
+                        `);
+                }
+            }
+        }
+
+      
+        if (Product_Array && Product_Array.length > 0) {
+            const productsData = (await getProducts()).dataArray;
+            const Alter_Id = Math.floor(Math.random() * 999999);
+
+            let Total_Invoice_value = 0;
+            let Total_Before_Tax = 0;
+            let Total_Tax = 0;
+            let CSGT_Total = 0;
+            let SGST_Total = 0;
+            let IGST_Total = 0;
+            let Round_off = 0;
+            let totalCGST = 0;
+            let totalSGST = 0;
+            let totalIGST = 0;
+
+            
+            for (const item of Product_Array) {
+                const product = findProductDetails(productsData, item.Item_Id);
+                if (!product) continue;
+
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = RoundNumber(item?.Bill_Qty);
+                const Amount = Multiplication(billQty, itemRate);
+                const gstPercentage = isIGST ? product.Igst_P : product.Gst_P;
+
+                if (isNotTaxableBill) {
+                    Total_Before_Tax = Addition(Total_Before_Tax, Amount);
+                    Total_Invoice_value = Addition(Total_Invoice_value, Amount);
+                    continue;
+                }
+
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                Total_Before_Tax = Addition(Total_Before_Tax, gstInfo.base_amount);
+                Total_Tax = Addition(Total_Tax, gstInfo.tax_amount);
+                Total_Invoice_value = Addition(Total_Invoice_value, gstInfo.with_tax);
+
+                if (isIGST) {
+                    IGST_Total = Addition(IGST_Total, gstInfo.tax_amount);
+                    totalIGST = Addition(totalIGST, gstInfo.tax_amount);
+                } else {
+                    const halfTax = gstInfo.tax_amount / 2;
+                    CSGT_Total = Addition(CSGT_Total, halfTax);
+                    SGST_Total = Addition(SGST_Total, halfTax);
+                    totalCGST = Addition(totalCGST, halfTax);
+                    totalSGST = Addition(totalSGST, halfTax);
+                }
+            }
+
+            Total_Invoice_value = RoundNumber(Total_Invoice_value);
+            Round_off = RoundNumber(
+                Math.round(Total_Invoice_value) - Total_Invoice_value
+            );
+            Total_Invoice_value = Math.round(Total_Invoice_value);
+
+            const Total_Expences = isNotTaxableBill
+                ? Round_off
+                : Addition(Addition(Addition(CSGT_Total, SGST_Total), IGST_Total), Round_off);
+
+            
+            await new sql.Request(transaction)
+                .input("Do_Id", sql.Int, Do_Id)
+                .query(`DELETE FROM tbl_Sales_Delivery_Stock_Info WHERE Delivery_Order_Id = @Do_Id`);
+
+            await new sql.Request(transaction)
+                .input("Do_Id", sql.Int, Do_Id)
+                .query(`DELETE FROM tbl_Sales_Delivery_Expence_Info WHERE Do_Id = @Do_Id`);
+
+           
+            await new sql.Request(transaction)
+                .input("doid", Do_Id)
+                .input("date", Do_Date)
+                .input("retailer", Retailer_Id)
+                .input("branch", Branch_Id)
+                .input("GST_Inclusive", GST_Inclusive)
+                .input("CSGT_Total", CSGT_Total)
+                .input("SGST_Total", SGST_Total)
+                .input("IGST_Total", IGST_Total)
+                .input("IS_IGST", isIGST ? 1 : 0)
+                .input("Total_Expences", Total_Expences)
+                .input("roundoff", Round_off)
+                .input("totalinvoice", Total_Invoice_value)
+                .input("Total_Before_Tax", Total_Before_Tax)
+                .input("Total_Tax", Total_Tax)
+                .input("narration", Narration)
+                .input("alterby", Altered_by)
+                .input("Alter_Id", Alter_Id)
+                .input("alteron", new Date())
+                .input("deliveryperson", Delivery_Person_Id)
+                .input("deliverystatus", Delivery_Status)
+                .input("deliveryTime", Delivery_Time)
+                .input("deliveryLocation", Delivery_Location)
+                .input("deliverylatitude", Delivery_Latitude)
+                .input("deliverylongitute", Delivery_Longitude)
+                .input("paymentMode", Payment_Mode)
+                .input("paymentStatus", Payment_Status)
+                .input("paymentrefno", Payment_Ref_No)
+                .input("Trans_Type", "UPDATE").query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info
                 SET
+                    Do_Date = @date,
+                    Retailer_Id = @retailer,
+                    Branch_Id = @branch,
+                    GST_Inclusive = @GST_Inclusive,
+                    IS_IGST = @IS_IGST,
+                    CSGT_Total = @CSGT_Total,
+                    SGST_Total = @SGST_Total,
+                    IGST_Total = @IGST_Total,
+                    Total_Expences = @Total_Expences,
+                    Round_off = @roundoff,
+                    Total_Invoice_value = @totalinvoice,
+                    Total_Before_Tax = @Total_Before_Tax,
+                    Total_Tax = @Total_Tax,
+                    Narration = @narration,
+                    Altered_by = @alterby,
+                    Alter_Id = @Alter_Id,
                     Delivery_Person_Id = @deliveryperson,
                     Delivery_Time = @deliveryTime,
                     Delivery_Status = @deliverystatus,
@@ -1354,45 +1592,206 @@ const DeliveryOrder = () => {
                     Payment_Mode = @paymentMode,
                     Payment_Status = @paymentStatus,
                     Payment_Ref_No = @paymentrefno,
-                    Trans_Type = @Trans_Type,
-                    Altered_by = @Altered_by,
-                    Alterd_on = @Alterd_on
-                WHERE Do_Id = @doid;
-            `);
+                    Alterd_on = @alteron,
+                    Trans_Type = @Trans_Type
+                WHERE Do_Id = @doid;`
+                );
 
-        const updateResult = await updateRequest;
+            
+            for (let i = 0; i < Product_Array.length; i++) {
+                const product = Product_Array[i];
+                const productDetails = findProductDetails(productsData, product.Item_Id);
+                if (!productDetails) continue;
 
-        if (updateResult.rowsAffected[0] === 0) {
-            throw new Error('Failed to update order, Try again');
-        }
+                const gstPercentage = isIGST ? productDetails.Igst_P : productDetails.Gst_P;
+                const Taxble = gstPercentage > 0 ? 1 : 0;
+                const Bill_Qty = Number(product.Bill_Qty);
+                const Item_Rate = RoundNumber(product.Item_Rate);
+                const Amount = Multiplication(Bill_Qty, Item_Rate);
 
-        const stockInfoRequest = new sql.Request(transaction)
-            .input('doid', Do_Id)
-            .query(`
-                SELECT 
-                   *
-                FROM tbl_Sales_Delivery_Stock_Info 
-                WHERE Delivery_Order_Id = @doid
-            `);
+                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
 
-        const stockInfoResult = await stockInfoRequest;
-        const originalStockItems = stockInfoResult.recordset;
-
-
-        if (Product_Array && Product_Array.length > 0) {
-            const missingItems = findMissingItems(originalStockItems, Product_Array);
-
-        
-            if (missingItems.length > 0) {
-                await insertMissingItemsIntoReturn(transaction, missingItems, Do_Id, Altered_by);
+                await new sql.Request(transaction)
+                    .input("Do_Date", Do_Date ? Do_Date : new Date())
+                    .input("Delivery_Order_Id", Do_Id)
+                    .input("S_No", i + 1)
+                    .input("Item_Id", product.Item_Id)
+                    .input("Bill_Qty", Bill_Qty)
+                    .input("Item_Rate", Item_Rate)
+                    .input("Amount", Amount)
+                    .input("Free_Qty", 0)
+                    .input("Total_Qty", Bill_Qty)
+                    .input("Taxble", Taxble)
+                    .input("Taxable_Rate", itemRateGst.base_amount)
+                    .input("HSN_Code", productDetails.HSN_Code)
+                    .input("GoDown_Id", 1)
+                    .input("Unit_Id", product.UOM ?? "")
+                    .input("Unit_Name", product.Units ?? "")
+                    .input("Taxable_Amount", gstInfo.base_amount)
+                    .input("Tax_Rate", gstPercentage)
+                    .input("Cgst", !isNotTaxableBill && !isIGST ? gstInfo.cgst_per : 0)
+                    .input("Cgst_Amo", !isNotTaxableBill && !isIGST ? gstInfo.cgst_amount : 0)
+                    .input("Sgst", !isNotTaxableBill && !isIGST ? gstInfo.cgst_per : 0)
+                    .input("Sgst_Amo", !isNotTaxableBill && !isIGST ? gstInfo.cgst_amount : 0)
+                    .input("Igst", !isNotTaxableBill && isIGST ? gstInfo.igst_per : 0)
+                    .input("Igst_Amo", !isNotTaxableBill && isIGST ? gstInfo.igst_amount : 0)
+                    .input("Final_Amo", gstInfo.with_tax)
+                    .input("Created_on", new Date()).query(`
+                    INSERT INTO tbl_Sales_Delivery_Stock_Info (
+                        Do_Date, Delivery_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate, Amount, 
+                        Free_Qty, Total_Qty, GoDown_Id, Taxble, Taxable_Rate, HSN_Code, 
+                        Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate, Cgst, Cgst_Amo, 
+                        Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+                    ) VALUES (
+                        @Do_Date, @Delivery_Order_Id, @S_No, @Item_Id, @Bill_Qty, @Item_Rate, @Amount, 
+                        @Free_Qty, @Total_Qty, @GoDown_Id, @Taxble, @Taxable_Rate, @HSN_Code, 
+                        @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate, @Cgst, @Cgst_Amo, 
+                        @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+                    );
+                `);
             }
-        }
 
-        await transaction.commit();
-      if (Product_Array && Product_Array.length > 0) {
-            success(res, 'Changes Saved and return items processed!');
+
+            const expenseEntries = [];
+            if (!isNotTaxableBill) {
+                if (!isIGST) {
+                    if (totalCGST > 0) {
+                        expenseEntries.push({
+                            type: "CGST",
+                            amount: totalCGST,
+                            isCredit: false,
+                        });
+                    }
+                    if (totalSGST > 0) {
+                        expenseEntries.push({
+                            type: "SGST",
+                            amount: totalSGST,
+                            isCredit: false,
+                        });
+                    }
+                } else if (totalIGST > 0) {
+                    expenseEntries.push({
+                        type: "IGST",
+                        amount: totalIGST,
+                        isCredit: false,
+                    });
+                }
+            }
+
+            if (Round_off !== 0) {
+                expenseEntries.push({
+                    type: "ROUNDOFF",
+                    amount: Math.abs(Round_off),
+                    isCredit: Round_off < 0,
+                });
+            }
+
+            const defaultAccounts = await new sql.Request(transaction).query(`
+                SELECT Acc_Id, AC_Reason 
+                FROM tbl_Default_AC_Master 
+                WHERE AC_Reason IN ('CGST', 'SGST', 'IGST', 'ROUNDOFF', 'GST', 'TAX', 'ROUND')
+            `);
+
+            const accountMap = {};
+            defaultAccounts.recordset.forEach((account) => {
+                const reason = (account.AC_Reason || "").toUpperCase();
+                accountMap[reason] = account.Acc_Id;
+            });
+
+            for (let i = 0; i < expenseEntries.length; i++) {
+                const expense = expenseEntries[i];
+                let accountId = accountMap[expense.type];
+
+                if (!accountId) {
+                    if (expense.type === "CGST" || expense.type === "SGST" || expense.type === "IGST") {
+                        accountId = accountMap["GST"] || accountMap["TAX"];
+                    } else if (expense.type === "ROUNDOFF") {
+                        accountId = accountMap["ROUND"];
+                    }
+                }
+
+                if (!accountId) {
+                    console.error(`No account mapping found for ${expense.type}`);
+                    continue;
+                }
+
+                if (expense.type === "ROUNDOFF") {
+                    const amount = Round_off;
+                    const isCredit = Round_off < 0;
+
+                    await new sql.Request(transaction)
+                        .input("Do_Id", sql.Int, Do_Id)
+                        .input("Sno", sql.Int, i + 1)
+                        .input("Expense_Id", sql.Int, accountId)
+                        .input("Expence_Value_Dr", sql.Decimal(18, 2), isCredit ? 0 : amount)
+                        .input("Expence_Value_Cr", sql.Decimal(18, 2), isCredit ? amount : 0).query(`
+                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                                Do_Id, Sno, Expense_Id, Expence_Value_Dr, Expence_Value_Cr
+                            ) VALUES (
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_Dr, @Expence_Value_Cr
+                            );`
+                        );
+                } else {
+                    await new sql.Request(transaction)
+                        .input("Do_Id", sql.Int, Do_Id)
+                        .input("Sno", sql.Int, i + 1)
+                        .input("Expense_Id", sql.Int, accountId)
+                        .input("Expence_Value_Dr", sql.Decimal(18, 2), expense.amount)
+                        .input("Expence_Value_Cr", sql.Decimal(18, 2), 0).query(`
+                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                                Do_Id, Sno, Expense_Id, Expence_Value_Dr, Expence_Value_Cr
+                            ) VALUES (
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_Dr, @Expence_Value_Cr
+                            );`
+                        );
+                }
+            }
+
+            await transaction.commit();
+            
+            if (returnItems.length > 0) {
+                success(res, "Delivery order updated successfully with return records created");
+            } else {
+                success(res, "Delivery order updated successfully");
+            }
+
         } else {
-            success(res, 'Changes Saved!');
+    
+            await new sql.Request(transaction)
+                .input('doid', Do_Id)
+                .input('deliveryperson', Delivery_Person_Id)
+                .input('deliverystatus', Delivery_Status)
+                .input('deliveryTime', Delivery_Time)
+                .input('deliveryLocation', Delivery_Location)
+                .input('deliverylatitude', Delivery_Latitude)
+                .input('deliverylongitute', Delivery_Longitude)
+                .input('paymentMode', Payment_Mode)
+                .input('paymentStatus', Payment_Status)
+                .input('paymentrefno', Payment_Ref_No)
+                .input('Altered_by', Altered_by)
+                .input('Alterd_on', new Date())
+                .input('Trans_Type', 'UPDATE')
+                .query(`
+                    UPDATE tbl_Sales_Delivery_Gen_Info
+                    SET
+                        Delivery_Person_Id = @deliveryperson,
+                        Delivery_Time = @deliveryTime,
+                        Delivery_Status = @deliverystatus,
+                        Delivery_Location = @deliveryLocation,
+                        Delivery_Latitude = @deliverylatitude,
+                        Delivery_Longitude = @deliverylongitute,
+                        Payment_Mode = @paymentMode,
+                        Payment_Status = @paymentStatus,
+                        Payment_Ref_No = @paymentrefno,
+                        Altered_by = @Altered_by,
+                        Alterd_on = @Alterd_on,
+                        Trans_Type = @Trans_Type
+                    WHERE Do_Id = @doid;
+                `);
+
+            await transaction.commit();
+            success(res, 'Delivery information updated successfully!');
         }
 
     } catch (e) {
@@ -1404,87 +1803,8 @@ const DeliveryOrder = () => {
 };
 
 
-function findMissingItems(originalItems, returnedItems) {
-    const missingItems = [];
-
-   
-    const returnedItemsMap = new Map();
-    returnedItems.forEach(item => {
-        returnedItemsMap.set(item.Item_Id, item);
-    });
-
-  
-    originalItems.forEach(originalItem => {
-        const returnedItem = returnedItemsMap.get(originalItem.Item_Id);
-        
-       
-        if (!returnedItem) {
-            missingItems.push(originalItem);
-        }
-    });
-
-    return missingItems;
-}
 
 
-async function insertMissingItemsIntoReturn(transaction, missingItems, deliveryOrderId, alteredBy) {
-    const currentDate = new Date();
-
-    for (const item of missingItems) {
-        const insertRequest = new sql.Request(transaction)
-            .input('Ret_Date', currentDate)
-            .input('Delivery_Order_Id', deliveryOrderId)
-            .input('GoDown_Id', item.GoDown_Id || null)
-            .input('S_No', item.S_No)
-            .input('Item_Id', item.Item_Id)
-            .input('Bill_Qty', item.Bill_Qty || 0)
-            .input('Act_Qty', item.Act_Qty || 0)
-            .input('Alt_Act_Qty', item.Alt_Act_Qty || 0)
-            .input('Taxable_Rate', item.Taxable_Rate || 0)
-            .input('Item_Rate', item.Item_Rate || 0)
-            .input('Amount', item.Amount || 0)
-            .input('Free_Qty', item.Free_Qty || 0)
-            .input('Total_Qty', item.Total_Qty || 0)
-            .input('Taxble', item.Taxble || 0)
-            .input('HSN_Code', item.HSN_Code || '')
-            .input('Unit_Id', item.Unit_Id || null)
-            .input('Unit_Name', item.Unit_Name || '')
-            .input('Act_unit_Id', item.Act_unit_Id || null)
-            .input('Alt_Act_Unit_Id', item.Alt_Act_Unit_Id || null)
-            .input('Taxable_Amount', item.Taxable_Amount || 0)
-            .input('Tax_Rate', item.Tax_Rate || 0)
-            .input('Cgst', item.Cgst || 0)
-            .input('Cgst_Amo', item.Cgst_Amo || 0)
-            .input('Sgst', item.Sgst || 0)
-            .input('Sgst_Amo', item.Sgst_Amo || 0)
-            .input('Igst', item.Igst || 0)
-            .input('Igst_Amo', item.Igst_Amo || 0)
-            .input('Final_Amo', item.Final_Amo || 0)
-            .input('Created_by', alteredBy)
-            .input('Altered_by', alteredBy)
-            .input('Created_on', currentDate)
-            .input('Alterd_on', new Date())
-            .query(`
-                INSERT INTO tbl_Sales_Return_Stock_Info (
-                    Ret_Date, Delivery_Order_Id, GoDown_Id, S_No, Item_Id, 
-                    Bill_Qty, Act_Qty, Alt_Act_Qty, Taxable_Rate, Item_Rate, 
-                    Amount, Free_Qty, Total_Qty, Taxble, HSN_Code, Unit_Id, 
-                    Unit_Name, Act_unit_Id, Alt_Act_Unit_Id, Taxable_Amount, 
-                    Tax_Rate, Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, 
-                    Final_Amo, Created_by, Altered_by, Created_on, Alterd_on
-                ) VALUES (
-                    @Ret_Date, @Delivery_Order_Id, @GoDown_Id, @S_No, @Item_Id,
-                    @Bill_Qty, @Act_Qty, @Alt_Act_Qty, @Taxable_Rate, @Item_Rate,
-                    @Amount, @Free_Qty, @Total_Qty, @Taxble, @HSN_Code, @Unit_Id,
-                    @Unit_Name, @Act_unit_Id, @Alt_Act_Unit_Id, @Taxable_Amount,
-                    @Tax_Rate, @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo,
-                    @Final_Amo, @Created_by, @Altered_by, @Created_on, @Alterd_on
-                );
-            `);
-
-        await insertRequest;
-    }
-}
 
 
 

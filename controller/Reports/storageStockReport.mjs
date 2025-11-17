@@ -336,12 +336,39 @@ const StockGroupWiseClosingDetails = async (req, res) => {
 }
 
 
-
 const getStorageStockItemWiseMobile = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-        const filters = req.query.filters ? JSON.parse(req.query.filters) : [];
+        
+        // Extract individual filter parameters
+        const filter1 = req.query.filter1 || '';
+        const filter2 = req.query.filter2 || '';
+        const filter3 = req.query.filter3 || '';
+
+        // Get mobile filters configuration
+        const mobileFilters = await new sql.Request().query(`
+            SELECT 
+                mrd.Type AS FilterType,
+                mrd.Column_Name AS ColumnName,
+                mrd.Table_Id AS TableId,
+                tm.Table_Name AS TableName,
+                STUFF((
+                    SELECT DISTINCT ',' + CAST(mrd2.List_Type AS VARCHAR(10))
+                    FROM tbl_Mobile_Report_Details mrd2
+                    WHERE mrd2.Type = mrd.Type 
+                    AND mrd2.Table_Id = mrd.Table_Id 
+                    AND mrd2.Column_Name = mrd.Column_Name
+                    AND mrd2.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS ListTypes
+            FROM tbl_Mobile_Report_Details mrd 
+            INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            WHERE mrt.Report_Name = 'StockInhand'
+            GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name
+            ORDER BY mrd.Type
+        `);
 
         const request = new sql.Request()
             .input('Fromdate', sql.DateTime, Fromdate)
@@ -369,9 +396,6 @@ const getStorageStockItemWiseMobile = async (req, res) => {
             filteredData.map(row => row?.Item_Group_Id).filter(id => id != null)
         )];
 
-        // Build filter conditions for LOS data
-        const { whereClause, filterParams } = buildFilterConditions(filters, 'los');
-
         const getProductLosData = new sql.Request();
 
         // Only add filterItems if there are unique items
@@ -381,10 +405,36 @@ const getStorageStockItemWiseMobile = async (req, res) => {
             getProductLosData.input('filterItems', sql.NVarChar(sql.MAX), '');
         }
 
-        // Add filter parameters to the request
-        Object.keys(filterParams).forEach(key => {
-            getProductLosData.input(key, filterParams[key]);
-        });
+        let whereConditions = [];
+        
+        // Add filter parameters and build conditions
+        if (filter1 && mobileFilters.recordset.length >= 1) {
+            const filterConfig = mobileFilters.recordset[0];
+            if (filterConfig && filterConfig.ColumnName) {
+                whereConditions.push(`los.${filterConfig.ColumnName} = @filter1`);
+                getProductLosData.input('filter1', filter1);
+            }
+        }
+
+        if (filter2 && mobileFilters.recordset.length >= 2) {
+            const filterConfig = mobileFilters.recordset[1];
+            if (filterConfig && filterConfig.ColumnName) {
+                whereConditions.push(`los.${filterConfig.ColumnName} = @filter2`);
+                getProductLosData.input('filter2', filter2);
+            }
+        }
+
+        if (filter3 && mobileFilters.recordset.length >= 3) {
+            const filterConfig = mobileFilters.recordset[2];
+            if (filterConfig && filterConfig.ColumnName) {
+                whereConditions.push(`los.${filterConfig.ColumnName} = @filter3`);
+                getProductLosData.input('filter3', filter3);
+            }
+        }
+
+        const whereClause = whereConditions.length > 0 
+            ? ` AND ${whereConditions.join(' AND ')} `
+            : '';
 
         const query = `
             WITH FilteredProducts AS (
@@ -404,7 +454,8 @@ const getStorageStockItemWiseMobile = async (req, res) => {
                 COALESCE(los.Stock_Group, '-') AS Stock_Group,
                 COALESCE(los.S_Sub_Group_1, '-') AS S_Sub_Group_1,
                 COALESCE(los.Grade_Item_Group, '-') AS Grade_Item_Group,
-                COALESCE(los.Item_Name_Modified, '-') AS Item_Name_Modified
+                COALESCE(los.Item_Name_Modified, '-') AS Item_Name_Modified,
+                COALESCE(los.Brand, '-') AS Brand
             FROM tbl_Product_Master AS p
             JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
             WHERE (
@@ -416,7 +467,17 @@ const getStorageStockItemWiseMobile = async (req, res) => {
 
         const productLosResult = (await getProductLosData.query(query)).recordset;
 
+        // Create a set of Product_Ids that match the filters
+        const filteredProductIds = new Set(productLosResult.map(product => product.Product_Id));
+
         const mergeLosData = filteredData.map(row => {
+            const hasActiveFilters = filter1 || filter2 || filter3;
+            
+            // If there are active filters, check if this row's Product_Id is in the filtered set
+            if (hasActiveFilters && !filteredProductIds.has(row.Product_Id)) {
+                return null; // Exclude rows that don't match filters
+            }
+
             const matchingProduct = productLosResult.find(
                 productDetails => isEqualNumber(
                     productDetails.Product_Id,
@@ -424,26 +485,23 @@ const getStorageStockItemWiseMobile = async (req, res) => {
                 )
             );
 
-            if (!matchingProduct && filters.length > 0) {
-                return null; // Exclude rows that don't match filters
-            }
-
             const {
                 Product_Rate = 0, Stock_Item = '', Group_ST = '', Bag = '',
                 Stock_Group = '', S_Sub_Group_1 = '', Grade_Item_Group = '',
-                Item_Name_Modified = ''
+                Item_Name_Modified = '', Brand = ''
             } = matchingProduct || {};
 
             return {
                 ...row,
                 Product_Rate, Stock_Item, Group_ST, Bag,
                 Stock_Group, S_Sub_Group_1, Grade_Item_Group,
-                Item_Name_Modified
+                Item_Name_Modified, Brand
             };
-        }).filter(row => row !== null); // Remove null rows
+        }).filter(row => row !== null);
 
         sentData(res, mergeLosData);
     } catch (e) {
+        console.error('API Error:', e);
         servError(e, res);
     }
 }
@@ -452,7 +510,35 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-        const filters = req.query.filters ? JSON.parse(req.query.filters) : [];
+        
+        // Extract individual filter parameters
+        const filter1 = req.query.filter1 || '';
+        const filter2 = req.query.filter2 || '';
+        const filter3 = req.query.filter3 || '';
+
+        // Get mobile filters configuration
+        const mobileFilters = await new sql.Request().query(`
+            SELECT 
+                mrd.Type AS FilterType,
+                mrd.Column_Name AS ColumnName,
+                mrd.Table_Id AS TableId,
+                tm.Table_Name AS TableName,
+                STUFF((
+                    SELECT DISTINCT ',' + CAST(mrd2.List_Type AS VARCHAR(10))
+                    FROM tbl_Mobile_Report_Details mrd2
+                    WHERE mrd2.Type = mrd.Type 
+                    AND mrd2.Table_Id = mrd.Table_Id 
+                    AND mrd2.Column_Name = mrd.Column_Name
+                    AND mrd2.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS ListTypes
+            FROM tbl_Mobile_Report_Details mrd 
+            INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            WHERE mrt.Report_Name = 'StockInhand'
+            GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name
+            ORDER BY mrd.Type
+        `);
 
         const request = new sql.Request()
             .input('Fromdate', sql.DateTime, Fromdate)
@@ -480,8 +566,6 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
             filteredData.map(row => row?.Item_Group_Id).filter(id => id != null)
         )];
 
-        const { whereClause, filterParams } = buildFilterConditions(filters, 'los');
-
         const getProductLosData = new sql.Request();
 
         // Only add filterItems if there are unique items
@@ -491,9 +575,39 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
             getProductLosData.input('filterItems', sql.NVarChar(sql.MAX), '');
         }
 
-        Object.keys(filterParams).forEach(key => {
-            getProductLosData.input(key, filterParams[key]);
-        });
+        // Add Todate parameter for the LEFT JOIN condition
+        getProductLosData.input('Todate', sql.DateTime, Todate);
+
+        let whereConditions = [];
+        
+        // Add filter parameters and build conditions
+        if (filter1 && mobileFilters.recordset.length >= 1) {
+            const filterConfig = mobileFilters.recordset[0];
+            if (filterConfig && filterConfig.ColumnName) {
+                whereConditions.push(`los.${filterConfig.ColumnName} = @filter1`);
+                getProductLosData.input('filter1', filter1);
+            }
+        }
+
+        if (filter2 && mobileFilters.recordset.length >= 2) {
+            const filterConfig = mobileFilters.recordset[1];
+            if (filterConfig && filterConfig.ColumnName) {
+                whereConditions.push(`los.${filterConfig.ColumnName} = @filter2`);
+                getProductLosData.input('filter2', filter2);
+            }
+        }
+
+        if (filter3 && mobileFilters.recordset.length >= 3) {
+            const filterConfig = mobileFilters.recordset[2];
+            if (filterConfig && filterConfig.ColumnName) {
+                whereConditions.push(`los.${filterConfig.ColumnName} = @filter3`);
+                getProductLosData.input('filter3', filter3);
+            }
+        }
+
+        const whereClause = whereConditions.length > 0 
+            ? ` AND ${whereConditions.join(' AND ')} `
+            : '';
 
         const query = `
             WITH FilteredProducts AS (
@@ -514,6 +628,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
                 COALESCE(los.S_Sub_Group_1, '-') AS S_Sub_Group_1,
                 COALESCE(los.Grade_Item_Group, '-') AS Grade_Item_Group,
                 COALESCE(los.Item_Name_Modified, '-') AS Item_Name_Modified,
+                COALESCE(los.Brand, '-') AS Brand,
                 COALESCE(stvlu.CL_Rate, 0) AS CL_Rate
             FROM tbl_Product_Master AS p
             JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
@@ -525,12 +640,19 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
             )
             ${whereClause}`;
 
-        // Add Todate parameter for the LEFT JOIN condition
-        getProductLosData.input('Todate', sql.DateTime, Todate);
-
         const productLosResult = (await getProductLosData.query(query)).recordset;
 
+        // Create a set of Product_Ids that match the filters
+        const filteredProductIds = new Set(productLosResult.map(product => product.Product_Id));
+
         const mergeLosData = filteredData.map(row => {
+            const hasActiveFilters = filter1 || filter2 || filter3;
+            
+            // If there are active filters, check if this row's Product_Id is in the filtered set
+            if (hasActiveFilters && !filteredProductIds.has(row.Product_Id)) {
+                return null;
+            }
+
             const matchingProduct = productLosResult.find(
                 productDetails => isEqualNumber(
                     productDetails.Product_Id,
@@ -538,27 +660,24 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
                 )
             );
 
-            if (!matchingProduct && filters.length > 0) {
-                return null;
-            }
-
             const {
                 Product_Rate = 0, Stock_Item = '', Group_ST = '', Bag = '',
                 Stock_Group = '', S_Sub_Group_1 = '', Grade_Item_Group = '',
-                Item_Name_Modified = '', CL_Rate = 0
+                Item_Name_Modified = '', Brand = '', CL_Rate = 0
             } = matchingProduct || {};
 
             return {
                 ...row,
                 Product_Rate, Stock_Item, Group_ST, Bag,
                 Stock_Group, S_Sub_Group_1, Grade_Item_Group,
-                Item_Name_Modified, CL_Rate, 
+                Item_Name_Modified, Brand, CL_Rate, 
                 CL_Value: Multiplication(row?.Bal_Qty, CL_Rate)
             };
         }).filter(row => row !== null);
 
         sentData(res, mergeLosData);
     } catch (e) {
+        console.error('API Error:', e);
         servError(e, res);
     }
 }
@@ -567,16 +686,14 @@ const itemGroupWiseClosingDetailsMobile = async (req, res) => {
     try {
         const reqDate = req.query?.reqDate ? ISOString(req.query?.reqDate) : ISOString();
         const getMaxOfItemClosingDate = isEqualNumber(req?.query?.getMaxOfItemClosingDate, 1);
-        const filters = req.query.filters ? JSON.parse(req.query.filters) : [];
-
-        const { whereClause, filterParams } = buildFilterConditions(filters, 'los');
+        
+     
+        const filter1 = req.query.filter1 || '';
+        const filter2 = req.query.filter2 || '';
+        const filter3 = req.query.filter3 || '';
 
         const request = new sql.Request()
             .input('reqDate', sql.DateTime, reqDate);
-
-        Object.keys(filterParams).forEach(key => {
-            request.input(key, filterParams[key]);
-        });
 
         const query = `
             SELECT
@@ -609,48 +726,59 @@ const itemGroupWiseClosingDetailsMobile = async (req, res) => {
                 WHERE  
                     Item_Group_Id IS NOT NULL 
                     AND Item_Group_Id <> 0
-                    ${whereClause}
             ) AS los
             ON los.Item_Group_Id = ig.Item_Group_Id`;
 
-        const result = await request.query(query);
+        let result = await request.query(query);
+        
+     
+        if (filter1 || filter2 || filter3) {
+
+            const mobileFilters = await new sql.Request().query(`
+                SELECT 
+                    mrd.Type AS FilterType,
+                    mrd.Column_Name AS ColumnName
+                FROM tbl_Mobile_Report_Details mrd 
+                INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+                WHERE mrt.Report_Name = 'StockInhand'
+                ORDER BY mrd.Type
+            `);
+
+            result.recordset = result.recordset.filter(row => {
+                let matches = true;
+                
+                if (filter1 && mobileFilters.recordset.length >= 1) {
+                    const filterConfig = mobileFilters.recordset[0];
+                    if (filterConfig && row[filterConfig.ColumnName] !== filter1) {
+                        matches = false;
+                    }
+                }
+                
+                if (filter2 && mobileFilters.recordset.length >= 2) {
+                    const filterConfig = mobileFilters.recordset[1];
+                    if (filterConfig && row[filterConfig.ColumnName] !== filter2) {
+                        matches = false;
+                    }
+                }
+                
+                if (filter3 && mobileFilters.recordset.length >= 3) {
+                    const filterConfig = mobileFilters.recordset[2];
+                    if (filterConfig && row[filterConfig.ColumnName] !== filter3) {
+                        matches = false;
+                    }
+                }
+                
+                return matches;
+            });
+        }
+
         sentData(res, result.recordset);
 
     } catch (e) {
+        console.error('API Error:', e);
         servError(e, res);
     }
 }
-
-const buildFilterConditions = (filters, tableAlias = '') => {
-    const conditions = [];
-    const filterParams = {};
-
-    if (filters && Array.isArray(filters)) {
-        filters.forEach((filter, index) => {
-            if (filter.columnName && filter.values && filter.values.length > 0) {
-                const paramName = `filter${index}`;
-                const column = tableAlias ? `${tableAlias}.${filter.columnName}` : filter.columnName;
-                
-                if (filter.values.length === 1) {
-                    conditions.push(`${column} = @${paramName}`);
-                    filterParams[paramName] = filter.values[0];
-                } else {
-                    const placeholders = filter.values.map((_, i) => `@${paramName}_${i}`).join(', ');
-                    conditions.push(`${column} IN (${placeholders})`);
-                    
-                    filter.values.forEach((value, i) => {
-                        filterParams[`${paramName}_${i}`] = value;
-                    });
-                }
-            }
-        });
-    }
-
-    return {
-        whereClause: conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '',
-        filterParams
-    };
-};
 
 export default {
     getStorageStockItemWise,
