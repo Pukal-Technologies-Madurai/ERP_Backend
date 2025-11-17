@@ -1937,13 +1937,13 @@ const getSalesInvoiceMobile = async (req, res) => {
             ORDER BY mrd.Type
         `);
 
-        // Helper function to build filter conditions
+        
         const buildFilterCondition = (filterConfig, filterParam) => {
             if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName) {
                 return null;
             }
 
-            // For now, using simple equality condition
+      
             return `EXISTS (
                 SELECT 1 FROM ${filterConfig.TableName} 
                 WHERE ${filterConfig.TableName}.${filterConfig.ColumnName} = @${filterParam}
@@ -1981,7 +1981,7 @@ const getSalesInvoiceMobile = async (req, res) => {
             }
         }
 
-        // Build mobile filter conditions
+   
         let mobileFilterConditions = [];
         
         if (filter1 && mobileFilters.recordset.length >= 1) {
@@ -2484,7 +2484,7 @@ const getMobileReportDropdowns = async (req, res) => {
 
                     result = await new sql.Request().query(dropdownQuery);
 
-                    // Remove duplicates based on label (keep first occurrence)
+              
                     const seenLabels = new Set();
                     const uniqueOptions = result.recordset.filter(item => {
                         if (seenLabels.has(item.label)) {
@@ -2544,20 +2544,21 @@ const getMobileReportDropdowns = async (req, res) => {
             error: dropdown.error,
             dataSummary: dropdown.dataSummary
         }));
-
-        res.json({
-            success: true,
-            data: formattedResponse,
-            message: "Dropdown options fetched successfully"
-        });
+          dataFound(res, formattedResponse);
+        // res.json({
+        //     success: true,
+        //     data: formattedResponse,
+        //     message: "Dropdown options fetched successfully"
+        // });
 
     } catch (error) {
-        console.error('Mobile Report Dropdown API Error:', error);
-        res.status(500).json({
-            success: false,
-            message: "Error fetching dropdown options",
-            error: error.message
-        });
+           servError(error, res);
+        // console.error('Mobile Report Dropdown API Error:', error);
+        // res.status(500).json({
+        //     success: false,
+        //     message: "Error fetching dropdown options",
+        //     error: error.message
+        // });
     }
 };
 

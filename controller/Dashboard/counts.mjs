@@ -278,6 +278,8 @@ const getEmployeeAbstract = async (req, res) => {
                     t.Task_Name,
                     t.Task_Desc,
                     td.AN_No,
+                    td.Project_Id,
+                    p.Project_Name,  -- Added Project_Name here
                     CONVERT(DATE, td.Est_Start_Dt) AS Est_Start_Dt,
                     CONVERT(DATE, td.Est_End_Dt) AS Est_End_Dt,
                     td.Sch_Time,
@@ -338,6 +340,8 @@ const getEmployeeAbstract = async (req, res) => {
                 FROM tbl_Task_Details AS td
                 LEFT JOIN tbl_Task AS t
                     ON td.Task_Id = t.Task_Id
+                LEFT JOIN tbl_Project_Master AS p  -- Added JOIN for project master
+                    ON p.Project_Id = td.Project_Id
                 WHERE td.Emp_Id = u.UserId
                   AND (
                         (CONVERT(DATE, td.Est_Start_Dt) >= @fromDate AND CONVERT(DATE, td.Est_Start_Dt) <= @toDate)
