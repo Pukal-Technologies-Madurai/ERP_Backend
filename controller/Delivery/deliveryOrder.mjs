@@ -1030,8 +1030,8 @@ const DeliveryOrder = () => {
         }
     }
 
-    const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Sales_Person_Id } = req.query;
+  const getDeliveryorder = async (req, res) => {
+        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Sales_Person_Id,Branch_Id } = req.query;
 
         try {
 
@@ -1039,7 +1039,7 @@ const DeliveryOrder = () => {
             const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
             let query = `
-                                          WITH SALES_DETAILS AS (
+                        WITH SALES_DETAILS AS (
                          SELECT
                              oi.*,
                              pm.Product_Id,
@@ -1130,7 +1130,9 @@ const DeliveryOrder = () => {
             if (Area_Id) {
                 query += ` AND rm.Area_Id = @Area_Id`;
             }
-
+          if (Branch_Id) {
+                query += ` AND so.Branch_Id = @Branch_Id`;
+            }
 
             query += ` ORDER BY so.Do_Id DESC`;
 
@@ -1144,7 +1146,7 @@ const DeliveryOrder = () => {
             request.input('Sales_Person_Id', sql.Int, Sales_Person_Id);
             request.input('Route_Id', sql.Int, Route_Id);
             request.input('Area_Id', sql.Int, Area_Id);
-
+            request.input('Branch_Id', sql.Int, Branch_Id);
 
             const result = await request.query(query);
 
@@ -2028,21 +2030,17 @@ const editmobileApi = async (req, res) => {
         }
     };
 
-    const deliveryTripsheetList = async (req, res) => {
+     const deliveryTripsheetList = async (req, res) => {
+    try {
+        const FromDate = ISOString(req.query.Fromdate);
+        const ToDate = ISOString(req.query.Todate);
+        const { Branch_Id } = req.query;
 
-        try {
-            const FromDate = ISOString(req.query.Fromdate), ToDate = ISOString(req.query.Todate);
+        if (!FromDate || !ToDate) {
+            return invalidInput(res, 'Select StartDate & EndDate');
+        }
 
-            if (!FromDate && !ToDate) {
-                return invalidInput(res, 'Select StartDate & EndDate')
-            }
-
-            const request = new sql.Request();
-            request.input('FromDate', sql.Date, FromDate);
-            request.input('ToDate', sql.Date, ToDate);
-            const result = await request.query(
-
-                `WITH TRIP_MASTER AS (
+        let query = `WITH TRIP_MASTER AS (
     SELECT
         tr.Trip_Id,
         tr.Challan_No,
@@ -2061,8 +2059,14 @@ const editmobileApi = async (req, res) => {
         bm.BranchName
     FROM tbl_Trip_Master tr
     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
-	 WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate AND tr.BillType= 'SALES'
-),
+    WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate AND tr.BillType = 'SALES'`;
+
+        // Add Branch_Id condition if provided
+        if (Branch_Id) {
+            query += ` AND tr.Branch_Id = @Branch_Id`;
+        }
+
+        query += `),
 TRIP_DETAILS AS (
     SELECT DISTINCT
         td.Trip_Id,
@@ -2111,8 +2115,8 @@ SELECT
     tm.Vehicle_No,
     tm.Branch_Id, 
     tm.TR_INV_ID,
-      tm.BillType,
-        tm.VoucherType,
+    tm.BillType,
+    tm.VoucherType,
 
     (SELECT MIN(td.Delivery_Do_Date) 
      FROM TRIP_DETAILS AS td 
@@ -2140,21 +2144,21 @@ SELECT
             td.Sales_Order_Id,
             td.Order_Retailer_Id,
             ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,  
-        ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
-           ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
-        ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
-        ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
-        ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
-        ISNULL(sgi.Collected_By, '') AS Collected_By,
-        ISNULL(sgi.Collected_Status, '') AS Collected_Status,
-        sgi.Payment_Status
-    FROM TRIP_DETAILS AS td
-    LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
-    LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
-    LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id  
-    WHERE td.Trip_Id = tm.Trip_Id
-    FOR JSON PATH
-), '[]') AS Trip_Details,
+            ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
+            ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
+            ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
+            ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
+            ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
+            ISNULL(sgi.Collected_By, '') AS Collected_By,
+            ISNULL(sgi.Collected_Status, '') AS Collected_Status,
+            sgi.Payment_Status
+        FROM TRIP_DETAILS AS td
+        LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
+        LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
+        LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id  
+        WHERE td.Trip_Id = tm.Trip_Id
+        FOR JSON PATH
+    ), '[]') AS Trip_Details,
 
     COALESCE((  
         SELECT
@@ -2194,32 +2198,35 @@ SELECT
         WHERE te.Trip_Id = tm.Trip_Id
         FOR JSON PATH
     ), '[]') AS Employees_Involved
-FROM TRIP_MASTER AS tm
+FROM TRIP_MASTER AS tm`;
 
-
-               ` );
-
-            if (result.recordset && Array.isArray(result.recordset) && result.recordset.length > 0) {
-
-                const parsed = result.recordset.map(o => ({
-                    ...o,
-                    Product_Array: o?.Product_Array ? JSON.parse(o.Product_Array) : [],
-                    Trip_Details: o?.Trip_Details ? JSON.parse(o?.Trip_Details) : [],
-                    Employees_Involved: o?.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
-                }));
-
-                dataFound(res, parsed);
-            } else {
-                noData(res);
-            }
-
-        } catch (e) {
-
-            servError(e, res);
+        const request = new sql.Request();
+        request.input('FromDate', sql.Date, FromDate);
+        request.input('ToDate', sql.Date, ToDate);
+        
+        if (Branch_Id) {
+            request.input('Branch_Id', sql.Int, Branch_Id);
         }
 
+        const result = await request.query(query);
 
+        if (result.recordset && Array.isArray(result.recordset) && result.recordset.length > 0) {
+            const parsed = result.recordset.map(o => ({
+                ...o,
+                Product_Array: o?.Product_Array ? JSON.parse(o.Product_Array) : [],
+                Trip_Details: o?.Trip_Details ? JSON.parse(o.Trip_Details) : [],
+                Employees_Involved: o?.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
+            }));
+
+            dataFound(res, parsed);
+        } else {
+            noData(res);
+        }
+
+    } catch (e) {
+        servError(e, res);
     }
+};
 
     const updateDeliveryOrderTrip = async (req, res) => {
         const {
