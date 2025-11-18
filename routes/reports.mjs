@@ -147,4 +147,6 @@ ReportRouter.delete('/templateMobile', templateMobile.deleteMobileTemplate);
 ReportRouter.post('templateMobile/templateState', templateMobile.saveMobileReportState);
 ReportRouter.get('/tablesAndColumnsMobile', templateMobile.getTablesandColumnsForMobileReport)
 
+ReportRouter.get('/returnReports',deliveryReports.ReturnDelivery)
+
 export default ReportRouter;

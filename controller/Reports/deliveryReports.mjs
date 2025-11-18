@@ -1,5 +1,5 @@
 import sql from "mssql";
-import { sentData, servError, noData } from "../../res.mjs";
+import { sentData, servError, noData,dataFound } from "../../res.mjs";
 import { checkIsNumber, ISOString, toArray } from "../../helper_functions.mjs";
 
 const getNonConvertedSales = async (req, res) => {
@@ -342,10 +342,36 @@ const SyncPosPending = async (req, res) => {
   }
 };
 
+const ReturnDelivery=async(req,res)=>{
+    try{
+                 const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+            const request=await new sql.Request()
+            .input('fromDate',Fromdate)
+            .input('toDate',Todate)
+            .query(`
+  SELECT  sr.*,p.Product_Name,gm.Godown_Name from tbl_Sales_Return_Stock_Info sr
+left join tbl_Product_Master p ON p.Product_Id=sr.Item_Id
+left join tbl_Godown_Master gm ON gm.Godown_Id=sr.GoDown_Id
+WHERE CAST(Ret_Date AS DATE) BETWEEN  @fromDate AND @toDate`);
+
+
+            if(request.recordsets.length <=0){
+                return invalidInput(res,'Record not found')
+            }
+
+              dataFound(res,request.recordsets[0] );
+
+        }
+    catch(error){
+servError(error,res)
+    }
+}
 
 export default {
     getNonConvertedSales,
     closingReport,
-     SyncPosPending
+     SyncPosPending,
+     ReturnDelivery
 };
