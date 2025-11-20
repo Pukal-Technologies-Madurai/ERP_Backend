@@ -352,11 +352,7 @@ const updateWorkedTask = async (req, res) => {
             Det_string, Additional_Project, Additional_Task, Entry_By
         } = req.body;
 
-        console.log('Updating work data:', {
-            Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
-            Process_Id, Work_Dt, Work_Done, Start_Time, End_Time, Work_Status,
-            Additional_Project, Additional_Task, Det_string
-        });
+  
 
 
         if (!Work_Id) {
@@ -461,12 +457,12 @@ const updateWorkedTask = async (req, res) => {
             formattedDetString = null;
         }
 
-        console.log('Formatted Det_string:', formattedDetString);
+
 
         const request = new sql.Request();
         
 
-        console.log("bwedifrestoerw procedure")
+    
 
         request.input('Mode',  2) 
         request.input('Work_Id', parseInt(Work_Id))
@@ -488,16 +484,15 @@ const updateWorkedTask = async (req, res) => {
         request.input('Additional_Project', Additional_Project || '')
         request.input('Additional_Task', Additional_Task || '')
 
-        console.log('Calling stored procedure with parameters...');
-        
+  
         const result = await request.execute('Work_SP');
         
-        console.log('Stored procedure result:', result);
+
 
         if (result.recordset && result.recordset.length > 0) {
             const updatedWorkId = result.recordset[0].Work_Id;
             
-            console.log(`Work updated successfully - Work_Id: ${updatedWorkId}`);
+         
             return success(res, 'Work updated successfully', { 
                 Work_Id: updatedWorkId,
                 message: 'Work record updated successfully'
@@ -790,7 +785,8 @@ const updateWorkedTask = async (req, res) => {
         getAllGroupedWorkedData,
         taskWorkDetailsPieChart,
         taskWorkDetailsBarChart,
-        getProcessDetails
+        getProcessDetails,
+        updateWorkedTask
     }
 }
 
