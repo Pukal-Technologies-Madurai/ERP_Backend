@@ -726,7 +726,7 @@ const SaleOrder = () => {
                     ${checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @cancel ' : ''}
                     ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
                     ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
-                    ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''};
+                    ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
                     ${checkIsNumber(Branch_Id) ? ' AND so.Branch_Id = @Branch_Id ' : ''};
                 -- Step 2: Sales Order General Info
                 SELECT 
