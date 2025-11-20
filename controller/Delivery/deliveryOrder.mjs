@@ -3062,8 +3062,8 @@ FROM TRIP_MASTER AS tm`;
         }
     };
 
-    const getDeliveryorderList = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id } = req.query;
+       const getDeliveryorderList = async (req, res) => {
+        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id,Branch_Id } = req.query;
 
         try {
 
@@ -3148,7 +3148,7 @@ FROM TRIP_MASTER AS tm`;
                         WHERE CAST(so.Do_Date AS DATE) = @from
                                   `;
 
-            // Add optional filters
+          
             if (Retailer_Id) {
                 query += ` AND so.Retailer_Id = @retailer`;
             }
@@ -3164,7 +3164,9 @@ FROM TRIP_MASTER AS tm`;
             if (Area_Id) {
                 query += ` AND rm.Area_Id = @Area_Id`;
             }
-
+             if (Branch_Id) {
+                query += ` AND so.Branch_Id = @Branch_Id`;
+            }
 
             query += ` ORDER BY so.Do_Id DESC`;
 
@@ -3177,6 +3179,7 @@ FROM TRIP_MASTER AS tm`;
             request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
             request.input('Route_Id', sql.Int, Route_Id);
             request.input('Area_Id', sql.Int, Area_Id);
+              request.input('Branch_Id', Branch_Id);
 
             const result = await request.query(query);
 
@@ -3201,7 +3204,165 @@ FROM TRIP_MASTER AS tm`;
         }
     };
 
+    const getDeliveryorderListMobile = async (req, res) => {
+    const { 
+        Retailer_Id, 
+        Cancel_status, 
+        Created_by, 
+        Delivery_Person_Id, 
+        Route_Id, 
+        Area_Id, 
+        Branch_Id,
+        Fromdate,
+        Todate
+    } = req.query;
 
+    try {
+     const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+            const toDate = Todate ? ISOString(Todate) : ISOString();
+        let query = `              
+           WITH SALES_DETAILS AS (
+                            SELECT
+                                oi.*,
+                                pm.Product_Id,
+                                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                                COALESCE(u.Units, 'not available') AS UOM,
+                                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                            FROM tbl_Sales_Delivery_Stock_Info AS oi
+                            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                        ),
+            SALES_ORDER_COUNT_SAME_DAY AS (
+                SELECT
+                    CAST(SO_Date AS DATE) AS SO_Date,
+                    COUNT(*) AS Order_Count
+                FROM tbl_Sales_Order_Gen_Info
+                GROUP BY CAST(SO_Date AS DATE)
+            ),
+            PENDING_SALES_ORDERS AS (
+                SELECT
+                    CAST(SO_Date AS DATE) AS SO_Date,
+                    COUNT(*) AS PendingSalesOrderCount
+                FROM tbl_Sales_Order_Gen_Info
+                WHERE isConverted = 1
+                GROUP BY CAST(SO_Date AS DATE)
+            ),
+            PREVIOUS_DAY_SALES_ORDER_COUNT AS (
+                SELECT COUNT(*) AS PreviousDaySalesOrderCount
+                FROM tbl_Sales_Order_Gen_Info
+                WHERE CAST(SO_Date AS DATE) = DATEADD(DAY, -1, CAST(@from AS DATE))
+            )
+              SELECT DISTINCT
+                            so.Do_Id AS Delivery_Order_id,
+                            so.*,
+                            rm.Retailer_Name,
+                            erpUser.Name AS Delivery_Person_Name,
+                            bm.BranchName AS Branch_Name,
+                            cb.Name AS Created_BY_Name,
+                            rmt.Route_Name AS Routename,
+                            am.Area_Name AS AreaName,
+                            rmt.Route_Id,
+                            rm.Area_Id,
+                            st.Status AS DeliveryStatusName,
+                            sgi.SO_Date AS SalesDate,
+                            soc.Order_Count AS SameDaySalesOrderCount,
+                            pso.PendingSalesOrderCount,
+                            pdsoc.PreviousDaySalesOrderCount,
+                            COALESCE((
+                                SELECT sd.*
+                                FROM SALES_DETAILS AS sd
+                                WHERE sd.Delivery_Order_Id = so.Do_Id
+                                FOR JSON PATH
+                            ), '[]') AS Products_List
+                        FROM tbl_Sales_Delivery_Gen_Info AS so
+                        LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+                        LEFT JOIN tbl_Status AS st ON st.Status_Id = so.Delivery_Status
+                        LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Delivery_Person_Id
+                        LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+                        LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+                        LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
+                        LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+                        LEFT JOIN tbl_Sales_Order_Gen_Info AS sgi ON sgi.So_Id = so.So_No
+                        LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = so.Do_Id
+                        LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = so.Delivery_Person_Id
+                        LEFT JOIN tbl_Users AS erpUser ON erpUser.UserId = ecc.User_Id
+                        LEFT JOIN SALES_ORDER_COUNT_SAME_DAY soc ON soc.SO_Date = CAST(so.Do_Date AS DATE)
+                        LEFT JOIN PENDING_SALES_ORDERS pso ON pso.SO_Date = CAST(so.Do_Date AS DATE)
+            CROSS JOIN PREVIOUS_DAY_SALES_ORDER_COUNT pdsoc
+            WHERE CAST(so.Do_Date AS DATE) BETWEEN @from AND @to
+        `;
+
+       
+        const conditions = [];
+        
+        if (Retailer_Id) {
+            conditions.push(`so.Retailer_Id = @retailer`);
+        }
+        if (Created_by) {
+            conditions.push(`so.Created_by = @creater`);
+        }
+        if (Delivery_Person_Id) {
+            conditions.push(`erpUser.UserId = @Delivery_Person_Id`);
+        }
+        if (Route_Id) {
+            conditions.push(`rmt.Route_Id = @Route_Id`);
+        }
+        if (Area_Id) {
+            conditions.push(`rm.Area_Id = @Area_Id`);
+        }
+        if (Branch_Id) {
+            conditions.push(`so.Branch_Id = @Branch_Id`);
+        }
+        if (Cancel_status !== undefined) {
+            conditions.push(`so.Cancel_status = @cancel`);
+        }
+
+        if (conditions.length > 0) {
+            query += ` AND ${conditions.join(' AND ')}`;
+        }
+
+        query += ` ORDER BY so.Do_Id DESC`;
+
+        const request = new sql.Request();
+        
+        
+        request.input('from', sql.Date, fromDate);
+        request.input('to', sql.Date, toDate);
+        
+        if (Retailer_Id) request.input('retailer', sql.Int, Retailer_Id);
+        if (Created_by) request.input('creater', sql.Int, Created_by);
+        if (Delivery_Person_Id) request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
+        if (Route_Id) request.input('Route_Id', sql.Int, Route_Id);
+        if (Area_Id) request.input('Area_Id', sql.Int, Area_Id);
+        if (Branch_Id) request.input('Branch_Id', sql.Int, Branch_Id);
+        if (Cancel_status !== undefined) request.input('cancel', sql.Bit, Cancel_status);
+
+        const result = await request.query(query);
+
+        if (result.recordset.length > 0) {
+            const parsed = result.recordset.map(o => ({
+                ...o,
+                Products_List: o?.Products_List ? JSON.parse(o.Products_List) : []
+            }));
+            
+            const withImage = parsed.map(o => ({
+                ...o,
+                Products_List: Array.isArray(o.Products_List) ? o.Products_List.map(product => ({
+                    ...product,
+                    ProductImageUrl: getImage('products', product?.Product_Image_Name)
+                })) : []
+            }));
+            
+            dataFound(res, withImage);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        servError(e, res);
+    }
+};
     return {
         salesDeliveryCreation,
         getSaleOrder,
@@ -3217,7 +3378,8 @@ FROM TRIP_MASTER AS tm`;
         getDeliveryDetailsListing,
         tripDetails,
         getClosingStock,
-        getDeliveryorderList
+        getDeliveryorderList,
+        getDeliveryorderListMobile
     }
 }
 

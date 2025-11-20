@@ -84,6 +84,7 @@ projectRoute.put('/task/assignEmployee', taskActivity.modifyTaskAssignedForEmplo
 projectRoute.get('/task/workDetails',taskWorks.getAllNewFormatData)
 projectRoute.get('/task/work', taskWorks.getAllWorkedData);
 projectRoute.post('/task/work', taskWorks.postWorkedTask);
+projectRoute.put('/task/work', taskWorks.updateWorkedTask);
 
 projectRoute.get('/task/work/groupd', taskWorks.getAllGroupedWorkedData);
 projectRoute.get('/task/work/pieChart', taskWorks.taskWorkDetailsPieChart);
@@ -100,5 +101,7 @@ projectRoute.get('/processMaster/dropDown',taskWorks.getProcessDetails)
 projectRoute.get('/tasks/project/dropdown',taskActivity.getProjectDropDown)
 
 projectRoute.get('/project/schedule/ListingDetailsAbstract',projectSchedule.getScheduleProjectidActivity)
+
+projectRoute.get('/workDetailsTask',taskActivity.getWorkDetailsWithTask)
 
 export default projectRoute;

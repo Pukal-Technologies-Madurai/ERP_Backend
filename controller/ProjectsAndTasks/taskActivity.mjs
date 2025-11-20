@@ -374,6 +374,59 @@ const getProjectDropDown = async (req, res) => {
     }
 }
 
+const getWorkDetailsWithTask=async(req,res)=>{
+   
+      const { Project_Id,Task_Id } = req.query;
+
+        if (!checkIsNumber(Project_Id) || !checkIsNumber(Task_Id)) {
+            return invalidInput(res, 'ProjectId or Task_Id is required')
+        }
+
+        try {
+            const query = `
+                 SELECT
+                wm.*,
+                t.Task_Name,
+				tt.Task_Type,
+                u.Name AS EmployeeName,
+                s.Status AS WorkStatus,
+
+                COALESCE(
+                    (SELECT Timer_Based FROM tbl_Task_Details WHERE AN_No = wm.AN_No), 
+                    0
+                ) AS Timer_Based
+                
+            FROM 
+                tbl_Work_Master AS wm
+            LEFT JOIN 
+                tbl_Task AS t ON t.Task_Id = wm.Task_Id
+            LEFT JOIN
+                tbl_Users AS u ON u.UserId = wm.Emp_Id
+            LEFT JOIN
+                tbl_Status AS s ON s.Status_Id = wm.Work_Status
+				left join tbl_Task_Type tt ON tt.Task_Type_Id=wm.Task_Levl_Id
+         
+            WHERE 
+				wm.Project_Id = @Project_Id And wm.Task_Levl_Id=@Task_Id
+                
+            ORDER BY 
+                wm.Start_Time`
+
+            const result = await new sql.Request()
+            .input('Project_Id', Project_Id)
+            .input('Task_Id',Task_Id)
+            .query(query);
+
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset)
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    }
+
     return {
         getEmployeeAssignedInTheTask,
         assignTaskForEmployee,
@@ -382,7 +435,8 @@ const getProjectDropDown = async (req, res) => {
         getTaskAssignedUsers,
         getAssignedTasks,
         getFilteredUsersBasedOnTasks,
-        getProjectDropDown
+        getProjectDropDown,
+        getWorkDetailsWithTask
     }
 }
 
