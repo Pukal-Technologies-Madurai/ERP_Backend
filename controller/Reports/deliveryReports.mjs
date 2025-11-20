@@ -1,10 +1,10 @@
 import sql from "mssql";
-import { sentData, servError, noData, invalidInput,success, dataFound } from "../../res.mjs";
+import { sentData, servError, noData, invalidInput, success, dataFound } from "../../res.mjs";
 import { checkIsNumber, ISOString, toArray } from "../../helper_functions.mjs";
 
 const getNonConvertedSales = async (req, res) => {
     try {
-        const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType,Branch_Id } = req.query;
+        const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, Branch_Id } = req.query;
         const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
@@ -287,69 +287,68 @@ const closingReport = async (req, res) => {
 
 
 const SyncPosPending = async (req, res) => {
-  const dataArray = Array.isArray(req.body) ? req.body : [];
- 
-  if (!Array.isArray(dataArray) || dataArray.length === 0) {
-    return res.status(400).json({ success: false, message: "Invalid or empty data array" });
-  }
+    const dataArray = Array.isArray(req.body) ? req.body : [];
 
-  const transaction = new sql.Transaction();
-  let transactionBegun = false;
+    if (!Array.isArray(dataArray) || dataArray.length === 0) {
+        return res.status(400).json({ success: false, message: "Invalid or empty data array" });
+    }
 
-  try {
-    await transaction.begin();
-    transactionBegun = true;
+    const transaction = new sql.Transaction();
+    let transactionBegun = false;
 
-    for (const data of dataArray) {
-      const retailerResult = await new sql.Request(transaction)
-        .input("Acc_Id", data.Acc_Id)
-        .query(`
+    try {
+        await transaction.begin();
+        transactionBegun = true;
+
+        for (const data of dataArray) {
+            const retailerResult = await new sql.Request(transaction)
+                .input("Acc_Id", data.Acc_Id)
+                .query(`
           SELECT Retailer_Id 
           FROM tbl_Retailers_Master 
           WHERE AC_Id = @Acc_Id
         `);
 
-      if (!retailerResult.recordset.length) {
-        console.warn(`No Retailer found for Acc_Id: ${data.Acc_Id}`);
-        continue; 
-      }
+            if (!retailerResult.recordset.length) {
+                console.warn(`No Retailer found for Acc_Id: ${data.Acc_Id}`);
+                continue;
+            }
 
-      const retailerId = retailerResult.recordSet[0].Retailer_Id;
+            const retailerId = retailerResult.recordSet[0].Retailer_Id;
 
-      await new sql.Request(transaction)
-        .input("Above_30Days", data.Above_30_Days_Pending_Amt || 0)
-        .input("Total_Outstanding", data.Overall_Outstanding_Amt || 0)
-        .input("Retailer_Id", retailerId)
-        .query(`
+            await new sql.Request(transaction)
+                .input("Above_30Days", data.Above_30_Days_Pending_Amt || 0)
+                .input("Total_Outstanding", data.Overall_Outstanding_Amt || 0)
+                .input("Retailer_Id", retailerId)
+                .query(`
           UPDATE tbl_ERP_POS_Master
           SET 
             Above_30Days = @Above_30Days,
             Total_Outstanding = @Total_Outstanding
           WHERE Retailer_Id = @Retailer_Id
         `);
+        }
+
+        await transaction.commit();
+        success(res, `Data synced successfully updated)`);
+
+    } catch (err) {
+        if (transactionBegun) {
+            try {
+                await transaction.rollback();
+            } catch (rollbackErr) {
+                console.error('Rollback failed:', rollbackErr);
+            }
+        }
+        servError(err, res, "Data sync error");
     }
-
-    await transaction.commit();
-    success(res, `Data synced successfully updated)`);
-
-  } catch (err) {
-
-    if (transactionBegun) {
-      try {
-        await transaction.rollback();
-      } catch (rollbackErr) {
-        console.error('Rollback failed:', rollbackErr);
-      }
-    }
-    servError(err, res, "Data sync error");
-  }
 };
 
 const ReturnDelivery = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-        const Branch_Id = req.query.Branch_Id; 
+        const Branch_Id = req.query.Branch_Id;
 
         let query = `
            SELECT 
@@ -370,9 +369,8 @@ WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
             .input('fromDate', Fromdate)
             .input('toDate', Todate);
 
-        
         if (Branch_Id) {
-            query += ` AND sr.Branch_Id = @Branch_Id`; 
+            query += ` AND sdgi.Branch_Id = @Branch_Id `;
             request.input('Branch_Id', Branch_Id);
         }
 
@@ -383,7 +381,6 @@ WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
         }
 
         dataFound(res, result.recordsets[0]);
-;
     } catch (error) {
         servError(error, res);
     }
@@ -393,6 +390,6 @@ WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
 export default {
     getNonConvertedSales,
     closingReport,
-     SyncPosPending,
-     ReturnDelivery
+    SyncPosPending,
+    ReturnDelivery
 };
