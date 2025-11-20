@@ -343,6 +343,191 @@ ORDER BY
     }
 }
 
+
+const updateWorkedTask = async (req, res) => {
+    try {
+        const {
+            Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
+            Process_Id, Work_Dt, Work_Done, Start_Time, End_Time, Work_Status,
+            Det_string, Additional_Project, Additional_Task, Entry_By
+        } = req.body;
+
+        console.log('Updating work data:', {
+            Mode, Work_Id, Project_Id, Sch_Id, Task_Levl_Id, Task_Id, AN_No, Emp_Id,
+            Process_Id, Work_Dt, Work_Done, Start_Time, End_Time, Work_Status,
+            Additional_Project, Additional_Task, Det_string
+        });
+
+
+        if (!Work_Id) {
+            return invalidInput(res, 'Work_Id is required for update');
+        }
+
+        const requiredFields = [
+            'Project_Id', 'Sch_Id', 'Task_Levl_Id', 'Task_Id', 'Emp_Id',
+            'Work_Done', 'Start_Time', 'End_Time', 'Work_Status'
+        ];
+
+        const missingFields = requiredFields.filter(field => !req.body[field]);
+        if (missingFields.length > 0) {
+            return invalidInput(res, `Missing required fields: ${missingFields.join(', ')}`);
+        }
+
+        
+        const checkQuery = `SELECT Work_Id FROM tbl_Work_Master WHERE Work_Id = '${Work_Id}'`;
+        const existingWork = await sql.query(checkQuery);
+        
+        if (!existingWork.recordset || existingWork.recordset.length === 0) {
+            return invalidInput(res, `Work with ID ${Work_Id} not found`);
+        }
+
+       
+        const isValidTimeFormat = (timeStr) => {
+            if (!timeStr || typeof timeStr !== 'string') return false;
+            
+            const cleanTime = timeStr.trim();
+            const parts = cleanTime.split(':');
+            
+            if (parts.length !== 2) return false;
+            
+            const hours = parseInt(parts[0], 10);
+            const minutes = parseInt(parts[1], 10);
+            
+            if (isNaN(hours) || isNaN(minutes)) return false;
+            if (hours < 0 || hours > 23) return false;
+            if (minutes < 0 || minutes > 59) return false;
+            
+            return true;
+        };
+
+        if (!isValidTimeFormat(Start_Time)) {
+            return invalidInput(res, 'Start_Time must be in valid HH:MM format (00:00 to 23:59)');
+        }
+
+        if (!isValidTimeFormat(End_Time)) {
+            return invalidInput(res, 'End_Time must be in valid HH:MM format (00:00 to 23:59)');
+        }
+
+
+        const startTimeObj = new Date(`1970-01-01T${Start_Time}:00`);
+        const endTimeObj = new Date(`1970-01-01T${End_Time}:00`);
+        
+        if (endTimeObj <= startTimeObj) {
+            return invalidInput(res, 'End_Time must be after Start_Time');
+        }
+
+  
+        const formatTime = (timeStr) => {
+            const parts = timeStr.split(':');
+            const hours = parts[0].padStart(2, '0');
+            const minutes = parts[1].padStart(2, '0');
+            return `${hours}:${minutes}`;
+        };
+
+        const formattedStartTime = formatTime(Start_Time);
+        const formattedEndTime = formatTime(End_Time);
+
+
+        const formatDateForSQL = (dateStr) => {
+            if (!dateStr) return new Date();
+            
+          
+            if (dateStr.includes('T')) {
+                const datePart = dateStr.split('T')[0];
+                return new Date(datePart);
+            }
+            
+            return new Date(dateStr);
+        };
+
+        const formattedWorkDate = formatDateForSQL(Work_Dt);
+
+     
+        let formattedDetString = null;
+        if (Det_string && Array.isArray(Det_string) && Det_string.length > 0) {
+        
+            formattedDetString = `<?xml version="1.0"?>
+<DocumentElement>
+    ${Det_string.map(param => `
+    <Data>
+        <Task_Id>${param.Task_Id || Task_Id || 0}</Task_Id>
+        <Param_Id>${param.Param_Id || 0}</Param_Id>
+        <Default_Value>${param.Default_Value || ''}</Default_Value>
+        <Current_Value>${param.Current_Value || ''}</Current_Value>
+    </Data>
+    `).join('')}
+</DocumentElement>`;
+        } else if (Det_string === null || Det_string === 'null') {
+            formattedDetString = null;
+        }
+
+        console.log('Formatted Det_string:', formattedDetString);
+
+        const request = new sql.Request();
+        
+
+        console.log("bwedifrestoerw procedure")
+
+        request.input('Mode',  2) 
+        request.input('Work_Id', parseInt(Work_Id))
+        request.input('Project_Id',  parseInt(Project_Id))
+        request.input('Sch_Id',parseInt(Sch_Id))
+        request.input('Task_Levl_Id', parseInt(Task_Levl_Id))
+        request.input('Task_Id', parseInt(Task_Id))
+        request.input('AN_No', parseInt(AN_No))
+        request.input('Emp_Id',  parseInt(Emp_Id))
+        request.input('Process_Id', parseInt(Process_Id) || 0)
+        request.input('Work_Dt', formattedWorkDate)
+        request.input('Work_Done', Work_Done)
+        request.input('Start_Time',  formattedStartTime)
+        request.input('End_Time',formattedEndTime)
+        request.input('Work_Status', parseInt(Work_Status))
+        request.input('Entry_By',parseInt(Entry_By || Emp_Id))
+        request.input('Entry_Date',  '2025-10-10')
+        request.input('Det_string',  formattedDetString)
+        request.input('Additional_Project', Additional_Project || '')
+        request.input('Additional_Task', Additional_Task || '')
+
+        console.log('Calling stored procedure with parameters...');
+        
+        const result = await request.execute('Work_SP');
+        
+        console.log('Stored procedure result:', result);
+
+        if (result.recordset && result.recordset.length > 0) {
+            const updatedWorkId = result.recordset[0].Work_Id;
+            
+            console.log(`Work updated successfully - Work_Id: ${updatedWorkId}`);
+            return success(res, 'Work updated successfully', { 
+                Work_Id: updatedWorkId,
+                message: 'Work record updated successfully'
+            });
+        } else {
+            console.error('No result returned from stored procedure');
+            return failed(res, 'Failed to update work - no result returned from stored procedure');
+        }
+    } catch (error) {
+        console.error('Error updating work:', error);
+        
+        // Check if it's a SQL error from the stored procedure
+        if (error.message && error.message.includes('Invalid Start_Time format')) {
+            return invalidInput(res, 'Invalid Start Time format');
+        }
+        if (error.message && error.message.includes('Invalid End_Time format')) {
+            return invalidInput(res, 'Invalid End Time format');
+        }
+        
+        // More specific error handling
+        if (error.originalError && error.originalError.info) {
+            console.error('SQL Server Error:', error.originalError.info);
+            return failed(res, `Database error: ${error.originalError.info.message}`);
+        }
+        
+        servError(error, res);
+    }
+};
+
+
     const getAllGroupedWorkedData = async (req, res) => {
         try {
 

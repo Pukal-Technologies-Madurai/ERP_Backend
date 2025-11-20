@@ -101,4 +101,6 @@ projectRoute.get('/tasks/project/dropdown',taskActivity.getProjectDropDown)
 
 projectRoute.get('/project/schedule/ListingDetailsAbstract',projectSchedule.getScheduleProjectidActivity)
 
+projectRoute.get('/workDetailsTask',taskActivity.getWorkDetailsWithTask)
+
 export default projectRoute;

@@ -1,10 +1,10 @@
 import sql from "mssql";
-import { sentData, servError, noData,dataFound } from "../../res.mjs";
+import { sentData, servError, noData, invalidInput,success, dataFound } from "../../res.mjs";
 import { checkIsNumber, ISOString, toArray } from "../../helper_functions.mjs";
 
 const getNonConvertedSales = async (req, res) => {
     try {
-        const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType } = req.query;
+        const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType,Branch_Id } = req.query;
         const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
@@ -15,7 +15,8 @@ const getNonConvertedSales = async (req, res) => {
             .input('cancel', Cancel_status)
             .input('creater', Created_by)
             .input('salesPerson', Sales_Person_Id)
-            .input('VoucherType', VoucherType);
+            .input('VoucherType', VoucherType)
+            .input('Branch_Id', Branch_Id);
 
         const result = await request.query(`
           
@@ -29,7 +30,9 @@ const getNonConvertedSales = async (req, res) => {
                 ${checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @cancel ' : ''}
                 ${checkIsNumber(Created_by) ? ' AND so.Created_by = @creater ' : ''}
                 ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
-                ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''};
+                ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
+                ${checkIsNumber(Branch_Id) ? ' AND so.Branch_Id = @Branch_Id ' : ''};
+
 
             -- Step 2: Fetch orders WITHOUT deliveries
             SELECT 
@@ -330,7 +333,7 @@ const SyncPosPending = async (req, res) => {
     success(res, `Data synced successfully updated)`);
 
   } catch (err) {
-    // Only rollback if transaction was successfully begun
+
     if (transactionBegun) {
       try {
         await transaction.rollback();
@@ -342,32 +345,50 @@ const SyncPosPending = async (req, res) => {
   }
 };
 
-const ReturnDelivery=async(req,res)=>{
-    try{
-                 const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+const ReturnDelivery = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+        const Branch_Id = req.query.Branch_Id; 
 
-            const request=await new sql.Request()
-            .input('fromDate',Fromdate)
-            .input('toDate',Todate)
-            .query(`
-  SELECT  sr.*,p.Product_Name,gm.Godown_Name from tbl_Sales_Return_Stock_Info sr
-left join tbl_Product_Master p ON p.Product_Id=sr.Item_Id
-left join tbl_Godown_Master gm ON gm.Godown_Id=sr.GoDown_Id
-WHERE CAST(Ret_Date AS DATE) BETWEEN  @fromDate AND @toDate`);
+        let query = `
+           SELECT 
+    sr.*,
+    sdgi.*,
+    p.Product_Name,
+	bm.BranchName,
+    gm.Godown_Name 
+FROM tbl_Sales_Return_Stock_Info sr
+LEFT JOIN tbl_Product_Master p ON p.Product_Id = sr.Item_Id
+LEFT JOIN tbl_Godown_Master gm ON gm.Godown_Id = sr.GoDown_Id
+LEFT JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdgi.Do_Id = sr.Delivery_Order_Id
+LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = sdgi.Branch_Id
+WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
+        `;
 
+        const request = await new sql.Request()
+            .input('fromDate', Fromdate)
+            .input('toDate', Todate);
 
-            if(request.recordsets.length <=0){
-                return invalidInput(res,'Record not found')
-            }
-
-              dataFound(res,request.recordsets[0] );
-
+        
+        if (Branch_Id) {
+            query += ` AND sr.Branch_Id = @Branch_Id`; 
+            request.input('Branch_Id', Branch_Id);
         }
-    catch(error){
-servError(error,res)
+
+        const result = await request.query(query);
+
+        if (result.recordsets.length <= 0 || result.recordsets[0].length <= 0) {
+            return invalidInput(res, 'Record not found');
+        }
+
+        dataFound(res, result.recordsets[0]);
+;
+    } catch (error) {
+        servError(error, res);
     }
 }
+
 
 export default {
     getNonConvertedSales,
