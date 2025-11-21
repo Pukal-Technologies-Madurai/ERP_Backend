@@ -407,8 +407,8 @@ const getWorkDetailsWithTask=async(req,res)=>{
 				left join tbl_Task_Type tt ON tt.Task_Type_Id=wm.Task_Levl_Id
          
             WHERE 
-				wm.Project_Id = @Project_Id And wm.Task_Levl_Id=@Task_Id
-                
+				--wm.Project_Id = @Project_Id And wm.Task_Levl_Id=@Task_Id
+                	wm.Project_Id = @Project_Id And t.Task_Group_Id=@Task_Id
             ORDER BY 
                 wm.Start_Time`
 
