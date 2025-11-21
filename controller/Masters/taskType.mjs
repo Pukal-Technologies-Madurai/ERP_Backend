@@ -84,38 +84,41 @@ order by Task_Type_Id desc`)).recordset
 // };
 
 
+
 const postTaskType = async (req, res) => {
     const data = req.body.Task_Type || req.body;
-
+     
     if (!req.body) {
         return invalidInput(res, 'Task_Type object is missing');
     }
+
+
 
     const {
         Task_Type,
         Task_Type_Id,
         Project_Id,
         Day_Duration,
+        Hours_Duration,
         Est_StartDate,
         Est_EndDate,
         Status
     } = data;
 
-    // if (!Project_Id) {
-    //     return invalidInput(res, 'Project_Id is required');
-    // }
 
     try {
-        const result = await new sql.Request()
+        const request = new sql.Request()
             .input('Mode', req.body.Mode || 1)
-            .input('Task_Type_Id', Task_Type_Id || 0)
-            .input('Task_Type', Task_Type || req.body.Task_Type)
-            .input('Day_Duration',Day_Duration || req.body.Day_Duration)
-            .input('Project_Id', Project_Id || req.body.Project_Id)
-            .input('Est_StartTime', Est_StartDate ? new Date(Est_StartDate) : new Date())
-            .input('Est_EndTime', Est_EndDate ? new Date(Est_EndDate) : new Date())
-            .input('Status', Status || 1)
-            .execute('Task_Type_SP');
+            .input('Task_Type_Id', sql.Int, Task_Type_Id || 0)
+            .input('Task_Type', sql.NVarChar, Task_Type || req.body.Task_Type)
+            .input('Day_Duration', sql.Int, Day_Duration || req.body.Day_Duration || 0)
+            .input('Hours_Duration', sql.Int, Hours_Duration || req.body.Hours_Duration)
+            .input('Project_Id', sql.Int, Project_Id || req.body.Project_Id)
+            .input('Est_StartTime', sql.DateTime, Est_StartDate ? new Date(Est_StartDate) : new Date())
+            .input('Est_EndTime', sql.DateTime, Est_EndDate ? new Date(Est_EndDate) : new Date())
+            .input('Status', sql.Int, Status || 1);
+
+        const result = await request.execute('Task_Type_SP');
 
         if (result.rowsAffected[0] > 0) {
             success(res, 'Task type added successfully', { Task_Type_Id: result.recordset[0] });
@@ -123,15 +126,15 @@ const postTaskType = async (req, res) => {
             failed(res, 'Failed to add task type');
         }
     } catch (e) {
+        console.error("Database error:", e);
         servError(e, res);
     }
 };
 
 
-
     const editTaskType = async (req, res) => {
      
-      const { Mode, Task_Type_Id, Task_Type, Project_Id, Day_Duration,Est_StartTime, Est_EndTime, Status } = req.body;
+      const { Mode, Task_Type_Id, Task_Type, Project_Id,Hours_Duration, Day_Duration,Est_StartTime, Est_EndTime, Status } = req.body;
 
     if (!Task_Type_Id) {
         return invalidInput(res, 'Task_Type_Id is required')
@@ -151,6 +154,7 @@ const postTaskType = async (req, res) => {
             .input('Task_Type_Id', Task_Type_Id)
             .input('Task_Type', Task_Type)
             .input('Project_Id', Project_Id)
+             .input('Hours_Duration', Hours_Duration)  
              .input('Day_Duration', Day_Duration)  
             .input('Est_StartTime', Est_StartTime ? new Date(Est_StartTime) : new Date())
             .input('Est_EndTime', Est_EndTime ? new Date(Est_EndTime) : new Date())
@@ -166,6 +170,7 @@ const postTaskType = async (req, res) => {
         servError(e, res)
     }
 };
+
 
 
     const deleteTaskType = async (req, res) => {
