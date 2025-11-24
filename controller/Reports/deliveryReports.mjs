@@ -1,10 +1,11 @@
 import sql from "mssql";
 import { sentData, servError, noData, invalidInput, success, dataFound } from "../../res.mjs";
-import { checkIsNumber, ISOString, toArray } from "../../helper_functions.mjs";
+import { checkIsNumber, ISOString, toArray,isEqualNumber,toNumber } from "../../helper_functions.mjs";
 
 const getNonConvertedSales = async (req, res) => {
     try {
         const { Retailer_Id, Cancel_status = 0, Created_by, Sales_Person_Id, VoucherType, Branch_Id } = req.query;
+
         const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
 
@@ -33,8 +34,7 @@ const getNonConvertedSales = async (req, res) => {
                 ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
                 ${checkIsNumber(Branch_Id) ? ' AND so.Branch_Id = @Branch_Id ' : ''};
 
-
-            -- Step 2: Fetch orders WITHOUT deliveries
+            
             SELECT 
                 so.*, 
                 COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
@@ -48,23 +48,160 @@ const getNonConvertedSales = async (req, res) => {
             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
             LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
             LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
-            WHERE 
-                so.So_Id IN (SELECT So_Id FROM @FilteredOrders)
-                AND NOT EXISTS (
-                    SELECT 1 
-                    FROM tbl_Sales_Delivery_Gen_Info AS sdgi 
-                    WHERE sdgi.So_No = so.So_Id
-                )
-            ORDER BY so.So_Date asc
-        `);
+            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
 
-        const [OrderData] = result.recordsets.map(toArray);
-        OrderData.length > 0 ? sentData(res, OrderData) : noData(res);
+            
+            SELECT 
+                si.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Order_Stock_Info AS si
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+           
+            SELECT 
+                sosi.So_Id, 
+                sosi.Involved_Emp_Id,
+                sosi.Cost_Center_Type_Id,
+                c.Cost_Center_Name AS EmpName,
+                cc.Cost_Category AS EmpType
+            FROM tbl_Sales_Order_Staff_Info AS sosi
+            LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+            WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            
+            SELECT 
+                dgi.*,
+                rm.Retailer_Name AS Retailer_Name,
+                bm.BranchName AS Branch_Name,
+                st.Status AS DeliveryStatusName,
+                COALESCE((
+                    SELECT SUM(collected_amount)
+                    FROM tbl_Sales_Receipt_Details_Info
+                    WHERE bill_id = dgi.Do_Id
+                ), 0) AS receiptsTotalAmount
+            FROM tbl_Sales_Delivery_Gen_Info AS dgi
+            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+            LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+            LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+            WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+
+           
+            SELECT 
+                oi.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Delivery_Stock_Info AS oi
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE oi.Delivery_Order_Id IN (
+                SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+            );`
+        );
+
+        const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
+
+        if (OrderData.length > 0) {
+            const pendingOrders = OrderData.filter(order => {
+                const orderProducts = ProductDetails.filter(p =>
+                    isEqualNumber(p.Sales_Order_Id, order.So_Id)
+                );
+                const deliveryList = DeliveryData.filter(d =>
+                    isEqualNumber(d.So_No, order.So_Id)
+                );
+
+                const totalOrderedQty = orderProducts.reduce(
+                    (sum, p) => sum + toNumber(p.Bill_Qty),
+                    0
+                );
+                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                    const deliveredItems = DeliveryItems.filter(p =>
+                        isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+                    );
+                    return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
+                }, 0);
+
+                return totalDeliveredQty < totalOrderedQty;
+            });
+
+            if (pendingOrders.length > 0) {
+                const resData = pendingOrders.map(order => {
+                    const orderProducts = ProductDetails.filter(p =>
+                        isEqualNumber(p.Sales_Order_Id, order.So_Id)
+                    );
+                    const deliveryList = DeliveryData.filter(d =>
+                        isEqualNumber(d.So_No, order.So_Id)
+                    );
+
+                    const totalOrderedQty = orderProducts.reduce(
+                        (sum, p) => sum + toNumber(p.Bill_Qty),
+                        0
+                    );
+                    const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                        const deliveredItems = DeliveryItems.filter(p =>
+                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+                        );
+                        return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
+                    }, 0);
+
+                    const pendingQty = totalOrderedQty - totalDeliveredQty;
+                    const deliveryPercentage = totalOrderedQty > 0 ? (totalDeliveredQty / totalOrderedQty) * 100 : 0;
+
+                    const mappedDeliveries = deliveryList.map(d => {
+                        const invoiceProducts = DeliveryItems.filter(p =>
+                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+                        ).map(prod => ({
+                            ...prod
+                         
+                        }));
+
+                        return {
+                            ...d,
+                            InvoicedProducts: invoiceProducts,
+                        };
+                    });
+
+                    return {
+                        ...order,
+                        OrderStatus: "pending",
+                        TotalOrderedQty: totalOrderedQty,
+                        TotalDeliveredQty: totalDeliveredQty,
+                        PendingQty: pendingQty,
+                        DeliveryPercentage: Math.round(deliveryPercentage),
+                        Products_List: orderProducts.map(p => ({
+                            ...p
+                        })),
+                        Staff_Involved_List: StaffInvolved.filter(s =>
+                            isEqualNumber(s.So_Id, order.So_Id)
+                        ),
+                        ConvertedInvoice: mappedDeliveries,
+                    };
+                });
+
+                dataFound(res, resData);
+            } else {
+                noData(res, "No pending orders found");
+            }
+        } else {
+            noData(res);
+        }
 
     } catch (e) {
         servError(e, res);
     }
 };
+
 
 const closingReport = async (req, res) => {
     try {

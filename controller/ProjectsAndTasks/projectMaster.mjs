@@ -591,7 +591,7 @@ const newProjectAbstract = async (req, res) => {
             .input('comp', Company_id)
             .input('empId', EmpId || null)
             .query(` 
-                SELECT 
+                 SELECT 
                     p.Project_Id, 
                     p.Project_Name, 
                     p.Est_Start_Dt, 
@@ -653,15 +653,92 @@ const newProjectAbstract = async (req, res) => {
                         WHERE pe.Project_Id = p.Project_Id
                     ), 0) AS EmployeesInvolved,
 
-                    -- Task Types as JSON array
-                    (
-                        SELECT 
-                           tt.*
-                        FROM tbl_Task_Type tt
-                        WHERE tt.Project_Id = p.Project_Id
-                        AND tt.Status = 1
-                        FOR JSON PATH
-                    ) AS TaskTypes
+    (
+    SELECT 
+        tt.Task_Type_Id,
+        tt.Project_Id,
+        tt.Task_Type,
+        tt.Hours_Duration,
+        tt.Day_Duration,
+        tt.Est_StartTime,
+        tt.Est_EndTime,
+        tt.Status,
+
+      
+        (
+            SELECT SUM(W.Tot_Minutes)
+            FROM tbl_Work_Master W
+            JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+            WHERE T.Task_Group_Id = tt.Task_Type_Id
+              AND W.Project_Id = tt.Project_Id
+        ) AS Total_Worked_Minutes,
+
+       
+        (
+            SELECT COUNT(*)
+            FROM tbl_Work_Master W
+            JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+            WHERE T.Task_Group_Id = tt.Task_Type_Id
+              AND W.Project_Id = tt.Project_Id
+        ) AS Work_Records_Count,
+
+       
+       (
+    SELECT CONCAT(
+        FLOOR(COALESCE(SUM(W.Tot_Minutes), 0) / 60), 'H ',
+        COALESCE(SUM(W.Tot_Minutes), 0) % 60, 'M'
+    ) AS Total_Time
+    FROM tbl_Work_Master W
+    JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+    WHERE T.Task_Group_Id = tt.Task_Type_Id
+      AND W.Project_Id = tt.Project_Id
+) AS Total_Worked_Hours,
+
+     
+
+(
+    SELECT SUM(W.Tot_Minutes) % 60
+    FROM tbl_Work_Master W
+    JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+    WHERE T.Task_Group_Id = tt.Task_Type_Id
+      AND W.Project_Id = tt.Project_Id
+) AS Total_Worked_Minutes_Remainder,
+
+
+CONCAT(
+    FLOOR(
+        (
+            (tt.Hours_Duration * 60) 
+            - COALESCE((
+                SELECT SUM(W.Tot_Minutes)
+                FROM tbl_Work_Master W
+                JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                WHERE T.Task_Group_Id = tt.Task_Type_Id
+                  AND W.Project_Id = tt.Project_Id
+            ), 0)
+        ) / 60
+    ), 'H ',
+    (
+        (tt.Hours_Duration * 60) 
+        - COALESCE((
+            SELECT SUM(W.Tot_Minutes)
+            FROM tbl_Work_Master W
+            JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+            WHERE T.Task_Group_Id = tt.Task_Type_Id
+              AND W.Project_Id = tt.Project_Id
+        ), 0)
+    ) % 60, 'M'
+) AS Remaining_Time
+
+
+
+
+    FROM tbl_Task_Type tt
+    WHERE tt.Project_Id = p.Project_Id
+      AND tt.Status = 1
+    FOR JSON PATH
+) AS TaskTypes
+
 
                 FROM 
                     tbl_Project_Master AS p
@@ -680,10 +757,11 @@ const newProjectAbstract = async (req, res) => {
                     ))
             `);
 
+
         const result = await request;
 
         if (result.recordset.length > 0) {
-            // Parse the JSON task types for each project and format the response
+      
             const projectsWithTaskTypes = result.recordset.map(project => ({
                 Project_Id: project.Project_Id,
                 Project_Name: project.Project_Name,
