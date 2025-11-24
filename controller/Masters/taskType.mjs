@@ -134,7 +134,7 @@ const postTaskType = async (req, res) => {
 
     const editTaskType = async (req, res) => {
      
-      const { Mode, Task_Type_Id, Task_Type, Project_Id,Hours_Duration, Day_Duration,Est_StartTime, Est_EndTime, Status } = req.body;
+      const { Mode, Task_Type_Id, Task_Type, Project_Id,Hours_Duration, Day_Duration,Est_StartDate, Est_EndDate, Status } = req.body;
 
     if (!Task_Type_Id) {
         return invalidInput(res, 'Task_Type_Id is required')
@@ -156,8 +156,8 @@ const postTaskType = async (req, res) => {
             .input('Project_Id', Project_Id)
              .input('Hours_Duration', Hours_Duration)  
              .input('Day_Duration', Day_Duration)  
-            .input('Est_StartTime', Est_StartTime ? new Date(Est_StartTime) : new Date())
-            .input('Est_EndTime', Est_EndTime ? new Date(Est_EndTime) : new Date())
+            .input('Est_StartTime', Est_StartDate ? new Date(Est_StartDate) : new Date())
+            .input('Est_EndTime', Est_EndDate ? new Date(Est_EndDate) : new Date())
             .input('Status', Status || 1)
             .execute('Task_Type_SP')
 
