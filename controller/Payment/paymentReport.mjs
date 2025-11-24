@@ -370,7 +370,7 @@ const PaymentReports = () => {
                 const dueAmount = amount - totalReference;
 
                 const paymentDays = toNumber(row.paymentDays);
-                const billDate = new Date(row.billDate);
+                const entryDate = new Date(row.entryDate);
 
                 let dueDate = null;
                 let daysRemaining = '';
@@ -378,7 +378,7 @@ const PaymentReports = () => {
                 const itemData = itemDetails.filter(item => isEqualNumber(item?.id, row?.id))
 
                 if (paymentDays > 0) {
-                    dueDate = new Date(billDate);
+                    dueDate = new Date(entryDate);
                     dueDate.setDate(dueDate.getDate() + paymentDays);
 
                     const today = new Date();
@@ -387,7 +387,7 @@ const PaymentReports = () => {
                     dueDate.setHours(0, 0, 0, 0);
 
                     const diffMs = dueDate.getTime() - today.getTime();
-                    daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                    daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24)) - 1;
                 }
 
 
