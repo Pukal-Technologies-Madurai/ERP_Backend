@@ -34,7 +34,7 @@ projectRoute.delete('/project/schedule', projectSchedule.deleteSchedule);
 projectRoute.post('/project/schedule/scheduleTask', projectSchedule.assignTaskInSchedule);
 projectRoute.put('/project/schedule/scheduleTask', projectSchedule.modifyTaskInSchedule);
 projectRoute.delete('/project/schedule/scheduleTask', projectSchedule.deleteTaskInSchedule);
-projectRoute.get('/project/schedule/projectDetailsforReport', projectSchedule.projectDetailsforReport   );
+projectRoute.get('/project/schedule/projectDetailsforReport', projectSchedule.projectDetailsforReport);
 
 
 projectRoute.get('/project/schedule/projectScheduleTaskdetails',projectSchedule.projectScheduleTaskdetails)
@@ -62,6 +62,9 @@ projectRoute.get('/tasks/dropdown', tasksMaster.getTaskDropDown);
 projectRoute.post('/tasks', tasksMaster.createTask);
 projectRoute.put('/tasks', tasksMaster.editTask);
 projectRoute.delete('/tasks', tasksMaster.deleteTask);
+
+
+
 
 projectRoute.get('/tasks/todayTasks', employeesAndTasks.todayTasks);
 projectRoute.get('/tasks/myTasks', employeesAndTasks.getMyTasks);
@@ -103,5 +106,12 @@ projectRoute.get('/tasks/project/dropdown',taskActivity.getProjectDropDown)
 projectRoute.get('/project/schedule/ListingDetailsAbstract',projectSchedule.getScheduleProjectidActivity)
 
 projectRoute.get('/workDetailsTask',taskActivity.getWorkDetailsWithTask)
+
+projectRoute.get('/task/projectScheduleAbstract',projectSchedule.projectScheduleAbstart)
+
+projectRoute.get('/taskType/dropdown',projectSchedule.taskTypebyProjectId)
+
+projectRoute.put('/task/updateTask',projectSchedule.projectScheduleUpdate)
+
 
 export default projectRoute;

@@ -493,11 +493,16 @@ const ReturnDelivery = async (req, res) => {
     sdgi.*,
     p.Product_Name,
 	bm.BranchName,
-    gm.Godown_Name 
+    gm.Godown_Name,
+    b.Brand_Id,
+	b.Brand_Name,
+   	rm.Retailer_Name
 FROM tbl_Sales_Return_Stock_Info sr
 LEFT JOIN tbl_Product_Master p ON p.Product_Id = sr.Item_Id
 LEFT JOIN tbl_Godown_Master gm ON gm.Godown_Id = sr.GoDown_Id
+LEFT JOIN tbl_Brand_Master b ON b.Brand_Id=p.Brand
 LEFT JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdgi.Do_Id = sr.Delivery_Order_Id
+LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id= sdgi.Retailer_Id
 LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = sdgi.Branch_Id
 WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
         `;
@@ -514,7 +519,7 @@ WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
         const result = await request.query(query);
 
         if (result.recordsets.length <= 0 || result.recordsets[0].length <= 0) {
-            return invalidInput(res, 'Record not found');
+            return noData(res, 'Record not found');
         }
 
         dataFound(res, result.recordsets[0]);

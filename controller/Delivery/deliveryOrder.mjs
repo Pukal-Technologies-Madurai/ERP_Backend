@@ -2747,24 +2747,24 @@ FROM TRIP_MASTER AS tm`;
             COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
             -- Broker information
             COALESCE((
-                SELECT ds.Emp_Id 
+                SELECT Top 1 ds.Emp_Id 
                 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
             ), 0) AS Broker_Id,
             COALESCE((
-                SELECT bu.Name 
+                SELECT TOP 1 bu.Name 
                 FROM DELIVERY_STAFF ds 
                 LEFT JOIN tbl_Users bu ON bu.UserId = ds.Emp_Id
                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
             ), '') AS Broker_Name,
             -- Transporter information
             COALESCE((
-                SELECT ds.Emp_Id 
+                SELECT TOP 1 ds.Emp_Id 
                 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
             ), 0) AS Transporter_Id,
             COALESCE((
-                SELECT tu.Name 
+                SELECT TOP 1 tu.Name 
                 FROM DELIVERY_STAFF ds 
                 LEFT JOIN tbl_Users tu ON tu.UserId = ds.Emp_Id
                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
@@ -3145,7 +3145,8 @@ FROM TRIP_MASTER AS tm`;
                         LEFT JOIN SALES_ORDER_COUNT_SAME_DAY soc ON soc.SO_Date = CAST(so.Do_Date AS DATE)
                         LEFT JOIN PENDING_SALES_ORDERS pso ON pso.SO_Date = CAST(so.Do_Date AS DATE)
                         LEFT JOIN PREVIOUS_DAY_SALES_ORDER_COUNT pdsoc ON 1 = 1
-                        WHERE CAST(so.Do_Date AS DATE) = @from
+                        --WHERE CAST(so.Do_Date AS DATE) = @from
+                        WHERE CAST(so.Do_Date AS DATE) BETWEEN @from AND @to
                                   `;
 
           
@@ -3203,6 +3204,9 @@ FROM TRIP_MASTER AS tm`;
             servError(e, res);
         }
     };
+
+
+
 
     const getDeliveryorderListMobile = async (req, res) => {
     const { 

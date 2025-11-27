@@ -590,173 +590,374 @@ const newProjectAbstract = async (req, res) => {
         const request = new sql.Request()
             .input('comp', Company_id)
             .input('empId', EmpId || null)
-            .query(` 
-                 SELECT 
-                    p.Project_Id, 
-                    p.Project_Name, 
-                    p.Est_Start_Dt, 
-                    p.Est_End_Dt,
-                    p.Project_Desc,
-                    p.Project_Status,
-                    p.Project_Head As Project_Head_Id,
-                    s.Status,
+//             .query(` 
+//                 SELECT 
+//     p.Project_Id, 
+//     p.Project_Name, 
+//     p.Est_Start_Dt, 
+//     p.Est_End_Dt,
+//     p.Project_Desc,
+//     p.Project_Status,
+//     p.Project_Head As Project_Head_Id,
+//     s.Status,
+    
                     
-                    COALESCE(( 
-                        SELECT COUNT(Sch_Id) 
-                        FROM tbl_Project_Schedule 
-                        WHERE Project_Id = p.Project_Id 
-                        AND Sch_Del_Flag = 0
-                    ), 0) AS SchedulesCount,
+//                     COALESCE(( 
+//                         SELECT COUNT(Sch_Id) 
+//                         FROM tbl_Project_Schedule 
+//                         WHERE Project_Id = p.Project_Id 
+//                         AND Sch_Del_Flag = 0
+//                     ), 0) AS SchedulesCount,
 
-                    COALESCE(( 
-                        SELECT COUNT(Sch_Id) 
-                        FROM tbl_Project_Schedule 
-                        WHERE Project_Id = p.Project_Id 
-                        AND Sch_Del_Flag = 0
-                        AND Sch_Status = 3
-                    ), 0) AS SchedulesCompletedCount,
-
-                    COALESCE(( 
-                        SELECT COUNT(t.Task_Id) 
-                        FROM tbl_Project_Schedule AS s
-                        JOIN tbl_Project_Sch_Task_DT AS t 
-                        ON s.Sch_Id = t.Sch_Id
-                        WHERE s.Project_Id = p.Project_Id
-                        AND t.Sch_Project_Id = p.Project_Id
-                        AND s.Sch_Del_Flag = 0
-                        AND t.Task_Sch_Del_Flag = 0
-                    ), 0) AS TodayTaskcounts,
+//                     COALESCE(( 
+//                         SELECT COUNT(Sch_Id) 
+//                         FROM tbl_Project_Schedule 
+//                         WHERE Project_Id = p.Project_Id 
+//                         AND Sch_Del_Flag = 0
+//                         AND Sch_Status = 3
+//                     ), 0) AS SchedulesCompletedCount,
+//                     COALESCE(( 
+//                         SELECT COUNT(t.Task_Id) 
+//                         FROM tbl_Project_Schedule AS s
+//                         JOIN tbl_Project_Sch_Task_DT AS t 
+//                         ON s.Sch_Id = t.Sch_Id
+//                         WHERE s.Project_Id = p.Project_Id
+//                         AND t.Sch_Project_Id = p.Project_Id
+//                         AND s.Sch_Del_Flag = 0
+//                         AND t.Task_Sch_Del_Flag = 0
+//                     ), 0) AS TodayTaskcounts,
                     
-                    COALESCE(( 
-                        SELECT COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
-                        FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
-                        WHERE t.Project_Id = p.Project_Id
-                    ), 0) AS TasksScheduled,
+//                     COALESCE(( 
+//                         SELECT COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
+//                         FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+//                         WHERE t.Project_Id = p.Project_Id
+//                     ), 0) AS TasksScheduled,
                     
-                    COALESCE(
-                        (
-                            SELECT COUNT(DISTINCT t.Task_Id) 
-                            FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
-                            WHERE t.Project_Id = p.Project_Id
-                        ), 0
-                    ) AS CompletedTasks,
+//                     COALESCE(
+//                         (
+//                             SELECT COUNT(DISTINCT t.Task_Id) 
+//                             FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+//                             WHERE t.Project_Id = p.Project_Id
+//                         ), 0
+//                     ) AS CompletedTasks,
 
-                    COALESCE(( 
-                        SELECT COUNT(DISTINCT Task_Levl_Id)
-                        FROM tbl_Task_Details
-                        WHERE Project_Id = p.Project_Id
-                    ), 0) AS TasksAssignedToEmployee,
+//                     COALESCE(( 
+//                         SELECT COUNT(DISTINCT Task_Levl_Id)
+//                         FROM tbl_Task_Details
+//                         WHERE Project_Id = p.Project_Id
+//                     ), 0) AS TasksAssignedToEmployee,
 
-                    COALESCE(( 
-                        SELECT COUNT(*)
-                        FROM tbl_Project_Employee pe
-                        WHERE pe.Project_Id = p.Project_Id
-                    ), 0) AS EmployeesInvolved,
+//                     COALESCE(( 
+//                         SELECT COUNT(*)
+//                         FROM tbl_Project_Employee pe
+//                         WHERE pe.Project_Id = p.Project_Id
+//                     ), 0) AS EmployeesInvolved,
+//                      (
+//         SELECT COUNT(*)
+//         FROM tbl_Task_Type tt
+//         WHERE tt.Project_Id = p.Project_Id
+//           AND tt.Status = 1
+//     ) AS TaskGroupCount,
 
-    (
-    SELECT 
-        tt.Task_Type_Id,
-        tt.Project_Id,
-        tt.Task_Type,
-        tt.Hours_Duration,
-        tt.Day_Duration,
-        tt.Est_StartTime,
-        tt.Est_EndTime,
-        tt.Status,
+//     (
+//     SELECT 
+//         tt.Task_Type_Id,
+//         tt.Project_Id,
+//         tt.Task_Type,
+//         tt.Hours_Duration,
+//         tt.Day_Duration,
+//         tt.Est_StartTime,
+//         tt.Est_EndTime,
+//         tt.Status,
 
       
-        (
-            SELECT SUM(W.Tot_Minutes)
-            FROM tbl_Work_Master W
-            JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-            WHERE T.Task_Group_Id = tt.Task_Type_Id
-              AND W.Project_Id = tt.Project_Id
-        ) AS Total_Worked_Minutes,
+//         (
+//             SELECT SUM(W.Tot_Minutes)
+//             FROM tbl_Work_Master W
+//             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+//             WHERE T.Task_Group_Id = tt.Task_Type_Id
+//               AND W.Project_Id = tt.Project_Id
+//         ) AS Total_Worked_Minutes,
 
        
-        (
-            SELECT COUNT(*)
-            FROM tbl_Work_Master W
-            JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-            WHERE T.Task_Group_Id = tt.Task_Type_Id
-              AND W.Project_Id = tt.Project_Id
-        ) AS Work_Records_Count,
+//         (
+//             SELECT COUNT(*)
+//             FROM tbl_Work_Master W
+//             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+//             WHERE T.Task_Group_Id = tt.Task_Type_Id
+//               AND W.Project_Id = tt.Project_Id
+//         ) AS Work_Records_Count,
 
        
-       (
-    SELECT CONCAT(
-        FLOOR(COALESCE(SUM(W.Tot_Minutes), 0) / 60), 'H ',
-        COALESCE(SUM(W.Tot_Minutes), 0) % 60, 'M'
-    ) AS Total_Time
-    FROM tbl_Work_Master W
-    JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-    WHERE T.Task_Group_Id = tt.Task_Type_Id
-      AND W.Project_Id = tt.Project_Id
-) AS Total_Worked_Hours,
+//        (
+//     SELECT CONCAT(
+//         FLOOR(COALESCE(SUM(W.Tot_Minutes), 0) / 60), 'H ',
+//         COALESCE(SUM(W.Tot_Minutes), 0) % 60, 'M'
+//     ) AS Total_Time
+//     FROM tbl_Work_Master W
+//     JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+//     WHERE T.Task_Group_Id = tt.Task_Type_Id
+//       AND W.Project_Id = tt.Project_Id
+// ) AS Total_Worked_Hours,
 
      
 
-(
-    SELECT SUM(W.Tot_Minutes) % 60
-    FROM tbl_Work_Master W
-    JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-    WHERE T.Task_Group_Id = tt.Task_Type_Id
-      AND W.Project_Id = tt.Project_Id
-) AS Total_Worked_Minutes_Remainder,
+// (
+//     SELECT SUM(W.Tot_Minutes) % 60
+//     FROM tbl_Work_Master W
+//     JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+//     WHERE T.Task_Group_Id = tt.Task_Type_Id
+//       AND W.Project_Id = tt.Project_Id
+// ) AS Total_Worked_Minutes_Remainder,
 
 
-CONCAT(
-    FLOOR(
+// CONCAT(
+//     FLOOR(
+//         (
+//             (tt.Hours_Duration * 60) 
+//             - COALESCE((
+//                 SELECT SUM(W.Tot_Minutes)
+//                 FROM tbl_Work_Master W
+//                 JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+//                 WHERE T.Task_Group_Id = tt.Task_Type_Id
+//                   AND W.Project_Id = tt.Project_Id
+//             ), 0)
+//         ) / 60
+//     ), 'H ',
+//     (
+//         (tt.Hours_Duration * 60) 
+//         - COALESCE((
+//             SELECT SUM(W.Tot_Minutes)
+//             FROM tbl_Work_Master W
+//             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+//             WHERE T.Task_Group_Id = tt.Task_Type_Id
+//               AND W.Project_Id = tt.Project_Id
+//         ), 0)
+//     ) % 60, 'M'
+// ) AS Remaining_Time
+
+//  FROM tbl_Task_Type tt
+//     WHERE tt.Project_Id = p.Project_Id
+//       AND tt.Status = 1
+//     FOR JSON PATH
+// ) AS TaskTypes
+
+
+//                 FROM 
+//                     tbl_Project_Master AS p
+//                 LEFT JOIN 
+//                     tbl_Users AS u ON p.Project_Head = u.UserId 
+//                 LEFT JOIN 
+//                     tbl_Status AS s ON p.Project_Status = s.Status_Id  
+//                 WHERE 
+//                     p.Project_Status NOT IN (3, 4) 
+//                     AND p.IsActive != 0
+//                     AND p.Company_id = @comp
+//                     AND (@empId IS NULL OR p.Project_Id IN (
+//                         SELECT pe.Project_Id 
+//                         FROM tbl_Project_Employee pe 
+//                         WHERE pe.User_Id = @empId
+//                     ))
+//             `);
+
+                 .query(`SELECT 
+    p.Project_Id, 
+    p.Project_Name, 
+    p.Est_Start_Dt, 
+    p.Est_End_Dt,
+    p.Project_Desc,
+    p.Project_Status,
+    p.Project_Head As Project_Head_Id,
+    s.Status,
+    
+    COALESCE(( 
+        SELECT COUNT(Sch_Id) 
+        FROM tbl_Project_Schedule 
+        WHERE Project_Id = p.Project_Id 
+        AND Sch_Del_Flag = 0
+    ), 0) AS SchedulesCount,
+
+    COALESCE(( 
+        SELECT COUNT(Sch_Id) 
+        FROM tbl_Project_Schedule 
+        WHERE Project_Id = p.Project_Id 
+        AND Sch_Del_Flag = 0
+        AND Sch_Status = 3
+    ), 0) AS SchedulesCompletedCount,
+    
+    COALESCE(( 
+        SELECT COUNT(t.Task_Id) 
+        FROM tbl_Project_Schedule AS s
+        JOIN tbl_Project_Sch_Task_DT AS t 
+        ON s.Sch_Id = t.Sch_Id
+        WHERE s.Project_Id = p.Project_Id
+        AND t.Sch_Project_Id = p.Project_Id
+        AND s.Sch_Del_Flag = 0
+        AND t.Task_Sch_Del_Flag = 0
+    ), 0) AS TodayTaskcounts,
+    
+    COALESCE(( 
+        SELECT COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
+        FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+        WHERE t.Project_Id = p.Project_Id
+    ), 0) AS TasksScheduled,
+    
+    COALESCE(
         (
-            (tt.Hours_Duration * 60) 
-            - COALESCE((
+            SELECT COUNT(DISTINCT t.Task_Id) 
+            FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+            WHERE t.Project_Id = p.Project_Id
+        ), 0
+    ) AS CompletedTasks,
+
+    COALESCE(( 
+        SELECT COUNT(DISTINCT Task_Levl_Id)
+        FROM tbl_Task_Details
+        WHERE Project_Id = p.Project_Id
+    ), 0) AS TasksAssignedToEmployee,
+
+    COALESCE(( 
+        SELECT COUNT(*)
+        FROM tbl_Project_Employee pe
+        WHERE pe.Project_Id = p.Project_Id
+    ), 0) AS EmployeesInvolved,
+    
+    (
+        SELECT COUNT(*)
+        FROM tbl_Task_Type tt
+        WHERE tt.Project_Id = p.Project_Id
+          AND tt.Status = 1
+    ) AS TaskGroupCount,
+
+    (
+        SELECT 
+            tt.Task_Type_Id,
+            tt.Project_Id,
+            tt.Task_Type,
+            tt.Hours_Duration,
+            tt.Day_Duration,
+            tt.Est_StartTime,
+            tt.Est_EndTime,
+            tt.Status,
+
+            -- Task Count Metrics
+            (
+                SELECT 
+    COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id)) AS TotalTasks,
+    COALESCE(
+        (SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
+         FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
+         JOIN tbl_Project_Sch_Task_DT pt2 ON wm.Task_Id = pt2.Task_Id 
+                                         AND wm.Task_Levl_Id = pt2.Task_Levl_Id
+                                         AND wm.Project_Id = pt2.Sch_Project_Id
+         WHERE pt2.Type_Task_Id = tt.Task_Type_Id
+         AND pt2.Sch_Project_Id = tt.Project_Id),
+        0
+    ) AS CompletedTasks,
+    CASE 
+        WHEN COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id)) > 0 
+        THEN ROUND(
+            (COALESCE(
+                (SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
+                 FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
+                 JOIN tbl_Project_Sch_Task_DT pt2 ON wm.Task_Id = pt2.Task_Id 
+                                                 AND wm.Task_Levl_Id = pt2.Task_Levl_Id
+                                                 AND wm.Project_Id = pt2.Sch_Project_Id
+                 WHERE pt2.Type_Task_Id = tt.Task_Type_Id
+                 AND pt2.Sch_Project_Id = tt.Project_Id),
+                0
+            ) * 100.0 / COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id))), 2
+        )
+        ELSE 0 
+    END AS CompletionPercentage
+FROM tbl_Project_Sch_Task_DT pt
+WHERE pt.Type_Task_Id = tt.Task_Type_Id
+AND pt.Sch_Project_Id = tt.Project_Id
+                FOR JSON PATH
+            ) AS TaskCountDetails,
+
+            -- Work Time Metrics
+            (
                 SELECT SUM(W.Tot_Minutes)
                 FROM tbl_Work_Master W
                 JOIN tbl_Task T ON W.Task_Id = T.Task_Id
                 WHERE T.Task_Group_Id = tt.Task_Type_Id
                   AND W.Project_Id = tt.Project_Id
-            ), 0)
-        ) / 60
-    ), 'H ',
-    (
-        (tt.Hours_Duration * 60) 
-        - COALESCE((
-            SELECT SUM(W.Tot_Minutes)
-            FROM tbl_Work_Master W
-            JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-            WHERE T.Task_Group_Id = tt.Task_Type_Id
-              AND W.Project_Id = tt.Project_Id
-        ), 0)
-    ) % 60, 'M'
-) AS Remaining_Time
+            ) AS Total_Worked_Minutes,
 
+            (
+                SELECT COUNT(*)
+                FROM tbl_Work_Master W
+                JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                WHERE T.Task_Group_Id = tt.Task_Type_Id
+                  AND W.Project_Id = tt.Project_Id
+            ) AS Work_Records_Count,
 
+            (
+                SELECT CONCAT(
+                    FLOOR(COALESCE(SUM(W.Tot_Minutes), 0) / 60), 'H ',
+                    COALESCE(SUM(W.Tot_Minutes), 0) % 60, 'M'
+                ) AS Total_Time
+                FROM tbl_Work_Master W
+                JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                WHERE T.Task_Group_Id = tt.Task_Type_Id
+                  AND W.Project_Id = tt.Project_Id
+            ) AS Total_Worked_Hours,
 
+            (
+                SELECT SUM(W.Tot_Minutes) % 60
+                FROM tbl_Work_Master W
+                JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                WHERE T.Task_Group_Id = tt.Task_Type_Id
+                  AND W.Project_Id = tt.Project_Id
+            ) AS Total_Worked_Minutes_Remainder,
 
-    FROM tbl_Task_Type tt
-    WHERE tt.Project_Id = p.Project_Id
-      AND tt.Status = 1
-    FOR JSON PATH
-) AS TaskTypes
+            CONCAT(
+                FLOOR(
+                    (
+                        (tt.Hours_Duration * 60) 
+                        - COALESCE((
+                            SELECT SUM(W.Tot_Minutes)
+                            FROM tbl_Work_Master W
+                            JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                            WHERE T.Task_Group_Id = tt.Task_Type_Id
+                              AND W.Project_Id = tt.Project_Id
+                        ), 0)
+                    ) / 60
+                ), 'H ',
+                (
+                    (tt.Hours_Duration * 60) 
+                    - COALESCE((
+                        SELECT SUM(W.Tot_Minutes)
+                        FROM tbl_Work_Master W
+                        JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                        WHERE T.Task_Group_Id = tt.Task_Type_Id
+                          AND W.Project_Id = tt.Project_Id
+                    ), 0)
+                ) % 60, 'M'
+            ) AS Remaining_Time
 
+        FROM tbl_Task_Type tt
+        WHERE tt.Project_Id = p.Project_Id
+          AND tt.Status = 1
+        FOR JSON PATH
+    ) AS TaskTypes
 
-                FROM 
-                    tbl_Project_Master AS p
-                LEFT JOIN 
-                    tbl_Users AS u ON p.Project_Head = u.UserId 
-                LEFT JOIN 
-                    tbl_Status AS s ON p.Project_Status = s.Status_Id  
-                WHERE 
-                    p.Project_Status NOT IN (3, 4) 
-                    AND p.IsActive != 0
-                    AND p.Company_id = @comp
-                    AND (@empId IS NULL OR p.Project_Id IN (
-                        SELECT pe.Project_Id 
-                        FROM tbl_Project_Employee pe 
-                        WHERE pe.User_Id = @empId
-                    ))
-            `);
-
+FROM 
+    tbl_Project_Master AS p
+LEFT JOIN 
+    tbl_Users AS u ON p.Project_Head = u.UserId 
+LEFT JOIN 
+    tbl_Status AS s ON p.Project_Status = s.Status_Id  
+WHERE 
+    p.Project_Status NOT IN (3, 4) 
+    AND p.IsActive != 0
+    AND p.Company_id = @comp
+    AND (@empId IS NULL OR p.Project_Id IN (
+        SELECT pe.Project_Id 
+        FROM tbl_Project_Employee pe 
+        WHERE pe.User_Id = @empId
+    ))`)
 
         const result = await request;
 
@@ -771,7 +972,11 @@ CONCAT(
                 Project_Status: project.Project_Status,
                 Project_Head_Id: project.Project_Head_Id,
                 Status: project.Status,
+                TaskGroupCount:project.TaskGroupCount,
                 SchedulesCount: project.SchedulesCount,
+                // TaskCountDetails:TaskCountDetails.map((data)=>{
+                //     JSON.parse(data)
+                // }) ,
                 SchedulesCompletedCount: project.SchedulesCompletedCount,
                 TodayTaskcounts: project.TodayTaskcounts,
                 TasksScheduled: project.TasksScheduled,
