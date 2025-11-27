@@ -193,9 +193,6 @@ const ProjectScheduler = () => {
                 s.Sch_Est_Start_Date`;
 
 
-
-
-
             const request = new sql.Request();
             request.input('proid', Project_Id);
 
@@ -779,7 +776,7 @@ const ProjectScheduler = () => {
                         ) AS CompletedTasks
                     FROM tbl_Project_Sch_Task_DT pt
                     LEFT JOIN tbl_Work_Master wm ON wm.Task_Id = pt.Task_Id 
-                                                     AND wm.Task_Levl_Id = pt.Task_Levl_Id
+                                                  
                     WHERE pt.Sch_Project_Id = p.Project_Id
                     AND pt.Sch_Type_Id = tt.Sch_Type_Id
                     AND pt.Sch_Type_Id NOT IN (4, 5, 6, 0)
@@ -1651,8 +1648,192 @@ ORDER BY ps.Sch_Id
     };
 
 
-   
 
+   const taskTypebyProjectId=async(req,res)=>{
+      
+          const { Project_Id } = req.query;
+    
+        if (!checkIsNumber(Project_Id)) {
+            return invalidInput(res, 'Project_Id is required');
+        }
+
+    
+        try{
+
+            const query=`select * from tbl_Task_Type where Project_Id=@proid`;
+
+           
+            const request = new sql.Request();
+            request.input('proid', sql.BigInt, Project_Id);
+        
+            const result = await request.query(query);
+    
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset);
+            } else {
+                noData(res);
+            }
+        }
+        catch(error){
+            servError(error,res)
+        }
+
+    }
+
+
+   const projectScheduleAbstart=async(req,res)=>{
+  
+
+        const getProjectScheduleQuery = `SELECT 
+    pm.*,
+    (
+        SELECT 
+            pst.*,
+            ta.Task_Name,
+            tt.Task_Type,
+            pm.Project_Name
+        FROM tbl_Project_Sch_Task_DT pst
+        LEFT JOIN tbl_Task ta 
+            ON ta.Task_Id = pst.Task_Id
+        LEFT JOIN tbl_Task_Type tt 
+            ON tt.Task_Type_Id = pst.Type_Task_Id
+            
+        WHERE pst.Sch_Project_Id = pm.Project_Id
+        FOR JSON PATH
+    ) AS Tasks
+FROM tbl_Project_Master pm
+
+
+
+
+`    
+    
+    
+        try {
+            const request = new sql.Request();
+
+            const result = await request.query(getProjectScheduleQuery);
+              
+
+         
+            if (result.recordset.length > 0) {
+            const parsed = result.recordset.map(o => {
+    let Tasks = [];
+
+    if (o.Tasks) {
+        Tasks = typeof o.Tasks === "string" ? JSON.parse(o.Tasks) : [];
+    }
+
+    return {
+        ...o,
+        Tasks: Tasks
+    };
+});
+
+                
+                dataFound(res,parsed)
+            } else {
+                noData(res);
+            }
+        } catch (error) {
+            servError(error, res);
+        }
+    }
+
+const projectScheduleUpdate = async (req, res) => {
+    const { sch_Project_Id, Task_Levl_Id, Sch_Id,Type_Task_Id } = req.body;
+
+    if (!checkIsNumber(sch_Project_Id)) {
+        return invalidInput(res, 'sch_Project_Id is required and must be a number');
+    }
+    if (!checkIsNumber(Task_Levl_Id)) {
+        return invalidInput(res, 'Task_Levl_Id is required and must be a number');
+    }
+    if (!checkIsNumber(Sch_Id)) {
+        return invalidInput(res, 'sch_Id is required and must be a number');
+    }
+
+    try {
+        // First, get the Sch_Id from tbl_Project_Schedule
+        const getQuery = `SELECT Sch_Id FROM tbl_Project_Schedule WHERE Project_Id = @sch_Project_Id`;
+
+        const requestGet = new sql.Request();
+        requestGet.input('sch_Project_Id', sql.BigInt, sch_Project_Id);
+             
+        const resultget = await requestGet.query(getQuery);
+
+        // Check if Sch_Id was found
+        if (resultget.recordset.length === 0) {
+            return noData(res, 'No schedule found for the given project ID');
+        }
+
+        const Sch_IdNew = resultget.recordset[0].Sch_Id;
+
+        // Update 1: Update project schedule task
+        const query1 = `
+            UPDATE tbl_Project_Sch_Task_DT
+            SET Sch_Project_Id = @Sch_Project_Id, Sch_Id = @Sch_Id, Type_Task_Id = @Type_Task_Id
+            WHERE Task_Levl_Id = @Task_Levl_Id
+        `;
+
+        const request1 = new sql.Request();
+        request1.input('Sch_Project_Id', sql.BigInt, sch_Project_Id);
+        request1.input('Task_Levl_Id', sql.BigInt, Task_Levl_Id);
+        request1.input('Type_Task_Id', sql.BigInt, Type_Task_Id);
+        request1.input('Sch_Id', sql.BigInt, Sch_IdNew);
+
+        const result1 = await request1.query(query1);
+
+        // Update 2: Update task details
+        const query2 = `
+            UPDATE [tbl_Task_Details]
+            SET Project_Id = @Project_Id, Sch_Id = @Sch_Id 
+            WHERE Task_Levl_Id = @Task_Levl_Id
+        `;
+
+        const request2 = new sql.Request();
+        request2.input('Project_Id', sql.BigInt, sch_Project_Id);
+        request2.input('Sch_Id', sql.BigInt, Sch_IdNew);
+        request2.input('Task_Levl_Id', sql.BigInt, Task_Levl_Id);
+
+        const result2 = await request2.query(query2);
+
+        // Update 3: Update work master
+        const query3 = `
+            UPDATE [tbl_Work_Master] 
+            SET Project_Id = @Project_Id, Sch_Id = @Sch_Id
+            WHERE AN_No IN (
+                SELECT AN_No FROM [tbl_Task_Details] WHERE Task_Levl_Id = @Task_Levl_Id
+            )
+        `;
+
+        const request3 = new sql.Request();
+        request3.input('Project_Id', sql.BigInt, sch_Project_Id);
+        request3.input('Sch_Id', sql.BigInt, Sch_IdNew);
+        request3.input('Task_Levl_Id', sql.BigInt, Task_Levl_Id);
+
+        const result3 = await request3.query(query3);
+
+        // Check if any updates were made
+        if (result1.rowsAffected[0] > 0 || result2.rowsAffected[0] > 0 || result3.rowsAffected[0] > 0) {
+            dataFound(res, {
+                message: 'Project schedule updated successfully',
+                projectId: sch_Project_Id,
+                schId: Sch_IdNew, // Use the retrieved Sch_IdNew instead of input sch_Id
+                taskLevelId: Task_Levl_Id,
+                updates: {
+                    projectSchedule: result1.rowsAffected[0],
+                    taskDetails: result2.rowsAffected[0],
+                    workMaster: result3.rowsAffected[0]
+                }
+            });
+        } else {
+            noData(res);
+        }
+    } catch (error) {
+        servError(error, res);
+    }
+};
 
     return {
         getSchedule,
@@ -1669,7 +1850,10 @@ ORDER BY ps.Sch_Id
         projectScheduleTaskupdate,
         newgetScheduleType,
         projectDetailsforReport,
-        getScheduleProjectidActivity
+        getScheduleProjectidActivity,
+        projectScheduleAbstart,
+        taskTypebyProjectId,
+        projectScheduleUpdate
     }
 }
 

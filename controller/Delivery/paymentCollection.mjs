@@ -1,3 +1,4 @@
+
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from "../../res.mjs";
 import { Addition, checkIsNumber, createPadString, filterableText, ISOString, Subraction, toNumber, stringCompare, toArray } from '../../helper_functions.mjs';
 import sql from 'mssql';
@@ -207,7 +208,7 @@ const Payments = () => {
             const isError = Object.entries(validation).some(([key, value]) => value === true)
 
             if (isError) {
-                console.log('Validation failed:', validation); // Helpful for debugging
+               
                 return invalidInput(res, 'Invalid or missing data provided.', validation);
             }
 
@@ -369,7 +370,7 @@ const Payments = () => {
             const isError = Object.entries(validation).some(([key, value]) => value === true)
 
             if (isError) {
-                console.log('Validation failed:', validation); // Helpful for debugging
+            
                 return invalidInput(res, 'Invalid or missing data provided.', validation);
             }
 
