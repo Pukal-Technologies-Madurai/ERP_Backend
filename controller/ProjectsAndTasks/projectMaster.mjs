@@ -78,23 +78,23 @@ const projectController = () => {
 
 
 
-    
+
     const postProject = async (req, res) => {
         const { Project_Name, Project_Desc, Project_Head, Est_Start_Dt, Est_End_Dt, Project_Status, Entry_By, Company_id } = req.body;
 
-    
+
         if (!Project_Name || !checkIsNumber(Company_id)) {
             return invalidInput(res, 'Project_Name and Company_id are required');
         }
-    
+
         const transaction = new sql.Transaction();
         try {
             await transaction.begin();
             const maxProjectIdRequest = await new sql.Request(transaction)
-            .query(`SELECT ISNULL(MAX(Project_Id), 0) + 1 AS NewProjectId FROM tbl_Project_Master`);
+                .query(`SELECT ISNULL(MAX(Project_Id), 0) + 1 AS NewProjectId FROM tbl_Project_Master`);
 
 
-        const NewProjectId = maxProjectIdRequest.recordset[0].NewProjectId;
+            const NewProjectId = maxProjectIdRequest.recordset[0].NewProjectId;
 
             // Remove Project_Id from the insert query
             const request = await new sql.Request(transaction)
@@ -116,41 +116,41 @@ const projectController = () => {
                         @Project_Name, @Project_Desc, @Company_id, @Project_Head, @Est_Start_Dt, @Est_End_Dt, @Project_Status, @Entry_By, @Entry_Date, @Update_By, @Update_Date
                     );
                 `);
-                if (request.rowsAffected[0] === 0) {
-                    throw new Error('Failed to add project');
-                }
-        
-                // Insert into the Discussion Forum with the same Project_Id
-                const DiscussionTopicCreation = await new sql.Request(transaction)
-                    .input('Topic', sql.VarChar, Project_Name)
-                    .input('Description', sql.Text, 'The Discussion Forum for the project: ' + Project_Name)
-                    .input('Company_id', sql.Int, Company_id)
-                    .input('CreatedAt', sql.DateTime, new Date())
-                    .input('IsActive', sql.Bit, 1)
-                    .input('Project_Id', sql.Int, NewProjectId)
-                    .query(`
+            if (request.rowsAffected[0] === 0) {
+                throw new Error('Failed to add project');
+            }
+
+            // Insert into the Discussion Forum with the same Project_Id
+            const DiscussionTopicCreation = await new sql.Request(transaction)
+                .input('Topic', sql.VarChar, Project_Name)
+                .input('Description', sql.Text, 'The Discussion Forum for the project: ' + Project_Name)
+                .input('Company_id', sql.Int, Company_id)
+                .input('CreatedAt', sql.DateTime, new Date())
+                .input('IsActive', sql.Bit, 1)
+                .input('Project_Id', sql.Int, NewProjectId)
+                .query(`
                         INSERT INTO tbl_Discussion_Topics (
                             Topic, Description, Company_id, CreatedAt, IsActive, Project_Id
                         ) VALUES (
                             @Topic, @Description, @Company_id, @CreatedAt, @IsActive, @Project_Id
                         )
                     `);
-        
-                if (DiscussionTopicCreation.rowsAffected[0] === 0) {
-                    throw new Error('Failed to create Discussion Forum');
-                }
-        
-                await transaction.commit();
-                return success(res, 'Project and Discussion Forum created successfully');
-        
-            } catch (error) {
-                await transaction.rollback();
-                return servError(error, res);
-            }
-        };
 
-   
-    
+            if (DiscussionTopicCreation.rowsAffected[0] === 0) {
+                throw new Error('Failed to create Discussion Forum');
+            }
+
+            await transaction.commit();
+            return success(res, 'Project and Discussion Forum created successfully');
+
+        } catch (error) {
+            await transaction.rollback();
+            return servError(error, res);
+        }
+    };
+
+
+
     const editProject = async (req, res) => {
         const { Project_Id, Project_Name, Project_Desc, Project_Head, Est_Start_Dt, Est_End_Dt, Project_Status, Entry_By } = req.body;
 
@@ -473,294 +473,294 @@ const projectController = () => {
     };
 
 
-//     const newProjectAbstract = async (req, res) => {
-//         const { Company_id } = req.query;
+    //     const newProjectAbstract = async (req, res) => {
+    //         const { Company_id } = req.query;
 
-//         if (!checkIsNumber(Company_id)) {
-//             return invalidInput(res, 'Company_id is required');
-//         }
-
-      
-//         try {
-//             const request = new sql.Request()
-//                 .input('comp', Company_id)
-//                 .query( ` SELECT 
-//     p.Project_Id, 
-//     p.Project_Name, 
-//     p.Est_Start_Dt, 
-//     p.Est_End_Dt,
-//     p.Project_Desc,
-//     p.Project_Status,
-//     p.Project_Head  As Project_Head_Id,
-//     s.Status, -- Assuming 'Status_Name' is the column storing the status name from tbl_Status
-    
-//     COALESCE(( 
-//         SELECT COUNT(Sch_Id) 
-//         FROM tbl_Project_Schedule 
-//         WHERE Project_Id = p.Project_Id 
-//         AND Sch_Del_Flag = 0
-//     ), 0) AS SchedulesCount,
-
-//     -- Existing Count of Completed Schedules
-//     COALESCE(( 
-//         SELECT COUNT(Sch_Id) 
-//         FROM tbl_Project_Schedule 
-//         WHERE Project_Id = p.Project_Id 
-//         AND Sch_Del_Flag = 0
-//         AND Sch_Status = 3
-//     ), 0) AS SchedulesCompletedCount,
-
-//     -- Existing Count of Tasks Scheduled
-//     COALESCE(( 
-//         SELECT COUNT(t.Task_Id) 
-//         FROM tbl_Project_Schedule AS s
-//         JOIN tbl_Project_Sch_Task_DT AS t 
-//         ON s.Sch_Id = t.Sch_Id
-//         WHERE s.Project_Id = p.Project_Id
-//         AND t.Sch_Project_Id = p.Project_Id
-//         AND s.Sch_Del_Flag = 0
-//         AND t.Task_Sch_Del_Flag = 0
-//     ), 0) AS TodayTaskcounts,
-    
-//     COALESCE(( 
-//     SELECT 
-//     COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
-// FROM 
-//     dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
-//         WHERE t.Project_Id =  p.Project_Id
-//     ), 0) AS TasksScheduled,
-    
-
-// COALESCE(
-//     (
-//         SELECT COUNT(DISTINCT t.Task_Id) 
-//             FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
-//         WHERE t.Project_Id = p.Project_Id
-//     ), 0
-// ) AS CompletedTasks,
+    //         if (!checkIsNumber(Company_id)) {
+    //             return invalidInput(res, 'Company_id is required');
+    //         }
 
 
+    //         try {
+    //             const request = new sql.Request()
+    //                 .input('comp', Company_id)
+    //                 .query( ` SELECT 
+    //     p.Project_Id, 
+    //     p.Project_Name, 
+    //     p.Est_Start_Dt, 
+    //     p.Est_End_Dt,
+    //     p.Project_Desc,
+    //     p.Project_Status,
+    //     p.Project_Head  As Project_Head_Id,
+    //     s.Status, -- Assuming 'Status_Name' is the column storing the status name from tbl_Status
 
-//     -- Existing Count of Tasks Assigned to Employees
-//     COALESCE(( 
-//         SELECT COUNT(DISTINCT Task_Levl_Id)
-//         FROM tbl_Task_Details
-//         WHERE Project_Id = p.Project_Id
-//     ), 0) AS TasksAssignedToEmployee,
+    //     COALESCE(( 
+    //         SELECT COUNT(Sch_Id) 
+    //         FROM tbl_Project_Schedule 
+    //         WHERE Project_Id = p.Project_Id 
+    //         AND Sch_Del_Flag = 0
+    //     ), 0) AS SchedulesCount,
 
-//     -- Existing Count of Tasks in Progress
-    
+    //     -- Existing Count of Completed Schedules
+    //     COALESCE(( 
+    //         SELECT COUNT(Sch_Id) 
+    //         FROM tbl_Project_Schedule 
+    //         WHERE Project_Id = p.Project_Id 
+    //         AND Sch_Del_Flag = 0
+    //         AND Sch_Status = 3
+    //     ), 0) AS SchedulesCompletedCount,
 
-//       COALESCE(( 
-//         SELECT COUNT(*)
-//         FROM tbl_Project_Employee pe
-//         WHERE pe.Project_Id = p.Project_Id
-//     ), 0) AS EmployeesInvolved
-// FROM 
-//     tbl_Project_Master AS p
-// LEFT JOIN 
-//     tbl_Users AS u ON p.Project_Head = u.UserId 
-// LEFT JOIN 
-//     tbl_Status AS s ON p.Project_Status = s.Status_Id  
-// WHERE 
-//     p.Project_Status NOT IN (3, 4) AND p.IsActive !=0
-//     AND p.Company_id =@comp
-// `)
-//             // AND p.Company_id = @comp
-//             const result = await request;
+    //     -- Existing Count of Tasks Scheduled
+    //     COALESCE(( 
+    //         SELECT COUNT(t.Task_Id) 
+    //         FROM tbl_Project_Schedule AS s
+    //         JOIN tbl_Project_Sch_Task_DT AS t 
+    //         ON s.Sch_Id = t.Sch_Id
+    //         WHERE s.Project_Id = p.Project_Id
+    //         AND t.Sch_Project_Id = p.Project_Id
+    //         AND s.Sch_Del_Flag = 0
+    //         AND t.Task_Sch_Del_Flag = 0
+    //     ), 0) AS TodayTaskcounts,
 
-//             if (result.recordset.length > 0) {
-//                 dataFound(res, result.recordset)
-//             } else {
-//                 noData(res)
-//             }
-//         } catch (e) {
-//             servError(e, res)
-//         }
-//     }
-
-const newProjectAbstract = async (req, res) => {
-    const { Company_id, EmpId } = req.query;
-
-    if (!checkIsNumber(Company_id)) {
-        return invalidInput(res, 'Company_id is required');
-    }
-
-    try {
-        const request = new sql.Request()
-            .input('comp', Company_id)
-            .input('empId', EmpId || null)
-//             .query(` 
-//                 SELECT 
-//     p.Project_Id, 
-//     p.Project_Name, 
-//     p.Est_Start_Dt, 
-//     p.Est_End_Dt,
-//     p.Project_Desc,
-//     p.Project_Status,
-//     p.Project_Head As Project_Head_Id,
-//     s.Status,
-    
-                    
-//                     COALESCE(( 
-//                         SELECT COUNT(Sch_Id) 
-//                         FROM tbl_Project_Schedule 
-//                         WHERE Project_Id = p.Project_Id 
-//                         AND Sch_Del_Flag = 0
-//                     ), 0) AS SchedulesCount,
-
-//                     COALESCE(( 
-//                         SELECT COUNT(Sch_Id) 
-//                         FROM tbl_Project_Schedule 
-//                         WHERE Project_Id = p.Project_Id 
-//                         AND Sch_Del_Flag = 0
-//                         AND Sch_Status = 3
-//                     ), 0) AS SchedulesCompletedCount,
-//                     COALESCE(( 
-//                         SELECT COUNT(t.Task_Id) 
-//                         FROM tbl_Project_Schedule AS s
-//                         JOIN tbl_Project_Sch_Task_DT AS t 
-//                         ON s.Sch_Id = t.Sch_Id
-//                         WHERE s.Project_Id = p.Project_Id
-//                         AND t.Sch_Project_Id = p.Project_Id
-//                         AND s.Sch_Del_Flag = 0
-//                         AND t.Task_Sch_Del_Flag = 0
-//                     ), 0) AS TodayTaskcounts,
-                    
-//                     COALESCE(( 
-//                         SELECT COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
-//                         FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
-//                         WHERE t.Project_Id = p.Project_Id
-//                     ), 0) AS TasksScheduled,
-                    
-//                     COALESCE(
-//                         (
-//                             SELECT COUNT(DISTINCT t.Task_Id) 
-//                             FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
-//                             WHERE t.Project_Id = p.Project_Id
-//                         ), 0
-//                     ) AS CompletedTasks,
-
-//                     COALESCE(( 
-//                         SELECT COUNT(DISTINCT Task_Levl_Id)
-//                         FROM tbl_Task_Details
-//                         WHERE Project_Id = p.Project_Id
-//                     ), 0) AS TasksAssignedToEmployee,
-
-//                     COALESCE(( 
-//                         SELECT COUNT(*)
-//                         FROM tbl_Project_Employee pe
-//                         WHERE pe.Project_Id = p.Project_Id
-//                     ), 0) AS EmployeesInvolved,
-//                      (
-//         SELECT COUNT(*)
-//         FROM tbl_Task_Type tt
-//         WHERE tt.Project_Id = p.Project_Id
-//           AND tt.Status = 1
-//     ) AS TaskGroupCount,
-
-//     (
-//     SELECT 
-//         tt.Task_Type_Id,
-//         tt.Project_Id,
-//         tt.Task_Type,
-//         tt.Hours_Duration,
-//         tt.Day_Duration,
-//         tt.Est_StartTime,
-//         tt.Est_EndTime,
-//         tt.Status,
-
-      
-//         (
-//             SELECT SUM(W.Tot_Minutes)
-//             FROM tbl_Work_Master W
-//             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-//             WHERE T.Task_Group_Id = tt.Task_Type_Id
-//               AND W.Project_Id = tt.Project_Id
-//         ) AS Total_Worked_Minutes,
-
-       
-//         (
-//             SELECT COUNT(*)
-//             FROM tbl_Work_Master W
-//             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-//             WHERE T.Task_Group_Id = tt.Task_Type_Id
-//               AND W.Project_Id = tt.Project_Id
-//         ) AS Work_Records_Count,
-
-       
-//        (
-//     SELECT CONCAT(
-//         FLOOR(COALESCE(SUM(W.Tot_Minutes), 0) / 60), 'H ',
-//         COALESCE(SUM(W.Tot_Minutes), 0) % 60, 'M'
-//     ) AS Total_Time
-//     FROM tbl_Work_Master W
-//     JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-//     WHERE T.Task_Group_Id = tt.Task_Type_Id
-//       AND W.Project_Id = tt.Project_Id
-// ) AS Total_Worked_Hours,
-
-     
-
-// (
-//     SELECT SUM(W.Tot_Minutes) % 60
-//     FROM tbl_Work_Master W
-//     JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-//     WHERE T.Task_Group_Id = tt.Task_Type_Id
-//       AND W.Project_Id = tt.Project_Id
-// ) AS Total_Worked_Minutes_Remainder,
+    //     COALESCE(( 
+    //     SELECT 
+    //     COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
+    // FROM 
+    //     dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+    //         WHERE t.Project_Id =  p.Project_Id
+    //     ), 0) AS TasksScheduled,
 
 
-// CONCAT(
-//     FLOOR(
-//         (
-//             (tt.Hours_Duration * 60) 
-//             - COALESCE((
-//                 SELECT SUM(W.Tot_Minutes)
-//                 FROM tbl_Work_Master W
-//                 JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-//                 WHERE T.Task_Group_Id = tt.Task_Type_Id
-//                   AND W.Project_Id = tt.Project_Id
-//             ), 0)
-//         ) / 60
-//     ), 'H ',
-//     (
-//         (tt.Hours_Duration * 60) 
-//         - COALESCE((
-//             SELECT SUM(W.Tot_Minutes)
-//             FROM tbl_Work_Master W
-//             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-//             WHERE T.Task_Group_Id = tt.Task_Type_Id
-//               AND W.Project_Id = tt.Project_Id
-//         ), 0)
-//     ) % 60, 'M'
-// ) AS Remaining_Time
-
-//  FROM tbl_Task_Type tt
-//     WHERE tt.Project_Id = p.Project_Id
-//       AND tt.Status = 1
-//     FOR JSON PATH
-// ) AS TaskTypes
+    // COALESCE(
+    //     (
+    //         SELECT COUNT(DISTINCT t.Task_Id) 
+    //             FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+    //         WHERE t.Project_Id = p.Project_Id
+    //     ), 0
+    // ) AS CompletedTasks,
 
 
-//                 FROM 
-//                     tbl_Project_Master AS p
-//                 LEFT JOIN 
-//                     tbl_Users AS u ON p.Project_Head = u.UserId 
-//                 LEFT JOIN 
-//                     tbl_Status AS s ON p.Project_Status = s.Status_Id  
-//                 WHERE 
-//                     p.Project_Status NOT IN (3, 4) 
-//                     AND p.IsActive != 0
-//                     AND p.Company_id = @comp
-//                     AND (@empId IS NULL OR p.Project_Id IN (
-//                         SELECT pe.Project_Id 
-//                         FROM tbl_Project_Employee pe 
-//                         WHERE pe.User_Id = @empId
-//                     ))
-//             `);
 
-                 .query(`SELECT 
+    //     -- Existing Count of Tasks Assigned to Employees
+    //     COALESCE(( 
+    //         SELECT COUNT(DISTINCT Task_Levl_Id)
+    //         FROM tbl_Task_Details
+    //         WHERE Project_Id = p.Project_Id
+    //     ), 0) AS TasksAssignedToEmployee,
+
+    //     -- Existing Count of Tasks in Progress
+
+
+    //       COALESCE(( 
+    //         SELECT COUNT(*)
+    //         FROM tbl_Project_Employee pe
+    //         WHERE pe.Project_Id = p.Project_Id
+    //     ), 0) AS EmployeesInvolved
+    // FROM 
+    //     tbl_Project_Master AS p
+    // LEFT JOIN 
+    //     tbl_Users AS u ON p.Project_Head = u.UserId 
+    // LEFT JOIN 
+    //     tbl_Status AS s ON p.Project_Status = s.Status_Id  
+    // WHERE 
+    //     p.Project_Status NOT IN (3, 4) AND p.IsActive !=0
+    //     AND p.Company_id =@comp
+    // `)
+    //             // AND p.Company_id = @comp
+    //             const result = await request;
+
+    //             if (result.recordset.length > 0) {
+    //                 dataFound(res, result.recordset)
+    //             } else {
+    //                 noData(res)
+    //             }
+    //         } catch (e) {
+    //             servError(e, res)
+    //         }
+    //     }
+
+    const newProjectAbstract = async (req, res) => {
+        const { Company_id, EmpId } = req.query;
+
+        if (!checkIsNumber(Company_id)) {
+            return invalidInput(res, 'Company_id is required');
+        }
+
+        try {
+            const request = new sql.Request()
+                .input('comp', Company_id)
+                .input('empId', EmpId || null)
+                //             .query(` 
+                //                 SELECT 
+                //     p.Project_Id, 
+                //     p.Project_Name, 
+                //     p.Est_Start_Dt, 
+                //     p.Est_End_Dt,
+                //     p.Project_Desc,
+                //     p.Project_Status,
+                //     p.Project_Head As Project_Head_Id,
+                //     s.Status,
+
+
+                //                     COALESCE(( 
+                //                         SELECT COUNT(Sch_Id) 
+                //                         FROM tbl_Project_Schedule 
+                //                         WHERE Project_Id = p.Project_Id 
+                //                         AND Sch_Del_Flag = 0
+                //                     ), 0) AS SchedulesCount,
+
+                //                     COALESCE(( 
+                //                         SELECT COUNT(Sch_Id) 
+                //                         FROM tbl_Project_Schedule 
+                //                         WHERE Project_Id = p.Project_Id 
+                //                         AND Sch_Del_Flag = 0
+                //                         AND Sch_Status = 3
+                //                     ), 0) AS SchedulesCompletedCount,
+                //                     COALESCE(( 
+                //                         SELECT COUNT(t.Task_Id) 
+                //                         FROM tbl_Project_Schedule AS s
+                //                         JOIN tbl_Project_Sch_Task_DT AS t 
+                //                         ON s.Sch_Id = t.Sch_Id
+                //                         WHERE s.Project_Id = p.Project_Id
+                //                         AND t.Sch_Project_Id = p.Project_Id
+                //                         AND s.Sch_Del_Flag = 0
+                //                         AND t.Task_Sch_Del_Flag = 0
+                //                     ), 0) AS TodayTaskcounts,
+
+                //                     COALESCE(( 
+                //                         SELECT COUNT( CONCAT(t.Project_Id, t.Sch_Id, t.Task_Levl_Id, t.Task_Id)) AS TaskCount
+                //                         FROM dbo.Task_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+                //                         WHERE t.Project_Id = p.Project_Id
+                //                     ), 0) AS TasksScheduled,
+
+                //                     COALESCE(
+                //                         (
+                //                             SELECT COUNT(DISTINCT t.Task_Id) 
+                //                             FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) t
+                //                             WHERE t.Project_Id = p.Project_Id
+                //                         ), 0
+                //                     ) AS CompletedTasks,
+
+                //                     COALESCE(( 
+                //                         SELECT COUNT(DISTINCT Task_Levl_Id)
+                //                         FROM tbl_Task_Details
+                //                         WHERE Project_Id = p.Project_Id
+                //                     ), 0) AS TasksAssignedToEmployee,
+
+                //                     COALESCE(( 
+                //                         SELECT COUNT(*)
+                //                         FROM tbl_Project_Employee pe
+                //                         WHERE pe.Project_Id = p.Project_Id
+                //                     ), 0) AS EmployeesInvolved,
+                //                      (
+                //         SELECT COUNT(*)
+                //         FROM tbl_Task_Type tt
+                //         WHERE tt.Project_Id = p.Project_Id
+                //           AND tt.Status = 1
+                //     ) AS TaskGroupCount,
+
+                //     (
+                //     SELECT 
+                //         tt.Task_Type_Id,
+                //         tt.Project_Id,
+                //         tt.Task_Type,
+                //         tt.Hours_Duration,
+                //         tt.Day_Duration,
+                //         tt.Est_StartTime,
+                //         tt.Est_EndTime,
+                //         tt.Status,
+
+
+                //         (
+                //             SELECT SUM(W.Tot_Minutes)
+                //             FROM tbl_Work_Master W
+                //             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                //             WHERE T.Task_Group_Id = tt.Task_Type_Id
+                //               AND W.Project_Id = tt.Project_Id
+                //         ) AS Total_Worked_Minutes,
+
+
+                //         (
+                //             SELECT COUNT(*)
+                //             FROM tbl_Work_Master W
+                //             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                //             WHERE T.Task_Group_Id = tt.Task_Type_Id
+                //               AND W.Project_Id = tt.Project_Id
+                //         ) AS Work_Records_Count,
+
+
+                //        (
+                //     SELECT CONCAT(
+                //         FLOOR(COALESCE(SUM(W.Tot_Minutes), 0) / 60), 'H ',
+                //         COALESCE(SUM(W.Tot_Minutes), 0) % 60, 'M'
+                //     ) AS Total_Time
+                //     FROM tbl_Work_Master W
+                //     JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                //     WHERE T.Task_Group_Id = tt.Task_Type_Id
+                //       AND W.Project_Id = tt.Project_Id
+                // ) AS Total_Worked_Hours,
+
+
+
+                // (
+                //     SELECT SUM(W.Tot_Minutes) % 60
+                //     FROM tbl_Work_Master W
+                //     JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                //     WHERE T.Task_Group_Id = tt.Task_Type_Id
+                //       AND W.Project_Id = tt.Project_Id
+                // ) AS Total_Worked_Minutes_Remainder,
+
+
+                // CONCAT(
+                //     FLOOR(
+                //         (
+                //             (tt.Hours_Duration * 60) 
+                //             - COALESCE((
+                //                 SELECT SUM(W.Tot_Minutes)
+                //                 FROM tbl_Work_Master W
+                //                 JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                //                 WHERE T.Task_Group_Id = tt.Task_Type_Id
+                //                   AND W.Project_Id = tt.Project_Id
+                //             ), 0)
+                //         ) / 60
+                //     ), 'H ',
+                //     (
+                //         (tt.Hours_Duration * 60) 
+                //         - COALESCE((
+                //             SELECT SUM(W.Tot_Minutes)
+                //             FROM tbl_Work_Master W
+                //             JOIN tbl_Task T ON W.Task_Id = T.Task_Id
+                //             WHERE T.Task_Group_Id = tt.Task_Type_Id
+                //               AND W.Project_Id = tt.Project_Id
+                //         ), 0)
+                //     ) % 60, 'M'
+                // ) AS Remaining_Time
+
+                //  FROM tbl_Task_Type tt
+                //     WHERE tt.Project_Id = p.Project_Id
+                //       AND tt.Status = 1
+                //     FOR JSON PATH
+                // ) AS TaskTypes
+
+
+                //                 FROM 
+                //                     tbl_Project_Master AS p
+                //                 LEFT JOIN 
+                //                     tbl_Users AS u ON p.Project_Head = u.UserId 
+                //                 LEFT JOIN 
+                //                     tbl_Status AS s ON p.Project_Status = s.Status_Id  
+                //                 WHERE 
+                //                     p.Project_Status NOT IN (3, 4) 
+                //                     AND p.IsActive != 0
+                //                     AND p.Company_id = @comp
+                //                     AND (@empId IS NULL OR p.Project_Id IN (
+                //                         SELECT pe.Project_Id 
+                //                         FROM tbl_Project_Employee pe 
+                //                         WHERE pe.User_Id = @empId
+                //                     ))
+                //             `);
+
+                .query(`SELECT 
     p.Project_Id, 
     p.Project_Name, 
     p.Est_Start_Dt, 
@@ -828,7 +828,32 @@ const newProjectAbstract = async (req, res) => {
         WHERE tt.Project_Id = p.Project_Id
           AND tt.Status = 1
     ) AS TaskGroupCount,
-
+  (
+        SELECT COUNT(*)
+        FROM tbl_Task_Type tt
+        WHERE tt.Project_Id = p.Project_Id
+          AND tt.Status = 1
+          AND (
+              SELECT COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id))
+              FROM tbl_Project_Sch_Task_DT pt
+              WHERE pt.Type_Task_Id = tt.Task_Type_Id
+                AND pt.Sch_Project_Id = tt.Project_Id
+          ) > 0  -- Ensure there are tasks in this group
+          AND (
+              SELECT COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id))
+              FROM tbl_Project_Sch_Task_DT pt
+              WHERE pt.Type_Task_Id = tt.Task_Type_Id
+                AND pt.Sch_Project_Id = tt.Project_Id
+          ) = (
+              SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
+              FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
+              JOIN tbl_Project_Sch_Task_DT pt ON wm.Task_Id = pt.Task_Id 
+                                              AND wm.Task_Levl_Id = pt.Task_Levl_Id
+                                              AND wm.Project_Id = pt.Sch_Project_Id
+              WHERE pt.Type_Task_Id = tt.Task_Type_Id
+                AND pt.Sch_Project_Id = tt.Project_Id
+          )
+    ) AS CompletedTaskGroupCount,
     (
         SELECT 
             tt.Task_Type_Id,
@@ -840,24 +865,15 @@ const newProjectAbstract = async (req, res) => {
             tt.Est_EndTime,
             tt.Status,
 
-            -- Task Count Metrics
+           
             (
-                SELECT 
-    COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id)) AS TotalTasks,
-    COALESCE(
-        (SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
-         FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
-         JOIN tbl_Project_Sch_Task_DT pt2 ON wm.Task_Id = pt2.Task_Id 
-                                         AND wm.Task_Levl_Id = pt2.Task_Levl_Id
-                                         AND wm.Project_Id = pt2.Sch_Project_Id
-         WHERE pt2.Type_Task_Id = tt.Task_Type_Id
-         AND pt2.Sch_Project_Id = tt.Project_Id),
-        0
-    ) AS CompletedTasks,
-    CASE 
-        WHEN COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id)) > 0 
-        THEN ROUND(
-            (COALESCE(
+                SELECT COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id))
+                FROM tbl_Project_Sch_Task_DT pt
+                WHERE pt.Type_Task_Id = tt.Task_Type_Id
+                AND pt.Sch_Project_Id = tt.Project_Id
+            ) AS TotalTasks,
+            
+            COALESCE(
                 (SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
                  FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
                  JOIN tbl_Project_Sch_Task_DT pt2 ON wm.Task_Id = pt2.Task_Id 
@@ -866,15 +882,33 @@ const newProjectAbstract = async (req, res) => {
                  WHERE pt2.Type_Task_Id = tt.Task_Type_Id
                  AND pt2.Sch_Project_Id = tt.Project_Id),
                 0
-            ) * 100.0 / COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id))), 2
-        )
-        ELSE 0 
-    END AS CompletionPercentage
-FROM tbl_Project_Sch_Task_DT pt
-WHERE pt.Type_Task_Id = tt.Task_Type_Id
-AND pt.Sch_Project_Id = tt.Project_Id
-                FOR JSON PATH
-            ) AS TaskCountDetails,
+            ) AS CompletedTasks,
+            
+            CASE 
+                WHEN (
+                    SELECT COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id))
+                    FROM tbl_Project_Sch_Task_DT pt
+                    WHERE pt.Type_Task_Id = tt.Task_Type_Id
+                    AND pt.Sch_Project_Id = tt.Project_Id
+                ) > 0 
+                THEN ROUND(
+                    (COALESCE(
+                        (SELECT COUNT(DISTINCT CONCAT(wm.Task_Id, wm.Task_Levl_Id, wm.AN_No))
+                         FROM dbo.Work_Details_Today_Fn(CAST(GETDATE() AS DATE)) wm
+                         JOIN tbl_Project_Sch_Task_DT pt2 ON wm.Task_Id = pt2.Task_Id 
+                                                         AND wm.Task_Levl_Id = pt2.Task_Levl_Id
+                                                         AND wm.Project_Id = pt2.Sch_Project_Id
+                         WHERE pt2.Type_Task_Id = tt.Task_Type_Id
+                         AND pt2.Sch_Project_Id = tt.Project_Id),
+                        0
+                    ) * 100.0 / 
+                    (SELECT COUNT(DISTINCT CONCAT(pt.Task_Id, pt.Task_Levl_Id, pt.Sch_Project_Id))
+                     FROM tbl_Project_Sch_Task_DT pt
+                     WHERE pt.Type_Task_Id = tt.Task_Type_Id
+                     AND pt.Sch_Project_Id = tt.Project_Id)), 2
+                )
+                ELSE 0 
+            END AS CompletionPercentage,
 
             -- Work Time Metrics
             (
@@ -903,14 +937,6 @@ AND pt.Sch_Project_Id = tt.Project_Id
                 WHERE T.Task_Group_Id = tt.Task_Type_Id
                   AND W.Project_Id = tt.Project_Id
             ) AS Total_Worked_Hours,
-
-            (
-                SELECT SUM(W.Tot_Minutes) % 60
-                FROM tbl_Work_Master W
-                JOIN tbl_Task T ON W.Task_Id = T.Task_Id
-                WHERE T.Task_Group_Id = tt.Task_Type_Id
-                  AND W.Project_Id = tt.Project_Id
-            ) AS Total_Worked_Minutes_Remainder,
 
             CONCAT(
                 FLOOR(
@@ -959,38 +985,38 @@ WHERE
         WHERE pe.User_Id = @empId
     ))`)
 
-        const result = await request;
+            const result = await request;
 
-        if (result.recordset.length > 0) {
-      
-            const projectsWithTaskTypes = result.recordset.map(project => ({
-                Project_Id: project.Project_Id,
-                Project_Name: project.Project_Name,
-                Est_Start_Dt: project.Est_Start_Dt,
-                Est_End_Dt: project.Est_End_Dt,
-                Project_Desc: project.Project_Desc,
-                Project_Status: project.Project_Status,
-                Project_Head_Id: project.Project_Head_Id,
-                Status: project.Status,
-                TaskGroupCount:project.TaskGroupCount,
-                SchedulesCount: project.SchedulesCount,
-                // TaskCountDetails:TaskCountDetails.map((data)=>{
-                //     JSON.parse(data)
-                // }) ,
-                SchedulesCompletedCount: project.SchedulesCompletedCount,
-                TodayTaskcounts: project.TodayTaskcounts,
-                TasksScheduled: project.TasksScheduled,
-                CompletedTasks: project.CompletedTasks,
-                TasksAssignedToEmployee: project.TasksAssignedToEmployee,
-                EmployeesInvolved: project.EmployeesInvolved,
-                TaskTypes: project.TaskTypes ? JSON.parse(project.TaskTypes) : []
-            }));
+            if (result.recordset.length > 0) {
 
-            // Return as JSON response
-           
+                const projectsWithTaskTypes = result.recordset.map(project => ({
+                    Project_Id: project.Project_Id,
+                    Project_Name: project.Project_Name,
+                    Est_Start_Dt: project.Est_Start_Dt,
+                    Est_End_Dt: project.Est_End_Dt,
+                    Project_Desc: project.Project_Desc,
+                    Project_Status: project.Project_Status,
+                    Project_Head_Id: project.Project_Head_Id,
+                    Status: project.Status,
+                    TaskGroupCount: project.TaskGroupCount,
+                    SchedulesCount: project.SchedulesCount,
+                    // TaskCountDetails:TaskCountDetails.map((data)=>{
+                    //     JSON.parse(data)
+                    // }) ,
+                    SchedulesCompletedCount: project.SchedulesCompletedCount,
+                    TodayTaskcounts: project.TodayTaskcounts,
+                    TasksScheduled: project.TasksScheduled,
+                    CompletedTasks: project.CompletedTasks,
+                    TasksAssignedToEmployee: project.TasksAssignedToEmployee,
+                    EmployeesInvolved: project.EmployeesInvolved,
+                    TaskTypes: project.TaskTypes ? JSON.parse(project.TaskTypes) : []
+                }));
+
+                // Return as JSON response
+
                 dataFound(res, projectsWithTaskTypes)
-        }
-          else {
+            }
+            else {
                 noData(res)
             }
         } catch (e) {
@@ -1001,18 +1027,18 @@ WHERE
 
 
 
-     const projectAbstractTaskNew = async (req, res) => {
+    const projectAbstractTaskNew = async (req, res) => {
         const { Company_id } = req.query;
 
         if (!checkIsNumber(Company_id)) {
             return invalidInput(res, 'Company_id is required');
         }
 
-      
+
         try {
             const request = new sql.Request()
                 .input('comp', Company_id)
-                .query( ` SELECT 
+                .query(` SELECT 
     p.Project_Id, 
     p.Project_Name, 
     p.Est_Start_Dt, 
