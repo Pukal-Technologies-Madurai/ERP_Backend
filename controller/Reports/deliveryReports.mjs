@@ -1,6 +1,6 @@
 import sql from "mssql";
 import { sentData, servError, noData, invalidInput, success, dataFound } from "../../res.mjs";
-import { checkIsNumber, ISOString, toArray,isEqualNumber,toNumber } from "../../helper_functions.mjs";
+import { checkIsNumber, ISOString, toArray, isEqualNumber, toNumber } from "../../helper_functions.mjs";
 
 const getNonConvertedSales = async (req, res) => {
     try {
@@ -163,7 +163,7 @@ const getNonConvertedSales = async (req, res) => {
                             isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
                         ).map(prod => ({
                             ...prod
-                         
+
                         }));
 
                         return {
@@ -486,6 +486,7 @@ const ReturnDelivery = async (req, res) => {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
         const Branch_Id = req.query.Branch_Id;
+        const Retailer_Id = req.query.Retailer_Id
 
         let query = `
            SELECT 
@@ -515,7 +516,10 @@ WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
             query += ` AND sdgi.Branch_Id = @Branch_Id `;
             request.input('Branch_Id', Branch_Id);
         }
-
+        if (Retailer_Id) {
+            query += ` AND sdgi.Retailer_Id = @Retailer_Id `;
+            request.input('Retailer_Id', Retailer_Id);
+        }
         const result = await request.query(query);
 
         if (result.recordsets.length <= 0 || result.recordsets[0].length <= 0) {
