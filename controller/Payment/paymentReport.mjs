@@ -190,6 +190,7 @@ const PaymentReports = () => {
                     SELECT 
                     	a.Account_name as retailerName,
                     	COALESCE(v.Voucher_Type, '') voucherTypeGet,
+                    	COALESCE(b.BranchCode, inv.company) companyName,
                     	inv.*,
                     	inv.paymentReference + inv.journalReference AS totalReference
                     FROM (
@@ -206,6 +207,7 @@ const PaymentReports = () => {
                     		COALESCE(pig.Discount, 0) discount,
                             pig.Total_Invoice_value invoiceValue,
                             'INV' AS dataSource,
+                    		'' as company,
                             COALESCE((
                                 SELECT SUM(pb.Debit_Amo) 
                                 FROM tbl_Payment_Bill_Info AS pb
@@ -231,10 +233,8 @@ const PaymentReports = () => {
                                     AND jr.RefType = 'PURCHASE'
                             ), 0) AS journalReference
                         FROM tbl_Purchase_Order_Inv_Gen_Info AS pig
-                        JOIN tbl_Retailers_Master AS r
-                        ON r.Retailer_Id = pig.Retailer_Id
-                        JOIN tbl_Account_Master AS a
-                        ON a.ERP_Id = R.ERP_Id
+                        JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pig.Retailer_Id
+                        JOIN tbl_Account_Master AS a ON a.ERP_Id = R.ERP_Id
                         WHERE 
                             pig.Cancel_status = 0
                             AND pig.Po_Entry_Date >= @OB_Date
@@ -253,6 +253,7 @@ const PaymentReports = () => {
                     		0 discount,
                             cb.cr_amount invoiceValue, 
                             'OB' AS dataSource,
+                    		cb.Bill_Company as company,
                         	COALESCE((
                                 SELECT SUM(pb.Debit_Amo) 
                                 FROM tbl_Payment_Bill_Info AS pb
@@ -296,6 +297,7 @@ const PaymentReports = () => {
                     		0 discount,
                     		rgi.credit_amount invoiceValue,
                     		'RECEIPT' AS dataSource,
+                    		'' as company,
                     		(
                                 SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
                                 FROM tbl_Receipt_Bill_Info AS rbi
@@ -330,6 +332,7 @@ const PaymentReports = () => {
                     ) AS inv
                     JOIN tbl_Account_Master AS a ON a.Acc_Id = inv.vendorAccId
                     LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = inv.voucherType
+                    LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = v.Branch_Id
                     WHERE inv.paymentReference + inv.journalReference < inv.invoiceValue`);
 
             const result = await request;
@@ -367,7 +370,7 @@ const PaymentReports = () => {
                 const paymentReference = toNumber(row.paymentReference);
                 const journalReference = toNumber(row.journalReference);
                 const totalReference = paymentReference + journalReference;
-                const dueAmount = amount - totalReference;
+                const dueAmount = invoiceValue - totalReference;
 
                 const paymentDays = toNumber(row.paymentDays);
                 const entryDate = new Date(row.entryDate);

@@ -723,9 +723,9 @@ const PurchaseOrder = () => {
             }
 
             const DE_PO_ID = Product_Array.reduce((acc, pro) => {
-                const existIndex = acc.findIndex(ind => isEqualNumber(ind, pro.OrderId));
+                const isOrderExist = acc.findIndex(OrderId => isEqualNumber(OrderId, pro.OrderId));
 
-                if (existIndex === -1) {
+                if (isOrderExist === -1) {
                     return acc.concat(pro.OrderId);
                 } else {
                     return acc;
