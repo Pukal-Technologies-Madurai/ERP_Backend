@@ -119,13 +119,14 @@ const validateDetailRow = (d, i, errors) => {
 
          
             const insertDetailSql = `
-                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type)
-                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type)
+                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type,Level)
+                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type,@Level)
             `;
 
             for (const d of details) {
                 const TypeVal = Number(d.Type);
                 const TableIdVal = Number(d.Table_Id);
+                const Level=Number(d.Level);
 
               
                 const listTypes = typeof d.List_Type === "string"
@@ -146,6 +147,7 @@ const validateDetailRow = (d, i, errors) => {
                         .input('Table_Id', sql.Int, TableIdVal)
                         .input('Column_Name', sql.NVarChar, d.Column_Name)
                         .input('List_Type', sql.Int, lt)
+                        .input('Level', sql.Int, Level)
                         .query(insertDetailSql);
                 }
             }
@@ -223,6 +225,7 @@ SELECT
             tbl.Table_Name, 
             tbl.Table_Accronym, 
             d.Column_Name, 
+            d.Level,
             d.List_Type,
             CASE 
                 WHEN d.List_Type = '1' THEN 'Sum'
@@ -381,7 +384,7 @@ const updateMobileTemplate = async (req, res) => {
         await transaction.begin();
 
         try {
-    
+            // Check if report name already exists
             const nameExists = (await new sql.Request(transaction)
                 .input('Report_Name', sql.NVarChar, reportName)
                 .input('Report_Type_Id', sql.Int, Report_Type_Id)
@@ -393,7 +396,7 @@ const updateMobileTemplate = async (req, res) => {
                 return failed(res, 'Report Name Already Exist');
             }
 
-          
+            // Update main table
             await new sql.Request(transaction)
                 .input('Report_Name', sql.NVarChar, reportName)
                 .input('Update_By', sql.Int, updatedBy)
@@ -404,20 +407,21 @@ const updateMobileTemplate = async (req, res) => {
                 WHERE Mob_Rpt_Id = @Report_Type_Id
             `);
 
+            // Delete existing details
             await new sql.Request(transaction)
                 .input('Report_Type_Id', sql.Int, Report_Type_Id)
                 .query(`DELETE FROM tbl_Mobile_Report_Details WHERE Mob_Rpt_Id = @Report_Type_Id`);
 
-   
+            // Insert new details - CORRECTED SQL with Level column
             const insertDetailSql = `
-                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type)
-                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type)
+                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type, Level)
+                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type, @Level)
             `;
 
             for (const d of details) {
                 const TypeVal = Number(d.Type);
                 const TableIdVal = Number(d.Table_Id);
-
+                const LevelVal = Number(d.Level) || (TypeVal >= 4 && TypeVal <= 6 ? 2 : 1); // Default level based on type
 
                 const listTypes = typeof d.List_Type === "string"
                     ? d.List_Type.split(",").map(Number).filter(n => !isNaN(n))
@@ -425,24 +429,25 @@ const updateMobileTemplate = async (req, res) => {
                         ? d.List_Type.map(Number).filter(n => !isNaN(n))
                         : [Number(d.List_Type)].filter(n => !isNaN(n));
 
-         
+                // Ensure at least one list type
                 if (listTypes.length === 0) {
                     listTypes.push(1);
                 }
 
-
+                // Insert each list type as separate row
                 for (const lt of listTypes) {
                     await new sql.Request(transaction)
                         .input('Mob_Rpt_Id', sql.Int, Report_Type_Id)
                         .input('Type', sql.Int, TypeVal)
                         .input('Table_Id', sql.Int, TableIdVal)
                         .input('Column_Name', sql.NVarChar, d.Column_Name)
-                        .input('List_Type', sql.Int, lt) 
+                        .input('List_Type', sql.Int, lt)
+                        .input('Level', sql.Int, LevelVal) // Added Level parameter
                         .query(insertDetailSql);
                 }
             }
 
-     
+            // Generate query string for report columns (optional)
             try {
                 const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Table_Master')).recordset;
                 const distinctTables = [...new Map(details.map(d => [Number(d.Table_Id), d.Table_Id])).values()];
