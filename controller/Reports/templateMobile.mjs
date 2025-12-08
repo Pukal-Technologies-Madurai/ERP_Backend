@@ -119,14 +119,14 @@ const validateDetailRow = (d, i, errors) => {
 
          
             const insertDetailSql = `
-                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type,Level)
-                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type,@Level)
+                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type,FilterLevel)
+                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type,@FilterLevel)
             `;
 
             for (const d of details) {
                 const TypeVal = Number(d.Type);
                 const TableIdVal = Number(d.Table_Id);
-                const Level=Number(d.Level);
+                const FilterLevel=Number(d.FilterLevel);
 
               
                 const listTypes = typeof d.List_Type === "string"
@@ -147,7 +147,7 @@ const validateDetailRow = (d, i, errors) => {
                         .input('Table_Id', sql.Int, TableIdVal)
                         .input('Column_Name', sql.NVarChar, d.Column_Name)
                         .input('List_Type', sql.Int, lt)
-                        .input('Level', sql.Int, Level)
+                        .input('FilterLevel', sql.Int, FilterLevel)
                         .query(insertDetailSql);
                 }
             }
@@ -225,7 +225,7 @@ SELECT
             tbl.Table_Name, 
             tbl.Table_Accronym, 
             d.Column_Name, 
-            d.Level,
+            d.FilterLevel,
             d.List_Type,
             CASE 
                 WHEN d.List_Type = '1' THEN 'Sum'
@@ -384,7 +384,7 @@ const updateMobileTemplate = async (req, res) => {
         await transaction.begin();
 
         try {
-            // Check if report name already exists
+            
             const nameExists = (await new sql.Request(transaction)
                 .input('Report_Name', sql.NVarChar, reportName)
                 .input('Report_Type_Id', sql.Int, Report_Type_Id)
@@ -396,7 +396,6 @@ const updateMobileTemplate = async (req, res) => {
                 return failed(res, 'Report Name Already Exist');
             }
 
-            // Update main table
             await new sql.Request(transaction)
                 .input('Report_Name', sql.NVarChar, reportName)
                 .input('Update_By', sql.Int, updatedBy)
@@ -407,21 +406,21 @@ const updateMobileTemplate = async (req, res) => {
                 WHERE Mob_Rpt_Id = @Report_Type_Id
             `);
 
-            // Delete existing details
+           
             await new sql.Request(transaction)
                 .input('Report_Type_Id', sql.Int, Report_Type_Id)
                 .query(`DELETE FROM tbl_Mobile_Report_Details WHERE Mob_Rpt_Id = @Report_Type_Id`);
 
-            // Insert new details - CORRECTED SQL with Level column
+            
             const insertDetailSql = `
-                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type, Level)
-                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type, @Level)
+                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type, FilterLevel)
+                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type, @FilterLevel)
             `;
 
             for (const d of details) {
                 const TypeVal = Number(d.Type);
                 const TableIdVal = Number(d.Table_Id);
-                const LevelVal = Number(d.Level) || (TypeVal >= 4 && TypeVal <= 6 ? 2 : 1); // Default level based on type
+                const LevelVal = Number(d.FilterLevel) || (TypeVal >= 4 && TypeVal <= 6 ? 2 : 1); 
 
                 const listTypes = typeof d.List_Type === "string"
                     ? d.List_Type.split(",").map(Number).filter(n => !isNaN(n))
@@ -429,12 +428,12 @@ const updateMobileTemplate = async (req, res) => {
                         ? d.List_Type.map(Number).filter(n => !isNaN(n))
                         : [Number(d.List_Type)].filter(n => !isNaN(n));
 
-                // Ensure at least one list type
+              
                 if (listTypes.length === 0) {
                     listTypes.push(1);
                 }
 
-                // Insert each list type as separate row
+               
                 for (const lt of listTypes) {
                     await new sql.Request(transaction)
                         .input('Mob_Rpt_Id', sql.Int, Report_Type_Id)
@@ -442,12 +441,11 @@ const updateMobileTemplate = async (req, res) => {
                         .input('Table_Id', sql.Int, TableIdVal)
                         .input('Column_Name', sql.NVarChar, d.Column_Name)
                         .input('List_Type', sql.Int, lt)
-                        .input('Level', sql.Int, LevelVal) // Added Level parameter
+                        .input('FilterLevel', sql.Int, LevelVal) 
                         .query(insertDetailSql);
                 }
             }
 
-            // Generate query string for report columns (optional)
             try {
                 const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Table_Master')).recordset;
                 const distinctTables = [...new Map(details.map(d => [Number(d.Table_Id), d.Table_Id])).values()];
@@ -471,11 +469,34 @@ const updateMobileTemplate = async (req, res) => {
                         .input('Report_Type_Id', sql.Int, Report_Type_Id)
                         .input('Report_Columns', sql.NVarChar, queryString)
                         .query(`
-                            IF EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'tbl_Mobile_Report_Type' AND COLUMN_NAME = 'Report_Columns')
-                            BEGIN
-                                UPDATE tbl_Mobile_Report_Type SET Report_Columns = @Report_Columns WHERE Mob_Rpt_Id = @Report_Type_Id
-                            END
-                        `);
+                         IF NOT EXISTS (
+	SELECT 1 
+	FROM INFORMATION_SCHEMA.COLUMNS 
+	WHERE TABLE_NAME = 'tbl_Mobile_Report_Type' 
+	  AND COLUMN_NAME = 'Report_Columns'
+)
+BEGIN
+	ALTER TABLE tbl_Mobile_Report_Type
+	ADD Report_Columns NVARCHAR(MAX);
+END
+
+IF EXISTS (
+	SELECT 1 
+	FROM INFORMATION_SCHEMA.COLUMNS 
+	WHERE TABLE_NAME = 'tbl_Mobile_Report_Type' 
+	  AND COLUMN_NAME = 'Report_Columns'
+)
+BEGIN
+    EXEC sp_executesql N'
+        UPDATE tbl_Mobile_Report_Type
+        SET Report_Columns = @Report_Columns,
+            Update_At = GETDATE()
+        WHERE Mob_Rpt_Id = @Report_Type_Id
+    ',
+    N'@Report_Columns NVARCHAR(MAX), @Report_Type_Id INT',
+    @Report_Columns, @Report_Type_Id;
+END
+ `);
                 }
             } catch (e) {
                 console.log('Query string generation failed, continuing...', e.message);

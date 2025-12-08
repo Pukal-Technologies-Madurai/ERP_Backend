@@ -2007,7 +2007,369 @@ const SalesInvoice = () => {
 // };
 
 
-const getSalesInvoiceMobile = async (req, res) => {
+const getSalesInvoiceMobileFilter1 = async (req, res) => {
+    try {
+        const { 
+            Retailer_Id, 
+            Cancel_status = 0, 
+            Created_by, 
+            VoucherType, 
+            Branch_Id, 
+            User_Id,
+            filter1, 
+            filter2,
+            filter3,
+            filter4
+        } = req.query;
+
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const parseFilterValues = (filterParam) => {
+            if (!filterParam) return null;
+            return filterParam.split(',').map(val => val.trim()).filter(val => val);
+        };
+
+        const filter1Values = parseFilterValues(filter1);
+        const filter2Values = parseFilterValues(filter2);
+        // const filter3Values = parseFilterValues(filter3);
+        //  const filter4Values = parseFilterValues(filter4);
+
+     
+        const mobileFilters = await new sql.Request().query(`
+            SELECT 
+                mrd.Type AS FilterType,
+                mrd.Column_Name AS ColumnName,
+                mrd.Table_Id AS TableId,
+                tm.Table_Name AS TableName,
+                mrd.FilterLevel,
+                STUFF((
+                    SELECT DISTINCT ',' + CAST(mrd2.List_Type AS VARCHAR(10))
+                    FROM tbl_Mobile_Report_Details mrd2
+                    WHERE mrd2.Type = mrd.Type 
+                    AND mrd2.Table_Id = mrd.Table_Id 
+                    AND mrd2.Column_Name = mrd.Column_Name
+                    AND mrd2.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS ListTypes
+            FROM tbl_Mobile_Report_Details mrd 
+            INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            WHERE mrt.Report_Name = 'Sales Invoice' AND FilterLevel =1
+            GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name,mrd.FilterLevel
+            ORDER BY mrd.Type
+        `);
+
+        const checkTableHasRetId = async (tableName) => {
+            try {
+                const columnCheck = await new sql.Request().query(`
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_NAME = '${tableName}' 
+                    AND COLUMN_NAME = 'Ret_Id'
+                `);
+                return columnCheck.recordset.length > 0;
+            } catch (error) {
+                console.error(`Error checking Ret_Id for ${tableName}:`, error);
+                return false;
+            }
+        };
+
+        const tableRetIdMap = {};
+        for (const filter of mobileFilters.recordset) {
+            if (filter.TableName && !tableRetIdMap[filter.TableName]) {
+                tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
+            }
+        }
+
+       const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
+    if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
+        return null;
+    }
+
+    const tableName = filterConfig.TableName;
+    const columnName = filterConfig.ColumnName;
+    const hasRetId = tableRetIdMap[tableName] || false;
+    
+ 
+    const specialTables = {
+        'tbl_Ledger_LOL': {
+            joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
+            fromClause: tableName,
+            additionalJoins: ''
+        },
+        'tbl_Stock_LOS': {
+            joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
+            fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
+            whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
+        }
+    };
+
+    const isSingleValue = filterValues.length === 1;
+    const placeholders = isSingleValue 
+        ? `@${filterParamName}` 
+        : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
+
+    const condition = isSingleValue 
+        ? `${columnName} = ${placeholders}`
+        : `${columnName} IN (${placeholders})`;
+
+
+    if (specialTables[tableName]) {
+        const specialConfig = specialTables[tableName];
+        return `EXISTS (
+            SELECT 1 FROM ${specialConfig.fromClause}
+            ${specialConfig.whereClause || ''}
+            ${specialConfig.whereClause ? 'AND' : 'WHERE'} ${condition}
+            ${specialConfig.joinCondition}
+        )`;
+    }
+    
+  
+    const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
+    
+    return `EXISTS (
+        SELECT 1 FROM ${tableName} 
+        WHERE ${tableName}.${condition}
+        ${retIdCondition}
+    )`;
+};
+
+       
+        const getCurrespondingAccount = await new sql.Request().query(`
+            SELECT Acc_Id 
+            FROM tbl_Default_AC_Master 
+            WHERE Type = 'DEFAULT' AND Acc_Id IS NOT NULL;
+        `);
+        const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
+
+        let branchCondition = '';
+
+        if (User_Id) {
+            const getBranches = await new sql.Request()
+                .input('User_Id', User_Id)
+                .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
+            
+            const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
+
+            if (Branch_Id) {
+                const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
+                const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
+
+                if (finalBranches.length) {
+                    branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
+                } else {
+                    return res.json({ data: [], message: "No data", success: true, others: {} });
+                }
+            } else if (allowedBranches.length) {
+                branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
+            }
+        }
+
+        let mobileFilterConditions = [];
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate);
+
+        if (Retailer_Id) request.input('retailer', Retailer_Id);
+        if (Cancel_status) request.input('cancel', Cancel_status);
+        if (Created_by) request.input('creater', Created_by);
+        if (VoucherType) request.input('VoucherType', VoucherType);
+
+        const filterConditions = [
+            { values: filter1Values, paramName: 'filter1', index: 0 },
+            { values: filter2Values, paramName: 'filter2', index: 1 },
+            // { values: filter3Values, paramName: 'filter3', index: 2 },
+            // { values: filter4Values, paramName: 'filter3', index: 3 }
+        ];
+
+        for (let i = 0; i < filterConditions.length; i++) {
+            const { values, paramName, index } = filterConditions[i];
+            
+            if (values && values.length > 0 && mobileFilters.recordset.length > index) {
+                const filterConfig = mobileFilters.recordset[index];
+                const condition = buildFilterCondition(filterConfig, values, paramName);
+                
+                if (condition) {
+                    mobileFilterConditions.push(condition);
+                    
+                    if (values.length === 1) {
+                        request.input(paramName, values[0]);
+                    } else {
+                        values.forEach((value, idx) => {
+                            request.input(`${paramName}${idx}`, value);
+                        });
+                    }
+                }
+            }
+        }
+
+        const mobileFilterCondition = mobileFilterConditions.length > 0 
+            ? ` AND ${mobileFilterConditions.join(' AND ')} `
+            : '';
+
+       
+        const sqlQuery = `
+            DECLARE @FilteredInvoice TABLE (Do_Id INT PRIMARY KEY);
+
+            INSERT INTO @FilteredInvoice (Do_Id)
+            SELECT DISTINCT sdgi.Do_Id
+            FROM tbl_Sales_Delivery_Gen_Info sdgi
+            WHERE 
+                sdgi.Do_Date BETWEEN @Fromdate AND @Todate
+                ${Retailer_Id ? ' AND sdgi.Retailer_Id = @retailer ' : ''}
+                ${Cancel_status ? ' AND sdgi.Cancel_status = @cancel ' : ''}
+                ${Created_by ? ' AND sdgi.Created_by = @creater ' : ''}
+                ${VoucherType ? ' AND sdgi.Voucher_Type = @VoucherType ' : ''}
+                ${branchCondition}
+                ${mobileFilterCondition};
+
+            
+            SELECT 
+                sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, 
+                sdgi.Total_Expences, sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
+                COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+            FROM tbl_Sales_Delivery_Gen_Info sdgi
+            LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
+            LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = sdgi.Branch_Id
+            LEFT JOIN tbl_Users cb ON cb.UserId = sdgi.Created_by
+            LEFT JOIN tbl_Voucher_Type v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+            WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+            ORDER BY sdgi.Do_Date DESC, sdgi.Do_Id DESC;
+
+          
+            SELECT 
+                oi.*, pm.Product_Id,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Product_Name, 'not available') AS Item_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Delivery_Stock_Info oi
+            LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = oi.Item_Id
+            LEFT JOIN tbl_UOM u ON u.Unit_Id = oi.Unit_Id
+            LEFT JOIN tbl_Brand_Master b ON b.Brand_Id = pm.Brand
+            WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+            ORDER BY oi.Delivery_Order_Id, oi.Item_Id;
+
+           
+            SELECT 
+                exp.*, em.Account_name AS Expence_Name, 
+                CASE WHEN exp.Expence_Value_DR > 0 THEN -exp.Expence_Value_DR ELSE exp.Expence_Value_CR END AS Expence_Value
+            FROM tbl_Sales_Delivery_Expence_Info exp
+            LEFT JOIN tbl_Account_Master em ON em.Acc_Id = exp.Expense_Id
+            WHERE exp.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+            ${excludeList ? ` AND exp.Expense_Id NOT IN (${excludeList})` : ''}
+            ORDER BY exp.Do_Id, exp.Expense_Id;
+
+            
+            IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'tbl_Sales_Delivery_Staff_Info')
+            BEGIN
+                SELECT 
+                    stf.*, 
+                    COALESCE(e.Cost_Center_Name, '') AS Emp_Name, 
+                    COALESCE(cc.Cost_Category, '') AS Involved_Emp_Type
+                FROM tbl_Sales_Delivery_Staff_Info stf
+                LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = stf.Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                WHERE stf.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+                ORDER BY stf.Do_Id, stf.Emp_Id;
+            END
+            ELSE
+            BEGIN
+                -- Return empty result set if table doesn't exist
+                SELECT NULL AS Do_Id, NULL AS Emp_Id, NULL AS Emp_Type_Id, '' AS Emp_Name, '' AS Involved_Emp_Type
+                WHERE 1 = 0;
+            END
+
+            
+            SELECT DISTINCT
+                llol.Ret_Id,
+                llol.Auto_Id,
+                llol.Ledger_Tally_Id,
+                llol.Alter_Tally_Id,
+                llol.Ledger_Name,
+                llol.Ledger_Alias,
+                llol.Actual_Party_Name_with_Brokers,
+                llol.Party_Name,
+                llol.Party_Location,
+                llol.Party_Nature,
+                llol.Party_Group,
+                llol.Ref_Brokers,
+                llol.Ref_Owners,
+                llol.Party_Mobile_1,
+                llol.Party_Mobile_2,
+                llol.Party_District,
+                llol.File_No,
+                llol.Date_Added,
+                llol.Payment_Mode,
+                llol.Party_Mailing_Name,
+                llol.Party_Mailing_Address,
+                llol.GST_No,
+                llol.Route_Name,
+                llol.A1,
+                llol.A2,
+                llol.A3,
+                llol.A4,
+                llol.A5,
+                llol.IsUpdated,
+                llol.Is_Tally_Updated
+            FROM tbl_Ledger_LOL llol
+            WHERE llol.Ret_Id IN (
+                SELECT DISTINCT Retailer_Id 
+                FROM tbl_Sales_Delivery_Gen_Info sdgi 
+                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+            )
+            ORDER BY llol.Ret_Id, llol.Auto_Id;
+        `;
+
+        const result = await request.query(sqlQuery);
+
+        const SalesGeneralInfo = toArray(result.recordsets[0]);
+        const Products_List = toArray(result.recordsets[1]);
+        const Expence_Array = toArray(result.recordsets[2]);
+        const Staffs_Array = toArray(result.recordsets[3]);
+        const LedgerInfo = toArray(result.recordsets[4]);
+
+        if (SalesGeneralInfo.length > 0) {
+           
+            const ledgerMap = {};
+            LedgerInfo.forEach(ledger => {
+                if (!ledgerMap[ledger.Ret_Id]) {
+                    ledgerMap[ledger.Ret_Id] = ledger;
+                }
+            });
+
+            const resData = SalesGeneralInfo.map(row => {
+                const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
+                
+                return {
+                    ...row,
+                    ...ledgerInfo,
+                    Products_List: Products_List.filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)),
+                    Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+                    Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+                };
+            });
+
+            dataFound(res, resData);
+        } else {
+            noData(res);
+        }
+
+    } catch (e) {
+        console.error('API Error:', e);
+        servError(e, res);
+    }
+};
+
+const getSalesInvoiceMobileFilter2 = async (req, res) => {
     try {
         const { 
             Retailer_Id, 
@@ -2042,6 +2404,7 @@ const getSalesInvoiceMobile = async (req, res) => {
                 mrd.Column_Name AS ColumnName,
                 mrd.Table_Id AS TableId,
                 tm.Table_Name AS TableName,
+                mrd.FilterLevel,
                 STUFF((
                     SELECT DISTINCT ',' + CAST(mrd2.List_Type AS VARCHAR(10))
                     FROM tbl_Mobile_Report_Details mrd2
@@ -2054,8 +2417,8 @@ const getSalesInvoiceMobile = async (req, res) => {
             FROM tbl_Mobile_Report_Details mrd 
             INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
             LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
-            WHERE mrt.Report_Name = 'Sales Invoice'
-            GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name
+            WHERE mrt.Report_Name = 'Sales Invoice' AND  FilterLevel =2
+            GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name,mrd.FilterLevel
             ORDER BY mrd.Type
         `);
 
@@ -2081,83 +2444,58 @@ const getSalesInvoiceMobile = async (req, res) => {
             }
         }
 
-        const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
-            if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
-                return null;
-            }
+       const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
+    if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
+        return null;
+    }
 
-            const tableName = filterConfig.TableName;
-            const columnName = filterConfig.ColumnName;
-            const hasRetId = tableRetIdMap[tableName] || false;
+    const tableName = filterConfig.TableName;
+    const columnName = filterConfig.ColumnName;
+    const hasRetId = tableRetIdMap[tableName] || false;
+    
+ 
+    const specialTables = {
+        'tbl_Ledger_LOL': {
+            joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
+            fromClause: tableName,
+            additionalJoins: ''
+        },
+        'tbl_Stock_LOS': {
+            joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
+            fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
+            whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
+        }
+    };
 
-            if (tableName === 'tbl_Ledger_LOL') {
-                if (filterValues.length === 1) {
-                    return `EXISTS (
-                        SELECT 1 FROM tbl_Ledger_LOL 
-                        WHERE tbl_Ledger_LOL.${columnName} = @${filterParamName}
-                        AND tbl_Ledger_LOL.Ret_Id = sdgi.Retailer_Id
-                    )`;
-                } else {
-                    const placeholders = filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-                    return `EXISTS (
-                        SELECT 1 FROM tbl_Ledger_LOL 
-                        WHERE tbl_Ledger_LOL.${columnName} IN (${placeholders})
-                        AND tbl_Ledger_LOL.Ret_Id = sdgi.Retailer_Id
-                    )`;
-                }
-            } else if (tableName === 'tbl_Stock_LOS') {
-                if (filterValues.length === 1) {
-                    return `EXISTS (
-                        SELECT 1 
-                        FROM tbl_Stock_LOS los
-                        INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id
-                        WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
-                        AND los.${columnName} = @${filterParamName}
-                        ${hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : ''}
-                    )`;
-                } else {
-                    const placeholders = filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-                    return `EXISTS (
-                        SELECT 1 
-                        FROM tbl_Stock_LOS los
-                        INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id
-                        WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
-                        AND los.${columnName} IN (${placeholders})
-                        ${hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : ''}
-                    )`;
-                }
-            } else {
-                if (hasRetId) {
-                    if (filterValues.length === 1) {
-                        return `EXISTS (
-                            SELECT 1 FROM ${tableName} 
-                            WHERE ${tableName}.${columnName} = @${filterParamName}
-                            AND ${tableName}.Ret_Id = sdgi.Retailer_Id
-                        )`;
-                    } else {
-                        const placeholders = filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-                        return `EXISTS (
-                            SELECT 1 FROM ${tableName} 
-                            WHERE ${tableName}.${columnName} IN (${placeholders})
-                            AND ${tableName}.Ret_Id = sdgi.Retailer_Id
-                        )`;
-                    }
-                } else {
-                    if (filterValues.length === 1) {
-                        return `EXISTS (
-                            SELECT 1 FROM ${tableName} 
-                            WHERE ${tableName}.${columnName} = @${filterParamName}
-                        )`;
-                    } else {
-                        const placeholders = filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-                        return `EXISTS (
-                            SELECT 1 FROM ${tableName} 
-                            WHERE ${tableName}.${columnName} IN (${placeholders})
-                        )`;
-                    }
-                }
-            }
-        };
+    const isSingleValue = filterValues.length === 1;
+    const placeholders = isSingleValue 
+        ? `@${filterParamName}` 
+        : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
+
+    const condition = isSingleValue 
+        ? `${columnName} = ${placeholders}`
+        : `${columnName} IN (${placeholders})`;
+
+
+    if (specialTables[tableName]) {
+        const specialConfig = specialTables[tableName];
+        return `EXISTS (
+            SELECT 1 FROM ${specialConfig.fromClause}
+            ${specialConfig.whereClause || ''}
+            ${specialConfig.whereClause ? 'AND' : 'WHERE'} ${condition}
+            ${specialConfig.joinCondition}
+        )`;
+    }
+    
+  
+    const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
+    
+    return `EXISTS (
+        SELECT 1 FROM ${tableName} 
+        WHERE ${tableName}.${condition}
+        ${retIdCondition}
+    )`;
+};
 
        
         const getCurrespondingAccount = await new sql.Request().query(`
@@ -2393,6 +2731,7 @@ const getSalesInvoiceMobile = async (req, res) => {
     }
 };
 
+
 const getMobileReportDropdowns = async (req, res) => {
     try {
         const { reportName } = req.query;
@@ -2406,7 +2745,7 @@ const getMobileReportDropdowns = async (req, res) => {
                 mrd.Type AS filterType,
                 mrd.Table_Id AS tableId,
                 mrd.Column_Name AS columnName,
-                mrd.Level As Level,
+                mrd.FilterLevel As FilterLevel,
                 STUFF((
                     SELECT DISTINCT ',' + CAST(mrd2.List_Type AS VARCHAR(10))
                     FROM tbl_Mobile_Report_Details mrd2
@@ -2421,7 +2760,7 @@ const getMobileReportDropdowns = async (req, res) => {
             INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
             LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
             WHERE mrt.Report_Name = @reportName
-            GROUP BY mrd.Type,mrd.Level, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name
+            GROUP BY mrd.Type,mrd.FilterLevel, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name
             ORDER BY mrd.Type
         `;
 
@@ -2457,7 +2796,7 @@ const getMobileReportDropdowns = async (req, res) => {
                             columnName: config.columnName,
                             tableName: config.tableName,
                             listTypes: config.listTypes,
-                            Level:config.Level,
+                            FilterLevel:config.FilterLevel,
                             options: [],
                             error: `Column '${config.columnName}' not found in table '${config.tableName}'`
                         };
@@ -2575,7 +2914,7 @@ const getMobileReportDropdowns = async (req, res) => {
                         tableName: config.tableName,
                         valueColumn: valueColumn,
                         listTypes: config.listTypes,
-                        Level:config.Level,
+                        FilterLevel:config.FilterLevel,
                         options: uniqueOptions,
                         dataSummary: dataCheck.recordset[0]
                     };
@@ -2587,7 +2926,7 @@ const getMobileReportDropdowns = async (req, res) => {
                         columnName: config.columnName,
                         tableName: config.tableName,
                         listTypes: config.listTypes,
-                         Level:config.Level,
+                         FilterLevel:config.FilterLevel,
                         options: [], 
                         error: "Invalid configuration - missing tableName or columnName"
                     };
@@ -2600,7 +2939,7 @@ const getMobileReportDropdowns = async (req, res) => {
                     tableId: config.tableId,
                     columnName: config.columnName,
                     tableName: config.tableName,
-                     Level:config.Level,
+                     FilterLevel:config.FilterLevel,
                     listTypes: config.listTypes,
                     options: [],
                     error: error.message
@@ -2616,7 +2955,7 @@ const getMobileReportDropdowns = async (req, res) => {
             columnName: dropdown.columnName,
             tableName: dropdown.tableName,
             valueColumn: dropdown.valueColumn,
-             Level:dropdown.Level,
+             FilterLevel:dropdown.FilterLevel,
             listTypes: dropdown.listTypes,
             options: dropdown.options,
             error: dropdown.error,
@@ -2639,6 +2978,7 @@ const getMobileReportDropdowns = async (req, res) => {
         // });
     }
 };
+
 
 
     const salesInvoiceReport = async (req, res) => {
@@ -3432,7 +3772,8 @@ const getMobileReportDropdowns = async (req, res) => {
         getSalesExpenceAccount,
         salesTallySync,
         liveSalesCreation,
-        getSalesInvoiceMobile,
+        getSalesInvoiceMobileFilter1,
+         getSalesInvoiceMobileFilter2,
         salesInvoiceReport,
         createSalesTransaction,
         getSaleOrderWithDeliveries,
