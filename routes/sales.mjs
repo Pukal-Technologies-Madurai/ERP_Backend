@@ -20,7 +20,8 @@ SalesRouter.get('/salesInvoice/filterValues', salesInvoice.getFilterValues);
 SalesRouter.get('/salesInvoice/expenceAccount', salesInvoice.getSalesExpenceAccount);
 
 SalesRouter.get('/saleOrderMobile', salesOrder.getSaleOrderMobile);
-SalesRouter.get('/salesInvoiceMobile', salesInvoice.getSalesInvoiceMobile);
+SalesRouter.get('/salesInvoiceMobile', salesInvoice.getSalesInvoiceMobileFilter1);
+SalesRouter.get('/salesInvoiceMobileFilter', salesInvoice.getSalesInvoiceMobileFilter2);
 SalesRouter.get('/salesFilterDropdown',salesInvoice.getMobileReportDropdowns)
 
 SalesRouter.get('/salesInvoice/tallySync', salesInvoice.salesTallySync);
