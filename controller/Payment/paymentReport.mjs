@@ -333,7 +333,13 @@ const PaymentReports = () => {
                     JOIN tbl_Account_Master AS a ON a.Acc_Id = inv.vendorAccId
                     LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = inv.voucherType
                     LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = v.Branch_Id
-                    WHERE inv.paymentReference + inv.journalReference < inv.invoiceValue`);
+                    WHERE 
+                        inv.paymentReference + inv.journalReference < inv.invoiceValue
+                        AND TRIM(COALESCE(inv.refNumber, '')) NOT IN (
+							SELECT TRIM(COALESCE(Do_Inv_No, '')) 
+							FROM tbl_Sales_Delivery_Gen_Info
+							WHERE Do_Date >= @OB_Date
+						)`);
 
             const result = await request;
 

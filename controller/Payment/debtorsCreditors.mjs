@@ -137,22 +137,23 @@ const DebitorsCreditors = () => {
             servError(err, res);
         }
     };
-   const getDebtors = async (req, res) => {
-  try {
- 
-    const result =await new sql.Request().query(`
-      SELECT * FROM dbo.Acc_SD_Fn_2()
-    `);
 
-    if (!result.recordset || result.recordset.length === 0) {
-      return failed(res, "No data found");
-    }
+    const getDebtors = async (req, res) => {
+        try {
 
-     sentData(res, result.recordset);
-  } catch (err) {
-     servError(err, res);
-  }
+            const result = await new sql.Request().query(`
+                SELECT * FROM dbo.Acc_SD_Fn_2()`);
+
+            if (!result.recordset || result.recordset.length === 0) {
+                return failed(res, "No data found");
+            }
+
+            sentData(res, result.recordset);
+        } catch (err) {
+            servError(err, res);
+        }
     }
+    
     return {
         getDebtorsCrditors,
         getDebtorsCreditorsId,

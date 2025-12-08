@@ -93,7 +93,7 @@ const getAccountPendingReference = async (req, res) => {
                                 ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide,
-                        pig.Do_Inv_No AS BillRefNo
+                        pig.Ref_Inv_Number AS BillRefNo
                     FROM tbl_Sales_Delivery_Gen_Info pig
                     JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
                     JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
@@ -101,48 +101,58 @@ const getAccountPendingReference = async (req, res) => {
                         pig.Cancel_status <> 0
                         AND a.Acc_Id = @Acc_Id
                         AND pig.Do_Date >= @OB_Date
+                        AND TRIM(COALESCE(pig.Ref_Inv_Number, '')) NOT IN (
+                            SELECT TRIM(COALESCE(Po_Inv_No, '')) 
+                            FROM tbl_Purchase_Order_Inv_Gen_Info
+                            WHERE Po_Entry_Date >= @OB_Date
+                        )
                     UNION ALL
             -- Opening balance (sales side)
-                SELECT 
-                    cb.OB_Id		  AS voucherId, 
-                    cb.bill_no        AS voucherNumber, 
-                    cb.bill_date      AS eventDate, 
-                    cb.Retailer_id    AS Acc_Id,  
-                    cb.dr_amount      AS totalValue, 
-                    'SALES'           AS dataSource,
-                    'SALES-OB'        AS actualSource,
-                    COALESCE((
-                        SELECT SUM(pb.Credit_Amo) 
-                        FROM tbl_Receipt_Bill_Info pb
-                        JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
-                        WHERE 
-                            pgi.status <> 0
-                            -- AND pgi.receipt_bill_type = 1
-                            AND pb.bill_id = cb.OB_Id
-                            AND pb.bill_name = cb.bill_no
-                            -- AND pgi.receipt_date <= @OB_Date
-                    ), 0) AS againstAmount,
-                    COALESCE((
-                        SELECT SUM(jr.Amount)
-                        FROM dbo.tbl_Journal_Bill_Reference jr
-                        JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
-                        JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
-                        WHERE 
-                            jh.JournalStatus <> 0
-                            AND je.Acc_Id = cb.Retailer_id
-                            AND je.DrCr   = 'Cr'
-                            AND jr.RefId = cb.OB_Id 
-                            AND jr.RefNo = cb.bill_no
-                            AND jr.RefType = 'SALES-OB'
-                            ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
-                    ), 0) AS journalAdjustment,
-                    'Dr' AS accountSide,
-                    cb.bill_no AS BillRefNo
-                FROM tbl_Ledger_Opening_Balance cb
-                WHERE 
-                    cb.OB_date >= @OB_Date
-                    AND cb.Retailer_id = @Acc_Id
-                    AND cb.cr_amount = 0
+                    SELECT 
+                        cb.OB_Id		  AS voucherId, 
+                        cb.bill_no        AS voucherNumber, 
+                        cb.bill_date      AS eventDate, 
+                        cb.Retailer_id    AS Acc_Id,  
+                        cb.dr_amount      AS totalValue, 
+                        'SALES'           AS dataSource,
+                        'SALES-OB'        AS actualSource,
+                        COALESCE((
+                            SELECT SUM(pb.Credit_Amo) 
+                            FROM tbl_Receipt_Bill_Info pb
+                            JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
+                            WHERE 
+                                pgi.status <> 0
+                                -- AND pgi.receipt_bill_type = 1
+                                AND pb.bill_id = cb.OB_Id
+                                AND pb.bill_name = cb.bill_no
+                                -- AND pgi.receipt_date <= @OB_Date
+                        ), 0) AS againstAmount,
+                        COALESCE((
+                            SELECT SUM(jr.Amount)
+                            FROM dbo.tbl_Journal_Bill_Reference jr
+                            JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                            JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                            WHERE 
+                                jh.JournalStatus <> 0
+                                AND je.Acc_Id = cb.Retailer_id
+                                AND je.DrCr   = 'Cr'
+                                AND jr.RefId = cb.OB_Id 
+                                AND jr.RefNo = cb.bill_no
+                                AND jr.RefType = 'SALES-OB'
+                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+                        ), 0) AS journalAdjustment,
+                        'Dr' AS accountSide,
+                        cb.bill_no AS BillRefNo
+                    FROM tbl_Ledger_Opening_Balance cb
+                    WHERE 
+                        cb.OB_date >= @OB_Date
+                        AND cb.Retailer_id = @Acc_Id
+                        AND cb.cr_amount = 0
+                        AND TRIM(COALESCE(cb.bill_no, '')) NOT IN (
+                            SELECT TRIM(COALESCE(Po_Inv_No, '')) 
+                            FROM tbl_Purchase_Order_Inv_Gen_Info
+                            WHERE Po_Entry_Date >= @OB_Date
+                        )
                 ) S
                 WHERE S.totalValue > S.againstAmount + S.journalAdjustment
                 UNION ALL
@@ -240,6 +250,11 @@ const getAccountPendingReference = async (req, res) => {
                         pig.Cancel_status = 0
                         AND a.Acc_Id = @Acc_Id
                         AND pig.Po_Entry_Date >= @OB_Date
+                        AND TRIM(COALESCE(pig.Ref_Po_Inv_No, '')) NOT IN (
+							SELECT TRIM(COALESCE(Do_Inv_No, '')) 
+							FROM tbl_Sales_Delivery_Gen_Info
+							WHERE Do_Date >= @OB_Date
+						)
                     UNION ALL
             -- Opening balance (purchase side)
                     SELECT 
@@ -282,6 +297,11 @@ const getAccountPendingReference = async (req, res) => {
                         cb.OB_date >= @OB_Date
                         AND cb.Retailer_id = @Acc_Id
                         AND cb.dr_amount = 0
+                        AND TRIM(COALESCE(cb.bill_no, '')) NOT IN (
+							SELECT TRIM(COALESCE(Do_Inv_No, '')) 
+							FROM tbl_Sales_Delivery_Gen_Info
+							WHERE Do_Date >= @OB_Date
+						)
                 ) P
                 WHERE P.totalValue > P.againstAmount + P.journalAdjustment
                 UNION ALL

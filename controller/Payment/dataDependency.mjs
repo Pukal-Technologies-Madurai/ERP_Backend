@@ -255,7 +255,13 @@ const PaymentDataDependency = () => {
                             AND rgi.receipt_date >= @OB_Date
                             AND rgi.status <> 0
                     ) AS inv
-                    WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value;`
+                    WHERE 
+                        inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
+                        AND TRIM(COALESCE(inv.bill_ref_number, '')) NOT IN (
+							SELECT TRIM(COALESCE(Do_Inv_No, '')) 
+							FROM tbl_Sales_Delivery_Gen_Info
+							WHERE Do_Date >= @OB_Date
+						);`
                 );
 
             const result = await request;

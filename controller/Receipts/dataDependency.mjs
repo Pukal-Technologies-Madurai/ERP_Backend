@@ -94,6 +94,7 @@ const ReceiptDataDependency = () => {
                             pig.Total_Tax, 
                             pig.Total_Invoice_value,
                             'INV' AS dataSource,
+                            pig.Ref_Inv_Number AS bill_ref_number,
                             COALESCE((
                                 SELECT SUM(pb.Credit_Amo) 
                                 FROM tbl_Receipt_Bill_Info AS pb
@@ -138,6 +139,7 @@ const ReceiptDataDependency = () => {
                             0 AS tot_tax, 
                             cb.dr_amount, 
                             'OB' AS dataSource,
+                            cb.bill_no AS bill_ref_number,
                         	COALESCE((
                                 SELECT COALESCE(SUM(pb.Credit_Amo), 0) 
                                 FROM tbl_Receipt_Bill_Info AS pb
@@ -178,6 +180,7 @@ const ReceiptDataDependency = () => {
                     		0 AS total_aft_tas,
                     		pgi.debit_amount,
                     		'PAYMENT' AS dataSource,
+                            pgi.payment_invoice_no AS bill_ref_number,
                     		 (
                                 SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
                                 FROM tbl_Receipt_Bill_Info AS rbi
@@ -213,7 +216,13 @@ const ReceiptDataDependency = () => {
                             AND pgi.payment_date >= @OB_Date
                             AND pgi.status <> 0
                     ) AS inv
-                    WHERE inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
+                    WHERE 
+                        inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
+                        AND TRIM(COALESCE(inv.bill_ref_number, '')) NOT IN (
+                            SELECT TRIM(COALESCE(Po_Inv_No, '')) 
+                            FROM tbl_Purchase_Order_Inv_Gen_Info
+                            WHERE Po_Entry_Date >= @OB_Date
+                        )
                     ORDER BY inv.Do_Date ASC;`
                 );
 

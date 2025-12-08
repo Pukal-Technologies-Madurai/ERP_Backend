@@ -1,35 +1,34 @@
 import sql from 'mssql';
-import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isArray, randomNumber, toArray, toNumber } from '../../helper_functions.mjs';
+import { servError, sentData, invalidInput, } from '../../res.mjs';
 
 const ReceiptReport = () => {
 
-  const getOutstadingAbove = async (req, res) => {
-  try {
-    const { reqDate } = req.query;
-    if (!reqDate) return invalidInput(res, 'reqDate is required');
+    const getOutstadingAbove = async (req, res) => {
+        try {
+            const { reqDate } = req.query;
+            if (!reqDate) return invalidInput(res, 'reqDate is required');
 
-    const parsedDate = new Date(reqDate);
-    if (isNaN(parsedDate.getTime())) {
-      return invalidInput(res, 'Invalid reqDate format. Use YYYY-MM-DD.');
-    }
+            const parsedDate = new Date(reqDate);
+            if (isNaN(parsedDate.getTime())) {
+                return invalidInput(res, 'Invalid reqDate format. Use YYYY-MM-DD.');
+            }
 
-    const request = new sql.Request();
-    
+            const request = new sql.Request();
 
-    request.input('reqDate', sql.Date, parsedDate);
-     
-  
-    const query = `EXEC Outstanding_Report_Days_RPT @reqDate`;
-   
-    const result = await request.query(query);
-    
-    sentData(res, result.recordset);
-  } catch (e) {
 
-    servError(e, res);
-  }
-};
+            request.input('reqDate', sql.Date, parsedDate);
+
+
+            const query = `EXEC Outstanding_Report_Days_RPT @reqDate`;
+
+            const result = await request.query(query);
+
+            sentData(res, result.recordset);
+        } catch (e) {
+
+            servError(e, res);
+        }
+    };
 
     const getoutstandingOver = async (req, res) => {
         const { reqDate } = req.query;

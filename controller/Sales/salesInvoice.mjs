@@ -85,7 +85,7 @@ const SalesInvoice = () => {
 
         try {
             const {
-                Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status = 1,
+                Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status = 1, Ref_Inv_Number = '',
                 Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
                 Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
             } = req.body;
@@ -247,6 +247,7 @@ const SalesInvoice = () => {
                 .input('Delivery_Person_Id', 0)
                 .input('Narration', Narration)
                 .input('So_No', checkIsNumber(So_No) ? So_No : null)
+                .input('Ref_Inv_Number', Ref_Inv_Number)
                 .input('Cancel_status', toNumber(Cancel_status))
 
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
@@ -271,13 +272,13 @@ const SalesInvoice = () => {
                         Do_Date, Branch_Id, Retailer_Id, Delivery_Person_Id, Narration, So_No, Cancel_status,
                         GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
                         Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name,
-                        Trans_Type, Alter_Id, Created_by, Created_on
+                        Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number
                     ) VALUES (
                         @Do_Id, @Do_Inv_No, @Voucher_Type, @Do_No, @Do_Year,
                         @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
                         @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
                         @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Stock_Item_Ledger_Name,
-                        @Trans_Type, @Alter_Id, @Created_by, @Created_on
+                        @Trans_Type, @Alter_Id, @Created_by, @Created_on, @Ref_Inv_Number
                     )`
                 );
 
@@ -676,7 +677,7 @@ const SalesInvoice = () => {
 
         try {
             const {
-                Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status,
+                Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status, Ref_Inv_Number = '',
                 Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
                 Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
             } = req.body;
@@ -781,6 +782,7 @@ const SalesInvoice = () => {
                 .input('Retailer_Id', Retailer_Id)
                 .input('Narration', Narration)
                 .input('So_No', checkIsNumber(So_No) ? So_No : null)
+                .input('Ref_Inv_Number', Ref_Inv_Number)
                 .input('Cancel_status', toNumber(Cancel_status))
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
                 .input('IS_IGST', isIGST ? 1 : 0)
@@ -819,6 +821,7 @@ const SalesInvoice = () => {
                         Total_Invoice_value = @Total_Invoice_value,
                         Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
                         Trans_Type = @Trans_Type,
+                        Ref_Inv_Number = @Ref_Inv_Number,
                         Alter_Id = @Alter_Id,
                         Altered_by = @Altered_by,
                         Alterd_on = GETDATE()
