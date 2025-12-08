@@ -2288,38 +2288,19 @@ const getSalesInvoiceMobileFilter1 = async (req, res) => {
                 WHERE 1 = 0;
             END
 
+
+SELECT  
+    llos.*
+FROM tbl_Stock_LOS llos
+WHERE llos.Pro_Id IN (
+    SELECT DISTINCT sdsi.Item_Id
+    FROM tbl_Sales_Delivery_Stock_Info sdsi
+    WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)  
+)
+ORDER BY llos.Pro_Id;
             
             SELECT DISTINCT
-                llol.Ret_Id,
-                llol.Auto_Id,
-                llol.Ledger_Tally_Id,
-                llol.Alter_Tally_Id,
-                llol.Ledger_Name,
-                llol.Ledger_Alias,
-                llol.Actual_Party_Name_with_Brokers,
-                llol.Party_Name,
-                llol.Party_Location,
-                llol.Party_Nature,
-                llol.Party_Group,
-                llol.Ref_Brokers,
-                llol.Ref_Owners,
-                llol.Party_Mobile_1,
-                llol.Party_Mobile_2,
-                llol.Party_District,
-                llol.File_No,
-                llol.Date_Added,
-                llol.Payment_Mode,
-                llol.Party_Mailing_Name,
-                llol.Party_Mailing_Address,
-                llol.GST_No,
-                llol.Route_Name,
-                llol.A1,
-                llol.A2,
-                llol.A3,
-                llol.A4,
-                llol.A5,
-                llol.IsUpdated,
-                llol.Is_Tally_Updated
+                llol.*
             FROM tbl_Ledger_LOL llol
             WHERE llol.Ret_Id IN (
                 SELECT DISTINCT Retailer_Id 
@@ -2328,46 +2309,67 @@ const getSalesInvoiceMobileFilter1 = async (req, res) => {
             )
             ORDER BY llol.Ret_Id, llol.Auto_Id;
         `;
+     const result = await request.query(sqlQuery);
+ 
+const SalesGeneralInfo = toArray(result.recordsets[0]);
+const Products_List = toArray(result.recordsets[1]);
+const Expence_Array = toArray(result.recordsets[2]);
+const Staffs_Array = toArray(result.recordsets[3]);
+const StockInfo = toArray(result.recordsets[4]);  
+const LedgerInfo = toArray(result.recordsets[5]);  
 
-        const result = await request.query(sqlQuery);
+if (SalesGeneralInfo.length > 0) {
+    const ledgerMap = {};
+    const stockMap = {}; 
+    
+   
+    LedgerInfo.forEach(ledger => {
+        if (!ledgerMap[ledger.Ret_Id]) {
+            ledgerMap[ledger.Ret_Id] = ledger;
+        }
+    });
+    
 
-        const SalesGeneralInfo = toArray(result.recordsets[0]);
-        const Products_List = toArray(result.recordsets[1]);
-        const Expence_Array = toArray(result.recordsets[2]);
-        const Staffs_Array = toArray(result.recordsets[3]);
-        const LedgerInfo = toArray(result.recordsets[4]);
-
-        if (SalesGeneralInfo.length > 0) {
-           
-            const ledgerMap = {};
-            LedgerInfo.forEach(ledger => {
-                if (!ledgerMap[ledger.Ret_Id]) {
-                    ledgerMap[ledger.Ret_Id] = ledger;
-                }
-            });
-
-            const resData = SalesGeneralInfo.map(row => {
-                const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
-                
+    StockInfo.forEach(stock => {
+        if (!stockMap[stock.Pro_Id]) { 
+            stockMap[stock.Pro_Id] = stock;
+        }
+    });
+    
+    const resData = SalesGeneralInfo.map(row => {
+        const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
+        
+        
+        const productsWithStock = Products_List
+            .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
+            .map(product => {
+                const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
                 return {
-                    ...row,
-                    ...ledgerInfo,
-                    Products_List: Products_List.filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)),
-                    Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
-                    Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+                    ...product,
+                    Stock_Info: productStock  
                 };
             });
+        
+        return {
+            ...row,
+            ...ledgerInfo,
+            Products_List: productsWithStock,  
+            Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+            Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+        };
+    });
 
-            dataFound(res, resData);
-        } else {
-            noData(res);
-        }
+    dataFound(res, resData);
+} else {
+    noData(res);
+}
 
     } catch (e) {
         console.error('API Error:', e);
         servError(e, res);
     }
 };
+
 
 const getSalesInvoiceMobileFilter2 = async (req, res) => {
     try {
@@ -2417,7 +2419,7 @@ const getSalesInvoiceMobileFilter2 = async (req, res) => {
             FROM tbl_Mobile_Report_Details mrd 
             INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
             LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
-            WHERE mrt.Report_Name = 'Sales Invoice' AND  FilterLevel =2
+            WHERE mrt.Report_Name = 'Sales Invoice' AND FilterLevel =2
             GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name,mrd.FilterLevel
             ORDER BY mrd.Type
         `);
@@ -2571,7 +2573,7 @@ const getSalesInvoiceMobileFilter2 = async (req, res) => {
             : '';
 
        
-        const sqlQuery = `
+          const sqlQuery = `
             DECLARE @FilteredInvoice TABLE (Do_Id INT PRIMARY KEY);
 
             INSERT INTO @FilteredInvoice (Do_Id)
@@ -2650,38 +2652,19 @@ const getSalesInvoiceMobileFilter2 = async (req, res) => {
                 WHERE 1 = 0;
             END
 
+
+SELECT  
+    llos.*
+FROM tbl_Stock_LOS llos
+WHERE llos.Pro_Id IN (
+    SELECT DISTINCT sdsi.Item_Id
+    FROM tbl_Sales_Delivery_Stock_Info sdsi
+    WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)  
+)
+ORDER BY llos.Pro_Id;
             
             SELECT DISTINCT
-                llol.Ret_Id,
-                llol.Auto_Id,
-                llol.Ledger_Tally_Id,
-                llol.Alter_Tally_Id,
-                llol.Ledger_Name,
-                llol.Ledger_Alias,
-                llol.Actual_Party_Name_with_Brokers,
-                llol.Party_Name,
-                llol.Party_Location,
-                llol.Party_Nature,
-                llol.Party_Group,
-                llol.Ref_Brokers,
-                llol.Ref_Owners,
-                llol.Party_Mobile_1,
-                llol.Party_Mobile_2,
-                llol.Party_District,
-                llol.File_No,
-                llol.Date_Added,
-                llol.Payment_Mode,
-                llol.Party_Mailing_Name,
-                llol.Party_Mailing_Address,
-                llol.GST_No,
-                llol.Route_Name,
-                llol.A1,
-                llol.A2,
-                llol.A3,
-                llol.A4,
-                llol.A5,
-                llol.IsUpdated,
-                llol.Is_Tally_Updated
+                llol.*
             FROM tbl_Ledger_LOL llol
             WHERE llol.Ret_Id IN (
                 SELECT DISTINCT Retailer_Id 
@@ -2690,40 +2673,60 @@ const getSalesInvoiceMobileFilter2 = async (req, res) => {
             )
             ORDER BY llol.Ret_Id, llol.Auto_Id;
         `;
+     const result = await request.query(sqlQuery);
+ 
+const SalesGeneralInfo = toArray(result.recordsets[0]);
+const Products_List = toArray(result.recordsets[1]);
+const Expence_Array = toArray(result.recordsets[2]);
+const Staffs_Array = toArray(result.recordsets[3]);
+const StockInfo = toArray(result.recordsets[4]);  
+const LedgerInfo = toArray(result.recordsets[5]);  
 
-        const result = await request.query(sqlQuery);
+if (SalesGeneralInfo.length > 0) {
+    const ledgerMap = {};
+    const stockMap = {}; 
+    
+   
+    LedgerInfo.forEach(ledger => {
+        if (!ledgerMap[ledger.Ret_Id]) {
+            ledgerMap[ledger.Ret_Id] = ledger;
+        }
+    });
+    
 
-        const SalesGeneralInfo = toArray(result.recordsets[0]);
-        const Products_List = toArray(result.recordsets[1]);
-        const Expence_Array = toArray(result.recordsets[2]);
-        const Staffs_Array = toArray(result.recordsets[3]);
-        const LedgerInfo = toArray(result.recordsets[4]);
-
-        if (SalesGeneralInfo.length > 0) {
-           
-            const ledgerMap = {};
-            LedgerInfo.forEach(ledger => {
-                if (!ledgerMap[ledger.Ret_Id]) {
-                    ledgerMap[ledger.Ret_Id] = ledger;
-                }
-            });
-
-            const resData = SalesGeneralInfo.map(row => {
-                const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
-                
+    StockInfo.forEach(stock => {
+        if (!stockMap[stock.Pro_Id]) { 
+            stockMap[stock.Pro_Id] = stock;
+        }
+    });
+    
+    const resData = SalesGeneralInfo.map(row => {
+        const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
+        
+        
+        const productsWithStock = Products_List
+            .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
+            .map(product => {
+                const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
                 return {
-                    ...row,
-                    ...ledgerInfo,
-                    Products_List: Products_List.filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)),
-                    Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
-                    Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+                    ...product,
+                    Stock_Info: productStock  
                 };
             });
+        
+        return {
+            ...row,
+            ...ledgerInfo,
+            Products_List: productsWithStock,  
+            Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+            Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+        };
+    });
 
-            dataFound(res, resData);
-        } else {
-            noData(res);
-        }
+    dataFound(res, resData);
+} else {
+    noData(res);
+}
 
     } catch (e) {
         console.error('API Error:', e);
