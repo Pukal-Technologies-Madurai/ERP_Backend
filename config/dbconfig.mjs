@@ -3,25 +3,29 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export const connectDB = () => {
+
     const config = {
+
         server: process.env.SERVER,
-        database: process.env.DATABASE,
+
+        instanceName: process.env.INSTANCE,
+        port: Number(process.env.DB_PORT),
         driver: "SQL Server",
+        database: process.env.DATABASE,
+
         user: process.env.USER,
         password: process.env.PASSWORD,
-        stream: false,
+
         options: {
-            trustedConnection: true,
+            // encrypt: false,
             trustServerCertificate: true,
+            enableArithAbort: true,
             requestTimeout: 60000,
         },
+
     };
 
-    sql.connect(config, (err) => {
-        if (err) {
-            console.log(err);
-        } else {
-            console.log("connected Successfully -----");
-        }
-    })
+    sql.connect(config)
+        .then(() => console.log("Connected Successfully ✔"))
+        .catch(err => console.log("DB Connection Error:", err));
 };
