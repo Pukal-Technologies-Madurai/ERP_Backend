@@ -2346,7 +2346,7 @@ if (SalesGeneralInfo.length > 0) {
                 const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
                 return {
                     ...product,
-                    Stock_Info: productStock  
+                    ... productStock  
                 };
             });
         
@@ -2710,7 +2710,7 @@ if (SalesGeneralInfo.length > 0) {
                 const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
                 return {
                     ...product,
-                    Stock_Info: productStock  
+                    ... productStock    
                 };
             });
         
