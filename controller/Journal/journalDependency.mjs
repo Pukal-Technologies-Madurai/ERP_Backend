@@ -93,7 +93,7 @@ const getAccountPendingReference = async (req, res) => {
                                 ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide,
-                        pig.Ref_Inv_Number AS BillRefNo
+                        pig.Do_Inv_No AS BillRefNo
                     FROM tbl_Sales_Delivery_Gen_Info pig
                     JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
                     JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
