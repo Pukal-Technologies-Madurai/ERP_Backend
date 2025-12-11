@@ -33,7 +33,7 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                     gen.Cancel_status,
                     gen.Created_by,
                     gen.Created_on,
-                    gen.staffInvolvedStatus
+                    ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus
                 FROM tbl_Sales_Delivery_Gen_Info AS gen
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
@@ -83,27 +83,38 @@ export const postAssignCostCenterToSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
 
     try {
-        const { Do_Id, involvedStaffs } = req.body;
+        const { Do_Id, involvedStaffs, staffInvolvedStatus = 0 } = req.body;
 
         await transaction.begin();
 
-        const request = new sql.Request(transaction);
-        request
+        // Update staffInvolvedStatus in main table
+        const updateStatusRequest = new sql.Request(transaction);
+        await updateStatusRequest
             .input('Do_Id', sql.BigInt, Do_Id)
-            .input('involvedStaffs', sql.NVarChar, JSON.stringify(involvedStaffs));
+            .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
+            .query(`
+                UPDATE tbl_Sales_Delivery_Gen_Info
+                SET staffInvolvedStatus = @staffInvolvedStatus
+                WHERE Do_Id = @Do_Id;`
+            );
 
-        await request.query(`
-            -- Delete old staff entries
-            DELETE FROM tbl_Sales_Delivery_Staff_Info
-            WHERE Do_Id = @Do_Id;
-            -- Insert new staff entries
-            INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
-            SELECT 
-                @Do_Id,
-                JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
-                JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
-            FROM OPENJSON(@involvedStaffs);
-        `);
+        // Update involved staffs
+        const request = new sql.Request(transaction);
+        await request
+            .input('Do_Id', sql.BigInt, Do_Id)
+            .input('involvedStaffs', sql.NVarChar, JSON.stringify(involvedStaffs))
+            .query(`
+                -- Delete old staff entries
+                DELETE FROM tbl_Sales_Delivery_Staff_Info
+                WHERE Do_Id = @Do_Id;
+                -- Insert new staff entries
+                INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
+                SELECT 
+                    @Do_Id,
+                    JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
+                    JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
+                FROM OPENJSON(@involvedStaffs);`
+            );
 
         await transaction.commit();
 
