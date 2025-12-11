@@ -338,7 +338,7 @@ const SaleOrder = () => {
     const editSaleOrder = async (req, res) => {
         const {
             So_Id, Retailer_Id, Sales_Person_Id, Branch_Id,
-            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0, VoucherType = '',
+            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0,
             Staff_Involved_List = []
         } = req.body;
 
@@ -354,10 +354,9 @@ const SaleOrder = () => {
             || !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Sales_Person_Id)
             || !checkIsNumber(Created_by)
-            || !checkIsNumber(VoucherType)
             || (!Array.isArray(Product_Array) || Product_Array.length === 0)
         ) {
-            return invalidInput(res, 'Retailer_Id, Sales_Person_Id, VoucherType, Product_Array is Required')
+            return invalidInput(res, 'Retailer_Id, Sales_Person_Id, Product_Array is Required')
         }
 
         const transaction = new sql.Transaction();
@@ -416,7 +415,6 @@ const SaleOrder = () => {
                 .input('retailer', Retailer_Id)
                 .input('salesperson', Sales_Person_Id)
                 .input('branch', Branch_Id)
-                .input('VoucherType', VoucherType)
                 .input('GST_Inclusive', GST_Inclusive)
                 .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
                 .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
@@ -439,7 +437,6 @@ const SaleOrder = () => {
                         Retailer_Id = @retailer, 
                         Sales_Person_Id = @salesperson, 
                         Branch_Id = @branch, 
-                        VoucherType = @VoucherType, 
                         GST_Inclusive = @GST_Inclusive, 
                         IS_IGST = @IS_IGST, 
                         CSGT_Total = @CSGT_Total, 

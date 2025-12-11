@@ -2,12 +2,13 @@ import express from 'express';
 import salesOrder from '../controller/Sales/salesOrder.mjs';
 import salesEntry from '../controller/Sales/salesEntry.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
-import { 
-    getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation 
+import {
+    getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation
 } from '../controller/Sales/salesInvoice/salesInvoceCrud.mjs';
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
 } from '../controller/Sales/salesInvoice/invoiceDependency.mjs';
+import { getSalesInvoiceForAssignCostCenter, postAssignCostCenterToSalesInvoice } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
 import salesReports from '../controller/Sales/reports.mjs';
 const SalesRouter = express.Router();
@@ -54,10 +55,9 @@ SalesRouter.get('/saleOrderReport', salesOrder.saleOrderReport)
 SalesRouter.post('/salesOrderSalesInvoice', salesInvoice.createSalesTransaction)
 SalesRouter.get('/salesInvoice/Details', salesInvoice.getSaleOrderWithDeliveries)
 
-
-
-
-
+// sales LR Report routes
+SalesRouter.get('/salesInvoice/lrReport', getSalesInvoiceForAssignCostCenter);
+SalesRouter.post('/salesInvoice/lrReport', postAssignCostCenterToSalesInvoice);
 
 
 SalesRouter.get('/lrReport', salesReports.getLRreport)

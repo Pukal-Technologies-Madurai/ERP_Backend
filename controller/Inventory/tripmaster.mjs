@@ -277,7 +277,6 @@ const tripActivities = () => {
         if (!checkIsNumber(Branch_Id) || Trip_Date === '' || !checkIsNumber(Trip_Id)) {
             return invalidInput(res, 'Check values ');
         }
-        if (!checkIsNumber(VoucherType)) return invalidInput(res, 'Select Voucher');
         if (StartTime && EndTime && new Date(StartTime) > new Date(EndTime)) {
             return invalidInput(res, 'Start Time cannot be greater than End Time');
         }
@@ -314,7 +313,6 @@ const tripActivities = () => {
                 .input('UnloadingLoad', toNumber(UnloadingLoad || 0))
                 .input('UnloadingEmpty', toNumber(UnloadingEmpty || 0))
                 .input('BillType', BillType)
-                .input('VoucherType', toNumber(VoucherType))
                 .input('Narration', Narration)
                 .input('TripStatus', TripStatus)
                 .input('StartTime', StartTime)
@@ -343,7 +341,6 @@ const tripActivities = () => {
                         UnloadingLoad = @UnloadingLoad,
                         UnloadingEmpty = @UnloadingEmpty,
                         BillType = @BillType,
-                        VoucherType = @VoucherType,
                         Narration = @Narration,
                         TripStatus = @TripStatus,
                         Updated_By = @Updated_By,

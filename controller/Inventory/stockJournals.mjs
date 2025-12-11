@@ -218,7 +218,6 @@ const StockJournal = () => {
                 .input('STJ_Id', Number(STJ_Id))
                 .input('Stock_Journal_date', Stock_Journal_date)
                 .input('Stock_Journal_Bill_type', Stock_Journal_Bill_type)
-                .input('Stock_Journal_Voucher_type', Stock_Journal_Voucher_type)
                 .input('Invoice_no', Invoice_no)
                 .input('Narration', Narration)
                 // .input('Start_Time', Start_Time)
@@ -232,7 +231,6 @@ const StockJournal = () => {
                     SET 
                         Stock_Journal_date = @Stock_Journal_date, 
                         Stock_Journal_Bill_type = @Stock_Journal_Bill_type,
-                        Stock_Journal_Voucher_type = @Stock_Journal_Voucher_type,
                         Invoice_no = @Invoice_no,
                         Narration = @Narration,
                         altered_by = @altered_by

@@ -691,7 +691,6 @@ export const updateSalesInvoice = async (req, res) => {
             !checkIsNumber(Do_Id)
             || !checkIsNumber(Retailer_Id)
             || !checkIsNumber(Altered_by)
-            || !checkIsNumber(Voucher_Type)
             || !Array.isArray(Product_Array) || Product_Array.length === 0
         ) {
             return invalidInput(res, 'Please select Required Fields')
@@ -774,7 +773,6 @@ export const updateSalesInvoice = async (req, res) => {
 
         const request = new sql.Request(transaction)
             .input('Do_Id', Do_Id)
-            .input('Voucher_Type', Voucher_Type)
             .input('Do_Date', Do_Date)
             .input('Branch_Id', sql.Int, Branch_Id)
             .input('Retailer_Id', Retailer_Id)
@@ -800,7 +798,6 @@ export const updateSalesInvoice = async (req, res) => {
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET 
-                    Voucher_Type = @Voucher_Type,
                     Do_Date = @Do_Date,
                     Branch_Id = @Branch_Id,
                     Retailer_Id = @Retailer_Id,

@@ -355,7 +355,6 @@ const StockManagement = () => {
             const {
                 PR_Id = 0,
                 Branch_Id = 0,
-                VoucherType = 0,
                 BillType = 'PROCESSING',
                 Machine_No = '',
                 Godownlocation = 0,
@@ -373,10 +372,6 @@ const StockManagement = () => {
 
             if (!checkIsNumber(Branch_Id) || !checkIsNumber(PR_Id)) {
                 return invalidInput(res, 'Select Branch, PR_Id');
-            }
-
-            if (!checkIsNumber(VoucherType)) {
-                return invalidInput(res, 'Select Voucher')
             }
 
             if (StartDateTime && EndDateTime && (new Date(StartDateTime) > new Date(EndDateTime))) {
@@ -417,7 +412,6 @@ const StockManagement = () => {
 
             const updateOrderDetails = await new sql.Request(transaction)
                 .input('Branch_Id', toNumber(Branch_Id))
-                .input('VoucherType', toNumber(VoucherType))
                 .input('BillType', BillType)
                 .input('Process_date', Process_date)
                 .input('Machine_No', Machine_No)
@@ -436,7 +430,6 @@ const StockManagement = () => {
                     UPDATE tbl_Processing_Gen_Info
                     SET 
                         Branch_Id = @Branch_Id,
-                        VoucherType = @VoucherType,
                         BillType = @BillType,
                         Process_date = @Process_date,
                         Machine_No = @Machine_No,

@@ -435,7 +435,7 @@ const PurchaseOrder = () => {
         const {
             PIN_Id, Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
-            Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
+            Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
             QualityCondition = '', PaymentDays = 0
         } = req.body;
 
@@ -505,7 +505,6 @@ const PurchaseOrder = () => {
                 .input('PIN_Id', PIN_Id)
                 .input('Po_Inv_Date', Po_Inv_Date)
                 .input('Po_Entry_Date', Po_Entry_Date)
-                .input('Voucher_Type', Voucher_Type)
                 .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
 
                 .input('Ref_Po_Inv_No', Ref_Po_Inv_No)
@@ -538,7 +537,6 @@ const PurchaseOrder = () => {
                     SET
                         Po_Inv_Date = @Po_Inv_Date, 
                         Po_Entry_Date = @Po_Entry_Date,
-                        Voucher_Type = @Voucher_Type,
                         Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
                         Ref_Po_Inv_No = @Ref_Po_Inv_No, 
                         Retailer_Id = @Retailer_Id, 
