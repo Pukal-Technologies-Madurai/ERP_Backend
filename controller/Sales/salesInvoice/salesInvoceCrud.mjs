@@ -78,6 +78,33 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}) {
     return { stockRows, batchRows };
 }
 
+const createRetailerDeliveryAddress = async ({ retailerId, deliveryName, phoneNumber, cityName, deliveryAddress, transaction }) => {
+    try {
+        const request = new sql.Request(transaction)
+            .input('retailerId', toNumber(retailerId))
+            .input('deliveryName', deliveryName)
+            .input('phoneNumber', phoneNumber)
+            .input('cityName', cityName)
+            .input('deliveryAddress', deliveryAddress)
+            .query(`
+                INSERT INTO tbl_Sales_Delivery_Address (
+                    retailerId, deliveryName, phoneNumber, cityName, deliveryAddress
+                ) VALUES (
+                    @retailerId, @deliveryName, @phoneNumber, @cityName, @deliveryAddress
+                );
+                SELECT SCOPE_IDENTITY() AS DeliveryAddressId;`
+            );
+        const result = await request;
+        if (result.rowsAffected[0] === 0) {
+            throw new Error('Failed to create delivery address');
+        }
+        return result.recordset[0]?.DeliveryAddressId;
+
+    } catch (e) {
+        throw new Error('Failed to create delivery address');
+    }
+}
+
 export const getSalesInvoice = async (req, res) => {
     try {
         const { Retailer_Id, Cancel_status = 0, Created_by, VoucherType } = req.query;
@@ -125,6 +152,7 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
                     sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
+                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, 
                     COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                     COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                     COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
@@ -219,7 +247,8 @@ export const createSalesInvoice = async (req, res) => {
         const {
             Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status = 1, Ref_Inv_Number = '',
             Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
-            Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
+            Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
+            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress,
         } = req.body;
 
         const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -365,6 +394,23 @@ export const createSalesInvoice = async (req, res) => {
         // const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
 
         await transaction.begin();
+        let delivery_id_to_post = delivery_id;
+
+        if (!checkIsNumber(delivery_id) && (deliveryName || phoneNumber || cityName || deliveryAddress)) {
+            const newDeliveryId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(deliveryName),
+                phoneNumber: String(phoneNumber),
+                cityName: String(cityName),
+                deliveryAddress: String(deliveryAddress),
+                transaction
+            });
+
+            if (!checkIsNumber(newDeliveryId)) {
+                throw new Error('Failed to create delivery address');
+            }
+            delivery_id_to_post = newDeliveryId;
+        }
 
         const request = new sql.Request(transaction)
             .input('Do_Id', Do_Id)
@@ -398,19 +444,20 @@ export const createSalesInvoice = async (req, res) => {
             .input('Alter_Id', sql.BigInt, Alter_Id)
             .input('Created_by', sql.BigInt, Created_by)
             .input('Created_on', sql.DateTime, new Date())
+            .input('deliveryAddressId', delivery_id_to_post)
             .query(`
                 INSERT INTO tbl_Sales_Delivery_Gen_Info (
                     Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year, 
                     Do_Date, Branch_Id, Retailer_Id, Delivery_Person_Id, Narration, So_No, Cancel_status,
                     GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
                     Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name,
-                    Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number
+                    Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number, deliveryAddressId
                 ) VALUES (
                     @Do_Id, @Do_Inv_No, @Voucher_Type, @Do_No, @Do_Year,
                     @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
                     @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
                     @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Stock_Item_Ledger_Name,
-                    @Trans_Type, @Alter_Id, @Created_by, @Created_on, @Ref_Inv_Number
+                    @Trans_Type, @Alter_Id, @Created_by, @Created_on, @Ref_Inv_Number, @deliveryAddressId
                 )`
             );
 
@@ -677,7 +724,8 @@ export const updateSalesInvoice = async (req, res) => {
         const {
             Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status, Ref_Inv_Number = '',
             Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
-            Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = ''
+            Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
+            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress,
         } = req.body;
 
         const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -771,6 +819,24 @@ export const updateSalesInvoice = async (req, res) => {
 
         await transaction.begin();
 
+        let delivery_id_to_post = delivery_id;
+
+        if (!checkIsNumber(delivery_id) && (deliveryName || phoneNumber || cityName || deliveryAddress)) {
+            const newDeliveryId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(deliveryName),
+                phoneNumber: String(phoneNumber),
+                cityName: String(cityName),
+                deliveryAddress: String(deliveryAddress),
+                transaction
+            });
+
+            if (!checkIsNumber(newDeliveryId)) {
+                throw new Error('Failed to create delivery address');
+            }
+            delivery_id_to_post = newDeliveryId;
+        }
+
         const request = new sql.Request(transaction)
             .input('Do_Id', Do_Id)
             .input('Do_Date', Do_Date)
@@ -795,6 +861,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Alter_Id', sql.BigInt, Alter_Id)
             .input('Altered_by', sql.BigInt, Altered_by)
             .input('Alterd_on', sql.DateTime, new Date())
+            .input('deliveryAddressId', delivery_id_to_post)
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET 
@@ -819,7 +886,8 @@ export const updateSalesInvoice = async (req, res) => {
                     Ref_Inv_Number = @Ref_Inv_Number,
                     Alter_Id = @Alter_Id,
                     Altered_by = @Altered_by,
-                    Alterd_on = GETDATE()
+                    Alterd_on = GETDATE(),
+                    deliveryAddressId = @deliveryAddressId
                 WHERE
                     Do_Id = @Do_Id`
             );

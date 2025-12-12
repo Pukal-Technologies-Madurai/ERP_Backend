@@ -7,7 +7,7 @@ import { dirname } from 'path';
 import copyImageMiddleware from '../../middleware/copyMiddleware.mjs';
 import getImage from '../../middleware/getImageIfExist.mjs';
 import dotenv from 'dotenv';
-import { Addition, checkIsNumber, getDaysBetween, ISOString, isValidDate, LocalDate, Multiplication, toArray, toNumber } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, getDaysBetween, isEqualNumber, ISOString, isValidDate, LocalDate, Multiplication, toArray, toNumber } from '../../helper_functions.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import fetch from 'node-fetch';
@@ -135,22 +135,43 @@ const RetailerControll = () => {
                 .input('isRetailer', isRetailer)
                 .input('isVendor', isVendor)
                 .query(`
+                    DECLARE @retailerIds TABLE (Retailer_Id INT);
+                    INSERT INTO @retailerIds (Retailer_Id)
+                    SELECT Retailer_Id 
+                    FROM tbl_Retailers_Master
+                    WHERE isRetailer = @isRetailer AND isVendor = @isVendor;  
+                    -- getting retailers
                     SELECT 
                         Retailer_Id,
                         Retailer_Name,
                         Reatailer_Address
-                    FROM 
-                        tbl_Retailers_Master
-                    WHERE
-                        isRetailer = @isRetailer
-                        AND
-                        isVendor = @isVendor`
-                )
+                    FROM tbl_Retailers_Master
+                    WHERE isRetailer IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
+                    -- getting retailer gen info
+                    SELECT 
+                        id,
+                        retailerId,
+                        deliveryName,
+                        phoneNumber,
+                        cityName,
+                        deliveryAddress 
+                    FROM tbl_Sales_Delivery_Address 
+                    WHERE retailerId IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);`
+                );
 
             const result = await request;
 
+            const [retailers, deliveryAddresses] = result.recordsets;
+
+            const withAddresses = retailers.map(retailer => ({
+                ...retailer,
+                deliveryAddresses: deliveryAddresses.filter(
+                    address => isEqualNumber(address.retailerId, retailer.Retailer_Id)
+                )
+            }));
+
             if (result.recordset.length > 0) {
-                dataFound(res, result.recordset)
+                dataFound(res, withAddresses)
             } else {
                 noData(res)
             }
