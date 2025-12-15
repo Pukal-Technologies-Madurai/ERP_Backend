@@ -9,35 +9,35 @@ const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumbe
 const SalesInvoice = () => {
 
     const getSalesInvoiceMobileFilter1 = async (req, res) => {
-        try {
-            const {
-                Retailer_Id,
-                Cancel_status = 0,
-                Created_by,
-                VoucherType,
-                Branch_Id,
-                User_Id,
-                filter1,
-                filter2,
-                filter3,
-                filter4
-            } = req.query;
+    try {
+        const { 
+            Retailer_Id, 
+            Cancel_status = 0, 
+            Created_by, 
+            VoucherType, 
+            Branch_Id, 
+            User_Id,
+            filter1, 
+            filter2,
+            filter3,
+            filter4
+        } = req.query;
 
-            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
-            const parseFilterValues = (filterParam) => {
-                if (!filterParam) return null;
-                return filterParam.split(',').map(val => val.trim()).filter(val => val);
-            };
+        const parseFilterValues = (filterParam) => {
+            if (!filterParam) return null;
+            return filterParam.split(',').map(val => val.trim()).filter(val => val);
+        };
 
-            const filter1Values = parseFilterValues(filter1);
-            const filter2Values = parseFilterValues(filter2);
-            // const filter3Values = parseFilterValues(filter3);
-            //  const filter4Values = parseFilterValues(filter4);
+        const filter1Values = parseFilterValues(filter1);
+        const filter2Values = parseFilterValues(filter2);
+        // const filter3Values = parseFilterValues(filter3);
+        //  const filter4Values = parseFilterValues(filter4);
 
-
-            const mobileFilters = await new sql.Request().query(`
+     
+        const mobileFilters = await new sql.Request().query(`
             SELECT 
                 mrd.Type AS FilterType,
                 mrd.Column_Name AS ColumnName,
@@ -61,156 +61,156 @@ const SalesInvoice = () => {
             ORDER BY mrd.Type
         `);
 
-            const checkTableHasRetId = async (tableName) => {
-                try {
-                    const columnCheck = await new sql.Request().query(`
+        const checkTableHasRetId = async (tableName) => {
+            try {
+                const columnCheck = await new sql.Request().query(`
                     SELECT COLUMN_NAME 
                     FROM INFORMATION_SCHEMA.COLUMNS 
                     WHERE TABLE_NAME = '${tableName}' 
                     AND COLUMN_NAME = 'Ret_Id'
                 `);
-                    return columnCheck.recordset.length > 0;
-                } catch (error) {
-                    console.error(`Error checking Ret_Id for ${tableName}:`, error);
-                    return false;
-                }
-            };
-
-            const tableRetIdMap = {};
-            for (const filter of mobileFilters.recordset) {
-                if (filter.TableName && !tableRetIdMap[filter.TableName]) {
-                    tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
-                }
+                return columnCheck.recordset.length > 0;
+            } catch (error) {
+                console.error(`Error checking Ret_Id for ${tableName}:`, error);
+                return false;
             }
+        };
 
-            const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
-                if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
-                    return null;
-                }
+        const tableRetIdMap = {};
+        for (const filter of mobileFilters.recordset) {
+            if (filter.TableName && !tableRetIdMap[filter.TableName]) {
+                tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
+            }
+        }
 
-                const tableName = filterConfig.TableName;
-                const columnName = filterConfig.ColumnName;
-                const hasRetId = tableRetIdMap[tableName] || false;
+       const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
+    if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
+        return null;
+    }
+
+    const tableName = filterConfig.TableName;
+    const columnName = filterConfig.ColumnName;
+    const hasRetId = tableRetIdMap[tableName] || false;
+    
+ 
+    const specialTables = {
+        'tbl_Ledger_LOL': {
+            joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
+            fromClause: tableName,
+            additionalJoins: ''
+        },
+        'tbl_Stock_LOS': {
+            joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
+            fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
+            whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
+        }
+    };
+
+    const isSingleValue = filterValues.length === 1;
+    const placeholders = isSingleValue 
+        ? `@${filterParamName}` 
+        : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
+
+    const condition = isSingleValue 
+        ? `${columnName} = ${placeholders}`
+        : `${columnName} IN (${placeholders})`;
 
 
-                const specialTables = {
-                    'tbl_Ledger_LOL': {
-                        joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
-                        fromClause: tableName,
-                        additionalJoins: ''
-                    },
-                    'tbl_Stock_LOS': {
-                        joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
-                        fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
-                        whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
-                    }
-                };
-
-                const isSingleValue = filterValues.length === 1;
-                const placeholders = isSingleValue
-                    ? `@${filterParamName}`
-                    : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-
-                const condition = isSingleValue
-                    ? `${columnName} = ${placeholders}`
-                    : `${columnName} IN (${placeholders})`;
-
-
-                if (specialTables[tableName]) {
-                    const specialConfig = specialTables[tableName];
-                    return `EXISTS (
+    if (specialTables[tableName]) {
+        const specialConfig = specialTables[tableName];
+        return `EXISTS (
             SELECT 1 FROM ${specialConfig.fromClause}
             ${specialConfig.whereClause || ''}
             ${specialConfig.whereClause ? 'AND' : 'WHERE'} ${condition}
             ${specialConfig.joinCondition}
         )`;
-                }
-
-
-                const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
-
-                return `EXISTS (
+    }
+    
+  
+    const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
+    
+    return `EXISTS (
         SELECT 1 FROM ${tableName} 
         WHERE ${tableName}.${condition}
         ${retIdCondition}
     )`;
-            };
+};
 
-
-            const getCurrespondingAccount = await new sql.Request().query(`
+       
+        const getCurrespondingAccount = await new sql.Request().query(`
             SELECT Acc_Id 
             FROM tbl_Default_AC_Master 
             WHERE Type = 'DEFAULT' AND Acc_Id IS NOT NULL;
         `);
-            const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
+        const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
 
-            let branchCondition = '';
+        let branchCondition = '';
 
-            if (User_Id) {
-                const getBranches = await new sql.Request()
-                    .input('User_Id', User_Id)
-                    .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
+        if (User_Id) {
+            const getBranches = await new sql.Request()
+                .input('User_Id', User_Id)
+                .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
+            
+            const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
 
-                const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
+            if (Branch_Id) {
+                const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
+                const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
 
-                if (Branch_Id) {
-                    const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
-                    const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
+                if (finalBranches.length) {
+                    branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
+                } else {
+                    return res.json({ data: [], message: "No data", success: true, others: {} });
+                }
+            } else if (allowedBranches.length) {
+                branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
+            }
+        }
 
-                    if (finalBranches.length) {
-                        branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
+        let mobileFilterConditions = [];
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate);
+
+        if (Retailer_Id) request.input('retailer', Retailer_Id);
+        if (Cancel_status) request.input('cancel', Cancel_status);
+        if (Created_by) request.input('creater', Created_by);
+        if (VoucherType) request.input('VoucherType', VoucherType);
+
+        const filterConditions = [
+            { values: filter1Values, paramName: 'filter1', index: 0 },
+            { values: filter2Values, paramName: 'filter2', index: 1 },
+            // { values: filter3Values, paramName: 'filter3', index: 2 },
+            // { values: filter4Values, paramName: 'filter3', index: 3 }
+        ];
+
+        for (let i = 0; i < filterConditions.length; i++) {
+            const { values, paramName, index } = filterConditions[i];
+            
+            if (values && values.length > 0 && mobileFilters.recordset.length > index) {
+                const filterConfig = mobileFilters.recordset[index];
+                const condition = buildFilterCondition(filterConfig, values, paramName);
+                
+                if (condition) {
+                    mobileFilterConditions.push(condition);
+                    
+                    if (values.length === 1) {
+                        request.input(paramName, values[0]);
                     } else {
-                        return res.json({ data: [], message: "No data", success: true, others: {} });
-                    }
-                } else if (allowedBranches.length) {
-                    branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
-                }
-            }
-
-            let mobileFilterConditions = [];
-            const request = new sql.Request()
-                .input('Fromdate', Fromdate)
-                .input('Todate', Todate);
-
-            if (Retailer_Id) request.input('retailer', Retailer_Id);
-            if (Cancel_status) request.input('cancel', Cancel_status);
-            if (Created_by) request.input('creater', Created_by);
-            if (VoucherType) request.input('VoucherType', VoucherType);
-
-            const filterConditions = [
-                { values: filter1Values, paramName: 'filter1', index: 0 },
-                { values: filter2Values, paramName: 'filter2', index: 1 },
-                // { values: filter3Values, paramName: 'filter3', index: 2 },
-                // { values: filter4Values, paramName: 'filter3', index: 3 }
-            ];
-
-            for (let i = 0; i < filterConditions.length; i++) {
-                const { values, paramName, index } = filterConditions[i];
-
-                if (values && values.length > 0 && mobileFilters.recordset.length > index) {
-                    const filterConfig = mobileFilters.recordset[index];
-                    const condition = buildFilterCondition(filterConfig, values, paramName);
-
-                    if (condition) {
-                        mobileFilterConditions.push(condition);
-
-                        if (values.length === 1) {
-                            request.input(paramName, values[0]);
-                        } else {
-                            values.forEach((value, idx) => {
-                                request.input(`${paramName}${idx}`, value);
-                            });
-                        }
+                        values.forEach((value, idx) => {
+                            request.input(`${paramName}${idx}`, value);
+                        });
                     }
                 }
             }
+        }
 
-            const mobileFilterCondition = mobileFilterConditions.length > 0
-                ? ` AND ${mobileFilterConditions.join(' AND ')} `
-                : '';
+        const mobileFilterCondition = mobileFilterConditions.length > 0 
+            ? ` AND ${mobileFilterConditions.join(' AND ')} `
+            : '';
 
-
-            const sqlQuery = `
+       
+        const sqlQuery = `
             DECLARE @FilteredInvoice TABLE (Do_Id INT PRIMARY KEY);
 
             INSERT INTO @FilteredInvoice (Do_Id)
@@ -310,97 +310,97 @@ ORDER BY llos.Pro_Id;
             )
             ORDER BY llol.Ret_Id, llol.Auto_Id;
         `;
-            const result = await request.query(sqlQuery);
+     const result = await request.query(sqlQuery);
+ 
+const SalesGeneralInfo = toArray(result.recordsets[0]);
+const Products_List = toArray(result.recordsets[1]);
+const Expence_Array = toArray(result.recordsets[2]);
+const Staffs_Array = toArray(result.recordsets[3]);
+const StockInfo = toArray(result.recordsets[4]);  
+const LedgerInfo = toArray(result.recordsets[5]);  
 
-            const SalesGeneralInfo = toArray(result.recordsets[0]);
-            const Products_List = toArray(result.recordsets[1]);
-            const Expence_Array = toArray(result.recordsets[2]);
-            const Staffs_Array = toArray(result.recordsets[3]);
-            const StockInfo = toArray(result.recordsets[4]);
-            const LedgerInfo = toArray(result.recordsets[5]);
-
-            if (SalesGeneralInfo.length > 0) {
-                const ledgerMap = {};
-                const stockMap = {};
-
-
-                LedgerInfo.forEach(ledger => {
-                    if (!ledgerMap[ledger.Ret_Id]) {
-                        ledgerMap[ledger.Ret_Id] = ledger;
-                    }
-                });
-
-
-                StockInfo.forEach(stock => {
-                    if (!stockMap[stock.Pro_Id]) {
-                        stockMap[stock.Pro_Id] = stock;
-                    }
-                });
-
-                const resData = SalesGeneralInfo.map(row => {
-                    const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
-
-
-                    const productsWithStock = Products_List
-                        .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
-                        .map(product => {
-                            const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
-                            return {
-                                ...product,
-                                ...productStock
-                            };
-                        });
-
-                    return {
-                        ...row,
-                        ...ledgerInfo,
-                        Products_List: productsWithStock,
-                        Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
-                        Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
-                    };
-                });
-
-                dataFound(res, resData);
-            } else {
-                noData(res);
-            }
-
-        } catch (e) {
-            console.error('API Error:', e);
-            servError(e, res);
+if (SalesGeneralInfo.length > 0) {
+    const ledgerMap = {};
+    const stockMap = {}; 
+    
+   
+    LedgerInfo.forEach(ledger => {
+        if (!ledgerMap[ledger.Ret_Id]) {
+            ledgerMap[ledger.Ret_Id] = ledger;
         }
-    };
+    });
+    
 
-    const getSalesInvoiceMobileFilter2 = async (req, res) => {
-        try {
-            const {
-                Retailer_Id,
-                Cancel_status = 0,
-                Created_by,
-                VoucherType,
-                Branch_Id,
-                User_Id,
-                filter1,
-                filter2,
-                filter3,
-                filter4
-            } = req.query;
+    StockInfo.forEach(stock => {
+        if (!stockMap[stock.Pro_Id]) { 
+            stockMap[stock.Pro_Id] = stock;
+        }
+    });
+    
+    const resData = SalesGeneralInfo.map(row => {
+        const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
+        
+        
+        const productsWithStock = Products_List
+            .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
+            .map(product => {
+                const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
+                return {
+                    ...product,
+                    ... productStock  
+                };
+            });
+        
+        return {
+            ...row,
+            ...ledgerInfo,
+            Products_List: productsWithStock,  
+            Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+            Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+        };
+    });
 
-            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+    dataFound(res, resData);
+} else {
+    noData(res);
+}
 
-            const parseFilterValues = (filterParam) => {
-                if (!filterParam) return null;
-                return filterParam.split(',').map(val => val.trim()).filter(val => val);
-            };
+    } catch (e) {
+        console.error('API Error:', e);
+        servError(e, res);
+    }
+};
 
-            const filter1Values = parseFilterValues(filter1);
-            const filter2Values = parseFilterValues(filter2);
-            const filter3Values = parseFilterValues(filter3);
-            const filter4Values = parseFilterValues(filter4);
+  const getSalesInvoiceMobileFilter2 = async (req, res) => {
+    try {
+        const { 
+            Retailer_Id, 
+            Cancel_status = 0, 
+            Created_by, 
+            VoucherType, 
+            Branch_Id, 
+            User_Id,
+            filter1, 
+            filter2,
+            filter3,
+            filter4
+        } = req.query;
 
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
-            const mobileFilters = await new sql.Request().query(`
+        const parseFilterValues = (filterParam) => {
+            if (!filterParam) return null;
+            return filterParam.split(',').map(val => val.trim()).filter(val => val);
+        };
+
+        const filter1Values = parseFilterValues(filter1);
+        const filter2Values = parseFilterValues(filter2);
+        const filter3Values = parseFilterValues(filter3);
+         const filter4Values = parseFilterValues(filter4);
+
+     
+        const mobileFilters = await new sql.Request().query(`
             SELECT 
                 mrd.Type AS FilterType,
                 mrd.Column_Name AS ColumnName,
@@ -424,156 +424,156 @@ ORDER BY llos.Pro_Id;
             ORDER BY mrd.Type
         `);
 
-            const checkTableHasRetId = async (tableName) => {
-                try {
-                    const columnCheck = await new sql.Request().query(`
+        const checkTableHasRetId = async (tableName) => {
+            try {
+                const columnCheck = await new sql.Request().query(`
                     SELECT COLUMN_NAME 
                     FROM INFORMATION_SCHEMA.COLUMNS 
                     WHERE TABLE_NAME = '${tableName}' 
                     AND COLUMN_NAME = 'Ret_Id'
                 `);
-                    return columnCheck.recordset.length > 0;
-                } catch (error) {
-                    console.error(`Error checking Ret_Id for ${tableName}:`, error);
-                    return false;
-                }
-            };
-
-            const tableRetIdMap = {};
-            for (const filter of mobileFilters.recordset) {
-                if (filter.TableName && !tableRetIdMap[filter.TableName]) {
-                    tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
-                }
+                return columnCheck.recordset.length > 0;
+            } catch (error) {
+                console.error(`Error checking Ret_Id for ${tableName}:`, error);
+                return false;
             }
+        };
 
-            const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
-                if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
-                    return null;
-                }
+        const tableRetIdMap = {};
+        for (const filter of mobileFilters.recordset) {
+            if (filter.TableName && !tableRetIdMap[filter.TableName]) {
+                tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
+            }
+        }
 
-                const tableName = filterConfig.TableName;
-                const columnName = filterConfig.ColumnName;
-                const hasRetId = tableRetIdMap[tableName] || false;
+       const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
+    if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
+        return null;
+    }
+
+    const tableName = filterConfig.TableName;
+    const columnName = filterConfig.ColumnName;
+    const hasRetId = tableRetIdMap[tableName] || false;
+    
+ 
+    const specialTables = {
+        'tbl_Ledger_LOL': {
+            joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
+            fromClause: tableName,
+            additionalJoins: ''
+        },
+        'tbl_Stock_LOS': {
+            joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
+            fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
+            whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
+        }
+    };
+
+    const isSingleValue = filterValues.length === 1;
+    const placeholders = isSingleValue 
+        ? `@${filterParamName}` 
+        : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
+
+    const condition = isSingleValue 
+        ? `${columnName} = ${placeholders}`
+        : `${columnName} IN (${placeholders})`;
 
 
-                const specialTables = {
-                    'tbl_Ledger_LOL': {
-                        joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
-                        fromClause: tableName,
-                        additionalJoins: ''
-                    },
-                    'tbl_Stock_LOS': {
-                        joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
-                        fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
-                        whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
-                    }
-                };
-
-                const isSingleValue = filterValues.length === 1;
-                const placeholders = isSingleValue
-                    ? `@${filterParamName}`
-                    : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-
-                const condition = isSingleValue
-                    ? `${columnName} = ${placeholders}`
-                    : `${columnName} IN (${placeholders})`;
-
-
-                if (specialTables[tableName]) {
-                    const specialConfig = specialTables[tableName];
-                    return `EXISTS (
+    if (specialTables[tableName]) {
+        const specialConfig = specialTables[tableName];
+        return `EXISTS (
             SELECT 1 FROM ${specialConfig.fromClause}
             ${specialConfig.whereClause || ''}
             ${specialConfig.whereClause ? 'AND' : 'WHERE'} ${condition}
             ${specialConfig.joinCondition}
         )`;
-                }
-
-
-                const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
-
-                return `EXISTS (
+    }
+    
+  
+    const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
+    
+    return `EXISTS (
         SELECT 1 FROM ${tableName} 
         WHERE ${tableName}.${condition}
         ${retIdCondition}
     )`;
-            };
+};
 
-
-            const getCurrespondingAccount = await new sql.Request().query(`
+       
+        const getCurrespondingAccount = await new sql.Request().query(`
             SELECT Acc_Id 
             FROM tbl_Default_AC_Master 
             WHERE Type = 'DEFAULT' AND Acc_Id IS NOT NULL;
         `);
-            const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
+        const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
 
-            let branchCondition = '';
+        let branchCondition = '';
 
-            if (User_Id) {
-                const getBranches = await new sql.Request()
-                    .input('User_Id', User_Id)
-                    .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
+        if (User_Id) {
+            const getBranches = await new sql.Request()
+                .input('User_Id', User_Id)
+                .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
+            
+            const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
 
-                const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
+            if (Branch_Id) {
+                const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
+                const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
 
-                if (Branch_Id) {
-                    const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
-                    const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
+                if (finalBranches.length) {
+                    branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
+                } else {
+                    return res.json({ data: [], message: "No data", success: true, others: {} });
+                }
+            } else if (allowedBranches.length) {
+                branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
+            }
+        }
 
-                    if (finalBranches.length) {
-                        branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
+        let mobileFilterConditions = [];
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate);
+
+        if (Retailer_Id) request.input('retailer', Retailer_Id);
+        if (Cancel_status) request.input('cancel', Cancel_status);
+        if (Created_by) request.input('creater', Created_by);
+        if (VoucherType) request.input('VoucherType', VoucherType);
+
+        const filterConditions = [
+            { values: filter1Values, paramName: 'filter1', index: 0 },
+            { values: filter2Values, paramName: 'filter2', index: 1 },
+            { values: filter3Values, paramName: 'filter3', index: 2 },
+            { values: filter4Values, paramName: 'filter3', index: 3 }
+        ];
+
+        for (let i = 0; i < filterConditions.length; i++) {
+            const { values, paramName, index } = filterConditions[i];
+            
+            if (values && values.length > 0 && mobileFilters.recordset.length > index) {
+                const filterConfig = mobileFilters.recordset[index];
+                const condition = buildFilterCondition(filterConfig, values, paramName);
+                
+                if (condition) {
+                    mobileFilterConditions.push(condition);
+                    
+                    if (values.length === 1) {
+                        request.input(paramName, values[0]);
                     } else {
-                        return res.json({ data: [], message: "No data", success: true, others: {} });
-                    }
-                } else if (allowedBranches.length) {
-                    branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
-                }
-            }
-
-            let mobileFilterConditions = [];
-            const request = new sql.Request()
-                .input('Fromdate', Fromdate)
-                .input('Todate', Todate);
-
-            if (Retailer_Id) request.input('retailer', Retailer_Id);
-            if (Cancel_status) request.input('cancel', Cancel_status);
-            if (Created_by) request.input('creater', Created_by);
-            if (VoucherType) request.input('VoucherType', VoucherType);
-
-            const filterConditions = [
-                { values: filter1Values, paramName: 'filter1', index: 0 },
-                { values: filter2Values, paramName: 'filter2', index: 1 },
-                { values: filter3Values, paramName: 'filter3', index: 2 },
-                { values: filter4Values, paramName: 'filter3', index: 3 }
-            ];
-
-            for (let i = 0; i < filterConditions.length; i++) {
-                const { values, paramName, index } = filterConditions[i];
-
-                if (values && values.length > 0 && mobileFilters.recordset.length > index) {
-                    const filterConfig = mobileFilters.recordset[index];
-                    const condition = buildFilterCondition(filterConfig, values, paramName);
-
-                    if (condition) {
-                        mobileFilterConditions.push(condition);
-
-                        if (values.length === 1) {
-                            request.input(paramName, values[0]);
-                        } else {
-                            values.forEach((value, idx) => {
-                                request.input(`${paramName}${idx}`, value);
-                            });
-                        }
+                        values.forEach((value, idx) => {
+                            request.input(`${paramName}${idx}`, value);
+                        });
                     }
                 }
             }
+        }
 
-            const mobileFilterCondition = mobileFilterConditions.length > 0
-                ? ` AND ${mobileFilterConditions.join(' AND ')} `
-                : '';
+        const mobileFilterCondition = mobileFilterConditions.length > 0 
+            ? ` AND ${mobileFilterConditions.join(' AND ')} `
+            : '';
 
-
-            const sqlQuery = `
+       
+          const sqlQuery = `
             DECLARE @FilteredInvoice TABLE (Do_Id INT PRIMARY KEY);
 
             INSERT INTO @FilteredInvoice (Do_Id)
@@ -673,81 +673,82 @@ ORDER BY llos.Pro_Id;
             )
             ORDER BY llol.Ret_Id, llol.Auto_Id;
         `;
-            const result = await request.query(sqlQuery);
+     const result = await request.query(sqlQuery);
+ 
+const SalesGeneralInfo = toArray(result.recordsets[0]);
+const Products_List = toArray(result.recordsets[1]);
+const Expence_Array = toArray(result.recordsets[2]);
+const Staffs_Array = toArray(result.recordsets[3]);
+const StockInfo = toArray(result.recordsets[4]);  
+const LedgerInfo = toArray(result.recordsets[5]);  
 
-            const SalesGeneralInfo = toArray(result.recordsets[0]);
-            const Products_List = toArray(result.recordsets[1]);
-            const Expence_Array = toArray(result.recordsets[2]);
-            const Staffs_Array = toArray(result.recordsets[3]);
-            const StockInfo = toArray(result.recordsets[4]);
-            const LedgerInfo = toArray(result.recordsets[5]);
-
-            if (SalesGeneralInfo.length > 0) {
-                const ledgerMap = {};
-                const stockMap = {};
-
-
-                LedgerInfo.forEach(ledger => {
-                    if (!ledgerMap[ledger.Ret_Id]) {
-                        ledgerMap[ledger.Ret_Id] = ledger;
-                    }
-                });
-
-
-                StockInfo.forEach(stock => {
-                    if (!stockMap[stock.Pro_Id]) {
-                        stockMap[stock.Pro_Id] = stock;
-                    }
-                });
-
-                const resData = SalesGeneralInfo.map(row => {
-                    const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
-
-
-                    const productsWithStock = Products_List
-                        .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
-                        .map(product => {
-                            const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
-                            return {
-                                ...product,
-                                ...productStock
-                            };
-                        });
-
-                    return {
-                        ...row,
-                        ...ledgerInfo,
-                        Products_List: productsWithStock,
-                        Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
-                        Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
-                    };
-                });
-
-                dataFound(res, resData);
-            } else {
-                noData(res);
-            }
-
-        } catch (e) {
-            console.error('API Error:', e);
-            servError(e, res);
+if (SalesGeneralInfo.length > 0) {
+    const ledgerMap = {};
+    const stockMap = {}; 
+    
+   
+    LedgerInfo.forEach(ledger => {
+        if (!ledgerMap[ledger.Ret_Id]) {
+            ledgerMap[ledger.Ret_Id] = ledger;
         }
-    };
+    });
+    
 
-    const getMobileReportDropdowns = async (req, res) => {
-        try {
-            const { reportName } = req.query;
+    StockInfo.forEach(stock => {
+        if (!stockMap[stock.Pro_Id]) { 
+            stockMap[stock.Pro_Id] = stock;
+        }
+    });
+    
+    const resData = SalesGeneralInfo.map(row => {
+        const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
+        
+        
+        const productsWithStock = Products_List
+            .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
+            .map(product => {
+                const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
+                return {
+                    ...product,
+                    ... productStock    
+                };
+            });
+        
+        return {
+            ...row,
+            ...ledgerInfo,
+            Products_List: productsWithStock,  
+            Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+            Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+        };
+    });
 
-            if (!reportName) {
-                return invalidInput(res, 'Report Name is Required')
-            }
+    dataFound(res, resData);
+} else {
+    noData(res);
+}
 
-            const mobileReportQuery = `
+    } catch (e) {
+        console.error('API Error:', e);
+        servError(e, res);
+    }
+};
+
+      const getMobileReportDropdowns = async (req, res) => {
+    try {
+        const { reportName } = req.query;
+
+        if (!reportName) {
+            return invalidInput(res, 'Report Name is Required')
+        }
+
+        // First, get the mobile report configuration
+        const mobileReportQuery = `
             SELECT 
                 mrd.Type AS filterType,
                 mrd.Table_Id AS tableId,
                 mrd.Column_Name AS columnName,
-                mrd.FilterLevel As FilterLevel,
+                mrd.FilterLevel AS FilterLevel,
                 STUFF((
                     SELECT DISTINCT ',' + CAST(mrd2.List_Type AS VARCHAR(10))
                     FROM tbl_Mobile_Report_Details mrd2
@@ -757,87 +758,112 @@ ORDER BY llos.Pro_Id;
                     AND mrd2.Mob_Rpt_Id = mrd.Mob_Rpt_Id
                     FOR XML PATH('')
                 ), 1, 1, '') AS listTypes,
-                tm.Table_Name AS tableName
+                tm.Table_Name AS tableName,
+                tm.AliasName AS aliasName
             FROM tbl_Mobile_Report_Details mrd
             INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
             LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
             WHERE mrt.Report_Name = @reportName
-            GROUP BY mrd.Type,mrd.FilterLevel, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name
+            GROUP BY mrd.Type, mrd.FilterLevel, mrd.Table_Id, mrd.Column_Name, 
+                     mrd.Mob_Rpt_Id, tm.Table_Name, tm.AliasName
             ORDER BY mrd.Type
         `;
 
-            const mobileReportResult = await new sql.Request()
-                .input('reportName', reportName)
-                .query(mobileReportQuery);
+        const mobileReportResult = await new sql.Request()
+            .input('reportName', reportName)
+            .query(mobileReportQuery);
 
-            if (mobileReportResult.recordset.length === 0) {
-                return res.json({
-                    success: true,
-                    data: [],
-                    message: "No dropdown configuration found for this report"
-                });
-            }
+        if (mobileReportResult.recordset.length === 0) {
+            return res.json({
+                success: true,
+                data: [],
+                message: "No dropdown configuration found for this report"
+            });
+        }
 
-            const dropdownPromises = mobileReportResult.recordset.map(async (config) => {
-                try {
-                    if (config.tableName && config.columnName) {
+   
+        const groupFilterQuery = `
+            SELECT DISTINCT
+                gtm.Table_Id,
+                gtm.Column_Name AS groupFilterColumn,
+                tm.Table_Name,
+                tm.AliasName
+            FROM tbl_Group_Template gtm
+            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = gtm.Table_Id
+            WHERE gtm.Mob_Rpt_Id IN (
+                SELECT Mob_Rpt_Id 
+                FROM tbl_Mobile_Report_Type 
+                WHERE Report_Name = @reportName
+            )
+        `;
 
-                        const columnCheckQuery = `
+        const groupFilterResult = await new sql.Request()
+            .input('reportName', reportName)
+            .query(groupFilterQuery);
+
+  
+        const regularFilterPromises = mobileReportResult.recordset.map(async (config) => {
+            try {
+                if (config.tableName && config.columnName) {
+                    
+                    const columnCheckQuery = `
                         SELECT COUNT(*) as columnExists
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_NAME = '${config.tableName}' 
                         AND COLUMN_NAME = '${config.columnName}'
                     `;
+                    
+                    const columnCheck = await new sql.Request().query(columnCheckQuery);
+                    
+                    if (columnCheck.recordset[0].columnExists === 0) {
+                        return {
+                            filterType: config.filterType,
+                            tableId: config.tableId,
+                            columnName: config.columnName,
+                            tableName: config.tableName,
+                            aliasName: config.aliasName,
+                            listTypes: config.listTypes,
+                            FilterLevel: config.FilterLevel,
+                            isGroupFilter: false,
+                            options: [],
+                            error: `Column '${config.columnName}' not found in table '${config.tableName}'`
+                        };
+                    }
 
-                        const columnCheck = await new sql.Request().query(columnCheckQuery);
-
-                        if (columnCheck.recordset[0].columnExists === 0) {
-                            return {
-                                filterType: config.filterType,
-                                tableId: config.tableId,
-                                columnName: config.columnName,
-                                tableName: config.tableName,
-                                listTypes: config.listTypes,
-                                FilterLevel: config.FilterLevel,
-                                options: [],
-                                error: `Column '${config.columnName}' not found in table '${config.tableName}'`
-                            };
-                        }
-
-                        const tableInfoQuery = `
+                    const tableInfoQuery = `
                         SELECT COLUMN_NAME, DATA_TYPE
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_NAME = '${config.tableName}'
                         ORDER BY ORDINAL_POSITION
                     `;
+                    
+                    const tableInfo = await new sql.Request().query(tableInfoQuery);
+                    
+                    let valueColumn = null;
+                    
+                    const possibleIdColumns = tableInfo.recordset.filter(col => 
+                        col.COLUMN_NAME.toLowerCase() === 'id' ||
+                        col.COLUMN_NAME.toLowerCase().includes('_id') ||
+                        col.COLUMN_NAME.toLowerCase().includes('id_') ||
+                        col.COLUMN_NAME.toLowerCase().endsWith('id') ||
+                        col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + 'id' ||
+                        col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + '_id'
+                    );
 
-                        const tableInfo = await new sql.Request().query(tableInfoQuery);
-
-                        let valueColumn = null;
-
-                        const possibleIdColumns = tableInfo.recordset.filter(col =>
-                            col.COLUMN_NAME.toLowerCase() === 'id' ||
-                            col.COLUMN_NAME.toLowerCase().includes('_id') ||
-                            col.COLUMN_NAME.toLowerCase().includes('id_') ||
-                            col.COLUMN_NAME.toLowerCase().endsWith('id') ||
-                            col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + 'id' ||
-                            col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + '_id'
+                    if (possibleIdColumns.length > 0) {
+                        valueColumn = possibleIdColumns[0].COLUMN_NAME;
+                    } else {
+                        const otherColumns = tableInfo.recordset.filter(col => 
+                            col.COLUMN_NAME !== config.columnName
                         );
-
-                        if (possibleIdColumns.length > 0) {
-                            valueColumn = possibleIdColumns[0].COLUMN_NAME;
+                        if (otherColumns.length > 0) {
+                            valueColumn = otherColumns[0].COLUMN_NAME;
                         } else {
-                            const otherColumns = tableInfo.recordset.filter(col =>
-                                col.COLUMN_NAME !== config.columnName
-                            );
-                            if (otherColumns.length > 0) {
-                                valueColumn = otherColumns[0].COLUMN_NAME;
-                            } else {
-                                valueColumn = config.columnName;
-                            }
+                            valueColumn = config.columnName;
                         }
+                    }
 
-                        const dataCheckQuery = `
+                    const dataCheckQuery = `
                         SELECT 
                             COUNT(*) as totalRecords,
                             COUNT(${config.columnName}) as nonNullCount,
@@ -846,27 +872,26 @@ ORDER BY llos.Pro_Id;
                         FROM ${config.tableName}
                     `;
 
-                        const dataCheck = await new sql.Request().query(dataCheckQuery);
+                    const dataCheck = await new sql.Request().query(dataCheckQuery);
 
-                        let dropdownQuery;
-                        let result;
-
-                        if (dataCheck.recordset[0].nonNullCount === 0) {
-                            const alternativeColumnQuery = `
+                    let dropdownQuery;
+                    let result;
+                    
+                    if (dataCheck.recordset[0].nonNullCount === 0) {
+                        const alternativeColumnQuery = `
                             SELECT COLUMN_NAME 
                             FROM INFORMATION_SCHEMA.COLUMNS 
                             WHERE TABLE_NAME = '${config.tableName}'
                             AND (COLUMN_NAME LIKE '%name%' OR COLUMN_NAME LIKE '%desc%' OR COLUMN_NAME LIKE '%title%')
                             AND COLUMN_NAME != '${config.columnName}'
                         `;
+                        
+                        const altColumns = await new sql.Request().query(alternativeColumnQuery);
 
-                            const altColumns = await new sql.Request().query(alternativeColumnQuery);
-
-                            if (altColumns.recordset.length > 0) {
-                                const altColumn = altColumns.recordset[0].COLUMN_NAME;
-
-
-                                dropdownQuery = `
+                        if (altColumns.recordset.length > 0) {
+                            const altColumn = altColumns.recordset[0].COLUMN_NAME;
+                            
+                            dropdownQuery = `
                                 SELECT DISTINCT
                                     ${valueColumn} AS value,
                                     ${altColumn} AS label
@@ -875,8 +900,8 @@ ORDER BY llos.Pro_Id;
                                 AND ${altColumn} != ''
                                 ORDER BY ${altColumn}
                             `;
-                            } else {
-                                dropdownQuery = `
+                        } else {
+                            dropdownQuery = `
                                 SELECT DISTINCT
                                     ${valueColumn} AS value,
                                     ${valueColumn} AS label
@@ -884,9 +909,9 @@ ORDER BY llos.Pro_Id;
                                 WHERE ${valueColumn} IS NOT NULL
                                 ORDER BY ${valueColumn}
                             `;
-                            }
-                        } else {
-                            dropdownQuery = `
+                        }
+                    } else {
+                        dropdownQuery = `
                             SELECT DISTINCT
                                 ${valueColumn} AS value,
                                 ${config.columnName} AS label
@@ -895,91 +920,232 @@ ORDER BY llos.Pro_Id;
                             AND ${config.columnName} != ''
                             ORDER BY ${config.columnName}
                         `;
-                        }
-
-                        result = await new sql.Request().query(dropdownQuery);
-
-
-                        const seenLabels = new Set();
-                        const uniqueOptions = result.recordset.filter(item => {
-                            if (seenLabels.has(item.label)) {
-                                return false;
-                            }
-                            seenLabels.add(item.label);
-                            return true;
-                        });
-
-                        return {
-                            filterType: config.filterType,
-                            tableId: config.tableId,
-                            columnName: config.columnName,
-                            tableName: config.tableName,
-                            valueColumn: valueColumn,
-                            listTypes: config.listTypes,
-                            FilterLevel: config.FilterLevel,
-                            options: uniqueOptions,
-                            dataSummary: dataCheck.recordset[0]
-                        };
-
-                    } else {
-                        return {
-                            filterType: config.filterType,
-                            tableId: config.tableId,
-                            columnName: config.columnName,
-                            tableName: config.tableName,
-                            listTypes: config.listTypes,
-                            FilterLevel: config.FilterLevel,
-                            options: [],
-                            error: "Invalid configuration - missing tableName or columnName"
-                        };
                     }
 
-                } catch (error) {
-                    console.error(`Error fetching dropdown for filter ${config.filterType}:`, error);
+                    result = await new sql.Request().query(dropdownQuery);
+
+                    const seenLabels = new Set();
+                    const uniqueOptions = result.recordset.filter(item => {
+                        if (seenLabels.has(item.label)) {
+                            return false;
+                        }
+                        seenLabels.add(item.label);
+                        return true;
+                    });
+
                     return {
                         filterType: config.filterType,
                         tableId: config.tableId,
                         columnName: config.columnName,
                         tableName: config.tableName,
-                        FilterLevel: config.FilterLevel,
+                        aliasName: config.aliasName,
+                        valueColumn: valueColumn,
                         listTypes: config.listTypes,
-                        options: [],
-                        error: error.message
+                        FilterLevel: config.FilterLevel,
+                        isGroupFilter: false,
+                        options: uniqueOptions,
+                        dataSummary: dataCheck.recordset[0]
+                    };
+
+                } else {
+                    return {
+                        filterType: config.filterType,
+                        tableId: config.tableId,
+                        columnName: config.columnName,
+                        tableName: config.tableName,
+                        aliasName: config.aliasName,
+                        listTypes: config.listTypes,
+                        FilterLevel: config.FilterLevel,
+                        isGroupFilter: false,
+                        options: [], 
+                        error: "Invalid configuration - missing tableName or columnName"
                     };
                 }
-            });
 
-            const dropdownResults = await Promise.all(dropdownPromises);
+            } catch (error) {
+                console.error(`Error fetching dropdown for filter ${config.filterType}:`, error);
+                return {
+                    filterType: config.filterType,
+                    tableId: config.tableId,
+                    columnName: config.columnName,
+                    tableName: config.tableName,
+                    aliasName: config.aliasName,
+                    FilterLevel: config.FilterLevel,
+                    isGroupFilter: false,
+                    listTypes: config.listTypes,
+                    options: [],
+                    error: error.message
+                };
+            }
+        });
 
-            const formattedResponse = dropdownResults.map(dropdown => ({
-                filterType: dropdown.filterType,
-                tableId: dropdown.tableId,
-                columnName: dropdown.columnName,
-                tableName: dropdown.tableName,
-                valueColumn: dropdown.valueColumn,
-                FilterLevel: dropdown.FilterLevel,
-                listTypes: dropdown.listTypes,
-                options: dropdown.options,
-                error: dropdown.error,
-                dataSummary: dropdown.dataSummary
-            }));
-            dataFound(res, formattedResponse);
-            // res.json({
-            //     success: true,
-            //     data: formattedResponse,
-            //     message: "Dropdown options fetched successfully"
-            // });
+        
+        const groupFilterPromises = groupFilterResult.recordset.map(async (groupConfig) => {
+            try {
+           
+                const actualTableName = groupConfig.Table_Name;
+                const actualColumnName = groupConfig.groupFilterColumn;
+                
+                if (actualTableName && actualColumnName) {
+                    
+                    const columnCheckQuery = `
+                        SELECT COUNT(*) as columnExists
+                        FROM INFORMATION_SCHEMA.COLUMNS 
+                        WHERE TABLE_NAME = '${actualTableName}' 
+                        AND COLUMN_NAME = '${actualColumnName}'
+                    `;
+                    
+                    const columnCheck = await new sql.Request().query(columnCheckQuery);
+                    
+                    if (columnCheck.recordset[0].columnExists === 0) {
+                        return {
+                            filterType: "GROUP_FILTER", 
+                            tableId: groupConfig.Table_Id,
+                            columnName: actualColumnName,
+                            tableName: actualTableName,
+                            aliasName: groupConfig.AliasName,
+                            listTypes: "1", 
+                            FilterLevel: 3, 
+                            isGroupFilter: true,
+                            options: [],
+                            error: `Group filter column '${actualColumnName}' not found in table '${actualTableName}'`
+                        };
+                    }
 
-        } catch (error) {
-            servError(error, res);
-            // console.error('Mobile Report Dropdown API Error:', error);
-            // res.status(500).json({
-            //     success: false,
-            //     message: "Error fetching dropdown options",
-            //     error: error.message
-            // });
-        }
-    };
+                    const tableInfoQuery = `
+                        SELECT COLUMN_NAME, DATA_TYPE
+                        FROM INFORMATION_SCHEMA.COLUMNS 
+                        WHERE TABLE_NAME = '${actualTableName}'
+                        ORDER BY ORDINAL_POSITION
+                    `;
+                    
+                    const tableInfo = await new sql.Request().query(tableInfoQuery);
+                    
+                    let valueColumn = null;
+                    
+                    const possibleIdColumns = tableInfo.recordset.filter(col => 
+                        col.COLUMN_NAME.toLowerCase() === 'id' ||
+                        col.COLUMN_NAME.toLowerCase().includes('_id') ||
+                        col.COLUMN_NAME.toLowerCase().includes('id_') ||
+                        col.COLUMN_NAME.toLowerCase().endsWith('id') ||
+                        col.COLUMN_NAME.toLowerCase() === actualTableName.replace('tbl_', '').toLowerCase() + 'id' ||
+                        col.COLUMN_NAME.toLowerCase() === actualTableName.replace('tbl_', '').toLowerCase() + '_id'
+                    );
+
+                    if (possibleIdColumns.length > 0) {
+                        valueColumn = possibleIdColumns[0].COLUMN_NAME;
+                    } else {
+                        valueColumn = actualColumnName;
+                    }
+
+                    const dataCheckQuery = `
+                        SELECT 
+                            COUNT(*) as totalRecords,
+                            COUNT(${actualColumnName}) as nonNullCount,
+                            COUNT(CASE WHEN ${actualColumnName} = '' THEN 1 END) as emptyCount,
+                            COUNT(CASE WHEN ${actualColumnName} IS NULL THEN 1 END) as nullCount
+                        FROM ${actualTableName}
+                    `;
+
+                    const dataCheck = await new sql.Request().query(dataCheckQuery);
+
+                    let dropdownQuery = `
+                        SELECT DISTINCT
+                            ${valueColumn} AS value,
+                            ${actualColumnName} AS label
+                        FROM ${actualTableName}
+                        WHERE ${actualColumnName} IS NOT NULL 
+                        AND ${actualColumnName} != ''
+                        ORDER BY ${actualColumnName}
+                    `;
+
+                    const result = await new sql.Request().query(dropdownQuery);
+
+                    const seenLabels = new Set();
+                    const uniqueOptions = result.recordset.filter(item => {
+                        if (seenLabels.has(item.label)) {
+                            return false;
+                        }
+                        seenLabels.add(item.label);
+                        return true;
+                    });
+
+                    return {
+                        filterType: "GROUP_FILTER", 
+                        tableId: groupConfig.Table_Id,
+                        columnName: actualColumnName,
+                        tableName: actualTableName,
+                        aliasName: groupConfig.AliasName,
+                        valueColumn: valueColumn,
+                        listTypes: "1", 
+                        FilterLevel: 3,
+                        isGroupFilter: true,
+                        options: uniqueOptions,
+                        dataSummary: dataCheck.recordset[0]
+                    };
+
+                } else {
+                    return {
+                        filterType: "GROUP_FILTER",
+                        tableId: groupConfig.Table_Id,
+                        columnName: groupConfig.groupFilterColumn,
+                        tableName: groupConfig.Table_Name,
+                        aliasName: groupConfig.AliasName,
+                        listTypes: "1",
+                        FilterLevel: 3,
+                        isGroupFilter: true,
+                        options: [], 
+                        error: "Invalid group filter configuration"
+                    };
+                }
+
+            } catch (error) {
+                console.error(`Error fetching group filter dropdown:`, error);
+                return {
+                    filterType: "GROUP_FILTER",
+                    tableId: groupConfig.Table_Id,
+                    columnName: groupConfig.groupFilterColumn,
+                    tableName: groupConfig.Table_Name,
+                    aliasName: groupConfig.AliasName,
+                    FilterLevel: 3,
+                    isGroupFilter: true,
+                    listTypes: "1",
+                    options: [],
+                    error: error.message
+                };
+            }
+        });
+
+     
+        const [regularResults, groupResults] = await Promise.all([
+            Promise.all(regularFilterPromises),
+            Promise.all(groupFilterPromises)
+        ]);
+
+   
+        const allResults = [...regularResults, ...groupResults];
+
+        const formattedResponse = allResults.map(item => ({
+            filterType: item.filterType,
+            tableId: item.tableId,
+            columnName: item.columnName,
+            tableName: item.tableName,
+            aliasName: item.aliasName,
+            valueColumn: item.valueColumn,
+            FilterLevel: item.FilterLevel,
+            isGroupFilter: item.isGroupFilter,
+            listTypes: item.listTypes,
+            options: item.options,
+            error: item.error,
+            dataSummary: item.dataSummary
+        }));
+        
+        dataFound(res, formattedResponse);
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
 
     const salesInvoiceReport = async (req, res) => {
         try {
@@ -1763,13 +1929,170 @@ ORDER BY llos.Pro_Id;
         }
     };
 
+     const getSalesOrderInvoice = async (req, res) => {
+        try {
+            const { So_Inv_No } = req.query;
+
+
+            const request = new sql.Request()
+                .input('So_Inv_No', So_Inv_No)
+              
+            const result = await request.query(`
+            DECLARE @FilteredOrders TABLE (So_Id INT);
+
+            INSERT INTO @FilteredOrders (So_Id)
+            SELECT so.So_Id
+            FROM tbl_Sales_Order_Gen_Info AS so
+            WHERE 1 = 1
+                ${So_Inv_No ? " AND so.So_Inv_No = @So_Inv_No " : ""}
+            
+            SELECT 
+                so.*,
+                lol.*,
+                COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+            FROM tbl_Sales_Order_Gen_Info AS so
+            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+            LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+            LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+            LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id=so.Retailer_Id
+            LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+            LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            SELECT 
+                si.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Order_Stock_Info AS si
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            SELECT 
+                sosi.So_Id, 
+                sosi.Involved_Emp_Id,
+                sosi.Cost_Center_Type_Id,
+                c.Cost_Center_Name AS EmpName,
+                cc.Cost_Category AS EmpType
+            FROM tbl_Sales_Order_Staff_Info AS sosi
+            LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+            WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            SELECT 
+                dgi.*,
+                rm.Retailer_Name AS Retailer_Name,
+                bm.BranchName AS Branch_Name,
+                st.Status AS DeliveryStatusName,
+                COALESCE((
+                    SELECT SUM(collected_amount)
+                    FROM tbl_Sales_Receipt_Details_Info
+                    WHERE bill_id = dgi.Do_Id
+                ), 0) AS receiptsTotalAmount
+            FROM tbl_Sales_Delivery_Gen_Info AS dgi
+            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+            LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+            LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+            WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+
+            SELECT 
+                oi.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Delivery_Stock_Info AS oi
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE oi.Delivery_Order_Id IN (
+                SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+            );`
+            );
+
+            const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
+
+            if (OrderData.length > 0) {
+                const resData = OrderData.map(order => {
+                    const orderProducts = ProductDetails.filter(p =>
+                        isEqualNumber(p.Sales_Order_Id, order.So_Id)
+                    );
+                    const deliveryList = DeliveryData.filter(d =>
+                        isEqualNumber(d.So_No, order.So_Id)
+                    );
+
+                    const totalOrderedQty = orderProducts.reduce(
+                        (sum, p) => sum + toNumber(p.Bill_Qty),
+                        0
+                    );
+                    const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                        const deliveredItems = DeliveryItems.filter(p =>
+                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+                        );
+                        return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
+                    }, 0);
+
+                    const orderStatus =
+                        totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+
+                    const mappedDeliveries = deliveryList.map(d => {
+                        const invoiceProducts = DeliveryItems.filter(p =>
+                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
+                        ).map(prod => ({
+                            ...prod
+            
+                        }));
+
+                        return {
+                            ...d,
+                            InvoicedProducts: invoiceProducts,
+                        };
+                    });
+
+                    return {
+                        ...order,
+                        OrderStatus: orderStatus,
+                        Products_List: orderProducts.map(p => ({
+                            ...p,
+                           
+                        })),
+                        Staff_Involved_List: StaffInvolved.filter(s =>
+                            isEqualNumber(s.So_Id, order.So_Id)
+                        ),
+                        ConvertedInvoice: mappedDeliveries, 
+                    };
+                });
+
+                // const filteredData = OrderStatus
+                //     ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+                //     : resData;
+
+                dataFound(res, resData);
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
     return {
         getSalesInvoiceMobileFilter1,
         getSalesInvoiceMobileFilter2,
         salesInvoiceReport,
         createSalesTransaction,
         getSaleOrderWithDeliveries,
-        getMobileReportDropdowns
+        getMobileReportDropdowns,
+        getSalesOrderInvoice
     }
 }
 
