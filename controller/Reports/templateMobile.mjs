@@ -71,11 +71,11 @@ const validateDetailRow = (d, i, errors) => {
     }
 };
 
- const insertMobileTemplate = async (req, res) => {
-    const { details, reportName, createdBy } = req.body;
-
+const insertMobileTemplate = async (req, res) => {
+    const { details, GroupFilter, reportName, createdBy } = req.body;
+   
     try {
-       
+
         if (!Array.isArray(details) || details.length < 1 || !reportName || !checkIsNumber(createdBy)) {
             return invalidInput(res, 'details (array), reportName, createdBy are required');
         }
@@ -93,7 +93,7 @@ const validateDetailRow = (d, i, errors) => {
         await transaction.begin();
 
         try {
-          
+        
             const checkifNameExist = (await new sql.Request()
                 .input('Report_Name', sql.NVarChar, reportName)
                 .query('SELECT COUNT(*) AS name FROM tbl_Mobile_Report_Type WHERE Report_Name = @Report_Name')).recordset[0]?.name;
@@ -103,11 +103,10 @@ const validateDetailRow = (d, i, errors) => {
                 return failed(res, 'Report Name Already Exist');
             }
 
-          
             const getMaxId = await new sql.Request(transaction).query(`SELECT ISNULL(MAX(Mob_Rpt_Id), 0) + 1 AS NewId FROM tbl_Mobile_Report_Type`);
             const Mob_Rpt_Id = getMaxId.recordset[0].NewId;
 
-      
+          
             await new sql.Request(transaction)
                 .input('Mob_Rpt_Id', sql.Int, Mob_Rpt_Id)
                 .input('Report_Name', sql.NVarChar, reportName)
@@ -117,27 +116,27 @@ const validateDetailRow = (d, i, errors) => {
                 VALUES (@Mob_Rpt_Id, @Report_Name, @Created_By, GETDATE())
             `);
 
-         
+            // Insert regular filter details
             const insertDetailSql = `
-                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type,FilterLevel)
-                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type,@FilterLevel)
+                INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type, FilterLevel)
+                VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type, @FilterLevel)
             `;
 
             for (const d of details) {
                 const TypeVal = Number(d.Type);
                 const TableIdVal = Number(d.Table_Id);
-                const FilterLevel=Number(d.FilterLevel);
+                const FilterLevel = Number(d.FilterLevel || d.Level || 1); // Default to 1 if not provided
 
-              
+                // Process List_Type
                 const listTypes = typeof d.List_Type === "string"
                     ? d.List_Type.split(",").map(Number).filter(n => !isNaN(n))
                     : Array.isArray(d.List_Type)
                         ? d.List_Type.map(Number).filter(n => !isNaN(n))
                         : [Number(d.List_Type)].filter(n => !isNaN(n));
 
-               
+                // Default to [1] if empty
                 if (listTypes.length === 0) {
-                    listTypes.push(1); 
+                    listTypes.push(1);
                 }
 
                 for (const lt of listTypes) {
@@ -152,6 +151,47 @@ const validateDetailRow = (d, i, errors) => {
                 }
             }
 
+            // Insert Group Filter into tbl_Group_Template if provided
+            if (GroupFilter && Array.isArray(GroupFilter) && GroupFilter.length > 0) {
+                // Get unique group filters (you might have multiple, but based on your table structure, we'll handle one)
+                // Or you can insert multiple if needed
+                
+                // First, delete any existing group filters for this Mob_Rpt_Id (for update scenario)
+                await new sql.Request(transaction)
+                    .input('Mob_Rpt_Id', sql.Int, Mob_Rpt_Id)
+                    .query('DELETE FROM tbl_Group_Template WHERE Mob_Rpt_Id = @Mob_Rpt_Id');
+
+                // Insert new group filters
+                const insertGroupFilterSql = `
+                    INSERT INTO tbl_Group_Template (Mob_Rpt_Id,Table_Id, Column_Name)
+                    VALUES (@Mob_Rpt_Id,@Table_Id, @Column_Name)
+                `;
+
+                // Since your table only has Mob_Rpt_Id and Column_Name, we'll take the first group filter
+                // Or you can insert all if you want to support multiple
+                const firstGroupFilter = GroupFilter[0];
+                if (firstGroupFilter && firstGroupFilter.Column_Name) {
+                    await new sql.Request(transaction)
+                        .input('Mob_Rpt_Id', sql.Int, Mob_Rpt_Id)
+                        .input('Table_Id', sql.NVarChar, firstGroupFilter.Table_Id)
+                        .input('Column_Name', sql.NVarChar, firstGroupFilter.Column_Name)
+                        .query(insertGroupFilterSql);
+                }
+                
+                // If you want to insert multiple group filters (in case you add more slots later):
+                /*
+                for (const gf of GroupFilter) {
+                    if (gf.Column_Name) {
+                        await new sql.Request(transaction)
+                            .input('Mob_Rpt_Id', sql.Int, Mob_Rpt_Id)
+                            .input('Column_Name', sql.NVarChar, gf.Column_Name)
+                            .query(insertGroupFilterSql);
+                    }
+                }
+                */
+            }
+
+            // Generate and store report query string
             try {
                 const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Table_Master')).recordset;
                 const distinctTables = [...new Map(details.map(d => [Number(d.Table_Id), d.Table_Id])).values()];
@@ -183,7 +223,7 @@ const validateDetailRow = (d, i, errors) => {
                 }
             } catch (e) {
                 console.log('Query string generation failed, continuing...', e.message);
-              
+                // Continue even if query generation fails
             }
 
             await transaction.commit();
@@ -199,92 +239,125 @@ const validateDetailRow = (d, i, errors) => {
 };
 
 
+ const getMobileTemplates = async (req, res) => {
+    const { Mob_Rpt_Id } = req.query;
 
-    const getMobileTemplates = async (req, res) => {
-        const { Mob_Rpt_Id } = req.query;
-
-        try {
-        
-            let query = `
-           WITH mobType AS (
-    SELECT m.Mob_Rpt_Id, m.Report_Name, m.Created_By, m.Created_At, m.Update_By, m.Update_At,
-           COALESCE(u.Name, 'User Not Found') AS CreatedByGet
-    FROM tbl_Mobile_Report_Type AS m
-    LEFT JOIN tbl_Users AS u ON m.Created_By = u.UserId
-), tableMaster AS (
-    SELECT * FROM tbl_Table_Master
-), mobDetails AS (
-    SELECT * FROM tbl_Mobile_Report_Details
-)
-SELECT
-    m.*,
-    COALESCE((
-        SELECT 
-            d.Type, 
-            d.Table_Id, 
-            tbl.Table_Name, 
-            tbl.Table_Accronym, 
-            d.Column_Name, 
-            d.FilterLevel,
-            d.List_Type,
-            CASE 
-                WHEN d.List_Type = '1' THEN 'Sum'
-                WHEN d.List_Type = '2' THEN 'Avg'
-                ELSE d.List_Type
-            END AS List_Type_Display
-        FROM mobDetails AS d
-        LEFT JOIN tableMaster AS tbl ON tbl.Table_Id = d.Table_Id
-        WHERE d.Mob_Rpt_Id = m.Mob_Rpt_Id
-        FOR JSON PATH
-    ), '[]') AS detailsList
-FROM mobType AS m
+    try {
+        let query = `
+        WITH mobType AS (
+            SELECT m.Mob_Rpt_Id, m.Report_Name, m.Created_By, m.Created_At, m.Update_By, m.Update_At,
+                   COALESCE(u.Name, 'User Not Found') AS CreatedByGet
+            FROM tbl_Mobile_Report_Type AS m
+            LEFT JOIN tbl_Users AS u ON m.Created_By = u.UserId
+        ), tableMaster AS (
+            SELECT * FROM tbl_Table_Master
+        ), mobDetails AS (
+            SELECT * FROM tbl_Mobile_Report_Details
+        )
+        SELECT
+            m.*,
+            COALESCE((
+                SELECT 
+                    d.Type, 
+                    d.Table_Id, 
+                    tbl.Table_Name, 
+                    tbl.Table_Accronym, 
+                    d.Column_Name, 
+                    d.FilterLevel,
+                    d.List_Type,
+                    CASE 
+                        WHEN d.List_Type = '1' THEN 'Sum'
+                        WHEN d.List_Type = '2' THEN 'Avg'
+                        ELSE d.List_Type
+                    END AS List_Type_Display
+                FROM mobDetails AS d
+                LEFT JOIN tableMaster AS tbl ON tbl.Table_Id = d.Table_Id
+                WHERE d.Mob_Rpt_Id = m.Mob_Rpt_Id
+                FOR JSON PATH
+            ), '[]') AS detailsList,
+            COALESCE((
+                SELECT 
+                    gf.Table_Id,
+                    gf.Column_Name,
+                    tbls.Table_Name, 
+                    tbls.Table_Accronym
+                FROM tbl_Group_Template AS gf
+                LEFT JOIN tableMaster AS tbls ON tbls.Table_Id = gf.Table_Id
+                WHERE gf.Mob_Rpt_Id = m.Mob_Rpt_Id
+                FOR JSON PATH
+            ), '[]') AS groupFiltersList
+        FROM mobType AS m
         `;
 
-            const request = new sql.Request();
+        const request = new sql.Request();
+        if (checkIsNumber(Mob_Rpt_Id)) {
+            query += ' WHERE m.Mob_Rpt_Id = @Mob_Rpt_Id';
+            request.input('Mob_Rpt_Id', sql.Int, Mob_Rpt_Id);
+        }
+
+        const result = await request.query(query);
+        const reports = result.recordset;
+
+        if (reports.length > 0) {
+            const parse = reports.map(o => ({
+                ...o,
+                detailsList: JSON.parse(o.detailsList),
+                groupFiltersList: o.groupFiltersList ? JSON.parse(o.groupFiltersList) : []
+            }));
+
             if (checkIsNumber(Mob_Rpt_Id)) {
-                query += ' WHERE m.Mob_Rpt_Id = @Mob_Rpt_Id';
-                request.input('Mob_Rpt_Id', sql.Int, Mob_Rpt_Id);
-            }
-
-            const result = await request.query(query);
-            const reports = result.recordset;
-
-            if (reports.length > 0) {
-                const parse = reports.map(o => ({
-                    ...o,
-                    detailsList: JSON.parse(o.detailsList)
+                const single = parse[0];
+                
+             
+                const groupFilterArray = (single.groupFiltersList || []).map(gf => ({
+                    Type: 7,
+                    Table_Id: Number(gf.Table_Id),
+                    Column_Name: gf.Column_Name,
+                    List_Type: "1,2", 
+                    Level: 3 
                 }));
 
-               
-                if (checkIsNumber(Mob_Rpt_Id)) {
-                    const single = parse[0];
-                   
-                    const responsePayload = {
-                        Mob_Rpt_Id: single.Mob_Rpt_Id,
-                        reportName: single.Report_Name,
-                        CreatedBy: single.CreatedByGet ?? single.Created_By,
-                        details: (single.detailsList || []).map(d => ({
-                            Type: Number(d.Type),
-                            Table_Id: Number(d.Table_Id),
-                            Table_Name: d.Table_Name ?? null,
-                            Table_Accronym: d.Table_Accronym ?? null,
-                            Column_Name: d.Column_Name,
-                            List_Type: d.List_Type !== undefined && d.List_Type !== null ? Number(d.List_Type) : null
-                        }))
-                    };
-                    return dataFound(res, responsePayload); 
-                }
-
-                
-                dataFound(res, parse);
-            } else {
-                noData(res);
+                const responsePayload = {
+                    Mob_Rpt_Id: single.Mob_Rpt_Id,
+                    reportName: single.Report_Name,
+                    GroupFilter: groupFilterArray, 
+                    CreatedBy: single.CreatedByGet ?? single.Created_By,
+                    details: (single.detailsList || []).map(d => ({
+                        Type: Number(d.Type),
+                        Table_Id: Number(d.Table_Id),
+                        Table_Name: d.Table_Name ?? null,
+                        Table_Accronym: d.Table_Accronym ?? null,
+                        Column_Name: d.Column_Name,
+                        List_Type: d.List_Type !== undefined && d.List_Type !== null ? Number(d.List_Type) : null,
+                        FilterLevel: d.FilterLevel ? Number(d.FilterLevel) : null
+                    }))
+                };
+                return dataFound(res, responsePayload); 
             }
 
-        } catch (e) {
-            servError(e, res);
+          
+            const allTemplates = parse.map(template => ({
+                Mob_Rpt_Id: template.Mob_Rpt_Id,
+                Report_Name: template.Report_Name,
+                Created_By: template.Created_By,
+                CreatedByGet: template.CreatedByGet,
+                Created_At: template.Created_At,
+                Update_By: template.Update_By,
+                Update_At: template.Update_At,
+                detailsList: template.detailsList,
+                groupFiltersList: template.groupFiltersList,
+                hasGroupFilter: template.groupFiltersList.length > 0
+            }));
+            
+            dataFound(res, allTemplates);
+        } else {
+            noData(res);
         }
-    };
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
 
 
     const executeMobileTemplateSQL = async (req, res) => {
@@ -364,7 +437,7 @@ FROM mobType AS m
     }
 
 const updateMobileTemplate = async (req, res) => {
-    const { Report_Type_Id, reportName, updatedBy, details } = req.body;
+    const { Report_Type_Id, reportName, updatedBy, details, GroupFilter } = req.body; // Added GroupFilter
 
     try {
         if (!checkIsNumber(Report_Type_Id) || !Array.isArray(details) || details.length < 1 || !reportName || !checkIsNumber(updatedBy)) {
@@ -384,7 +457,7 @@ const updateMobileTemplate = async (req, res) => {
         await transaction.begin();
 
         try {
-            
+            // Check if report name already exists (excluding current report)
             const nameExists = (await new sql.Request(transaction)
                 .input('Report_Name', sql.NVarChar, reportName)
                 .input('Report_Type_Id', sql.Int, Report_Type_Id)
@@ -396,6 +469,7 @@ const updateMobileTemplate = async (req, res) => {
                 return failed(res, 'Report Name Already Exist');
             }
 
+            // Update main report type
             await new sql.Request(transaction)
                 .input('Report_Name', sql.NVarChar, reportName)
                 .input('Update_By', sql.Int, updatedBy)
@@ -406,12 +480,12 @@ const updateMobileTemplate = async (req, res) => {
                 WHERE Mob_Rpt_Id = @Report_Type_Id
             `);
 
-           
+            // Delete existing details
             await new sql.Request(transaction)
                 .input('Report_Type_Id', sql.Int, Report_Type_Id)
                 .query(`DELETE FROM tbl_Mobile_Report_Details WHERE Mob_Rpt_Id = @Report_Type_Id`);
 
-            
+            // Insert new details
             const insertDetailSql = `
                 INSERT INTO tbl_Mobile_Report_Details (Mob_Rpt_Id, Type, Table_Id, Column_Name, List_Type, FilterLevel)
                 VALUES (@Mob_Rpt_Id, @Type, @Table_Id, @Column_Name, @List_Type, @FilterLevel)
@@ -428,12 +502,11 @@ const updateMobileTemplate = async (req, res) => {
                         ? d.List_Type.map(Number).filter(n => !isNaN(n))
                         : [Number(d.List_Type)].filter(n => !isNaN(n));
 
-              
+                // Default to [1] if empty
                 if (listTypes.length === 0) {
                     listTypes.push(1);
                 }
 
-               
                 for (const lt of listTypes) {
                     await new sql.Request(transaction)
                         .input('Mob_Rpt_Id', sql.Int, Report_Type_Id)
@@ -446,6 +519,43 @@ const updateMobileTemplate = async (req, res) => {
                 }
             }
 
+            // Handle Group Filter - ADDED THIS SECTION
+            // Delete existing group filters for this template
+            await new sql.Request(transaction)
+                .input('Mob_Rpt_Id', sql.Int, Report_Type_Id)
+                .query(`DELETE FROM tbl_Group_Template WHERE Mob_Rpt_Id = @Mob_Rpt_Id`);
+
+            // Insert new group filter if provided
+            if (GroupFilter && Array.isArray(GroupFilter) && GroupFilter.length > 0) {
+                const insertGroupFilterSql = `
+                    INSERT INTO tbl_Group_Template (Mob_Rpt_Id,Table_Id, Column_Name)
+                    VALUES (@Mob_Rpt_Id, @Table_Id,@Column_Name)
+                `;
+
+                // Take the first group filter (or insert all if you want multiple)
+                const firstGroupFilter = GroupFilter[0];
+                if (firstGroupFilter && firstGroupFilter.Column_Name) {
+                    await new sql.Request(transaction) 
+                        .input('Mob_Rpt_Id',  Report_Type_Id) 
+                        .input('Table_Id', firstGroupFilter.Table_Id)   
+                        .input('Column_Name',  firstGroupFilter.Column_Name)
+                        .query(insertGroupFilterSql);
+                }
+                
+                // If you want to support multiple group filters, use this loop instead:
+                /*
+                for (const gf of GroupFilter) {
+                    if (gf.Column_Name) {
+                        await new sql.Request(transaction)
+                            .input('Mob_Rpt_Id', sql.Int, Report_Type_Id)
+                            .input('Column_Name', sql.NVarChar, gf.Column_Name)
+                            .query(insertGroupFilterSql);
+                    }
+                }
+                */
+            }
+
+            // Generate and store report query string
             try {
                 const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Table_Master')).recordset;
                 const distinctTables = [...new Map(details.map(d => [Number(d.Table_Id), d.Table_Id])).values()];

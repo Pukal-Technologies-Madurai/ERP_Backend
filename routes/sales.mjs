@@ -54,6 +54,7 @@ SalesRouter.get('/saleOrderReport', salesOrder.saleOrderReport)
 
 SalesRouter.post('/salesOrderSalesInvoice', salesInvoice.createSalesTransaction)
 SalesRouter.get('/salesInvoice/Details', salesInvoice.getSaleOrderWithDeliveries)
+SalesRouter.get('/invoicesNumber',salesInvoice.getSalesOrderInvoice)
 
 // sales LR Report routes
 SalesRouter.get('/salesInvoice/lrReport', getSalesInvoiceForAssignCostCenter);
