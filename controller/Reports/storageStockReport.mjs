@@ -674,7 +674,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
                 let cleaned = v.replace(/"/g, '');
                 cleaned = cleaned.trim();
                 cleaned = cleaned.replace(/'/g, "''");
-                return `'${cleaned}'`;
+                return `''${cleaned}''`;
             }).join(',');
             
             return formatted;
