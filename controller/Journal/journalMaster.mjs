@@ -394,12 +394,12 @@ const editJournal = async (req, res) => {
         // 2) Normalize like create API
         const raw = toArray(Entries).map((r, idx) => ({
             __idx: idx,
-            __clientLineId: r?.ClientLineId ?? r?.LineId ?? null, // mapping key
+            __clientLineId: r?.ClientLineId || r?.LineId || null, // mapping key
             Acc_Id: Number(r?.Acc_Id),
             DrCr: String(r?.DrCr || "").trim(),
             Amount: Number(r?.Amount || 0),
-            Remarks: r?.Remarks ?? null,
-            AccountGet: r?.AccountGet ?? null,
+            Remarks: r?.Remarks || null,
+            AccountGet: r?.AccountGet || null,
             isSundryParty: r?.isSundryParty || 0,
         }));
 

@@ -363,7 +363,23 @@ const getAccountPendingReference = async (req, res) => {
                         jei.Amount		         AS totalValue,
                         'JOURNAL'                AS dataSource,
                         'JOURNAL'                AS actualSource,
-                    	0						 AS againstAmount,
+                    	CASE WHEN jei.DrCr = 'Dr' THEN (
+                            SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
+                            FROM tbl_Payment_Bill_Info AS pb
+                            JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+                            WHERE 
+                            	pgi.status <> 0
+                            	AND pb.pay_bill_id = jgi.JournalId
+                				AND pb.bill_name = jgi.JournalVoucherNo
+                		) ELSE (
+                			SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
+                            FROM tbl_Receipt_Bill_Info AS rbi
+                            JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
+                            WHERE 
+                            	rgi.status <> 0
+                            	AND rbi.bill_id = jgi.JournalId
+                				AND rbi.bill_name = jgi.JournalVoucherNo
+                		) END AS againstAmount,
                         (
                     		SELECT COALESCE(SUM(jr.Amount), 0)
                             FROM dbo.tbl_Journal_Bill_Reference jr

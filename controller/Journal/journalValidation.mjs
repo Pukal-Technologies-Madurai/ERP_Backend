@@ -72,7 +72,7 @@ export const EditJournalSchema = z
     .superRefine((data, ctx) => {
         const entryClientIds = new Set();
         data.Entries.forEach((e, idx) => {
-            const clientId = e.ClientLineId ?? e.LineId;
+            const clientId = e.ClientLineId || e.LineId;
             if (!clientId) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
@@ -109,7 +109,7 @@ export const EditJournalSchema = z
         }
 
         data.BillReferences.forEach((r, i) => {
-            const clientId = r.ClientLineId ?? r.LineId;
+            const clientId = r.ClientLineId || r.LineId;
             if (!clientId) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,

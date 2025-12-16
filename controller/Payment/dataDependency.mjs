@@ -122,6 +122,14 @@ const PaymentDataDependency = () => {
                     DECLARE @OB_Date DATE = (
                     	SELECT MAX(OB_Date) FROM tbl_OB_Date
                     );
+                    DECLARE @SalesInvoiceNumber TABLE (invNumber NVARCHAR(50) NOT NULL);
+                    INSERT INTO @SalesInvoiceNumber (invNumber)
+                    SELECT DISTINCT Do_Inv_No 
+                    FROM tbl_Sales_Delivery_Gen_Info
+                    WHERE 
+                    	Do_Date >= @OB_Date
+                    	AND Do_Inv_No IS NOT NULL
+                    	AND TRIM(COALESCE(Do_Inv_No, '')) <> ''
                     SELECT 
                     	inv.*,
                     	inv.Paid_Amount + inv.journalAdjustment AS totalReference
@@ -169,6 +177,7 @@ const PaymentDataDependency = () => {
                             pig.Cancel_status = 0
                             AND a.Acc_Id = @Acc_Id
                             AND pig.Po_Entry_Date >= @OB_Date
+                    		AND TRIM(COALESCE(pig.Ref_Po_Inv_No, '')) NOT IN (SELECT invNumber FROM @SalesInvoiceNumber)
                         UNION ALL
                     -- from purchase invoice
                         SELECT 
@@ -210,6 +219,7 @@ const PaymentDataDependency = () => {
                             cb.OB_date >= @OB_Date 
                             AND cb.Retailer_id = @Acc_Id 
                             AND cb.dr_amount = 0
+                    		AND TRIM(COALESCE(cb.bill_no, '')) NOT IN (SELECT invNumber FROM @SalesInvoiceNumber)
                     	UNION ALL
                     -- receipt outstanding
                     	SELECT 
@@ -254,14 +264,49 @@ const PaymentDataDependency = () => {
                     		rgi.credit_ledger = @Acc_Id
                             AND rgi.receipt_date >= @OB_Date
                             AND rgi.status <> 0
+                    	UNION ALL
+                    -- Journal outstanding
+                    	SELECT
+                    		jgi.JournalId,
+                    		jgi.JournalVoucherNo,
+                    		jgi.JournalDate,
+                    		jei.Acc_Id,
+                    		0 AS total_bef_tax,
+                    		0 AS total_aft_tas,
+                    		jei.Amount,
+                    		'JOURNAL' AS dataSource,
+                            Jgi.JournalVoucherNo AS bill_ref_number,
+                    		 (
+                                SELECT COALESCE(SUM(pbi.Debit_Amo), 0) 
+                                FROM tbl_Payment_Bill_Info AS pbi
+                                JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pbi.payment_id
+                                WHERE 
+                                    pgi.status <> 0
+                                    AND pbi.pay_bill_id = jgi.JournalId
+                                    AND pbi.bill_name = jgi.JournalVoucherNo
+                            ) AS Paid_Amount,
+                            COALESCE((
+                                SELECT SUM(jr.Amount)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = @Acc_Id
+                                    AND je.DrCr   = 'Cr'
+                                    AND jr.RefId = jgi.JournalId 
+                                    AND jr.RefNo = jgi.JournalVoucherNo
+                            ), 0) AS journalAdjustment
+                    	FROM tbl_Journal_Entries_Info AS jei
+                    	LEFT JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
+                    	WHERE 
+                    		jei.Acc_Id				= @Acc_Id
+                            AND jgi.JournalDate		>= @OB_Date
+                            AND jgi.JournalStatus	<> 0
+                    		AND jei.DrCr			= 'Dr'
                     ) AS inv
                     WHERE 
-                        inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
-                        AND TRIM(COALESCE(inv.bill_ref_number, '')) NOT IN (
-							SELECT TRIM(COALESCE(Do_Inv_No, '')) 
-							FROM tbl_Sales_Delivery_Gen_Info
-							WHERE Do_Date >= @OB_Date
-						);`
+                        inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value;`
                 );
 
             const result = await request;
