@@ -11,26 +11,26 @@ const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumbe
 const Reports = () => {
 
 
-  const getLRreport = async (req, res) => {
-    try {
-        const { Fromdate, Todate } = req.query;
+    const getLRreport = async (req, res) => {
+        try {
+            const { Fromdate, Todate } = req.query;
 
-        if (!Fromdate || !Todate) {
-            return invalidInput(res, 'Fromdate and Todate are required');
-        }
+            if (!Fromdate || !Todate) {
+                return invalidInput(res, 'Fromdate and Todate are required');
+            }
 
-        const parsedFromDate = new Date(Fromdate);
-        const parsedToDate = new Date(Todate);
+            const parsedFromDate = new Date(Fromdate);
+            const parsedToDate = new Date(Todate);
 
-        if (isNaN(parsedFromDate.getTime()) || isNaN(parsedToDate.getTime())) {
-            return invalidInput(res, 'Invalid date format. Use YYYY-MM-DD.');
-        }
+            if (isNaN(parsedFromDate.getTime()) || isNaN(parsedToDate.getTime())) {
+                return invalidInput(res, 'Invalid date format. Use YYYY-MM-DD.');
+            }
 
-        const request = new sql.Request();
-        request.input('FromDate', sql.DateTime, parsedFromDate);
-        request.input('ToDate', sql.DateTime, parsedToDate);
+            const request = new sql.Request();
+            request.input('FromDate', sql.DateTime, parsedFromDate);
+            request.input('ToDate', sql.DateTime, parsedToDate);
 
-        const query = `
+            const query = `
       SELECT 
     tm.*,
     -- Take the first retailer name per trip
@@ -115,69 +115,67 @@ ORDER BY tm.Trip_Id DESC;
 
         `;
 
-        const result = await request.query(query);
+            const result = await request.query(query);
 
-        if (result.recordset.length > 0) {
-            const parsed = result.recordset.map(o => ({
-                ...o,
-                Employees: JSON.parse(o?.Employees || '[]'),
-                TripDetails: JSON.parse(o?.TripDetails || '[]'),
-            }));
+            if (result.recordset.length > 0) {
+                const parsed = result.recordset.map(o => ({
+                    ...o,
+                    Employees: JSON.parse(o?.Employees || '[]'),
+                    TripDetails: JSON.parse(o?.TripDetails || '[]'),
+                }));
 
-            dataFound(res, parsed);
-        } else {
-            noData(res);
+                dataFound(res, parsed);
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            servError(e, res);
         }
+    };
 
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    const costCenterUpdate = async (req, res) => {
+        try {
 
-const costCenterUpdate = async (req, res) => {
-    try {
+            const tripId = req.body.tripId;
+            const employeeCostCenters = req.body.employeeCostCenters;
 
-        const tripId = req.body.tripId;
-        const employeeCostCenters = req.body.employeeCostCenters;
+            if (!tripId) {
+                return invalidInput(res, 'Trip Id is required.');
+            }
 
-        if (!tripId) {
-            return invalidInput(res, 'Trip Id is required.');
+            if (!employeeCostCenters || !Array.isArray(employeeCostCenters)) {
+                return invalidInput(res, 'Employee cost centers data is required ');
+            }
+
+            const request = new sql.Request();
+
+            await request
+                .input('tripId', sql.Int, parseInt(tripId))
+                .query('DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @tripId');
+
+            for (let employee of employeeCostCenters) {
+
+                await new sql.Request()
+                    .input('Trip_Id', sql.Int, parseInt(tripId))
+                    .input('Involved_Emp_Id', sql.Int, parseInt(employee.Involved_Emp_Id))
+                    .input('Cost_Center_Type_Id', sql.Int, parseInt(employee.Cost_Center_Type_Id))
+                    .query(`
+                        INSERT INTO tbl_Trip_Employees (
+                            Trip_Id, Involved_Emp_Id, Cost_Center_Type_Id
+                        ) VALUES (
+                            @Trip_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
+                        )`
+                    );
+            }
+
+            success(res, `Cost centers updated successfully`);
+
+        } catch (error) {
+            servError(error, res);
         }
+    };
 
-        if (!employeeCostCenters || !Array.isArray(employeeCostCenters)) {
-            return invalidInput(res, 'Employee cost centers data is required ');
-        }
-
-        const request = new sql.Request();
-        
-        await request
-            .input('tripId', sql.Int, parseInt(tripId))
-            .query('DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @tripId');
-
-        const maxIdResult = await new sql.Request()
-            .query('SELECT ISNULL(MAX(Id), 0) as maxId FROM tbl_Trip_Employees');
-
-        for (let employee of employeeCostCenters) {
-            
-            await new sql.Request()
-              .input('Trip_Id', sql.Int, parseInt(tripId))
-                .input('Involved_Emp_Id', sql.Int, parseInt(employee.Involved_Emp_Id))
-                .input('Cost_Center_Type_Id', sql.Int, parseInt(employee.Cost_Center_Type_Id))
-                .query(`INSERT INTO tbl_Trip_Employees (
-                    Trip_Id, Involved_Emp_Id, Cost_Center_Type_Id
-                ) VALUES (
-                     @Trip_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
-                )`);
-            
-        }
-
-        success(res, `Cost centers updated successfully`);
-
-    } catch (error) {
-        console.error('Error in costCenterUpdate:', error);
-        servError(error, res);
-    }
-};
     return {
         getLRreport,
         costCenterUpdate

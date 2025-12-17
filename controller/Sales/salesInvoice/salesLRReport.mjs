@@ -1,6 +1,8 @@
 import sql from 'mssql';
 import { isEqualNumber, ISOString, toArray } from '../../../helper_functions.mjs';
 import { servError, sentData, success } from '../../../res.mjs';
+import { validateBody } from '../../../middleware/zodValidator.mjs';
+import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
@@ -126,3 +128,57 @@ export const postAssignCostCenterToSalesInvoice = async (req, res) => {
         servError(e, res);
     }
 };
+
+export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
+    const transaction = new sql.Transaction();
+    try {
+        const validate = validateBody(multipleSalesInvoiceStaffUpdateSchema, req.body, res);
+        if (!validate) {
+            return;
+        }
+
+        const { CostCategory, Do_Id, involvedStaffs } = req.body;
+        const invoiceIdsStr = Do_Id.join(',');
+
+        await transaction.begin();
+
+        await new sql.Request(transaction)
+            .input('invoiceIds', sql.NVarChar(sql.MAX), invoiceIdsStr)
+            .input('Emp_Type_Id', sql.Int, CostCategory)
+            .query(`
+                DELETE FROM tbl_Sales_Delivery_Staff_Info
+                WHERE 
+                    Do_Id IN (
+                        SELECT CAST(value AS INT)
+                        FROM STRING_SPLIT(@invoiceIds, ',')
+                    )
+                    AND Emp_Type_Id = @Emp_Type_Id;`
+            );
+
+        if (involvedStaffs.length > 0) {
+            const values = [];
+            Do_Id.forEach(doId => {
+                involvedStaffs.forEach(staffId => {
+                    values.push(`(${doId}, ${CostCategory}, ${staffId})`);
+                });
+            });
+
+            if (values.length > 0) {
+                const query = `
+                    INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
+                    VALUES ${values.join(',')};
+                `;
+                const request = new sql.Request(transaction);
+                await request.query(query);
+            }
+        }
+
+        await transaction.commit();
+        success(res, 'Sales Invoice Staff Updated!');
+    } catch (e) {
+        if (transaction._aborted === false) {
+            await transaction.rollback();
+        }
+        servError(e, res);
+    }
+}

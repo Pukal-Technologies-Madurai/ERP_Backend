@@ -8,7 +8,7 @@ import {
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
 } from '../controller/Sales/salesInvoice/invoiceDependency.mjs';
-import { getSalesInvoiceForAssignCostCenter, postAssignCostCenterToSalesInvoice } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
+import { getSalesInvoiceForAssignCostCenter, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
 import salesReports from '../controller/Sales/reports.mjs';
 const SalesRouter = express.Router();
@@ -59,6 +59,7 @@ SalesRouter.get('/invoicesNumber',salesInvoice.getSalesOrderInvoice)
 // sales LR Report routes
 SalesRouter.get('/salesInvoice/lrReport', getSalesInvoiceForAssignCostCenter);
 SalesRouter.post('/salesInvoice/lrReport', postAssignCostCenterToSalesInvoice);
+SalesRouter.post('/salesInvoice/lrReport/multiple', multipleSalesInvoiceStaffUpdate);
 
 
 SalesRouter.get('/lrReport', salesReports.getLRreport)
