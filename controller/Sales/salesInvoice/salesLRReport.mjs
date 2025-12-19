@@ -35,7 +35,9 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                     gen.Cancel_status,
                     gen.Created_by,
                     gen.Created_on,
-                    ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus
+                    ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
+                    CONVERT(DATETIME, gen.Created_on) AS createdOn,
+                    gen.Narration
                 FROM tbl_Sales_Delivery_Gen_Info AS gen
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
