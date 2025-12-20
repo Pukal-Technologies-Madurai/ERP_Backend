@@ -146,7 +146,7 @@ const RetailerControll = () => {
                         Retailer_Name,
                         Reatailer_Address
                     FROM tbl_Retailers_Master
-                    WHERE isRetailer IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
+                    WHERE Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
                     -- getting retailer gen info
                     SELECT 
                         id,

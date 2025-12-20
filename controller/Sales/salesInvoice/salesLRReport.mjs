@@ -184,3 +184,7 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
         servError(e, res);
     }
 }
+
+// export const katchathCopyPrintOut = async (req, res) => {
+
+// }

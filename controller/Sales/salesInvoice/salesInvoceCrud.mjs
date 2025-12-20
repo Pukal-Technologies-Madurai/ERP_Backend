@@ -107,7 +107,7 @@ const createRetailerDeliveryAddress = async ({ retailerId, deliveryName, phoneNu
 
 export const getSalesInvoice = async (req, res) => {
     try {
-        const { Retailer_Id, Cancel_status = 0, Created_by, VoucherType } = req.query;
+        const { Retailer_Id, Cancel_status, Created_by, VoucherType, Do_Id } = req.query;
         const
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -132,6 +132,7 @@ export const getSalesInvoice = async (req, res) => {
             .input('cancel', Cancel_status)
             .input('creater', Created_by)
             .input('VoucherType', VoucherType)
+            .input('Do_Id', Do_Id)
             .query(`
                 -- declaring table variable
                 DECLARE @FilteredInvoice TABLE (Do_Id INT);
@@ -144,7 +145,8 @@ export const getSalesInvoice = async (req, res) => {
                     ${checkIsNumber(Retailer_Id) ? ' AND Retailer_Id = @retailer ' : ''}
                     ${checkIsNumber(Cancel_status) ? ' AND Cancel_status = @cancel ' : ''}
                     ${checkIsNumber(Created_by) ? ' AND Created_by = @creater ' : ''}
-                    ${checkIsNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''};
+                    ${checkIsNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''}
+                    ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''};
                 -- sales general details
                 SELECT 
                     sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
@@ -251,7 +253,7 @@ export const createSalesInvoice = async (req, res) => {
             Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status = 1, Ref_Inv_Number = '',
             Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
-            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress, 
+            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress,
             Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0
         } = req.body;
 

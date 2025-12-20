@@ -576,7 +576,7 @@ const EmployeeController = () => {
         }
     };
 
-     const employeeAttendanceModule = async (req, res) => {
+    const employeeAttendanceModule = async (req, res) => {
         const { FromDate, ToDate, FingerPrintId, EmpId } = req.query;
 
 

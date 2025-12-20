@@ -42,8 +42,8 @@ const CustomerAPIs = () => {
                     return ResData.recordset;
                 } catch (e) {
                     console.error(e);
-                    res.status(422).json({ data: [], success: false, message: '', isCustomer: true });
-                    throw e;
+                    return res.status(422).json({ data: [], success: false, message: '', isCustomer: true });
+                    // throw e;
                 }
             }));
 
