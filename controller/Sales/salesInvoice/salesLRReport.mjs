@@ -1,6 +1,6 @@
 import sql from 'mssql';
-import { isEqualNumber, ISOString, toArray } from '../../../helper_functions.mjs';
-import { servError, sentData, success } from '../../../res.mjs';
+import { checkIsNumber, isEqualNumber, ISOString, toArray } from '../../../helper_functions.mjs';
+import { servError, sentData, success, invalidInput } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 
@@ -185,6 +185,63 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
     }
 }
 
-// export const katchathCopyPrintOut = async (req, res) => {
+export const katchathCopyPrintOut = async (req, res) => {
+    try {
+        const { Do_Id } = req.query;
 
-// }
+        if (!checkIsNumber(Do_Id)) return invalidInput(res, 'Do_Id is required');
+
+        const request = new sql.Request()
+            .input('Do_Id', sql.BigInt, Do_Id)
+            .query(`
+                SELECT
+                	sdgi.Do_Id id,
+                	sdgi.Voucher_Type voucherType,
+                	v.Voucher_Type voucherTypeGet, 
+                	cb.Name createdByGet,
+                	sdgi.Created_on createdOn,
+                	sda.deliveryName mailingName,
+                	sda.deliveryAddress mailingAddress,
+                	sda.cityName mailingCity,
+                	sda.phoneNumber mailingNumber,
+                	COALESCE((
+                		SELECT 
+                			sdsi.Item_Id itemId,
+                			p.Product_Name itemName,
+                			sdsi.Alt_Act_Qty quantity
+                		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
+                		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+                		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
+                		FOR JSON PATH
+                	), '[]') AS productDetails,
+                	COALESCE((
+                		SELECT 
+                			stf.Emp_Id AS empId,
+                			stf.Emp_Type_Id AS empTypeId,
+                			e.Cost_Center_Name AS empName,
+                            cc.Cost_Category AS empType
+                		FROM tbl_Sales_Delivery_Staff_Info AS stf
+                		LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = stf.Emp_Id
+                		LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                		WHERE stf.Do_Id = sdgi.Do_Id
+                		FOR JSON PATH
+                	), '[]') AS staffDetails
+                FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
+                WHERE sdgi.Do_Id = @Do_Id;`);
+
+        const result = await request;
+
+        const parseData = result.recordset.map(inv => ({
+            ...inv,
+            productDetails: JSON.parse(inv.productDetails),
+            staffDetails: JSON.parse(inv.staffDetails)
+        }))
+
+        sentData(res, parseData);
+    } catch (e) {
+        servError(e, res);
+    }
+}
