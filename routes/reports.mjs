@@ -117,7 +117,7 @@ ReportRouter.get('/brokerageNagal/list', nagalReports.getNakalReport);
 ReportRouter.get('/brokerageNagalDelivery/list', nagalReports.getNagalPurchase)
 
 ReportRouter.get('/reportsNonconvert/sales', deliveryReports.getNonConvertedSales)
-
+ReportRouter.get('/reportsNonconvert/salesMobile', deliveryReports.getNonConvertedSalesMobile)
 
 ReportRouter.get('/reportState/columnVisiblity', reportsColumnVisiblity.getReportColumnVisiblityState);
 ReportRouter.post('/reportState/columnVisiblity', reportsColumnVisiblity.createReportColumnVisiblityState);
