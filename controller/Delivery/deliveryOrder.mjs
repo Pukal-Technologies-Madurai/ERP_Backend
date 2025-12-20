@@ -2030,17 +2030,244 @@ const editmobileApi = async (req, res) => {
         }
     };
 
-     const deliveryTripsheetList = async (req, res) => {
+//      const deliveryTripsheetList = async (req, res) => {
+//     try {
+//         const FromDate = ISOString(req.query.Fromdate);
+//         const ToDate = ISOString(req.query.Todate);
+
+//         const { Branch_Id,Delivery_Person_Id } = req.query;
+
+//         if (!FromDate || !ToDate) {
+//             return invalidInput(res, 'Select StartDate & EndDate');
+//         }
+
+//         let query = `WITH TRIP_MASTER AS (
+//     SELECT
+//         tr.Trip_Id,
+//         tr.Challan_No,
+//         tr.EndTime,
+//         tr.StartTime,
+//         tr.Trip_Date,
+//         tr.Trip_EN_KM,
+//         tr.Trip_No,
+//         tr.Trip_ST_KM,
+//         tr.Trip_Tot_Kms,
+//         tr.Vehicle_No,
+//         tr.Branch_Id,
+//         tr.BillType,
+//         tr.VoucherType,
+//         tr.TR_INV_ID,
+//         bm.BranchName
+//     FROM tbl_Trip_Master tr
+//     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
+//     WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate AND tr.BillType = 'SALES'`;
+
+//         // Add Branch_Id condition if provided
+//         if (Branch_Id) {
+//             query += ` AND tr.Branch_Id = @Branch_Id`;
+//         }
+
+//         query += `),
+// TRIP_DETAILS AS (
+//     SELECT DISTINCT
+//         td.Trip_Id,
+//         td.Delivery_Id,
+//         sgi.Do_Id,
+//         sgi.So_No,
+//         sgi.Total_Before_Tax,
+//         sgi.Total_Invoice_Value,
+//         sgi.SGST_Total,
+//         sgi.CSGT_Total,
+//         sgi.IGST_Total,
+//         sgi.Delivery_Person_Id,
+//         sgi.Delivery_Status,
+//         sgi.Cancel_status,
+//         sgi.Total_Tax,
+//         sgi.Created_by,
+//         sgi.Altered_by,
+//         sgi.Do_Date AS Delivery_Do_Date,  
+//         sogi.So_Id AS Sales_Order_Id,  
+//         sogi.Retailer_Id AS Order_Retailer_Id  
+//     FROM tbl_Trip_Details AS td
+//     LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi ON sgi.Do_Id = td.Delivery_Id
+//     LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sgi.So_No
+//      WHERE 1 = 1
+//       ${Delivery_Person_Id ? 'AND sgi.Delivery_Person_Id = @Delivery_Person_Id' : ''}
+// ),
+// TRIP_EMPLOYEES AS (
+//     SELECT
+//         te.Trip_Id,
+//         te.Involved_Emp_Id,
+//         e.Cost_Center_Name AS Emp_Name,
+//         cc.Cost_Category,
+//         cc.Cost_Category_Id
+//     FROM tbl_Trip_Employees AS te
+//     LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = te.Involved_Emp_Id
+//     LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+// )
+// SELECT
+//     tm.Trip_Id,
+//     tm.Challan_No,
+//     tm.EndTime,
+//     tm.StartTime,
+//     tm.Trip_Date,
+//     tm.Trip_EN_KM,
+//     tm.Trip_No,
+//     tm.Trip_ST_KM,
+//     tm.Trip_Tot_Kms,
+//     tm.Vehicle_No,
+//     tm.Branch_Id, 
+//     tm.TR_INV_ID,
+//     tm.BillType,
+//     tm.VoucherType,
+
+//     (SELECT MIN(td.Delivery_Do_Date) 
+//      FROM TRIP_DETAILS AS td 
+//      WHERE td.Trip_Id = tm.Trip_Id) AS DO_Date,
+
+//     COALESCE((  
+//         SELECT DISTINCT
+//             td.Delivery_Id,
+//             td.Do_Id,
+//             td.So_No,
+//             td.Total_Before_Tax,
+//             td.Total_Invoice_Value,
+//             td.SGST_Total,
+//             td.CSGT_Total,
+//             td.IGST_Total,
+//             td.Delivery_Person_Id,
+//             ecc.Cost_Center_Name,
+//             ecc.User_Id,
+//             us.Name,
+//             td.Delivery_Status,
+//             td.Cancel_status,
+//             td.Total_Tax,
+//             td.Created_by,
+//             td.Altered_by,
+//             td.Sales_Order_Id,
+//             td.Order_Retailer_Id,
+//             ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,  
+//             ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
+//             ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
+//             ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
+//             ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
+//             ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
+//             ISNULL(sgi.Collected_By, '') AS Collected_By,
+//             ISNULL(sgi.Collected_Status, '') AS Collected_Status,
+//             sgi.Payment_Status
+//         FROM TRIP_DETAILS AS td
+//         LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
+//         LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
+//         LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id  
+//         WHERE td.Trip_Id = tm.Trip_Id
+//         FOR JSON PATH
+//     ), '[]') AS Trip_Details,
+
+//     COALESCE((  
+//     SELECT
+//         sgi.Do_Id,
+//         sgi.So_No,
+//         rm.Retailer_Name,
+//         sgi.Do_Date AS Product_Do_Date, 
+
+//         (SELECT
+//             sdsi.*,
+//             sgi2.Do_Inv_No,
+//             pm.Product_Name,
+//             pm.Product_Image_Name,
+//             tm.BranchName AS Branch,  
+//             rm2.Retailer_Name,  
+//             rm2.Latitude,
+//             rm2.Longitude,
+//            -- ssi.*,
+//             (SELECT
+//                 ssi.Id,
+//                 ssi.Do_Id,
+//                 ssi.Emp_Id,
+//                 ecc.Cost_Center_Name AS Emp_Name,
+//                 ssi.Emp_Type_Id,
+//                 et.Cost_Category AS Emp_Type_Name
+//             FROM tbl_Sales_Delivery_Staff_Info AS ssi
+//             LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
+//             LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
+//             WHERE ssi.Do_Id = sgi2.Do_Id
+//             FOR JSON PATH
+//             ) AS Delivery_Staff
+//         FROM tbl_Sales_Delivery_Stock_Info AS sdsi
+//         LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sdsi.Item_Id
+//         LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
+//         LEFT JOIN tbl_Retailers_Master AS rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
+//         LEFT JOIN tbl_Sales_Delivery_Staff_Info AS ssi ON ssi.Do_Id = sgi2.Do_Id
+      
+//     --    LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
+       
+//       --  LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
+     
+//         WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
+//         FOR JSON PATH
+//         ) AS Products_List
+//     FROM tbl_Sales_Delivery_Gen_Info AS sgi
+//     LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sgi.Retailer_Id
+//     WHERE sgi.Do_Id IN (SELECT td.Delivery_Id FROM TRIP_DETAILS td WHERE td.Trip_Id = tm.Trip_Id)
+//     FOR JSON PATH
+// ), '[]') AS Product_Array,
+
+//     COALESCE((  
+//         SELECT
+//             te.Involved_Emp_Id,
+//             te.Emp_Name,
+//             te.Cost_Category,
+//             te.Cost_Category_Id AS Cost_Center_Type_Id
+//         FROM TRIP_EMPLOYEES AS te
+//         WHERE te.Trip_Id = tm.Trip_Id
+//         FOR JSON PATH
+//     ), '[]') AS Employees_Involved
+// FROM TRIP_MASTER AS tm`;
+
+//         const request = new sql.Request();
+//         request.input('FromDate', sql.Date, FromDate);
+//         request.input('ToDate', sql.Date, ToDate);
+    
+//         if (Branch_Id) {
+//             request.input('Branch_Id', sql.Int, Branch_Id);
+//         }
+//          if (Delivery_Person_Id) {
+//             request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
+//         }
+
+
+//         const result = await request.query(query);
+
+//         if (result.recordset && Array.isArray(result.recordset) && result.recordset.length > 0) {
+//             const parsed = result.recordset.map(o => ({
+//                 ...o,
+//                 Product_Array: o?.Product_Array ? JSON.parse(o.Product_Array) : [],
+//                 Trip_Details: o?.Trip_Details ? JSON.parse(o.Trip_Details) : [],
+//                 Employees_Involved: o?.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
+//             }));
+
+//             dataFound(res, parsed);
+//         } else {
+//             noData(res);
+//         }
+
+//     } catch (e) {
+//         servError(e, res);
+//     }
+// };
+
+const deliveryTripsheetList = async (req, res) => {
     try {
         const FromDate = ISOString(req.query.Fromdate);
         const ToDate = ISOString(req.query.Todate);
-        const { Branch_Id } = req.query;
+        const { Branch_Id, User_Id, Delivery_Person_Id } = req.query;
 
         if (!FromDate || !ToDate) {
             return invalidInput(res, 'Select StartDate & EndDate');
         }
 
-        let query = `WITH TRIP_MASTER AS (
+        let query = `
+WITH TRIP_MASTER AS (
     SELECT
         tr.Trip_Id,
         tr.Challan_No,
@@ -2059,14 +2286,26 @@ const editmobileApi = async (req, res) => {
         bm.BranchName
     FROM tbl_Trip_Master tr
     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
-    WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate AND tr.BillType = 'SALES'`;
+    WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate
+      AND tr.BillType = 'SALES'
+`;
 
-        // Add Branch_Id condition if provided
         if (Branch_Id) {
             query += ` AND tr.Branch_Id = @Branch_Id`;
         }
+        
+
+        if (Delivery_Person_Id) {
+            query += ` AND EXISTS (
+                SELECT 1 FROM tbl_Trip_Details td
+                INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id
+                WHERE td.Trip_Id = tr.Trip_Id 
+                AND sgi.Delivery_Person_Id = @Delivery_Person_Id
+            )`;
+        }
 
         query += `),
+
 TRIP_DETAILS AS (
     SELECT DISTINCT
         td.Trip_Id,
@@ -2084,13 +2323,21 @@ TRIP_DETAILS AS (
         sgi.Total_Tax,
         sgi.Created_by,
         sgi.Altered_by,
-        sgi.Do_Date AS Delivery_Do_Date,  
-        sogi.So_Id AS Sales_Order_Id,  
-        sogi.Retailer_Id AS Order_Retailer_Id  
-    FROM tbl_Trip_Details AS td
-    LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi ON sgi.Do_Id = td.Delivery_Id
-    LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sgi.So_No
-),
+        sgi.Do_Date AS Delivery_Do_Date,
+        sogi.So_Id AS Sales_Order_Id,
+        sogi.Retailer_Id AS Order_Retailer_Id
+    FROM tbl_Trip_Details td
+    LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id
+    LEFT JOIN tbl_Sales_Order_Gen_Info sogi ON sogi.So_Id = sgi.So_No
+    WHERE 1 = 1
+`;
+
+        if (Delivery_Person_Id) {
+            query += ` AND sgi.Delivery_Person_Id = @Delivery_Person_Id`;
+        }
+
+        query += `),
+
 TRIP_EMPLOYEES AS (
     SELECT
         te.Trip_Id,
@@ -2098,10 +2345,11 @@ TRIP_EMPLOYEES AS (
         e.Cost_Center_Name AS Emp_Name,
         cc.Cost_Category,
         cc.Cost_Category_Id
-    FROM tbl_Trip_Employees AS te
-    LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = te.Involved_Emp_Id
-    LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+    FROM tbl_Trip_Employees te
+    LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = te.Involved_Emp_Id
+    LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
 )
+
 SELECT
     tm.Trip_Id,
     tm.Challan_No,
@@ -2113,16 +2361,17 @@ SELECT
     tm.Trip_ST_KM,
     tm.Trip_Tot_Kms,
     tm.Vehicle_No,
-    tm.Branch_Id, 
-    tm.TR_INV_ID,
+    tm.Branch_Id,
     tm.BillType,
     tm.VoucherType,
+    tm.TR_INV_ID,
+    tm.BranchName,
 
-    (SELECT MIN(td.Delivery_Do_Date) 
-     FROM TRIP_DETAILS AS td 
+    (SELECT MIN(td.Delivery_Do_Date)
+     FROM TRIP_DETAILS td
      WHERE td.Trip_Id = tm.Trip_Id) AS DO_Date,
 
-    COALESCE((  
+    COALESCE((
         SELECT DISTINCT
             td.Delivery_Id,
             td.Do_Id,
@@ -2133,9 +2382,6 @@ SELECT
             td.CSGT_Total,
             td.IGST_Total,
             td.Delivery_Person_Id,
-            ecc.Cost_Center_Name,
-            ecc.User_Id,
-            us.Name,
             td.Delivery_Status,
             td.Cancel_status,
             td.Total_Tax,
@@ -2143,7 +2389,10 @@ SELECT
             td.Altered_by,
             td.Sales_Order_Id,
             td.Order_Retailer_Id,
-            ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,  
+            ecc.Cost_Center_Name,
+            ecc.User_Id,
+            us.Name,
+            ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,
             ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
             ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
             ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
@@ -2152,91 +2401,125 @@ SELECT
             ISNULL(sgi.Collected_By, '') AS Collected_By,
             ISNULL(sgi.Collected_Status, '') AS Collected_Status,
             sgi.Payment_Status
-        FROM TRIP_DETAILS AS td
+        FROM TRIP_DETAILS td
         LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
-        LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
-        LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id  
+        LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id
+        LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id
         WHERE td.Trip_Id = tm.Trip_Id
         FOR JSON PATH
     ), '[]') AS Trip_Details,
 
-    COALESCE((  
-    SELECT
-        sgi.Do_Id,
-        sgi.So_No,
-        rm.Retailer_Name,
-        sgi.Do_Date AS Product_Do_Date, 
-
-        (SELECT
-            sdsi.*,
-            sgi2.Do_Inv_No,
-            pm.Product_Name,
-            pm.Product_Image_Name,
-            tm.BranchName AS Branch,  
-            rm2.Retailer_Name,  
-            rm2.Latitude,
-            rm2.Longitude,
-           -- ssi.*,
-            (SELECT
-                ssi.Id,
-                ssi.Do_Id,
-                ssi.Emp_Id,
-                ecc.Cost_Center_Name AS Emp_Name,
-                ssi.Emp_Type_Id,
-                et.Cost_Category AS Emp_Type_Name
-            FROM tbl_Sales_Delivery_Staff_Info AS ssi
-            LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
-            LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
-            WHERE ssi.Do_Id = sgi2.Do_Id
-            FOR JSON PATH
-            ) AS Delivery_Staff
-        FROM tbl_Sales_Delivery_Stock_Info AS sdsi
-        LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sdsi.Item_Id
-        LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
-        LEFT JOIN tbl_Retailers_Master AS rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
-        LEFT JOIN tbl_Sales_Delivery_Staff_Info AS ssi ON ssi.Do_Id = sgi2.Do_Id
-      
-    --    LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
-       
-      --  LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
-     
-        WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
+    COALESCE((
+        SELECT
+            sgi.Do_Id,
+            sgi.So_No,
+            rm.Retailer_Name,
+            sgi.Do_Date AS Product_Do_Date,
+            (
+                SELECT
+                    sdsi.DO_St_Id,
+                    sdsi.Do_Date,
+                    sdsi.Delivery_Order_Id,
+                    sdsi.GoDown_Id,
+                    sdsi.S_No,
+                    sdsi.Item_Id,
+                    sdsi.Bill_Qty,
+                    sdsi.Act_Qty,
+                    sdsi.Alt_Act_Qty,
+                    sdsi.Taxable_Rate,
+                    sdsi.Item_Rate,
+                    sdsi.Amount,
+                    sdsi.Free_Qty,
+                    sdsi.Total_Qty,
+                    sdsi.Taxble,
+                    sdsi.HSN_Code,
+                    sdsi.Unit_Id,
+                    sdsi.Unit_Name,
+                    sdsi.Act_unit_Id,
+                    sdsi.Alt_Act_Unit_Id,
+                    sdsi.Taxable_Amount,
+                    sdsi.Tax_Rate,
+                    sdsi.Cgst,
+                    sdsi.Cgst_Amo,
+                    sdsi.Sgst,
+                    sdsi.Sgst_Amo,
+                    sdsi.Igst,
+                    sdsi.Igst_Amo,
+                    sdsi.Final_Amo,
+                    sdsi.Created_on,
+                    sdsi.Batch_Name,
+                    sgi2.Do_Inv_No,
+                    pm.Product_Name,
+                    pm.Product_Image_Name,
+                    tm.BranchName AS Branch,
+                    rm2.Retailer_Name,
+                    rm2.Latitude,
+                    rm2.Longitude,
+                    (
+                        SELECT
+                            ssi.Id,
+                            ssi.Do_Id,
+                            ssi.Emp_Id,
+                            ecc.Cost_Center_Name AS Emp_Name,
+                            ssi.Emp_Type_Id,
+                            et.Cost_Category AS Emp_Type_Name
+                        FROM tbl_Sales_Delivery_Staff_Info ssi
+                        LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
+                        LEFT JOIN tbl_ERP_Cost_Category et ON et.Cost_Category_Id = ssi.Emp_Type_Id
+                        WHERE ssi.Do_Id = sgi2.Do_Id
+                        FOR JSON PATH
+                    ) AS Delivery_Staff
+                FROM tbl_Sales_Delivery_Stock_Info sdsi
+                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
+                LEFT JOIN tbl_Retailers_Master rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
+                WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
+                FOR JSON PATH
+            ) AS Products_List
+        FROM tbl_Sales_Delivery_Gen_Info sgi
+        LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sgi.Retailer_Id
+        WHERE sgi.Do_Id IN (
+            SELECT td.Delivery_Id
+            FROM TRIP_DETAILS td
+            WHERE td.Trip_Id = tm.Trip_Id
+        )
         FOR JSON PATH
-        ) AS Products_List
-    FROM tbl_Sales_Delivery_Gen_Info AS sgi
-    LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sgi.Retailer_Id
-    WHERE sgi.Do_Id IN (SELECT td.Delivery_Id FROM TRIP_DETAILS td WHERE td.Trip_Id = tm.Trip_Id)
-    FOR JSON PATH
-), '[]') AS Product_Array,
+    ), '[]') AS Product_Array,
 
-    COALESCE((  
+    COALESCE((
         SELECT
             te.Involved_Emp_Id,
             te.Emp_Name,
             te.Cost_Category,
             te.Cost_Category_Id AS Cost_Center_Type_Id
-        FROM TRIP_EMPLOYEES AS te
+        FROM TRIP_EMPLOYEES te
         WHERE te.Trip_Id = tm.Trip_Id
         FOR JSON PATH
     ), '[]') AS Employees_Involved
-FROM TRIP_MASTER AS tm`;
+
+FROM TRIP_MASTER tm
+`;
 
         const request = new sql.Request();
         request.input('FromDate', sql.Date, FromDate);
         request.input('ToDate', sql.Date, ToDate);
-        
+
         if (Branch_Id) {
             request.input('Branch_Id', sql.Int, Branch_Id);
+        }
+       
+        if (Delivery_Person_Id) {
+            request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
         }
 
         const result = await request.query(query);
 
-        if (result.recordset && Array.isArray(result.recordset) && result.recordset.length > 0) {
+        if (result.recordset?.length) {
             const parsed = result.recordset.map(o => ({
                 ...o,
-                Product_Array: o?.Product_Array ? JSON.parse(o.Product_Array) : [],
-                Trip_Details: o?.Trip_Details ? JSON.parse(o.Trip_Details) : [],
-                Employees_Involved: o?.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
+                Product_Array: o.Product_Array ? JSON.parse(o.Product_Array) : [],
+                Trip_Details: o.Trip_Details ? JSON.parse(o.Trip_Details) : [],
+                Employees_Involved: o.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
             }));
 
             dataFound(res, parsed);
@@ -2248,6 +2531,7 @@ FROM TRIP_MASTER AS tm`;
         servError(e, res);
     }
 };
+
 
     const updateDeliveryOrderTrip = async (req, res) => {
         const {
