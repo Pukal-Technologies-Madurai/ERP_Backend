@@ -629,7 +629,9 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
         
         const filter1 = req.query.filter1 ? req.query.filter1.split(',').map(f => f.trim()).filter(f => f) : [];
-        const filter2 = req.query.filter2 ? req.query.filter2.split(',').map(f => f.trim()).filter(f => f) : [];
+        const filter2 = req.query.filter2 ? req.
+        
+        query.filter2.split(',').map(f => f.trim()).filter(f => f) : [];
         const filter3 = req.query.filter3 ? req.query.filter3.split(',').map(f => f.trim()).filter(f => f) : [];
         const Godown_Id = req.query.godown_Id || 0; 
    

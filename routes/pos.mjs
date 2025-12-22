@@ -19,5 +19,9 @@ PosRouter.get('/transporters',pos.transporters);
 
 PosRouter.get('/brokers',pos.brokers)
 
+PosRouter.get('/retailerMasterOpt',pos.getRetailersOpt)
+
+PosRouter.get('/brokersOpt',pos.getBrokersOpt)
+PosRouter.get('/transportersOpt',pos.getTransporterOpt)
 export default PosRouter;
 
