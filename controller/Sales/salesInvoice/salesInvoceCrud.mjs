@@ -192,8 +192,8 @@ export const getSalesInvoice = async (req, res) => {
                     exp.*, 
                     em.Account_name AS Expence_Name, 
                     CASE  
-                        WHEN exp.Expence_Value_DR > 0 THEN -exp.Expence_Value_DR 
-                        ELSE exp.Expence_Value_CR
+                        WHEN exp.Expence_Value_DR > 0 THEN exp.Expence_Value_DR 
+                        ELSE -exp.Expence_Value_CR
                     END AS Expence_Value
                 FROM tbl_Sales_Delivery_Expence_Info AS exp
                 LEFT JOIN tbl_Account_Master AS em

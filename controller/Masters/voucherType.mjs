@@ -4,36 +4,47 @@ import { checkIsNumber, filterableText, isEqualNumber, randomNumber } from '../.
 
 const voucherType = () => {
 
- const getVoucherType = async (req, res) => {
-    try {
-        const { module } = req.query;
+    const getVoucherType = async (req, res) => {
+        try {
+            const { module, showDeleted = 0 } = req.query;
 
-        const request = new sql.Request()
-            .input('module', module)
-            .query(`
-                SELECT 
-                    vt.Vocher_Type_Id,
-                    vt.Voucher_Type,
-                    vt.Voucher_Code,
-                    vt.Branch_Id,
-                    vt.Type,
-                    vt.tally_sync AS tallySync,   
-                    bm.BranchName  
-                FROM tbl_Voucher_Type vt
-                LEFT JOIN tbl_Branch_Master bm 
-                    ON bm.BranchId = vt.Branch_Id
-                WHERE Vocher_Type_Id IS NOT NULL
-                ${module ? ' AND Type = @module ' : ''}
-            `);
+            const request = new sql.Request()
+                .input('module', module)
+                .query(`
+                    SELECT 
+                        vt.Vocher_Type_Id,
+                        vt.Voucher_Type,
+                        vt.Voucher_Code,
+                        vt.Branch_Id,
+                        vt.Type,
+                        vt.tally_sync AS tallySync,   
+                        bm.BranchName,
+                        vt.Created_By,
+				    	cb.Name createdByGet,
+				    	vt.Created_Time,
+				    	vt.Alter_By,
+				    	ub.Name updatedByGet,
+				    	vt.Alter_Time,
+                        COALESCE(vt.deleteFlag, 0) AS isDeleted
+                    FROM tbl_Voucher_Type vt
+                    LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = vt.Branch_Id
+				    LEFT JOIN tbl_Users AS cb ON cb.UserId = vt.Created_By
+				    LEFT JOIN tbl_Users AS ub ON ub.UserId = vt.Alter_By
+                    WHERE 
+				    	COALESCE(vt.Vocher_Type_Id, 0) <> 0
+				    	AND TRIM(COALESCE(vt.Voucher_Code, '')) <> ''
+                    ${module ? ' AND vt.Type = @module ' : ''}
+                    ${isEqualNumber(showDeleted, 1) ? '' : ' AND COALESCE(vt.deleteFlag, 0) = 0 '}
+                    ORDER BY vt.Voucher_Type ASC;`
+                );
 
-        const result = await request;
-        sentData(res, result.recordset);
-    } catch (e) {
-        servError(e, res);
-    }
-};
+            const result = await request;
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    };
 
-    /***** ADD VOUCHER TYPE *****/
     const addVoucherType = async (req, res) => {
 
         const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync } = req.body;
@@ -76,11 +87,14 @@ const voucherType = () => {
                 .input('Created_Time', new Date())
                 .input('tally_sync', tally_sync)
                 .query(`
-                INSERT INTO tbl_Voucher_Type 
-                (Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_Id, Created_By, Created_Time, tally_sync)
-                VALUES 
-                (@Vocher_Type_Id, @Voucher_Type, @Voucher_Code, @Branch_Id, @Type, @Alter_Id, @Created_By, @Created_Time, @tally_sync)
-            `);
+                    INSERT INTO tbl_Voucher_Type (
+                        Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_Id, 
+                        Created_By, Created_Time, tally_sync, deleteFlag
+                    ) VALUES (
+                        @Vocher_Type_Id, @Voucher_Type, @Voucher_Code, @Branch_Id, @Type, @Alter_Id, 
+                        @Created_By, @Created_Time, @tally_sync, 0
+                    );`
+                );
 
             const result = await request;
 
@@ -95,8 +109,6 @@ const voucherType = () => {
         }
     };
 
-
-    /***** EDIT VOUCHER TYPE *****/
     const editVoucherType = async (req, res) => {
 
         const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync } = req.body;
@@ -150,7 +162,6 @@ const voucherType = () => {
         }
     };
 
-
     const deleteVoucherType = async (req, res) => {
         const { Vocher_Type_Id } = req.body;
         if (!checkIsNumber(Vocher_Type_Id)) {
@@ -161,9 +172,9 @@ const voucherType = () => {
             const request = new sql.Request()
                 .input('Vocher_Type_Id', Vocher_Type_Id)
                 .query(`
-                DELETE 
-                FROM tbl_Voucher_Type 
-                WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                    UPDATE tbl_Voucher_Type 
+                    SET deleteFlag = 1
+                    WHERE Vocher_Type_Id = @Vocher_Type_Id`
                 )
 
             const result = await request;

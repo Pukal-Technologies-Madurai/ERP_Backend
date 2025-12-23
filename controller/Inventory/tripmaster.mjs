@@ -15,7 +15,7 @@ const tripActivities = () => {
                 Vehicle_No = '',
                 Trip_ST_KM = '',
                 Trip_EN_KM = '',
-                Created_by = '',
+                Created_By = '',
                 PhoneNumber = '',
                 LoadingLoad = 0,
                 LoadingEmpty = 0,
@@ -142,7 +142,7 @@ const tripActivities = () => {
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
                 .input('Trip_EN_KM', Number(Trip_EN_KM))
                 .input('Trip_Tot_Kms', toNumber(Trip_Tot_Kms))
-                .input('Created_By', Created_by)
+                .input('Created_By', Created_By)
                 .input('Created_At', new Date())
                 .query(`
                     INSERT INTO tbl_Trip_Master (
@@ -174,7 +174,7 @@ const tripActivities = () => {
                     .input('Gst_Rate', toNumber(product?.Gst_Rate))
                     .input('From_Location', toNumber(product?.From_Location))
                     .input('To_Location', toNumber(product?.To_Location))
-                    .input('Created_By', toNumber(Created_by))
+                    .input('Created_By', toNumber(Created_By))
                     .query(`
                     -- trip update
                         DECLARE @reference_id INT;

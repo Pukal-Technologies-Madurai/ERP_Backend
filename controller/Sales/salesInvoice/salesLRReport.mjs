@@ -207,7 +207,7 @@ export const katchathCopyPrintOut = async (req, res) => {
                 	COALESCE((
                 		SELECT 
                 			sdsi.Item_Id itemId,
-                			p.Product_Name itemName,
+                			p.Short_Name itemName,
                 			sdsi.Alt_Act_Qty quantity
                 		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id

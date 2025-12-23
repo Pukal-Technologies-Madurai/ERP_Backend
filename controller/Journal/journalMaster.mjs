@@ -2,7 +2,7 @@ import { servError, success, invalidInput, dataFound, noData, } from '../../res.
 import { ISOString, checkIsNumber, createPadString, randomNumber, toArray } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql';
-import { isGuid, normGuid, zodToErrors, EditJournalSchema } from './journalValidation.mjs';
+import { isGuid, normGuid, zodToErrors, EditJournalSchema, CreateJournalSchema } from './journalValidation.mjs';
 
 const getJournal = async (req, res) => {
     try {
@@ -79,7 +79,13 @@ const getJournal = async (req, res) => {
 
 const createJournal = async (req, res) => {
     const tx = new sql.Transaction();
+
     try {
+        const parsed = CreateJournalSchema.safeParse(req.body || {});
+        if (!parsed.success) {
+            return invalidInput(res, "Enter Required Fields", { errors: zodToErrors(parsed.error) });
+        }
+
         const {
             VoucherType,
             JournalDate,
@@ -88,102 +94,12 @@ const createJournal = async (req, res) => {
             JournalStatus,
             CreatedBy,
             Entries = [],
-            BillReferences = [],
-        } = req.body || {};
+        } = parsed.data;
 
         const journalDate = JournalDate ? ISOString(JournalDate) : ISOString();
 
-        // ----------------------------
-        // Validations (field names as-is)
-        // ----------------------------
-        const errors = [];
-        if (!VoucherType) errors.push("VoucherType");
-        if (!BranchId) errors.push("BranchId");
-        if (!CreatedBy) errors.push("CreatedBy");
-        if (JournalStatus === undefined || JournalStatus === null || JournalStatus === '') errors.push("JournalStatus");
-
-        const raw = toArray(Entries).map((r, idx) => ({
-            __idx: idx,
-            __clientLineId: r?.LineId || null,
-            LineNum: r?.LineNum || null,
-            Acc_Id: Number(r?.Acc_Id),
-            DrCr: String(r?.DrCr || "").trim(),
-            Amount: Number(r?.Amount || 0),
-            Remarks: r?.Remarks ?? null,
-            AccountGet: r?.AccountGet ?? null,
-            isSundryParty: r?.isSundryParty || 0,
-        }));
-
-        if (raw.length === 0) errors.push("Entries");
-
-        raw.forEach((r, i) => {
-            if (!r.Acc_Id) errors.push(`Entries[${i}].Acc_Id`);
-            if (!(r.DrCr === "Dr" || r.DrCr === "Cr")) errors.push(`Entries[${i}].DrCr`);
-            if (!(r.Amount > 0)) errors.push(`Entries[${i}].Amount`);
-            if (!r.__clientLineId) errors.push(`Entries[${i}].LineId(missing)`);
-        });
-
-        // sort (if you need), but keep clientLineId for mapping
-        const rows = raw.sort((a, b) => String(b.DrCr).localeCompare(a.DrCr));
-
-        const hasDr = rows.some((r) => r.DrCr === "Dr");
-        const hasCr = rows.some((r) => r.DrCr === "Cr");
-        if (!hasDr) errors.push("Entries:MissingDebit");
-        if (!hasCr) errors.push("Entries:MissingCredit");
-
-        // no duplicate Acc_Id on the same side
-        const seen = new Set();
-        rows.forEach((r) => {
-            const k = `${r.DrCr}:${r.Acc_Id}`;
-            if (seen.has(k)) errors.push(`Duplicate_${k}`);
-            seen.add(k);
-        });
-
-        const drTotal = rows.filter((r) => r.DrCr === "Dr").reduce((t, r) => t + r.Amount, 0);
-        const crTotal = rows.filter((r) => r.DrCr === "Cr").reduce((t, r) => t + r.Amount, 0);
-        if (Math.round((drTotal - crTotal) * 100) !== 0) errors.push("NotBalanced");
-
-        // ---- BillReferences validations (flat) ----
-        const refs = toArray(BillReferences).map((r, i) => ({
-            __i: i,
-            LineId: r?.LineId || null,
-            RefId: r?.RefId ?? null,
-            RefNo: r?.RefNo ?? null,
-            RefType: r?.RefType ?? null,
-            Amount: Number(r?.Amount || 0),
-            BillRefNo: r?.BillRefNo ?? null,
-        }));
-
-        // every ref must target a valid client line
-        const clientLineIdSet = new Set(rows.map((r) => r.__clientLineId));
-        refs.forEach((r) => {
-            if (!r.LineId || !clientLineIdSet.has(r.LineId)) {
-                errors.push(`BillReferences[${r.__i}].LineId(invalid)`);
-            }
-            if (!(r.Amount > 0)) {
-                errors.push(`BillReferences[${r.__i}].Amount`);
-            }
-        });
-
-        // for each line that HAS refs, refs sum must equal line Amount
-        // const sumByClientLineId = refs.reduce((m, r) => {
-        //     if (!r.LineId) return m;
-        //     m[r.LineId] = (m[r.LineId] || 0) + r.Amount;
-        //     return m;
-        // }, {});
-        // rows.forEach((line) => {
-        //     if (sumByClientLineId[line.__clientLineId] != null) {
-        //         const lhs = Math.round(sumByClientLineId[line.__clientLineId] * 100);
-        //         const rhs = Math.round(Number(line.Amount || 0) * 100);
-        //         if (lhs !== rhs) {
-        //             errors.push(`Entries[${line.__idx}].BillReferencesNotBalanced`);
-        //         }
-        //     }
-        // });
-
-        if (errors.length) {
-            return invalidInput(res, "Enter Required Fields", { errors });
-        }
+        const drTotal = Entries.filter((e) => e.DrCr === "Dr").reduce((t, e) => t + e.Amount, 0);
+        const crTotal = Entries.filter((e) => e.DrCr === "Cr").reduce((t, e) => t + e.Amount, 0);
 
         // ----------------------------
         // Year_Id & Year_Desc
@@ -193,8 +109,8 @@ const createJournal = async (req, res) => {
             .query(`
                 SELECT Id AS Year_Id, Year_Desc
                 FROM tbl_Year_Master
-                WHERE Fin_Start_Date <= @JournalDate AND Fin_End_Date >= @JournalDate`
-            );
+                WHERE Fin_Start_Date <= @JournalDate AND Fin_End_Date >= @JournalDate`);
+
         if (yearQ.recordset.length === 0) throw new Error("Year_Id not found");
         const { Year_Id, Year_Desc } = yearQ.recordset[0];
 
@@ -206,13 +122,13 @@ const createJournal = async (req, res) => {
             .query(`
                 SELECT Voucher_Code
                 FROM tbl_Voucher_Type
-                WHERE Vocher_Type_Id = @Vocher_Type_Id`
-            );
+                WHERE Vocher_Type_Id = @Vocher_Type_Id`);
+
         if (vcodeQ.recordset.length === 0) throw new Error("Voucher_Code not found");
         const Voucher_Code = vcodeQ.recordset[0]?.Voucher_Code || "";
 
         // ----------------------------
-        // JournalId (global) & JournalNo (per Year/VoucherType)
+        // JournalId & JournalNo
         // ----------------------------
         const journalIdGet = await getNextId({ table: "tbl_Journal_General_Info", column: "JournalId" });
         if (!journalIdGet?.status || !Number.isFinite(Number(journalIdGet.MaxId))) {
@@ -228,6 +144,7 @@ const createJournal = async (req, res) => {
                 FROM tbl_Journal_General_Info
                 WHERE Year_Id = @Year_Id AND VoucherType = @VoucherType`
             );
+
         const JournalNo = Number(jnoQ?.recordset?.[0]?.JournalNo || 0) + 1;
 
         const JournalVoucherNo = `${Voucher_Code}/${createPadString(JournalNo, 6)}/${Year_Desc}`;
@@ -238,8 +155,8 @@ const createJournal = async (req, res) => {
         // ----------------------------
         await tx.begin();
 
-        // Header
-        const hdrReq = new sql.Request(tx)
+        // Header insert
+        const hdrIns = await new sql.Request(tx)
             .input("JournalId", JournalId)
             .input("Year_Id", Year_Id)
             .input("VoucherType", VoucherType)
@@ -250,96 +167,86 @@ const createJournal = async (req, res) => {
             .input("Narration", Narration)
             .input("JournalStatus", JournalStatus)
             .input("CreatedBy", CreatedBy)
-            .input("AlterId", AlterId);
-
-        const hdrIns = await hdrReq.query(`
-            INSERT INTO dbo.tbl_Journal_General_Info (
-                JournalAutoId, JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo,
-                JournalDate, BranchId, Narration, JournalStatus,
-                CreatedBy, CreatedAt, UpdatedAt, AlterId
-            )
-            OUTPUT inserted.JournalAutoId
-            VALUES (
-                DEFAULT, @JournalId, @Year_Id, @VoucherType, @JournalNo, @JournalVoucherNo,
-                @JournalDate, @BranchId, @Narration, @JournalStatus,
-                @CreatedBy, GETDATE(), NULL, @AlterId
-            )`
-        );
+            .input("AlterId", AlterId)
+            .query(`
+                INSERT INTO dbo.tbl_Journal_General_Info (
+                  JournalAutoId, JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo,
+                  JournalDate, BranchId, Narration, JournalStatus,
+                  CreatedBy, CreatedAt, UpdatedAt, AlterId
+                )
+                OUTPUT inserted.JournalAutoId
+                VALUES (
+                  DEFAULT, @JournalId, @Year_Id, @VoucherType, @JournalNo, @JournalVoucherNo,
+                  @JournalDate, @BranchId, @Narration, @JournalStatus,
+                  @CreatedBy, GETDATE(), NULL, @AlterId
+                )`);
 
         const JournalAutoId = hdrIns?.recordset?.[0]?.JournalAutoId;
         if (!JournalAutoId) throw new Error("Failed to capture JournalAutoId");
 
-        // Lines: insert & build map from clientLineId -> DB line
-        const lineMapByClientId = new Map();
+        let lineCount = 0;
+        let billCount = 0;
 
-        let LineNum = 1;
-        for (const r of rows) {
-            const lineReq = new sql.Request(tx)
-                .input("LineNum", LineNum++)
+        for (let i = 0; i < Entries.length; i++) {
+            const e = Entries[i];
+            const lineNum = i + 1;
+
+            const lineIns = await new sql.Request(tx)
+                .input("LineNum", lineNum)
                 .input("JournalAutoId", JournalAutoId)
                 .input("JournalId", JournalId)
                 .input("JournalVoucherNo", JournalVoucherNo)
                 .input("JournalDate", journalDate)
-                .input("Acc_Id", r.Acc_Id)
-                .input("AccountGet", r.AccountGet)
-                .input("isSundryParty", r.isSundryParty)
-                .input("DrCr", r.DrCr)
-                .input("Amount", r.Amount)
-                .input("Remarks", r.Remarks);
-
-            const lineIns = await lineReq.query(`
-                INSERT INTO dbo.tbl_Journal_Entries_Info (
-                    LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
-                    Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
-                )
-                OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
-                VALUES (
-                    DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-                    @Acc_Id, @AccountGet, @isSundryParty, @DrCr, @Amount, @Remarks
-                );`
-            );
+                .input("Acc_Id", e.Acc_Id)
+                .input("AccountGet", e.AccountGet ?? null)
+                .input("isSundryParty", e.isSundryParty ?? 0)
+                .input("DrCr", e.DrCr)
+                .input("Amount", e.Amount)
+                .input("Remarks", e.Remarks ?? null)
+                .query(`
+                    INSERT INTO dbo.tbl_Journal_Entries_Info (
+                      LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+                      Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
+                    )
+                    OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
+                    VALUES (
+                      DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+                      @Acc_Id, @AccountGet, @isSundryParty, @DrCr, @Amount, @Remarks
+                    )`);
 
             const ins = lineIns?.recordset?.[0];
             if (!ins?.LineId) throw new Error("Failed to insert journal line");
+            lineCount++;
 
-            lineMapByClientId.set(r.__clientLineId, {
-                LineId: ins.LineId,
-                LineNum: ins.LineNum,
-                Acc_Id: ins.Acc_Id,
-                DrCr: ins.DrCr,
-            });
-        }
+            const bills = e.BillEntries || [];
+            for (const b of bills) {
+                billCount++;
 
-        for (const r of refs) {
-            const map = lineMapByClientId.get(r.LineId);
-            if (!map) {
-                throw new Error(`BillReferences[${r.__i}] refers to unknown LineId`);
+                await new sql.Request(tx)
+                    .input("LineId", ins.LineId)
+                    .input("LineNum", ins.LineNum)
+                    .input("JournalAutoId", JournalAutoId)
+                    .input("JournalId", JournalId)
+                    .input("JournalVoucherNo", JournalVoucherNo)
+                    .input("JournalDate", journalDate)
+                    .input("Acc_Id", ins.Acc_Id)
+                    .input("DrCr", ins.DrCr)
+                    .input("RefId", b.RefId ?? null)
+                    .input("RefNo", b.RefNo ?? null)
+                    .input("RefType", b.RefType ?? null)
+                    .input("BillRefNo", b.BillRefNo ?? null)
+                    .input("Amount", b.Amount)
+                    .query(`
+                        INSERT INTO dbo.tbl_Journal_Bill_Reference (
+                          autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+                          Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
+                        )
+                        VALUES (
+                          DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+                          @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @BillRefNo, @Amount
+                        )`
+                    );
             }
-            const refReq = new sql.Request(tx)
-                .input("LineId", map.LineId)
-                .input("LineNum", map.LineNum)
-                .input("JournalAutoId", JournalAutoId)
-                .input("JournalId", JournalId)
-                .input("JournalVoucherNo", JournalVoucherNo)
-                .input("JournalDate", journalDate)
-                .input("Acc_Id", map.Acc_Id)
-                .input("DrCr", map.DrCr)
-                .input("RefId", r.RefId ?? null)
-                .input("RefNo", r.RefNo ?? null)
-                .input("RefType", r.RefType ?? null)
-                .input("BillRefNo", r.BillRefNo ?? null)
-                .input("Amount", r.Amount);
-
-            await refReq.query(`
-                INSERT INTO dbo.tbl_Journal_Bill_Reference (
-                    autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
-                    Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
-                )
-                VALUES (
-                    DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-                    @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @BillRefNo, @Amount
-                )`
-            );
         }
 
         await tx.commit();
@@ -359,11 +266,13 @@ const createJournal = async (req, res) => {
             DrTotal: Number(drTotal.toFixed(2)),
             CrTotal: Number(crTotal.toFixed(2)),
             Difference: Number((drTotal - crTotal).toFixed(2)),
-            Lines: rows.length,
-            BillReferences: refs.length,
+            Lines: lineCount,
+            BillReferences: billCount,
         });
     } catch (e) {
-        try { if (tx._aborted !== true) await tx.rollback(); } catch { }
+        try {
+            if (tx._aborted !== true) await tx.rollback();
+        } catch { }
         return servError(e, res);
     }
 };
@@ -372,10 +281,11 @@ const editJournal = async (req, res) => {
     const tx = new sql.Transaction();
 
     try {
-        // 1) Validate with Zod
         const parsed = EditJournalSchema.safeParse(req.body || {});
         if (!parsed.success) {
-            return invalidInput(res, "Enter Required Fields", { errors: zodToErrors(parsed.error) });
+            return invalidInput(res, "Enter Required Fields", {
+                errors: zodToErrors(parsed.error),
+            });
         }
 
         const {
@@ -384,95 +294,45 @@ const editJournal = async (req, res) => {
             Narration = null,
             JournalStatus,
             BranchId,
-            Entries = [],
-            BillReferences = [],
+            Entries,
         } = parsed.data;
 
         const journalAutoId = normGuid(JournalAutoId);
         const journalDate = JournalDate ? ISOString(JournalDate) : ISOString();
 
-        // 2) Normalize like create API
-        const raw = toArray(Entries).map((r, idx) => ({
-            __idx: idx,
-            __clientLineId: r?.ClientLineId || r?.LineId || null, // mapping key
-            Acc_Id: Number(r?.Acc_Id),
-            DrCr: String(r?.DrCr || "").trim(),
-            Amount: Number(r?.Amount || 0),
-            Remarks: r?.Remarks || null,
-            AccountGet: r?.AccountGet || null,
-            isSundryParty: r?.isSundryParty || 0,
-        }));
+        const drTotal = Entries.filter((e) => e.DrCr === "Dr").reduce((t, e) => t + e.Amount, 0);
+        const crTotal = Entries.filter((e) => e.DrCr === "Cr").reduce((t, e) => t + e.Amount, 0);
 
-        // keep create-style sorting if needed
-        const rows = raw.sort((a, b) => String(b.DrCr).localeCompare(a.DrCr));
-
-        const refs = toArray(BillReferences).map((r, i) => ({
-            __i: i,
-            LineId: r?.ClientLineId ?? r?.LineId ?? null, // refers to clientLineId
-            RefId: r?.RefId ?? null,
-            RefNo: r?.RefNo ?? null,
-            RefType: r?.RefType ?? null,
-            Amount: Number(r?.Amount || 0),
-            BillRefNo: r?.BillRefNo ?? null,
-        }));
-
-        const drTotal = rows.filter((r) => r.DrCr === "Dr").reduce((t, r) => t + r.Amount, 0);
-        const crTotal = rows.filter((r) => r.DrCr === "Cr").reduce((t, r) => t + r.Amount, 0);
-
-        // 3) Load header from DB (trust DB, ignore payload JournalId etc.)
         const hdrQ = await new sql.Request()
             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
             .query(`
-        SELECT TOP 1 JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo, BranchId
-        FROM dbo.tbl_Journal_General_Info
-        WHERE JournalAutoId = @JournalAutoId;
-      `);
+                SELECT TOP 1 JournalId, VoucherType, JournalNo, JournalVoucherNo, BranchId
+                FROM dbo.tbl_Journal_General_Info
+                WHERE JournalAutoId = @JournalAutoId;
+            `);
 
-        if (hdrQ.recordset.length === 0) {
+        if (!hdrQ.recordset?.length) {
             return invalidInput(res, "Journal not found", { JournalAutoId });
         }
 
         const {
             JournalId,
-            Year_Id,
             VoucherType,
             JournalNo,
             JournalVoucherNo,
             BranchId: dbBranchId,
         } = hdrQ.recordset[0];
 
-        // (Optional but recommended) Prevent year change
-        const yearQ = await new sql.Request()
-            .input("JournalDate", journalDate)
-            .query(`
-        SELECT Id AS Year_Id
-        FROM tbl_Year_Master
-        WHERE Fin_Start_Date <= @JournalDate AND Fin_End_Date >= @JournalDate;
-      `);
-
-        if (yearQ.recordset.length === 0) {
-            return invalidInput(res, "Year_Id not found for date", { JournalDate: journalDate });
-        }
-        if (Number(yearQ.recordset[0].Year_Id) !== Number(Year_Id)) {
-            return invalidInput(res, "Cannot change financial year for existing Journal", {
-                from: Year_Id,
-                to: yearQ.recordset[0].Year_Id,
-            });
-        }
-
-        // 4) Begin Transaction
         await tx.begin();
 
-        // lock header row
         await new sql.Request(tx)
             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
             .query(`
-        SELECT 1
-        FROM dbo.tbl_Journal_General_Info WITH (UPDLOCK, HOLDLOCK)
-        WHERE JournalAutoId=@JournalAutoId;
-      `);
+                SELECT 1
+                FROM dbo.tbl_Journal_General_Info WITH (UPDLOCK, HOLDLOCK)
+                WHERE JournalAutoId=@JournalAutoId;
+            `);
 
-        // 5) Update header
         await new sql.Request(tx)
             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
             .input("JournalDate", journalDate)
@@ -480,61 +340,56 @@ const editJournal = async (req, res) => {
             .input("JournalStatus", JournalStatus)
             .input("BranchId", BranchId ?? dbBranchId)
             .query(`
-        UPDATE dbo.tbl_Journal_General_Info
-        SET
-          JournalDate=@JournalDate,
-          Narration=@Narration,
-          JournalStatus=@JournalStatus,
-          BranchId=@BranchId,
-          UpdatedAt=GETDATE(),
-          AlterId=AlterId+1
-        WHERE JournalAutoId=@JournalAutoId;
-      `);
-
-        // 6) DELETE old BillReferences first (FK safe), then old Entries
-        await new sql.Request(tx)
-            .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
-            .query(`DELETE FROM dbo.tbl_Journal_Bill_Reference WHERE JournalAutoId=@JournalAutoId;`);
+                UPDATE dbo.tbl_Journal_General_Info
+                SET
+                  JournalDate=@JournalDate,
+                  Narration=@Narration,
+                  JournalStatus=@JournalStatus,
+                  BranchId=@BranchId,
+                  UpdatedAt=GETDATE(),
+                  AlterId=AlterId+1
+                WHERE JournalAutoId=@JournalAutoId;`);
 
         await new sql.Request(tx)
             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
-            .query(`DELETE FROM dbo.tbl_Journal_Entries_Info WHERE JournalAutoId=@JournalAutoId;`);
+            .query(`
+                DELETE FROM dbo.tbl_Journal_Bill_Reference WHERE JournalAutoId = @JournalAutoId;
+                DELETE FROM dbo.tbl_Journal_Entries_Info WHERE JournalAutoId = @JournalAutoId;`);
 
-        // 7) INSERT new Entries (create-style) + build clientLineId -> DB Line map
-        const lineMapByClientId = new Map();
-        let LineNum = 1;
+        const lineMap = new Map();
 
-        for (const r of rows) {
-            const lineReq = new sql.Request(tx)
-                .input("LineNum", LineNum++)
+        for (let i = 0; i < Entries.length; i++) {
+            const e = Entries[i];
+            const lineNum = i + 1;
+
+            const lineIns = await new sql.Request(tx)
+                .input("LineNum", lineNum)
                 .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
                 .input("JournalId", JournalId)
                 .input("JournalVoucherNo", JournalVoucherNo)
                 .input("JournalDate", journalDate)
-                .input("Acc_Id", r.Acc_Id)
-                .input("AccountGet", r.AccountGet)
-                .input("isSundryParty", r.isSundryParty)
-                .input("DrCr", r.DrCr)
-                .input("Amount", r.Amount)
-                .input("Remarks", r.Remarks);
+                .input("Acc_Id", e.Acc_Id)
+                .input("AccountGet", e.AccountGet ?? null)
+                .input("isSundryParty", e.isSundryParty ?? 0)
+                .input("DrCr", e.DrCr)
+                .input("Amount", e.Amount)
+                .input("Remarks", e.Remarks ?? null)
+                .query(`
+                    INSERT INTO dbo.tbl_Journal_Entries_Info (
+                      LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+                      Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
+                    )
+                    OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
+                    VALUES (
+                      DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+                      @Acc_Id, @AccountGet, @isSundryParty, @DrCr, @Amount, @Remarks
+                    );`
+                );
 
-            const lineIns = await lineReq.query(`
-        INSERT INTO dbo.tbl_Journal_Entries_Info (
-          LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
-          Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
-        )
-        OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
-        VALUES (
-          DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-          @Acc_Id, @AccountGet, @isSundryParty, @DrCr, @Amount, @Remarks
-        );
-      `);
-
-            const ins = lineIns?.recordset?.[0];
+            const ins = lineIns.recordset?.[0];
             if (!ins?.LineId) throw new Error("Failed to insert journal line");
 
-            // IMPORTANT: map by clientLineId (from payload) to NEW db LineId
-            lineMapByClientId.set(r.__clientLineId, {
+            lineMap.set(lineNum, {
                 LineId: ins.LineId,
                 LineNum: ins.LineNum,
                 Acc_Id: ins.Acc_Id,
@@ -542,38 +397,43 @@ const editJournal = async (req, res) => {
             });
         }
 
-        // 8) INSERT new BillReferences (create-style)
-        for (const r of refs) {
-            const map = lineMapByClientId.get(r.LineId);
-            if (!map) {
-                throw new Error(`BillReferences[${r.__i}] refers to unknown LineId (client mapping key)`);
+        let billCount = 0;
+
+        for (let i = 0; i < Entries.length; i++) {
+            const e = Entries[i];
+            const lineNum = e.LineNum ?? (i + 1);
+
+            const map = lineMap.get(lineNum);
+            if (!map) throw new Error(`Missing inserted line for LineNum ${lineNum}`);
+
+            for (const b of e.BillEntries) {
+                billCount++;
+
+                await new sql.Request(tx)
+                    .input("LineId", map.LineId)
+                    .input("LineNum", map.LineNum)
+                    .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
+                    .input("JournalId", JournalId)
+                    .input("JournalVoucherNo", JournalVoucherNo)
+                    .input("JournalDate", journalDate)
+                    .input("Acc_Id", map.Acc_Id)
+                    .input("DrCr", map.DrCr)
+                    .input("RefId", b.RefId ?? null)
+                    .input("RefNo", b.RefNo ?? null)
+                    .input("RefType", b.RefType ?? null)
+                    .input("BillRefNo", b.BillRefNo ?? null)
+                    .input("Amount", b.Amount)
+                    .query(`
+                        INSERT INTO dbo.tbl_Journal_Bill_Reference (
+                          autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+                          Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
+                        )
+                        VALUES (
+                          DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+                          @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @BillRefNo, @Amount
+                        );`
+                    );
             }
-
-            const refReq = new sql.Request(tx)
-                .input("LineId", map.LineId)
-                .input("LineNum", map.LineNum)
-                .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
-                .input("JournalId", JournalId)
-                .input("JournalVoucherNo", JournalVoucherNo)
-                .input("JournalDate", journalDate)
-                .input("Acc_Id", map.Acc_Id)
-                .input("DrCr", map.DrCr)
-                .input("RefId", r.RefId ?? null)
-                .input("RefNo", r.RefNo ?? null)
-                .input("RefType", r.RefType ?? null)
-                .input("BillRefNo", r.BillRefNo ?? null)
-                .input("Amount", r.Amount);
-
-            await refReq.query(`
-        INSERT INTO dbo.tbl_Journal_Bill_Reference (
-          autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
-          Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
-        )
-        VALUES (
-          DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
-          @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @BillRefNo, @Amount
-        );
-      `);
         }
 
         await tx.commit();
@@ -581,7 +441,6 @@ const editJournal = async (req, res) => {
         return success(res, "Journal Updated", {
             JournalAutoId: journalAutoId,
             JournalId,
-            Year_Id,
             VoucherType,
             JournalNo,
             JournalVoucherNo,
@@ -592,18 +451,13 @@ const editJournal = async (req, res) => {
             DrTotal: Number(drTotal.toFixed(2)),
             CrTotal: Number(crTotal.toFixed(2)),
             Difference: Number((drTotal - crTotal).toFixed(2)),
-            Lines: rows.length,
-            BillReferences: refs.length,
-            LineMap: Array.from(lineMapByClientId.entries()).map(([ClientLineId, v]) => ({
-                ClientLineId,
-                LineId: v.LineId,
-                LineNum: v.LineNum,
-                Acc_Id: v.Acc_Id,
-                DrCr: v.DrCr,
-            })),
+            Lines: Entries.length,
+            BillReferences: billCount,
         });
     } catch (e) {
-        try { if (tx._aborted !== true) await tx.rollback(); } catch { }
+        try {
+            if (tx._aborted !== true) await tx.rollback();
+        } catch { }
         return servError(e, res);
     }
 };
@@ -614,3 +468,506 @@ export default {
     createJournal,
     editJournal
 }
+
+// const createJournal = async (req, res) => {
+//     const tx = new sql.Transaction();
+//     try {
+//         const {
+//             VoucherType,
+//             JournalDate,
+//             BranchId,
+//             Narration = null,
+//             JournalStatus,
+//             CreatedBy,
+//             Entries = [],
+//             BillReferences = [],
+//         } = req.body || {};
+
+//         const journalDate = JournalDate ? ISOString(JournalDate) : ISOString();
+
+//         // ----------------------------
+//         // Validations (field names as-is)
+//         // ----------------------------
+//         const errors = [];
+//         if (!VoucherType) errors.push("VoucherType");
+//         if (!BranchId) errors.push("BranchId");
+//         if (!CreatedBy) errors.push("CreatedBy");
+//         if (JournalStatus === undefined || JournalStatus === null || JournalStatus === '') errors.push("JournalStatus");
+
+//         const raw = toArray(Entries).map((r, idx) => ({
+//             __idx: idx,
+//             __clientLineId: r?.LineId || null,
+//             LineNum: r?.LineNum || null,
+//             Acc_Id: Number(r?.Acc_Id),
+//             DrCr: String(r?.DrCr || "").trim(),
+//             Amount: Number(r?.Amount || 0),
+//             Remarks: r?.Remarks ?? null,
+//             AccountGet: r?.AccountGet ?? null,
+//             isSundryParty: r?.isSundryParty || 0,
+//         }));
+
+//         if (raw.length === 0) errors.push("Entries");
+
+//         raw.forEach((r, i) => {
+//             if (!r.Acc_Id) errors.push(`Entries[${i}].Acc_Id`);
+//             if (!(r.DrCr === "Dr" || r.DrCr === "Cr")) errors.push(`Entries[${i}].DrCr`);
+//             if (!(r.Amount > 0)) errors.push(`Entries[${i}].Amount`);
+//             if (!r.__clientLineId) errors.push(`Entries[${i}].LineId(missing)`);
+//         });
+
+//         // sort (if you need), but keep clientLineId for mapping
+//         const rows = raw.sort((a, b) => String(b.DrCr).localeCompare(a.DrCr));
+
+//         const hasDr = rows.some((r) => r.DrCr === "Dr");
+//         const hasCr = rows.some((r) => r.DrCr === "Cr");
+//         if (!hasDr) errors.push("Entries:MissingDebit");
+//         if (!hasCr) errors.push("Entries:MissingCredit");
+
+//         // no duplicate Acc_Id on the same side
+//         const seen = new Set();
+//         rows.forEach((r) => {
+//             const k = `${r.DrCr}:${r.Acc_Id}`;
+//             if (seen.has(k)) errors.push(`Duplicate_${k}`);
+//             seen.add(k);
+//         });
+
+//         const drTotal = rows.filter((r) => r.DrCr === "Dr").reduce((t, r) => t + r.Amount, 0);
+//         const crTotal = rows.filter((r) => r.DrCr === "Cr").reduce((t, r) => t + r.Amount, 0);
+//         if (Math.round((drTotal - crTotal) * 100) !== 0) errors.push("NotBalanced");
+
+//         // ---- BillReferences validations (flat) ----
+//         const refs = toArray(BillReferences).map((r, i) => ({
+//             __i: i,
+//             LineId: r?.LineId || null,
+//             RefId: r?.RefId ?? null,
+//             RefNo: r?.RefNo ?? null,
+//             RefType: r?.RefType ?? null,
+//             Amount: Number(r?.Amount || 0),
+//             BillRefNo: r?.BillRefNo ?? null,
+//         }));
+
+//         // every ref must target a valid client line
+//         const clientLineIdSet = new Set(rows.map((r) => r.__clientLineId));
+//         refs.forEach((r) => {
+//             if (!r.LineId || !clientLineIdSet.has(r.LineId)) {
+//                 errors.push(`BillReferences[${r.__i}].LineId(invalid)`);
+//             }
+//             if (!(r.Amount > 0)) {
+//                 errors.push(`BillReferences[${r.__i}].Amount`);
+//             }
+//         });
+
+//         // for each line that HAS refs, refs sum must equal line Amount
+//         // const sumByClientLineId = refs.reduce((m, r) => {
+//         //     if (!r.LineId) return m;
+//         //     m[r.LineId] = (m[r.LineId] || 0) + r.Amount;
+//         //     return m;
+//         // }, {});
+//         // rows.forEach((line) => {
+//         //     if (sumByClientLineId[line.__clientLineId] != null) {
+//         //         const lhs = Math.round(sumByClientLineId[line.__clientLineId] * 100);
+//         //         const rhs = Math.round(Number(line.Amount || 0) * 100);
+//         //         if (lhs !== rhs) {
+//         //             errors.push(`Entries[${line.__idx}].BillReferencesNotBalanced`);
+//         //         }
+//         //     }
+//         // });
+
+//         if (errors.length) {
+//             return invalidInput(res, "Enter Required Fields", { errors });
+//         }
+
+//         // ----------------------------
+//         // Year_Id & Year_Desc
+//         // ----------------------------
+//         const yearQ = await new sql.Request()
+//             .input("JournalDate", journalDate)
+//             .query(`
+//                 SELECT Id AS Year_Id, Year_Desc
+//                 FROM tbl_Year_Master
+//                 WHERE Fin_Start_Date <= @JournalDate AND Fin_End_Date >= @JournalDate`
+//             );
+//         if (yearQ.recordset.length === 0) throw new Error("Year_Id not found");
+//         const { Year_Id, Year_Desc } = yearQ.recordset[0];
+
+//         // ----------------------------
+//         // Voucher_Code
+//         // ----------------------------
+//         const vcodeQ = await new sql.Request()
+//             .input("Vocher_Type_Id", VoucherType)
+//             .query(`
+//                 SELECT Voucher_Code
+//                 FROM tbl_Voucher_Type
+//                 WHERE Vocher_Type_Id = @Vocher_Type_Id`
+//             );
+//         if (vcodeQ.recordset.length === 0) throw new Error("Voucher_Code not found");
+//         const Voucher_Code = vcodeQ.recordset[0]?.Voucher_Code || "";
+
+//         // ----------------------------
+//         // JournalId (global) & JournalNo (per Year/VoucherType)
+//         // ----------------------------
+//         const journalIdGet = await getNextId({ table: "tbl_Journal_General_Info", column: "JournalId" });
+//         if (!journalIdGet?.status || !Number.isFinite(Number(journalIdGet.MaxId))) {
+//             throw new Error("Failed to get JournalId");
+//         }
+//         const JournalId = Number(journalIdGet.MaxId);
+
+//         const jnoQ = await new sql.Request()
+//             .input("Year_Id", Year_Id)
+//             .input("VoucherType", VoucherType)
+//             .query(`
+//                 SELECT COALESCE(MAX(JournalNo), 0) AS JournalNo
+//                 FROM tbl_Journal_General_Info
+//                 WHERE Year_Id = @Year_Id AND VoucherType = @VoucherType`
+//             );
+//         const JournalNo = Number(jnoQ?.recordset?.[0]?.JournalNo || 0) + 1;
+
+//         const JournalVoucherNo = `${Voucher_Code}/${createPadString(JournalNo, 6)}/${Year_Desc}`;
+//         const AlterId = randomNumber(6, 8);
+
+//         // ----------------------------
+//         // Begin Transaction
+//         // ----------------------------
+//         await tx.begin();
+
+//         // Header
+//         const hdrReq = new sql.Request(tx)
+//             .input("JournalId", JournalId)
+//             .input("Year_Id", Year_Id)
+//             .input("VoucherType", VoucherType)
+//             .input("JournalNo", JournalNo)
+//             .input("JournalVoucherNo", JournalVoucherNo)
+//             .input("JournalDate", journalDate)
+//             .input("BranchId", BranchId)
+//             .input("Narration", Narration)
+//             .input("JournalStatus", JournalStatus)
+//             .input("CreatedBy", CreatedBy)
+//             .input("AlterId", AlterId);
+
+//         const hdrIns = await hdrReq.query(`
+//             INSERT INTO dbo.tbl_Journal_General_Info (
+//                 JournalAutoId, JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo,
+//                 JournalDate, BranchId, Narration, JournalStatus,
+//                 CreatedBy, CreatedAt, UpdatedAt, AlterId
+//             )
+//             OUTPUT inserted.JournalAutoId
+//             VALUES (
+//                 DEFAULT, @JournalId, @Year_Id, @VoucherType, @JournalNo, @JournalVoucherNo,
+//                 @JournalDate, @BranchId, @Narration, @JournalStatus,
+//                 @CreatedBy, GETDATE(), NULL, @AlterId
+//             )`
+//         );
+
+//         const JournalAutoId = hdrIns?.recordset?.[0]?.JournalAutoId;
+//         if (!JournalAutoId) throw new Error("Failed to capture JournalAutoId");
+
+//         // Lines: insert & build map from clientLineId -> DB line
+//         const lineMapByClientId = new Map();
+
+//         let LineNum = 1;
+//         for (const r of rows) {
+//             const lineReq = new sql.Request(tx)
+//                 .input("LineNum", LineNum++)
+//                 .input("JournalAutoId", JournalAutoId)
+//                 .input("JournalId", JournalId)
+//                 .input("JournalVoucherNo", JournalVoucherNo)
+//                 .input("JournalDate", journalDate)
+//                 .input("Acc_Id", r.Acc_Id)
+//                 .input("AccountGet", r.AccountGet)
+//                 .input("isSundryParty", r.isSundryParty)
+//                 .input("DrCr", r.DrCr)
+//                 .input("Amount", r.Amount)
+//                 .input("Remarks", r.Remarks);
+
+//             const lineIns = await lineReq.query(`
+//                 INSERT INTO dbo.tbl_Journal_Entries_Info (
+//                     LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+//                     Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
+//                 )
+//                 OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
+//                 VALUES (
+//                     DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+//                     @Acc_Id, @AccountGet, @isSundryParty, @DrCr, @Amount, @Remarks
+//                 );`
+//             );
+
+//             const ins = lineIns?.recordset?.[0];
+//             if (!ins?.LineId) throw new Error("Failed to insert journal line");
+
+//             lineMapByClientId.set(r.__clientLineId, {
+//                 LineId: ins.LineId,
+//                 LineNum: ins.LineNum,
+//                 Acc_Id: ins.Acc_Id,
+//                 DrCr: ins.DrCr,
+//             });
+//         }
+
+//         for (const r of refs) {
+//             const map = lineMapByClientId.get(r.LineId);
+//             if (!map) {
+//                 throw new Error(`BillReferences[${r.__i}] refers to unknown LineId`);
+//             }
+//             const refReq = new sql.Request(tx)
+//                 .input("LineId", map.LineId)
+//                 .input("LineNum", map.LineNum)
+//                 .input("JournalAutoId", JournalAutoId)
+//                 .input("JournalId", JournalId)
+//                 .input("JournalVoucherNo", JournalVoucherNo)
+//                 .input("JournalDate", journalDate)
+//                 .input("Acc_Id", map.Acc_Id)
+//                 .input("DrCr", map.DrCr)
+//                 .input("RefId", r.RefId ?? null)
+//                 .input("RefNo", r.RefNo ?? null)
+//                 .input("RefType", r.RefType ?? null)
+//                 .input("BillRefNo", r.BillRefNo ?? null)
+//                 .input("Amount", r.Amount);
+
+//             await refReq.query(`
+//                 INSERT INTO dbo.tbl_Journal_Bill_Reference (
+//                     autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+//                     Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
+//                 )
+//                 VALUES (
+//                     DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+//                     @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @BillRefNo, @Amount
+//                 )`
+//             );
+//         }
+
+//         await tx.commit();
+
+//         return success(res, "Journal Created", {
+//             JournalAutoId,
+//             JournalId,
+//             Year_Id,
+//             VoucherType,
+//             JournalNo,
+//             JournalVoucherNo,
+//             JournalDate: journalDate,
+//             BranchId,
+//             Narration,
+//             JournalStatus,
+//             CreatedBy,
+//             DrTotal: Number(drTotal.toFixed(2)),
+//             CrTotal: Number(crTotal.toFixed(2)),
+//             Difference: Number((drTotal - crTotal).toFixed(2)),
+//             Lines: rows.length,
+//             BillReferences: refs.length,
+//         });
+//     } catch (e) {
+//         try { if (tx._aborted !== true) await tx.rollback(); } catch { }
+//         return servError(e, res);
+//     }
+// };
+
+// const editJournal = async (req, res) => {
+//     const tx = new sql.Transaction();
+
+//     try {
+//         // 1) Validate with Zod
+//         const parsed = EditJournalSchema.safeParse(req.body || {});
+//         if (!parsed.success) {
+//             return invalidInput(res, "Enter Required Fields", { errors: zodToErrors(parsed.error) });
+//         }
+
+//         const {
+//             JournalAutoId,
+//             JournalDate,
+//             Narration = null,
+//             JournalStatus,
+//             BranchId,
+//             Entries = [],
+//             BillReferences = [],
+//         } = parsed.data;
+
+//         const journalAutoId = normGuid(JournalAutoId);
+//         const journalDate = JournalDate ? ISOString(JournalDate) : ISOString();
+
+//         // 2) Normalize like create API
+//         const raw = toArray(Entries).map((r, idx) => ({
+//             __idx: idx,
+//             __clientLineId: r?.ClientLineId || r?.LineId || null, // mapping key
+//             Acc_Id: Number(r?.Acc_Id),
+//             DrCr: String(r?.DrCr || "").trim(),
+//             Amount: Number(r?.Amount || 0),
+//             Remarks: r?.Remarks || null,
+//             AccountGet: r?.AccountGet || null,
+//             isSundryParty: r?.isSundryParty || 0,
+//         }));
+
+//         // keep create-style sorting if needed
+//         const rows = raw.sort((a, b) => String(b.DrCr).localeCompare(a.DrCr));
+
+//         const refs = toArray(BillReferences).map((r, i) => ({
+//             __i: i,
+//             LineId: r?.ClientLineId ?? r?.LineId ?? null, // refers to clientLineId
+//             RefId: r?.RefId ?? null,
+//             RefNo: r?.RefNo ?? null,
+//             RefType: r?.RefType ?? null,
+//             Amount: Number(r?.Amount || 0),
+//             BillRefNo: r?.BillRefNo ?? null,
+//         }));
+
+//         const drTotal = rows.filter((r) => r.DrCr === "Dr").reduce((t, r) => t + r.Amount, 0);
+//         const crTotal = rows.filter((r) => r.DrCr === "Cr").reduce((t, r) => t + r.Amount, 0);
+
+//         const hdrQ = await new sql.Request()
+//             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
+//             .query(`
+//                 SELECT TOP 1 JournalId, VoucherType, JournalNo, JournalVoucherNo, BranchId
+//                 FROM dbo.tbl_Journal_General_Info
+//                 WHERE JournalAutoId = @JournalAutoId;`
+//             );
+
+//         if (hdrQ.recordset.length === 0) {
+//             return invalidInput(res, "Journal not found", { JournalAutoId });
+//         }
+
+//         const {
+//             JournalId,
+//             VoucherType,
+//             JournalNo,
+//             JournalVoucherNo,
+//             BranchId: dbBranchId,
+//         } = hdrQ.recordset[0];
+
+//         // 4) Begin Transaction
+//         await tx.begin();
+
+//         // lock header row
+//         await new sql.Request(tx)
+//             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
+//             .query(`
+//                 SELECT 1
+//                 FROM dbo.tbl_Journal_General_Info WITH (UPDLOCK, HOLDLOCK)
+//                 WHERE JournalAutoId=@JournalAutoId;`
+//             );
+
+//         // 5) Update header
+//         await new sql.Request(tx)
+//             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
+//             .input("JournalDate", journalDate)
+//             .input("Narration", Narration)
+//             .input("JournalStatus", JournalStatus)
+//             .input("BranchId", BranchId ?? dbBranchId)
+//             .query(`
+//                 UPDATE dbo.tbl_Journal_General_Info
+//                 SET
+//                     JournalDate=@JournalDate,
+//                     Narration=@Narration,
+//                     JournalStatus=@JournalStatus,
+//                     BranchId=@BranchId,
+//                     UpdatedAt=GETDATE(),
+//                     AlterId=AlterId+1
+//                 WHERE JournalAutoId=@JournalAutoId;`
+//             );
+
+//         // 6) DELETE old BillReferences
+//         await new sql.Request(tx)
+//             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
+//             .query(`
+//                 DELETE FROM dbo.tbl_Journal_Bill_Reference WHERE JournalAutoId = @JournalAutoId;
+//                 DELETE FROM dbo.tbl_Journal_Entries_Info WHERE JournalAutoId = @JournalAutoId;`);
+
+//         const lineMapByClientId = new Map();
+//         let LineNum = 1;
+
+//         for (const r of rows) {
+//             const lineReq = new sql.Request(tx)
+//                 .input("LineNum", LineNum++)
+//                 .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
+//                 .input("JournalId", JournalId)
+//                 .input("JournalVoucherNo", JournalVoucherNo)
+//                 .input("JournalDate", journalDate)
+//                 .input("Acc_Id", r.Acc_Id)
+//                 .input("AccountGet", r.AccountGet)
+//                 .input("isSundryParty", r.isSundryParty)
+//                 .input("DrCr", r.DrCr)
+//                 .input("Amount", r.Amount)
+//                 .input("Remarks", r.Remarks);
+
+//             const lineIns = await lineReq.query(`
+//                 INSERT INTO dbo.tbl_Journal_Entries_Info (
+//                     LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+//                     Acc_Id, AccountGet, isSundryParty, DrCr, Amount, Remarks
+//                 )
+//                 OUTPUT inserted.LineId, inserted.LineNum, inserted.Acc_Id, inserted.DrCr
+//                 VALUES (
+//                     DEFAULT, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+//                     @Acc_Id, @AccountGet, @isSundryParty, @DrCr, @Amount, @Remarks
+//                 );`);
+
+//             const ins = lineIns?.recordset?.[0];
+//             if (!ins?.LineId) throw new Error("Failed to insert journal line");
+
+//             lineMapByClientId.set(r.__clientLineId, {
+//                 LineId: ins.LineId,
+//                 LineNum: ins.LineNum,
+//                 Acc_Id: ins.Acc_Id,
+//                 DrCr: ins.DrCr,
+//             });
+//         }
+
+//         for (const r of refs) {
+//             const map = lineMapByClientId.get(r.LineId);
+//             if (!map) {
+//                 throw new Error(`BillReferences[${r.__i}] refers to unknown LineId (client mapping key)`);
+//             }
+
+//             const refReq = new sql.Request(tx)
+//                 .input("LineId", map.LineId)
+//                 .input("LineNum", map.LineNum)
+//                 .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
+//                 .input("JournalId", JournalId)
+//                 .input("JournalVoucherNo", JournalVoucherNo)
+//                 .input("JournalDate", journalDate)
+//                 .input("Acc_Id", map.Acc_Id)
+//                 .input("DrCr", map.DrCr)
+//                 .input("RefId", r.RefId ?? null)
+//                 .input("RefNo", r.RefNo ?? null)
+//                 .input("RefType", r.RefType ?? null)
+//                 .input("BillRefNo", r.BillRefNo ?? null)
+//                 .input("Amount", r.Amount);
+
+//             await refReq.query(`
+//                 INSERT INTO dbo.tbl_Journal_Bill_Reference (
+//                     autoGenId, LineId, LineNum, JournalAutoId, JournalId, JournalVoucherNo, JournalDate,
+//                     Acc_Id, DrCr, RefId, RefNo, RefType, BillRefNo, Amount
+//                 )
+//                 VALUES (
+//                     DEFAULT, @LineId, @LineNum, @JournalAutoId, @JournalId, @JournalVoucherNo, @JournalDate,
+//                     @Acc_Id, @DrCr, @RefId, @RefNo, @RefType, @BillRefNo, @Amount
+//                 );`
+//             );
+//         }
+
+//         await tx.commit();
+
+//         return success(res, "Journal Updated", {
+//             JournalAutoId: journalAutoId,
+//             JournalId,
+//             VoucherType,
+//             JournalNo,
+//             JournalVoucherNo,
+//             JournalDate: journalDate,
+//             Narration,
+//             JournalStatus,
+//             BranchId: BranchId ?? dbBranchId,
+//             DrTotal: Number(drTotal.toFixed(2)),
+//             CrTotal: Number(crTotal.toFixed(2)),
+//             Difference: Number((drTotal - crTotal).toFixed(2)),
+//             Lines: rows.length,
+//             BillReferences: refs.length,
+//             LineMap: Array.from(lineMapByClientId.entries()).map(([ClientLineId, v]) => ({
+//                 ClientLineId,
+//                 LineId: v.LineId,
+//                 LineNum: v.LineNum,
+//                 Acc_Id: v.Acc_Id,
+//                 DrCr: v.DrCr,
+//             })),
+//         });
+//     } catch (e) {
+//         try { if (tx._aborted !== true) await tx.rollback(); } catch { }
+//         return servError(e, res);
+//     }
+// };
