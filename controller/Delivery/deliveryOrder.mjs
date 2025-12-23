@@ -3002,113 +3002,388 @@ FROM TRIP_MASTER tm
         }
     };
 
+// const getDeliveryDetailsListing = async (req, res) => {
+//     const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Item, Godown, Retailer } = req.query;
+
+//     const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+
+//     try {
+//         let query = `
+//         WITH DELIVERY_DETAILS AS (
+//             SELECT
+//                 oi.*,
+//                 pm.Product_Id,
+//                 COALESCE(pm.Product_Name, '') AS Product_Name,
+//                 COALESCE(pm.Product_Image_Name, '') AS Product_Image_Name,
+//                 COALESCE(u.Units, '') AS UOM,
+//                 COALESCE(b.Brand_Name, '') AS BrandGet
+//             FROM tbl_Sales_Delivery_Stock_Info AS oi
+//             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+//             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+//             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+//             LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = oi.Godown_Id
+//             WHERE
+//                 CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
+//                 AND
+//                 CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
+//         ),
+//         DELIVERY_STAFF AS (
+//             SELECT
+//                 dsi.Do_Id,
+//                 dsi.Emp_Id,
+//                 dsi.Emp_Type_Id,
+//                 ecc.Cost_Category,
+//                 ecc.Cost_Category_Id,
+//                 COALESCE(e.Cost_Center_Name, '') AS Staff_Name
+//             FROM tbl_Sales_Delivery_Staff_Info dsi
+//             LEFT JOIN tbl_Erp_Cost_Category ecc ON ecc.Cost_Category_Id = dsi.Emp_Type_Id
+//             LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = dsi.Emp_Id
+//             -- LEFT JOIN tbl_Users u ON u.UserId = dsi.Emp_Id
+//         ),
+//         DELIVERY_ALL_STAFF AS (
+//             SELECT
+//               ds.*
+//             FROM DELIVERY_STAFF ds
+//         )
+//         SELECT 
+//             sdgi.*,
+//             COALESCE(rm.Retailer_Name, '') AS Retailer_Name,
+//             COALESCE(sp.Name, '') AS Sales_Person_Name,
+//             COALESCE(bm.BranchName, '') AS Branch_Name,
+//             COALESCE(cb.Name, '') AS Created_BY_Name,
+//             COALESCE(rmt.Route_Name, '') AS RouteName,
+//             COALESCE(am.Area_Name, '') AS AreaName,
+//             COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
+        
+//             COALESCE((
+//                 SELECT Top 1 ds.Emp_Id 
+//                 FROM DELIVERY_STAFF ds 
+//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+//             ), 0) AS Broker_Id,
+//             COALESCE((
+//                 SELECT TOP 1 ds.Staff_Name 
+//                 FROM DELIVERY_STAFF ds 
+//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+//             ), '') AS Broker_Name,
+           
+//             COALESCE((
+//                 SELECT TOP 1 ds.Emp_Id 
+//                 FROM DELIVERY_STAFF ds 
+//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+//             ), 0) AS Transporter_Id,
+//             COALESCE((
+//                 SELECT TOP 1 ds.Staff_Name 
+//                 FROM DELIVERY_STAFF ds 
+//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+//             ), '') AS Transporter_Name,
+           
+//             COALESCE((
+//                 SELECT 
+//                    ds.*
+//                 FROM DELIVERY_ALL_STAFF ds
+//                 WHERE ds.Do_Id = sdgi.Do_Id
+//                 ORDER BY ds.Cost_Category, ds.Staff_Name
+//                 FOR JSON PATH
+//             ), '[]') AS All_Staff_Details,
+//             -- Products list
+//             COALESCE((
+//                 SELECT 
+//                     sd.*,
+//                     sdgi.Do_Inv_No,
+//                     COALESCE(rm.Retailer_Name, '') AS Retailer_Name
+//                 FROM DELIVERY_DETAILS AS sd
+//                 WHERE sd.Delivery_Order_Id = sdgi.Do_Id
+//                 FOR JSON PATH
+//             ), '[]') AS Products_List
+//         FROM 
+//             tbl_Sales_Delivery_Gen_Info AS sdgi
+//         LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No 
+//         LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+//         LEFT JOIN tbl_Users AS sp ON sp.UserId = sogi.Sales_Person_Id 
+//         LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
+//         LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+//         LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
+//         LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+//         WHERE 
+//             CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
+//             AND
+//             CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
+//             AND NOT EXISTS (
+//                 SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
+//             )`;
+
+//         const request = new sql.Request();
+//         request.input('from', Fromdate);
+//         request.input('to', Todate);
+
+//         const parseArrayParam = (param) => {
+//             if (!param) return [];
+//             if (Array.isArray(param)) return param;
+//             if (typeof param === 'string') return param.split(',').filter(item => item.trim() !== '');
+//             return [param];
+//         };
+
+//         const retailerTypes = parseArrayParam(Retailer);
+//         const voucherTypes = parseArrayParam(VoucherType);
+//         const brokers = parseArrayParam(Broker);
+//         const transporters = parseArrayParam(Transporter);
+//         const items = parseArrayParam(Item);
+
+//         if (checkIsNumber(Sales_Person_Id)) {
+//             query += ` AND sogi.Sales_Person_Id = @salesPerson`;
+//             request.input('salesPerson', sql.Int, parseInt(Sales_Person_Id));
+//         }
+        
+//         if (voucherTypes.length > 0) {
+//             query += ` AND sdgi.Voucher_Type IN (${voucherTypes.map((_, index) => `@VoucherType${index}`).join(', ')})`;
+//             voucherTypes.forEach((voucherType, index) => {
+//                 request.input(`VoucherType${index}`, sql.VarChar, voucherType);
+//             });
+//         }
+        
+//         if (Branch && Branch !== '') {
+//             query += ` AND sdgi.Branch_Id = @Branch`;
+//             request.input('Branch', sql.Int, parseInt(Branch));
+//         }
+
+//         if (retailerTypes.length > 0) {
+//             query += ` AND sdgi.Retailer_Id IN (${retailerTypes.map((_, index) => `@Retailer${index}`).join(', ')})`;
+//             retailerTypes.forEach((retailer, index) => {
+//                 request.input(`Retailer${index}`, sql.Int, parseInt(retailer));
+//             });
+//         }
+        
+//         if (brokers.length > 0) {
+//             query += ` AND EXISTS (
+//                 SELECT 1 FROM DELIVERY_STAFF ds 
+//                 WHERE ds.Do_Id = sdgi.Do_Id 
+//                 AND ds.Cost_Category = 'BROKER' 
+//                 AND ds.Emp_Id IN (${brokers.map((_, index) => `@Broker${index}`).join(', ')})
+//             )`;
+//             brokers.forEach((broker, index) => {
+//                 request.input(`Broker${index}`, sql.Int, parseInt(broker));
+//             });
+//         }
+
+//         if (transporters.length > 0) {
+//             query += ` AND EXISTS (
+//                 SELECT 1 FROM DELIVERY_STAFF ds 
+//                 WHERE ds.Do_Id = sdgi.Do_Id 
+//                 AND ds.Cost_Category = 'TRANSPORT' 
+//                 AND ds.Emp_Id IN (${transporters.map((_, index) => `@Transporter${index}`).join(', ')})
+//             )`;
+//             transporters.forEach((transporter, index) => {
+//                 request.input(`Transporter${index}`, sql.Int, parseInt(transporter));
+//             });
+//         }
+
+//         if (items.length > 0) {
+//             query += ` AND EXISTS (
+//                 SELECT 1 FROM DELIVERY_DETAILS dd 
+//                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
+//                 AND dd.Product_Id IN (${items.map((_, index) => `@Item${index}`).join(', ')})
+//             )`;
+//             items.forEach((item, index) => {
+//                 request.input(`Item${index}`, sql.Int, parseInt(item));
+//             });
+//         }
+
+//         if (Godown && Godown !== '') {
+//             query += ` AND EXISTS (
+//                 SELECT 1 FROM DELIVERY_DETAILS dd 
+//                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
+//                 AND dd.Godown_Id = @Godown
+//             )`;
+//             request.input('Godown', sql.Int, parseInt(Godown));
+//         }
+
+//         query += ` ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
+
+//         const result = await request.query(query);
+
+//         if (result.recordset.length > 0) {
+//             const parsed = result.recordset.map(o => {
+//                 // Parse Products_List
+//                 let productsList = o.Products_List;
+//                 if (typeof productsList === 'string') {
+//                     try {
+//                         productsList = JSON.parse(productsList);
+//                     } catch (e) {
+//                         console.error('Error parsing Products_List:', e);
+//                         productsList = [];
+//                     }
+//                 }
+                
+//                 // Parse All_Staff_Details - CORRECTION: Parse only once
+//                 let allStaffDetails = o.All_Staff_Details;
+//                 if (typeof allStaffDetails === 'string') {
+//                     try {
+//                         allStaffDetails = JSON.parse(allStaffDetails);
+//                     } catch (e) {
+//                         console.error('Error parsing All_Staff_Details:', e);
+//                         allStaffDetails = [];
+//                     }
+//                 }
+                
+//                 // Return with consistent naming
+//                 return {
+//                     ...o,
+//                     Products_List: productsList,
+//                     // Use only one field for staff details - remove duplicates
+//                     All_Staff_Details: allStaffDetails
+//                 };
+//             });
+            
+//             const withImage = parsed.map(o => ({
+//                 ...o,
+//                 Products_List: o?.Products_List?.map(product => ({
+//                     ...product,
+//                     ProductImageUrl: getImage('products', product?.Product_Image_Name)
+//                 })) || [],
+//                 // Ensure Staff_Involved is consistent
+//                 Staff_Involved: o.All_Staff_Details // Or keep as All_Staff_Details based on your preference
+//             }));
+            
+//             dataFound(res, withImage);
+//         } else {
+//             noData(res);
+//         }
+//     } catch (e) {
+//         servError(e, res);
+//     }
+// };
+
+   
 const getDeliveryDetailsListing = async (req, res) => {
-    const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Item, Godown, Retailer } = req.query;
+    const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, LoadMan, Item, Godown, Retailer } = req.query;
 
     const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
     try {
         let query = `
-        WITH DELIVERY_DETAILS AS (
-            SELECT
-                oi.*,
-                pm.Product_Id,
-                COALESCE(pm.Product_Name, '') AS Product_Name,
-                COALESCE(pm.Product_Image_Name, '') AS Product_Image_Name,
-                COALESCE(u.Units, '') AS UOM,
-                COALESCE(b.Brand_Name, '') AS BrandGet
-            FROM tbl_Sales_Delivery_Stock_Info AS oi
-            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-            LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = oi.Godown_Id
-            WHERE
-                CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
-                AND
-                CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
-        ),
-        DELIVERY_STAFF AS (
-            SELECT
-                dsi.Do_Id,
-                dsi.Emp_Id,
-                dsi.Emp_Type_Id,
-                ecc.Cost_Category,
-                ecc.Cost_Category_Id,
-                COALESCE(u.Name, '') AS Staff_Name
-            FROM tbl_Sales_Delivery_Staff_Info dsi
-            LEFT JOIN tbl_Erp_Cost_Category ecc ON ecc.Cost_Category_Id = dsi.Emp_Type_Id
-            LEFT JOIN tbl_Users u ON u.UserId = dsi.Emp_Id
-        ),
-        DELIVERY_ALL_STAFF AS (
-            SELECT
-              ds.*
-            FROM DELIVERY_STAFF ds
-        )
+     WITH DELIVERY_DETAILS AS (
+    SELECT
+        oi.*,
+        pm.Product_Id,
+        COALESCE(pm.Product_Name, '') AS Product_Name,
+        COALESCE(pm.Product_Image_Name, '') AS Product_Image_Name,
+        COALESCE(u.Units, '') AS UOM,
+        COALESCE(b.Brand_Name, '') AS BrandGet
+    FROM tbl_Sales_Delivery_Stock_Info AS oi
+    LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+    LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+    LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+    LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = oi.Godown_Id
+    WHERE
+        CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
+        AND
+        CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
+),
+DELIVERY_STAFF AS (
+    SELECT
+        dsi.Do_Id,
+        dsi.Emp_Id,
+        dsi.Emp_Type_Id,
+        ecc.Cost_Category,
+        ecc.Cost_Category_Id,
+        COALESCE(e.Cost_Center_Name, '') AS Staff_Name
+    FROM tbl_Sales_Delivery_Staff_Info dsi
+    LEFT JOIN tbl_Erp_Cost_Category ecc ON ecc.Cost_Category_Id = dsi.Emp_Type_Id
+    LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = dsi.Emp_Id
+    -- LEFT JOIN tbl_Users u ON u.UserId = dsi.Emp_Id
+),
+DELIVERY_ALL_STAFF AS (
+    SELECT
+      ds.*
+    FROM DELIVERY_STAFF ds
+),
+TRANSPORTER_INFO AS (
+    SELECT DISTINCT
+        ds.Do_Id,
+        COALESCE(ds.Staff_Name, '') AS Transporter_Name
+    FROM DELIVERY_STAFF ds
+    WHERE ds.Cost_Category = 'TRANSPORT'
+)
+SELECT 
+    sdgi.*,
+    COALESCE(rm.Retailer_Name, '') AS Retailer_Name,
+    COALESCE(sp.Name, '') AS Sales_Person_Name,
+    COALESCE(bm.BranchName, '') AS Branch_Name,
+    COALESCE(cb.Name, '') AS Created_BY_Name,
+    COALESCE(rmt.Route_Name, '') AS RouteName,
+    COALESCE(am.Area_Name, '') AS AreaName,
+    COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
+
+    COALESCE((
+        SELECT Top 1 ds.Emp_Id 
+        FROM DELIVERY_STAFF ds 
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+    ), 0) AS Broker_Id,
+    COALESCE((
+        SELECT TOP 1 ds.Staff_Name 
+        FROM DELIVERY_STAFF ds 
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+    ), '') AS Broker_Name,
+   
+    COALESCE((
+        SELECT TOP 1 ds.Emp_Id 
+        FROM DELIVERY_STAFF ds 
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+    ), 0) AS Transporter_Id,
+    COALESCE((
+        SELECT TOP 1 ds.Staff_Name 
+        FROM DELIVERY_STAFF ds 
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+    ), '') AS Transporter_Name,
+   
+    COALESCE((
+        SELECT TOP 1 ds.Emp_Id 
+        FROM DELIVERY_STAFF ds 
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'LOAD MAN'
+    ), 0) AS LoadMan_Id,
+    COALESCE((
+        SELECT TOP 1 ds.Staff_Name 
+        FROM DELIVERY_STAFF ds 
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'LOAD MAN'
+    ), '') AS LoadMan_Name,
+   
+    COALESCE((
         SELECT 
-            sdgi.*,
-            COALESCE(rm.Retailer_Name, '') AS Retailer_Name,
-            COALESCE(sp.Name, '') AS Sales_Person_Name,
-            COALESCE(bm.BranchName, '') AS Branch_Name,
-            COALESCE(cb.Name, '') AS Created_BY_Name,
-            COALESCE(rmt.Route_Name, '') AS RouteName,
-            COALESCE(am.Area_Name, '') AS AreaName,
-            COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
-        
-            COALESCE((
-                SELECT Top 1 ds.Emp_Id 
-                FROM DELIVERY_STAFF ds 
-                WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
-            ), 0) AS Broker_Id,
-            COALESCE((
-                SELECT TOP 1 ds.Staff_Name 
-                FROM DELIVERY_STAFF ds 
-                WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
-            ), '') AS Broker_Name,
-           
-            COALESCE((
-                SELECT TOP 1 ds.Emp_Id 
-                FROM DELIVERY_STAFF ds 
-                WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
-            ), 0) AS Transporter_Id,
-            COALESCE((
-                SELECT TOP 1 ds.Staff_Name 
-                FROM DELIVERY_STAFF ds 
-                WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
-            ), '') AS Transporter_Name,
-           
-            COALESCE((
-                SELECT 
-                   ds.*
-                FROM DELIVERY_ALL_STAFF ds
-                WHERE ds.Do_Id = sdgi.Do_Id
-                ORDER BY ds.Cost_Category, ds.Staff_Name
-                FOR JSON PATH
-            ), '[]') AS All_Staff_Details,
-            -- Products list
-            COALESCE((
-                SELECT 
-                    sd.*,
-                    COALESCE(rm.Retailer_Name, '') AS Retailer_Name
-                FROM DELIVERY_DETAILS AS sd
-                WHERE sd.Delivery_Order_Id = sdgi.Do_Id
-                FOR JSON PATH
-            ), '[]') AS Products_List
-        FROM 
-            tbl_Sales_Delivery_Gen_Info AS sdgi
-        LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No 
-        LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
-        LEFT JOIN tbl_Users AS sp ON sp.UserId = sogi.Sales_Person_Id 
-        LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
-        LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-        LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
-        LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
-        WHERE 
-            CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
-            AND
-            CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
-            AND NOT EXISTS (
-                SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
-            )`;
+           ds.*
+        FROM DELIVERY_ALL_STAFF ds
+        WHERE ds.Do_Id = sdgi.Do_Id
+        ORDER BY ds.Cost_Category, ds.Staff_Name
+        FOR JSON PATH
+    ), '[]') AS All_Staff_Details,
+    -- Products list
+    COALESCE((
+        SELECT 
+            sd.*,
+            sdgi.Do_Inv_No,
+            COALESCE(ti.Transporter_Name, '') AS Transporter_Name,
+            COALESCE(rm.Retailer_Name, '') AS Retailer_Name
+        FROM DELIVERY_DETAILS AS sd
+        LEFT JOIN TRANSPORTER_INFO ti ON ti.Do_Id = sdgi.Do_Id
+        WHERE sd.Delivery_Order_Id = sdgi.Do_Id
+        FOR JSON PATH
+    ), '[]') AS Products_List
+FROM 
+    tbl_Sales_Delivery_Gen_Info AS sdgi
+LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No 
+LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+LEFT JOIN tbl_Users AS sp ON sp.UserId = sogi.Sales_Person_Id 
+LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
+LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
+LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+LEFT JOIN TRANSPORTER_INFO ti ON ti.Do_Id = sdgi.Do_Id
+WHERE 
+    CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
+    AND
+    CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
+    AND NOT EXISTS (
+        SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
+    )`
 
         const request = new sql.Request();
         request.input('from', Fromdate);
@@ -3125,6 +3400,7 @@ const getDeliveryDetailsListing = async (req, res) => {
         const voucherTypes = parseArrayParam(VoucherType);
         const brokers = parseArrayParam(Broker);
         const transporters = parseArrayParam(Transporter);
+        const loadmen = parseArrayParam(LoadMan); 
         const items = parseArrayParam(Item);
 
         if (checkIsNumber(Sales_Person_Id)) {
@@ -3175,6 +3451,18 @@ const getDeliveryDetailsListing = async (req, res) => {
             });
         }
 
+        if (loadmen.length > 0) { 
+            query += ` AND EXISTS (
+                SELECT 1 FROM DELIVERY_STAFF ds 
+                WHERE ds.Do_Id = sdgi.Do_Id 
+                AND ds.Cost_Category = 'LOADMAN' 
+                AND ds.Emp_Id IN (${loadmen.map((_, index) => `@LoadMan${index}`).join(', ')})
+            )`;
+            loadmen.forEach((loadman, index) => {
+                request.input(`LoadMan${index}`, sql.Int, parseInt(loadman));
+            });
+        }
+
         if (items.length > 0) {
             query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_DETAILS dd 
@@ -3201,7 +3489,7 @@ const getDeliveryDetailsListing = async (req, res) => {
 
         if (result.recordset.length > 0) {
             const parsed = result.recordset.map(o => {
-                // Parse Products_List
+              
                 let productsList = o.Products_List;
                 if (typeof productsList === 'string') {
                     try {
@@ -3212,7 +3500,7 @@ const getDeliveryDetailsListing = async (req, res) => {
                     }
                 }
                 
-                // Parse All_Staff_Details - CORRECTION: Parse only once
+  
                 let allStaffDetails = o.All_Staff_Details;
                 if (typeof allStaffDetails === 'string') {
                     try {
@@ -3223,11 +3511,11 @@ const getDeliveryDetailsListing = async (req, res) => {
                     }
                 }
                 
-                // Return with consistent naming
+               
                 return {
                     ...o,
                     Products_List: productsList,
-                    // Use only one field for staff details - remove duplicates
+               
                     All_Staff_Details: allStaffDetails
                 };
             });
@@ -3251,7 +3539,10 @@ const getDeliveryDetailsListing = async (req, res) => {
     }
 };
 
-    const tripDetails = async (req, res) => {
+
+
+
+const tripDetails = async (req, res) => {
         const { Trip_Id } = req.body;
 
         if (!Trip_Id) {

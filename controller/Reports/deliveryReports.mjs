@@ -604,6 +604,401 @@ const getNonConvertedSalesMobile = async (req, res) => {
     }
 };
 
+const getNonConvertedSalesMobileItemwise = async (req, res) => {
+    try {
+        const { 
+            Retailer_Id, 
+            Cancel_status = 0, 
+            Created_by, 
+            VoucherType, 
+            Branch_Id, 
+            User_Id,
+            Sales_Person_Id,  
+            filter1 = '', 
+            filter2 = '',
+            filter3 = '',
+            filter4 = ''
+        } = req.query;
+
+        const filter1Array = filter1 ? (Array.isArray(filter1) ? filter1 : filter1.split(',').filter(Boolean)) : [];
+        const filter2Array = filter2 ? (Array.isArray(filter2) ? filter2 : filter2.split(',').filter(Boolean)) : [];
+        const filter3Array = filter3 ? (Array.isArray(filter3) ? filter3 : filter3.split(',').filter(Boolean)) : [];
+        const filter4Array = filter4 ? (Array.isArray(filter4) ? filter4 : filter4.split(',').filter(Boolean)) : [];
+
+     
+        const Fromdate = req.query.Fromdate 
+            ? new Date(req.query.Fromdate).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0];
+        
+        const Todate = req.query.Todate 
+            ? new Date(req.query.Todate).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0];
+
+     
+           const mobileFilters = await new sql.Request().query(`
+            SELECT 
+                mrd.Type AS FilterType,
+                mrd.Column_Name AS ColumnName,
+                mrd.Table_Id AS TableId,
+                tm.Table_Name AS TableName,
+                mrd.FilterLevel,
+                STUFF((
+                    SELECT DISTINCT ',' + CAST(mrd2.List_Type AS VARCHAR(10))
+                    FROM tbl_Mobile_Report_Details mrd2
+                    WHERE mrd2.Type = mrd.Type 
+                    AND mrd2.Table_Id = mrd.Table_Id 
+                    AND mrd2.Column_Name = mrd.Column_Name
+                    AND mrd2.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+                    FOR XML PATH('')
+                ), 1, 1, '') AS ListTypes
+            FROM tbl_Mobile_Report_Details mrd 
+            INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            WHERE mrt.Report_Name = 'SalesReturn_Item' AND FilterLevel = 1
+            GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name, mrd.FilterLevel
+            ORDER BY mrd.Type
+        `);
+
+    
+        const request = new sql.Request();
+        
+      
+        request.input('Fromdate', sql.Date, Fromdate);
+        request.input('Todate', sql.Date, Todate);
+        
+   
+        if (Retailer_Id && checkIsNumber(Retailer_Id)) {
+            request.input('retailer', sql.Int, Retailer_Id);
+        }
+        
+        if (Cancel_status && checkIsNumber(Cancel_status)) {
+            request.input('cancel', sql.Int, Cancel_status);
+        }
+        
+        if (Created_by && checkIsNumber(Created_by)) {
+            request.input('creater', sql.Int, Created_by);
+        }
+        
+        if (Sales_Person_Id && checkIsNumber(Sales_Person_Id)) {
+            request.input('salesPerson', sql.Int, Sales_Person_Id);
+        }
+        
+        if (VoucherType && checkIsNumber(VoucherType)) {
+            request.input('VoucherType', sql.Int, VoucherType);
+        }
+        
+      
+        let productFilterConditions = [];
+        let stockFilterConditions = [];
+        
+      
+        if (filter1Array.length > 0 && mobileFilters.recordset.length >= 1) {
+            const filterInfo = mobileFilters.recordset[0];
+            const columnName = filterInfo.ColumnName;
+            const tableName = filterInfo.TableName || 'llos'; 
+            
+             
+       
+            const placeholders = filter1Array.map((_, i) => `@filter1_${i}`).join(',');
+            
+            if (tableName.includes('Product') || tableName.includes('pm')) {
+                
+                productFilterConditions.push(`pm.${columnName} IN (${placeholders})`);
+            } else if (tableName.includes('Stock') || tableName.includes('llos')) {
+         
+                stockFilterConditions.push(`llos.${columnName} IN (${placeholders})`);
+            } else {
+               
+                stockFilterConditions.push(`llos.${columnName} IN (${placeholders})`);
+            }
+            
+      
+            filter1Array.forEach((value, index) => {
+                request.input(`filter1_${index}`, sql.NVarChar, value.trim());
+            });
+        }
+        
+     
+        if (filter2Array.length > 0 && mobileFilters.recordset.length >= 2) {
+            const filterInfo = mobileFilters.recordset[1];
+            const columnName = filterInfo.ColumnName;
+            const tableName = filterInfo.TableName || 'llos';
+            
+           
+            const placeholders = filter2Array.map((_, i) => `@filter2_${i}`).join(',');
+            
+            if (tableName.includes('Product') || tableName.includes('pm')) {
+                productFilterConditions.push(`pm.${columnName} IN (${placeholders})`);
+            } else if (tableName.includes('Stock') || tableName.includes('llos')) {
+                stockFilterConditions.push(`llos.${columnName} IN (${placeholders})`);
+            } else {
+                stockFilterConditions.push(`llos.${columnName} IN (${placeholders})`);
+            }
+            
+            filter2Array.forEach((value, index) => {
+                request.input(`filter2_${index}`, sql.NVarChar, value.trim());
+            });
+        }
+        
+      
+        if (filter3Array.length > 0 && mobileFilters.recordset.length >= 3) {
+            const filterInfo = mobileFilters.recordset[2];
+            const columnName = filterInfo.ColumnName;
+            const tableName = filterInfo.TableName || 'llos';
+            
+            
+            const placeholders = filter3Array.map((_, i) => `@filter3_${i}`).join(',');
+            
+            if (tableName.includes('Product') || tableName.includes('pm')) {
+                productFilterConditions.push(`pm.${columnName} IN (${placeholders})`);
+            } else if (tableName.includes('Stock') || tableName.includes('llos')) {
+                stockFilterConditions.push(`llos.${columnName} IN (${placeholders})`);
+            } else {
+                stockFilterConditions.push(`llos.${columnName} IN (${placeholders})`);
+            }
+            
+            filter3Array.forEach((value, index) => {
+                request.input(`filter3_${index}`, sql.NVarChar, value.trim());
+            });
+        }
+        
+      
+        const productFilterCondition = productFilterConditions.length > 0 
+            ? ` AND ${productFilterConditions.join(' AND ')}`
+            : '';
+            
+        const stockFilterCondition = stockFilterConditions.length > 0 
+            ? ` AND ${stockFilterConditions.join(' AND ')}`
+            : '';
+        
+      
+        let branchCondition = '';
+        if (Branch_Id && checkIsNumber(Branch_Id)) {
+            branchCondition = ' AND so.Branch_Id = @branch';
+            request.input('branch', sql.Int, Branch_Id);
+        }
+
+        
+        const retailerCondition = Retailer_Id && checkIsNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer' : '';
+        const cancelCondition = Cancel_status && checkIsNumber(Cancel_status) ? ' AND so.Cancel_status = @cancel' : '';
+        const createdByCondition = Created_by && checkIsNumber(Created_by) ? ' AND so.Created_by = @creater' : '';
+        const salesPersonCondition = Sales_Person_Id && checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson' : '';
+        const voucherTypeCondition = VoucherType && checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType' : '';
+
+    
+        const sqlQuery = `
+            -- Step 1: Filter products based on brand/other criteria
+            DECLARE @FilteredProducts TABLE (Product_Id INT);
+            
+            INSERT INTO @FilteredProducts (Product_Id)
+            SELECT DISTINCT pm.Product_Id
+            FROM tbl_Product_Master pm
+            LEFT JOIN tbl_Stock_LOS llos ON llos.Pro_Id = pm.Product_Id
+            WHERE 1=1 
+            ${productFilterCondition}
+            ${stockFilterCondition};
+            
+            -- Step 2: Get sales orders that contain these filtered products
+            DECLARE @FilteredOrders TABLE (So_Id INT);
+            
+            INSERT INTO @FilteredOrders (So_Id)
+            SELECT DISTINCT so.So_Id
+            FROM tbl_Sales_Order_Gen_Info AS so
+            INNER JOIN tbl_Sales_Order_Stock_Info AS si ON si.Sales_Order_Id = so.So_Id
+            WHERE 
+                CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                ${retailerCondition}
+                ${cancelCondition}
+                ${createdByCondition}
+                ${salesPersonCondition}
+                ${voucherTypeCondition}
+                ${branchCondition}
+                AND si.Item_Id IN (SELECT Product_Id FROM @FilteredProducts);
+
+            -- Main order data
+            SELECT 
+                so.*, 
+                COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+            FROM tbl_Sales_Order_Gen_Info AS so
+            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+            LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+            LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+            LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+            LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            -- Product details (only filtered products)
+            SELECT 
+                si.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Order_Stock_Info AS si
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders)
+            AND si.Item_Id IN (SELECT Product_Id FROM @FilteredProducts);
+
+            -- Staff involved
+            SELECT 
+                sosi.So_Id, 
+                sosi.Involved_Emp_Id,
+                sosi.Cost_Center_Type_Id,
+                c.Cost_Center_Name AS EmpName,
+                cc.Cost_Category AS EmpType
+            FROM tbl_Sales_Order_Staff_Info AS sosi
+            LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+            WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+            -- Delivery data
+            DECLARE @FilteredInvoice TABLE (Do_Id INT);
+            
+            INSERT INTO @FilteredInvoice (Do_Id)
+            SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
+            WHERE So_No IN (SELECT So_Id FROM @FilteredOrders);
+
+            SELECT 
+                dgi.*,
+                rm.Retailer_Name AS Retailer_Name,
+                bm.BranchName AS Branch_Name,
+                st.Status AS DeliveryStatusName,
+                COALESCE((
+                    SELECT SUM(collected_amount)
+                    FROM tbl_Sales_Receipt_Details_Info
+                    WHERE bill_id = dgi.Do_Id
+                ), 0) AS receiptsTotalAmount
+            FROM tbl_Sales_Delivery_Gen_Info AS dgi
+            LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+            LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+            LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+            WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+
+            -- Delivery items (only filtered products)
+            SELECT 
+                oi.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Delivery_Stock_Info AS oi
+            LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+            LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+            LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+            WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+            AND oi.Item_Id IN (SELECT Product_Id FROM @FilteredProducts);
+
+            -- Stock LOS data (only for filtered products)
+            SELECT  
+                llos.*
+            FROM tbl_Stock_LOS llos
+            WHERE llos.Pro_Id IN (SELECT Product_Id FROM @FilteredProducts)
+            ORDER BY llos.Pro_Id;
+            
+            -- Ledger LOL data
+            SELECT DISTINCT
+                llol.*
+            FROM tbl_Ledger_LOL llol
+            WHERE llol.Ret_Id IN (
+                SELECT DISTINCT Retailer_Id 
+                FROM tbl_Sales_Delivery_Gen_Info sdgi 
+                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+            )
+            ORDER BY llol.Ret_Id, llol.Auto_Id;
+        `;
+
+   
+
+        const result = await request.query(sqlQuery);
+ 
+        
+        const toArray = (recordset) => recordset || [];
+        const isEqualNumber = (a, b) => {
+            if (a == null || b == null) return false;
+            return parseInt(a) === parseInt(b);
+        };
+        
+        const SalesGeneralInfo = toArray(result.recordsets[0]);
+        const Products_List = toArray(result.recordsets[1]);
+        const Staffs_Array = toArray(result.recordsets[2]);
+        const DeliveryInfo = toArray(result.recordsets[3]);
+        const DeliveryItems = toArray(result.recordsets[4]);
+        const StockInfo = toArray(result.recordsets[5]);  
+        const LedgerInfo = toArray(result.recordsets[6]);  
+
+     
+        if (SalesGeneralInfo.length > 0) {
+            const ledgerMap = {};
+            const stockMap = {}; 
+            
+          
+            LedgerInfo.forEach(ledger => {
+                if (!ledgerMap[ledger.Ret_Id]) {
+                    ledgerMap[ledger.Ret_Id] = ledger;
+                }
+            });
+            
+            
+            StockInfo.forEach(stock => {
+                if (!stockMap[stock.Pro_Id]) { 
+                    stockMap[stock.Pro_Id] = stock;
+                }
+            });
+            
+            const resData = SalesGeneralInfo.map(order => {
+                const ledgerInfo = ledgerMap[order.Retailer_Id] || {};
+                
+           
+                const productsWithStock = Products_List
+                    .filter(product => isEqualNumber(product.Sales_Order_Id, order.So_Id))
+                    .map(product => {
+                        const productStock = stockMap[product.Item_Id] || {};
+                        return {
+                            ...product,
+                            ...productStock  
+                        };
+                    });
+                
+              
+                const orderDelivery = DeliveryInfo.find(delivery => 
+                    isEqualNumber(delivery.So_No, order.So_Id)
+                );
+                
+                return {
+                    ...order,
+                    ...ledgerInfo,
+                    Products_List: productsWithStock,
+                    Delivery_Info: orderDelivery || {},
+                    Delivery_Items: DeliveryItems.filter(item => 
+                        orderDelivery && isEqualNumber(item.Delivery_Order_Id, orderDelivery.Do_Id)
+                    ),
+                    Staffs_Array: Staffs_Array.filter(staff => 
+                        isEqualNumber(staff.So_Id, order.So_Id)
+                    )
+                };
+            });
+
+     
+            dataFound(res, resData);
+        } else {
+         noData(res);
+        }
+
+    } catch (e) {
+        console.error('API Error:', e);
+     
+        servError(e, res);
+    }
+};
+
+
 
 const closingReport = async (req, res) => {
     try {
@@ -938,6 +1333,7 @@ WHERE CAST(sr.Ret_Date AS DATE) BETWEEN @fromDate AND @toDate
 export default {
     getNonConvertedSales,
     getNonConvertedSalesMobile,
+    getNonConvertedSalesMobileItemwise,
     closingReport,
     SyncPosPending,
     ReturnDelivery
