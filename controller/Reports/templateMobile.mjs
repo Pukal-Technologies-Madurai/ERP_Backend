@@ -24,14 +24,14 @@ const MobileReportTemplate = () => {
             const request = new sql.Request()
                 .query(`
                     WITH TableColumns AS (
-                        SELECT * FROM tbl_Table_Master_Columns
+                        SELECT * FROM tbl_Mobile_Rpt_Table_Columns
                     )
                     SELECT
                         t.*,
                         COALESCE((
                             SELECT c.* FROM TableColumns AS c WHERE c.Table_Id = t.Table_Id FOR JSON PATH
                         ), '[]') AS Columns
-                    FROM tbl_Table_Master AS t
+                    FROM tbl_Mobile_Rpt_Table_Master AS t
                 `)
 
             const result = (await request).recordset
@@ -193,7 +193,7 @@ const insertMobileTemplate = async (req, res) => {
 
             // Generate and store report query string
             try {
-                const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Table_Master')).recordset;
+                const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Mobile_Rpt_Table_Master')).recordset;
                 const distinctTables = [...new Map(details.map(d => [Number(d.Table_Id), d.Table_Id])).values()];
 
                 const colToInsert = details.map(d => {
@@ -250,7 +250,7 @@ const insertMobileTemplate = async (req, res) => {
             FROM tbl_Mobile_Report_Type AS m
             LEFT JOIN tbl_Users AS u ON m.Created_By = u.UserId
         ), tableMaster AS (
-            SELECT * FROM tbl_Table_Master
+            SELECT * FROM tbl_Mobile_Rpt_Table_Master
         ), mobDetails AS (
             SELECT * FROM tbl_Mobile_Report_Details
         )
@@ -382,7 +382,7 @@ const insertMobileTemplate = async (req, res) => {
                
                 const mobileDetailsReq = await new sql.Request()
                     .input('Mob_Rpt_Id', Mob_Rpt_Id)
-                    .query('SELECT d.*, t.Table_Accronym FROM tbl_Mobile_Report_Details d LEFT JOIN tbl_Table_Master t ON d.Table_Id = t.Table_Id WHERE d.Mob_Rpt_Id = @Mob_Rpt_Id');
+                    .query('SELECT d.*, t.Table_Accronym FROM tbl_Mobile_Report_Details d LEFT JOIN tbl_Mobile_Rpt_Table_Master t ON d.Table_Id = t.Table_Id WHERE d.Mob_Rpt_Id = @Mob_Rpt_Id');
 
                 const rows = mobileDetailsReq.recordset;
                 const structure = { tables: [] };
@@ -557,7 +557,7 @@ const updateMobileTemplate = async (req, res) => {
 
             // Generate and store report query string
             try {
-                const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Table_Master')).recordset;
+                const tableMaster = (await new sql.Request(transaction).query('SELECT * FROM tbl_Mobile_Rpt_Table_Master')).recordset;
                 const distinctTables = [...new Map(details.map(d => [Number(d.Table_Id), d.Table_Id])).values()];
 
                 const colToInsert = details.map(d => {

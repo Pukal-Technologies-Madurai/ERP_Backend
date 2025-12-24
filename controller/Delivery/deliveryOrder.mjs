@@ -3253,9 +3253,10 @@ FROM TRIP_MASTER tm
 //     }
 // };
 
-   
+
 const getDeliveryDetailsListing = async (req, res) => {
-    const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, LoadMan, Item, Godown, Retailer } = req.query;
+    const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Loadman, Item, Godown, Retailer } = req.query;
+    // Note: Changed from LoadMan to Loadman to match your API parameter
 
     const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
@@ -3290,7 +3291,6 @@ DELIVERY_STAFF AS (
     FROM tbl_Sales_Delivery_Staff_Info dsi
     LEFT JOIN tbl_Erp_Cost_Category ecc ON ecc.Cost_Category_Id = dsi.Emp_Type_Id
     LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = dsi.Emp_Id
-    -- LEFT JOIN tbl_Users u ON u.UserId = dsi.Emp_Id
 ),
 DELIVERY_ALL_STAFF AS (
     SELECT
@@ -3302,7 +3302,7 @@ TRANSPORTER_INFO AS (
         ds.Do_Id,
         COALESCE(ds.Staff_Name, '') AS Transporter_Name
     FROM DELIVERY_STAFF ds
-    WHERE ds.Cost_Category = 'TRANSPORT'
+    WHERE ds.Cost_Category_Id = 2  -- Transport
 )
 SELECT 
     sdgi.*,
@@ -3317,34 +3317,34 @@ SELECT
     COALESCE((
         SELECT Top 1 ds.Emp_Id 
         FROM DELIVERY_STAFF ds 
-        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category_Id = 3  -- Broker
     ), 0) AS Broker_Id,
     COALESCE((
         SELECT TOP 1 ds.Staff_Name 
         FROM DELIVERY_STAFF ds 
-        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category_Id = 3  -- Broker
     ), '') AS Broker_Name,
    
     COALESCE((
         SELECT TOP 1 ds.Emp_Id 
         FROM DELIVERY_STAFF ds 
-        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category_Id = 2  -- Transport
     ), 0) AS Transporter_Id,
     COALESCE((
         SELECT TOP 1 ds.Staff_Name 
         FROM DELIVERY_STAFF ds 
-        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category_Id = 2  -- Transport
     ), '') AS Transporter_Name,
    
     COALESCE((
         SELECT TOP 1 ds.Emp_Id 
         FROM DELIVERY_STAFF ds 
-        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'LOAD MAN'
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category_Id = 4  -- Load Man
     ), 0) AS LoadMan_Id,
     COALESCE((
         SELECT TOP 1 ds.Staff_Name 
         FROM DELIVERY_STAFF ds 
-        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'LOAD MAN'
+        WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category_Id = 4  -- Load Man
     ), '') AS LoadMan_Name,
    
     COALESCE((
@@ -3400,7 +3400,7 @@ WHERE
         const voucherTypes = parseArrayParam(VoucherType);
         const brokers = parseArrayParam(Broker);
         const transporters = parseArrayParam(Transporter);
-        const loadmen = parseArrayParam(LoadMan); 
+        const loadmen = parseArrayParam(Loadman);  // Changed from LoadMan to Loadman
         const items = parseArrayParam(Item);
 
         if (checkIsNumber(Sales_Person_Id)) {
@@ -3431,7 +3431,7 @@ WHERE
             query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id 
-                AND ds.Cost_Category = 'BROKER' 
+                AND ds.Cost_Category_Id = 3  -- Broker
                 AND ds.Emp_Id IN (${brokers.map((_, index) => `@Broker${index}`).join(', ')})
             )`;
             brokers.forEach((broker, index) => {
@@ -3443,7 +3443,7 @@ WHERE
             query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id 
-                AND ds.Cost_Category = 'TRANSPORT' 
+                AND ds.Cost_Category_Id = 2  -- Transport
                 AND ds.Emp_Id IN (${transporters.map((_, index) => `@Transporter${index}`).join(', ')})
             )`;
             transporters.forEach((transporter, index) => {
@@ -3455,7 +3455,7 @@ WHERE
             query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id 
-                AND ds.Cost_Category = 'LOADMAN' 
+                AND ds.Cost_Category_Id = 4  -- Load Man
                 AND ds.Emp_Id IN (${loadmen.map((_, index) => `@LoadMan${index}`).join(', ')})
             )`;
             loadmen.forEach((loadman, index) => {
@@ -3484,6 +3484,7 @@ WHERE
         }
 
         query += ` ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
+
 
         const result = await request.query(query);
 
@@ -3515,7 +3516,6 @@ WHERE
                 return {
                     ...o,
                     Products_List: productsList,
-               
                     All_Staff_Details: allStaffDetails
                 };
             });
@@ -3526,8 +3526,8 @@ WHERE
                     ...product,
                     ProductImageUrl: getImage('products', product?.Product_Image_Name)
                 })) || [],
-                // Ensure Staff_Involved is consistent
-                Staff_Involved: o.All_Staff_Details // Or keep as All_Staff_Details based on your preference
+               
+                Staff_Involved: o.All_Staff_Details 
             }));
             
             dataFound(res, withImage);
@@ -3538,7 +3538,6 @@ WHERE
         servError(e, res);
     }
 };
-
 
 
 

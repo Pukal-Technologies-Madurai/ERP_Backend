@@ -55,7 +55,7 @@ const SalesInvoice = () => {
                 ), 1, 1, '') AS ListTypes
             FROM tbl_Mobile_Report_Details mrd 
             INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
-            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            LEFT JOIN tbl_Mobile_Rpt_Table_Master tm ON tm.Table_Id = mrd.Table_Id
             WHERE mrt.Report_Name = 'Sales Invoice' AND FilterLevel =1
             GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name,mrd.FilterLevel
             ORDER BY mrd.Type
@@ -227,7 +227,7 @@ const SalesInvoice = () => {
 
             
             SELECT 
-                sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                sdgi.Do_Id, sdgi.Do_Inv_No,  sdgi.Voucher_Type as Voucher_Type_Id, sdgi.Do_No, sdgi.Do_Year,
                 sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
                 sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, 
                 sdgi.Total_Expences, sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
@@ -235,7 +235,8 @@ const SalesInvoice = () => {
                 COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                 COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                 COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                  COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+				COALESCE(v.Voucher_Type, 'unknown') AS Voucher_Type
             FROM tbl_Sales_Delivery_Gen_Info sdgi
             LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = sdgi.Branch_Id
@@ -310,6 +311,8 @@ ORDER BY llos.Pro_Id;
             )
             ORDER BY llol.Ret_Id, llol.Auto_Id;
         `;
+
+
      const result = await request.query(sqlQuery);
  
 const SalesGeneralInfo = toArray(result.recordsets[0]);
@@ -418,7 +421,7 @@ if (SalesGeneralInfo.length > 0) {
                 ), 1, 1, '') AS ListTypes
             FROM tbl_Mobile_Report_Details mrd 
             INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
-            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            LEFT JOIN [tbl_Mobile_Rpt_Table_Master] tm ON tm.Table_Id = mrd.Table_Id
             WHERE mrt.Report_Name = 'Sales Invoice' AND FilterLevel =2
             GROUP BY mrd.Type, mrd.Table_Id, mrd.Column_Name, mrd.Mob_Rpt_Id, tm.Table_Name,mrd.FilterLevel
             ORDER BY mrd.Type
@@ -762,7 +765,7 @@ if (SalesGeneralInfo.length > 0) {
                 tm.AliasName AS aliasName
             FROM tbl_Mobile_Report_Details mrd
             INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
-            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            LEFT JOIN [tbl_Mobile_Rpt_Table_Master] tm ON tm.Table_Id = mrd.Table_Id
             WHERE mrt.Report_Name = @reportName
             GROUP BY mrd.Type, mrd.FilterLevel, mrd.Table_Id, mrd.Column_Name, 
                      mrd.Mob_Rpt_Id, tm.Table_Name, tm.AliasName
@@ -789,7 +792,7 @@ if (SalesGeneralInfo.length > 0) {
                 tm.Table_Name,
                 tm.AliasName
             FROM tbl_Group_Template gtm
-            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = gtm.Table_Id
+            LEFT JOIN tbl_Mobile_Rpt_Table_Master tm ON tm.Table_Id = gtm.Table_Id
             WHERE gtm.Mob_Rpt_Id IN (
                 SELECT Mob_Rpt_Id 
                 FROM tbl_Mobile_Report_Type 
