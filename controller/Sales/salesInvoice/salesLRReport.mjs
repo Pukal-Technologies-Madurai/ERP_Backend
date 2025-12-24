@@ -245,3 +245,88 @@ export const katchathCopyPrintOut = async (req, res) => {
         servError(e, res);
     }
 }
+
+export const invoiceCopyPrintOut = async (req, res) => {
+    try {
+        const { Do_Id } = req.query;
+
+        if (!checkIsNumber(Do_Id)) return invalidInput(res, 'Do_Id is required');
+
+        const request = new sql.Request()
+            .input('Do_Id', sql.BigInt, Do_Id)
+            .query(`
+                SELECT
+                	sdgi.Do_Id id,
+                	sdgi.Voucher_Type voucherType,
+                    sdgi.Do_Inv_No voucherNumber,
+                	v.Voucher_Type voucherTypeGet, 
+                	r.Retailer_Name retailerNameGet,
+                	r.Gstno retailerGstNumber,
+                	cb.Name createdByGet,
+                	sdgi.Created_on createdOn,
+                	sda.deliveryName mailingName,
+                	sda.deliveryAddress mailingAddress,
+                	sda.cityName mailingCity,
+                	sda.phoneNumber mailingNumber,
+                	COALESCE(sdgi.Round_off, 0) roundOffValue,
+                	COALESCE((
+                		SELECT 
+                			sdsi.Item_Id itemId,
+                			p.Short_Name itemName,
+                			p.HSN_Code hsnCode,
+                			COALESCE((sdsi.Cgst + sdsi.Sgst + sdsi.Igst), 0) AS gstPercentage,
+                			COALESCE((sdsi.Cgst_Amo + sdsi.Sgst_Amo + sdsi.Igst_Amo), 0) AS gstAmount,
+                			sdsi.Alt_Act_Qty quantity,
+                            sdsi.Bill_Qty billQuantity,
+                			sdsi.Item_Rate itemRate,
+                			sdsi.Final_Amo amount
+                		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
+                		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+                		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
+                		FOR JSON PATH
+                	), '[]') AS productDetails,
+                	COALESCE((
+                		SELECT 
+                			stf.Emp_Id AS empId,
+                			stf.Emp_Type_Id AS empTypeId,
+                			e.Cost_Center_Name AS empName,
+                            cc.Cost_Category AS empType
+                		FROM tbl_Sales_Delivery_Staff_Info AS stf
+                		LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = stf.Emp_Id
+                		LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                		WHERE stf.Do_Id = sdgi.Do_Id
+                		FOR JSON PATH
+                	), '[]') AS staffDetails,
+                	COALESCE((
+                		SELECT 
+                            em.Account_name AS expenseName, 
+                            CASE  
+                                WHEN exp.Expence_Value_DR > 0 THEN exp.Expence_Value_DR 
+                                ELSE -exp.Expence_Value_CR
+                            END AS expenseValue
+                        FROM tbl_Sales_Delivery_Expence_Info AS exp
+                        LEFT JOIN tbl_Account_Master AS em ON em.Acc_Id = exp.Expense_Id
+                        WHERE exp.Do_Id = sdgi.Do_Id
+                		FOR JSON PATH
+                	), '[]') AS expencessDetails
+                FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
+                WHERE sdgi.Do_Id = @Do_Id;`);
+
+        const result = await request;
+
+        const parseData = result.recordset.map(inv => ({
+            ...inv,
+            productDetails: JSON.parse(inv.productDetails),
+            staffDetails: JSON.parse(inv.staffDetails),
+            expencessDetails: JSON.parse(inv.expencessDetails)
+        }))
+
+        sentData(res, parseData);
+    } catch (e) {
+        servError(e, res);
+    }
+}

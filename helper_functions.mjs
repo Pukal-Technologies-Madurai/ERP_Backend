@@ -29,7 +29,6 @@ export const decryptPasswordFun = (str) => {
 //     return bytes.toString(CryptoJS.enc.Utf8);
 // };
 
-
 export const toArray = (array) => Array.isArray(array) ? array : [];
 
 export const isArray = (array) => Array.isArray(array);
@@ -38,7 +37,6 @@ export const isValidDate = (dateString) => {
     const timestamp = Date.parse(dateString);
     return !isNaN(timestamp);
 }
-
 
 export const LocalDate = (dateObj) => {
     const receivedDate = dateObj ? new Date(dateObj) : new Date();
@@ -60,6 +58,48 @@ export const getDaysBetween = (invoiceDateStr, currentDateStr = new Date().toISO
 
     return diffInDays;
 }
+
+export const getIndianTime = (dateString) => {
+    const date = dateString ? new Date(dateString): new Date();
+
+    const options = {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        fractionalSecondDigits: 3,
+        hour12: false
+    };
+
+    const parts = new Intl.DateTimeFormat("en-CA", options).formatToParts(date); new Date()
+
+    const get = (type) =>
+        parts.find(p => p.type === type)?.value ?? "";
+
+    return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}.${get("fractionalSecond")}`;
+}
+
+export const addFiveThirty = (dateStr) => {
+  const iso = dateStr.replace(" ", "T");
+
+  const baseDate = new Date(iso);
+
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+  const istDate = new Date(baseDate.getTime() + IST_OFFSET_MS);
+
+  const pad = (n, size = 2) => String(n).padStart(size, "0");
+
+  return `${istDate.getFullYear()}-${pad(istDate.getMonth() + 1)}-${pad(
+    istDate.getDate()
+  )} ${pad(istDate.getHours())}:${pad(
+    istDate.getMinutes()
+  )}:${pad(istDate.getSeconds())}.${pad(istDate.getMilliseconds(), 3)}`;
+}
+
 
 export const LocalDateTime = () => {
     const now = new Date();
@@ -325,8 +365,8 @@ export const NumberFormat = (num) => {
 }
 
 export const createPadString = (number, padLength = 0) => {
-    const numberStr = number.toString(); 
-    return numberStr.padStart(padLength, '0'); 
+    const numberStr = number.toString();
+    return numberStr.padStart(padLength, '0');
 }
 
 export const limitFractionDigits = (num = 0, maxFractionDigits = 2) => {
@@ -335,12 +375,12 @@ export const limitFractionDigits = (num = 0, maxFractionDigits = 2) => {
 }
 
 export const toNumber = (value) => {
-    if (!value) return 0; 
+    if (!value) return 0;
     if (typeof value === 'string') {
-        const parsed = parseFloat(value.replace(/,/g, '')); 
+        const parsed = parseFloat(value.replace(/,/g, ''));
         return isNaN(parsed) ? 0 : parsed;
     }
-    return typeof value === 'number' ? value : 0; 
+    return typeof value === 'number' ? value : 0;
 };
 
 export const RoundNumber = (num) => {
@@ -542,9 +582,9 @@ export const groupData = (arr, key) => {
 };
 
 export const randomNumber = (minDigits = 5, maxDigits = 8) => {
-  const digits = Math.floor(Math.random() * (maxDigits - minDigits + 1)) + minDigits;
-  const min = Math.pow(10, digits - 1);
-  const max = Math.pow(10, digits) - 1;
+    const digits = Math.floor(Math.random() * (maxDigits - minDigits + 1)) + minDigits;
+    const min = Math.pow(10, digits - 1);
+    const max = Math.pow(10, digits) - 1;
 
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+    return Math.floor(Math.random() * (max - min + 1)) + min;
 };
