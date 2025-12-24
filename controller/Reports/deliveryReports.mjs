@@ -33,7 +33,7 @@ const getNonConvertedSales = async (req, res) => {
                 ${checkIsNumber(Sales_Person_Id) ? ' AND so.Sales_Person_Id = @salesPerson ' : ''}
                 ${checkIsNumber(VoucherType) ? ' AND so.VoucherType = @VoucherType ' : ''}
                 ${checkIsNumber(Branch_Id) ? ' AND so.Branch_Id = @Branch_Id ' : ''};
-
+      
             
             SELECT 
                 so.*, 
