@@ -356,6 +356,7 @@ export const deliverySlipPrintOut = async (req, res) => {
                 	SELECT 
 					     	p.Product_Rate,
                             p.Short_Name,
+                            sdsi.Item_Rate,
 							p.Pack_Id,
                 			sdsi.Item_Id itemId,
                 			p.Product_Name itemName,
