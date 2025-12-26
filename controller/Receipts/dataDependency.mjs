@@ -253,7 +253,7 @@ const ReceiptDataDependency = () => {
                     		jei.Acc_Id				= @Acc_Id
                             AND jgi.JournalDate		>= @OB_Date
                             AND jgi.JournalStatus	<> 0
-                    		AND jei.DrCr			= 'Cr'
+                    		AND jei.DrCr			= 'Dr'
                     ) AS inv
                     WHERE 
                         inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value

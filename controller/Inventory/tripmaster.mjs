@@ -177,18 +177,21 @@ const tripActivities = () => {
                     .input('Created_By', toNumber(Created_By))
                     .query(`
                     -- trip update
+                        DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                         DECLARE @reference_id INT;
+                        ${filterableText(product?.Batch_No) ? `
+                    -- batch update in arrival
+                            UPDATE tbl_Trip_Arrival
+                            SET Batch_No = @Batch_No
+                            WHERE Arr_Id = @Arrival_Id;` : ''}
+                    -- Trip details
                         INSERT INTO tbl_Trip_Details (
                             Trip_Id, Arrival_Id
                         ) VALUES (
                             @Trip_Id, @Arrival_Id
                         );
                         SET @reference_id = SCOPE_IDENTITY();
-                        ${filterableText(product?.Batch_No) ? `
-                    -- batch update in arrival
-                            UPDATE tbl_Trip_Arrival
-                            SET Batch_No = @Batch_No
-                            WHERE Arr_Id = @Arrival_Id;
+                        ${(BillType === 'MATERIAL INWARD' && filterableText(product?.Batch_No)) ? `
                     -- Batch details
                             MERGE tbl_Batch_Master AS target
                             USING (SELECT @Batch_No AS batch, @Product_Id AS item_id, @To_Location AS godown_id) AS src
@@ -198,13 +201,11 @@ const tripActivities = () => {
                             WHEN MATCHED THEN 
                                 UPDATE SET target.quantity = target.quantity + @QTY
                             WHEN NOT MATCHED THEN
-                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By);`
+                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by, ob_id)
+                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By, @openingId);`
                             : ''}
                     -- if the bill type is Godown transfer
                         ${(BillType === 'OTHER GODOWN' && filterableText(product?.Batch_No)) ? `
-                            -- latest obid
-                            DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                             DECLARE @batch_id uniqueidentifier = (
                                 SELECT TOP(1) id FROM tbl_Batch_Master
                                 WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
@@ -406,7 +407,7 @@ const tripActivities = () => {
                     .input('Trip_Id', toNumber(Trip_Id))
                     .input('Trip_Date', Trip_Date)
                     .input('Arrival_Id', toNumber(product?.Arrival_Id))
-                    .input('Batch_No', product?.Batch_No)
+                    .input('Batch_No', product?.Batch_No ? product?.Batch_No : null)
                     .input('Product_Id', toNumber(product?.Product_Id))
                     .input('QTY', toNumber(product?.QTY))
                     .input('Gst_Rate', toNumber(product?.Gst_Rate))
@@ -416,17 +417,20 @@ const tripActivities = () => {
                     .query(`
                     -- trip update
                         DECLARE @reference_id INT;
+                    -- latest obid
+                        DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
+                    -- batch update in arrival
+                        UPDATE tbl_Trip_Arrival
+                        SET Batch_No = @Batch_No
+                        WHERE Arr_Id = @Arrival_Id;
+                    -- trip details
                         INSERT INTO tbl_Trip_Details (
                             Trip_Id, Arrival_Id
                         ) VALUES (
                             @Trip_Id, @Arrival_Id
                         );
                         SET @reference_id = SCOPE_IDENTITY();
-                        ${filterableText(product?.Batch_No) ? `
-                    -- batch update in arrival
-                            UPDATE tbl_Trip_Arrival
-                            SET Batch_No = @Batch_No
-                            WHERE Arr_Id = @Arrival_Id;
+                        ${(BillType === 'MATERIAL INWARD' && filterableText(product?.Batch_No)) ? `
                     -- Batch details
                             MERGE tbl_Batch_Master AS target
                             USING (SELECT @Batch_No AS batch, @Product_Id AS item_id, @To_Location AS godown_id) AS src
@@ -436,8 +440,8 @@ const tripActivities = () => {
                             WHEN MATCHED THEN 
                                 UPDATE SET target.quantity = target.quantity + @QTY
                             WHEN NOT MATCHED THEN
-                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By);`
+                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by, ob_id)
+                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By, @openingId);`
                             : ''}
                     -- if the bill type is Godown transfer
                         ${(BillType === 'OTHER GODOWN' && filterableText(product?.Batch_No)) ? `
@@ -445,8 +449,6 @@ const tripActivities = () => {
                                 SELECT TOP(1) id FROM tbl_Batch_Master
                                 WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
                             );
-                            -- latest obid
-                            DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                             INSERT INTO tbl_Batch_Transaction (
                                 batch_id, batch, trans_date, item_id, godown_id, 
                                 quantity, type, reference_id, created_by, ob_id

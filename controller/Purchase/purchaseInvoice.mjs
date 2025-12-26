@@ -853,7 +853,7 @@ const PurchaseOrder = () => {
                     LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = s.Cost_Center_Type_Id
                     WHERE s.PIN_Id IN (SELECT PIN_Id FROM @FilteredPurchase);
                     -- Step 6: Get is direct order or from purchase order
-                    SELECT DISTINCT PIN_Id
+                    SELECT DISTINCT PIN_Id, Order_Id
                     FROM tbl_Purchase_Order_Inv_Gen_Order
                     WHERE PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)`
                 );
@@ -873,7 +873,7 @@ const PurchaseOrder = () => {
                         ProductImageUrl: getImage('products', pp.Product_Image_Name)
                     })),
                     Staff_List: Staff_List.filter(stf => isEqualNumber(stf.PIN_Id, p.PIN_Id)),
-                    isFromPurchaseOrder: checkIsNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.PIN_Id)
+                    isFromPurchaseOrder: toNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.Order_Id) !== 0
                 }));
                 dataFound(res, finalResult);
             } else {
@@ -1084,7 +1084,7 @@ const PurchaseOrder = () => {
                         ProductImageUrl: getImage('products', pp.Product_Image_Name)
                     })),
                     Staff_List: Staff_List.filter(stf => isEqualNumber(stf.PIN_Id, p.PIN_Id)),
-                    isFromPurchaseOrder: checkIsNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.PIN_Id)
+                    isFromPurchaseOrder: toNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.PIN_Id) !== 0
                 }));
 
                 dataFound(res, finalResult);
