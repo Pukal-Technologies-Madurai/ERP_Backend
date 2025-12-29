@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { servError, sentData, invalidInput, dataFound } from '../../res.mjs';
+import { servError, sentData, invalidInput, dataFound,noData } from '../../res.mjs';
 
 
 const DebitorsCreditors = () => {
@@ -153,12 +153,47 @@ const DebitorsCreditors = () => {
             servError(err, res);
         }
     }
+
+
+   const getTransactions = async (req, res) => {
+    try {
+        const { fromDate, toDate, Acc_Id } = req.query;
+
+    
+        if (!fromDate || !toDate || !Acc_Id) {
+            return invalidInput(res, 'From date, To date and Account ID are required');
+        }
+
+        const accountId = parseInt(Acc_Id);
+        if (isNaN(accountId)) {
+            return invalidInput(res, 'Account ID must be a valid number');
+        }
+
+        const request = new sql.Request();
+        request.input('Fromdate', sql.NVarChar(200), fromDate);
+        request.input('Todate', sql.NVarChar(200), toDate);
+        request.input('Acc_Id', sql.Int, accountId);
+
+        const result = await request.execute('Transaction_Report_vw_By_Acc_Id');
+
+        if (result.recordset && result.recordset.length > 0) {
+            return sentData(res, result.recordset);
+        } else {
+            return noData(res);
+        }
+    } catch (err) {
+      
+        console.error('SQL Error:', err.originalError?.message);
+        servError(err, res);
+    }
+};
     
     return {
         getDebtorsCrditors,
         getDebtorsCreditorsId,
         getDebtorsCreditorsAll,
-        getDebtors
+        getDebtors,
+        getTransactions
     }
 }
 
