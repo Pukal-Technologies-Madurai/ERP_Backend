@@ -321,4 +321,6 @@ MastersRouter.delete("/accountMasterSales", accountMasterSales.deleteAccountMast
 MastersRouter.get("/accountMasterSales/accounts", accountMasterSales.getAccountDropdown);
 MastersRouter.get("/accountMasterSales/salespersons", accountMasterSales.getSalesPersonDropdown);
 
+MastersRouter.get('/retailersPaginated', retailers.getSFCustomersPaginated);
+
 export default MastersRouter;
