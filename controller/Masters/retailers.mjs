@@ -1089,6 +1089,235 @@ const RetailerControll = () => {
         }
     }
 
+const getSFCustomersPaginated = async (req, res) => {
+  try {
+    const {
+      Retailer_Id,
+      PhoneNumber,
+      ContactPerson_Name,
+      Route_Id,
+      Area_Id,
+      City,
+    //   search = '',
+    //   page = 1,
+    //   limit = 100,
+      filter1,
+      filter2,
+      filter3
+    } = req.query;
+
+    // const pageNo = Math.max(parseInt(page), 1);
+    // const pageSize = Math.min(parseInt(limit), 50);
+    // const offset = (pageNo - 1) * pageSize;
+
+    const request = new sql.Request();
+    // request.input('offset', sql.Int, offset);
+    // request.input('limit', sql.Int, pageSize);
+    // request.input('search', sql.NVarChar, `%${search}%`);
+
+  
+    let whereClause = ` WHERE rm.isRetailer = 1 `;
+
+    if (Retailer_Id) {
+      whereClause += ` AND rm.Retailer_Id = @Retailer_Id`;
+      request.input('Retailer_Id', sql.Int, Retailer_Id);
+    }
+
+    if (PhoneNumber) {
+      whereClause += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
+      request.input('PhoneNumber', sql.NVarChar, PhoneNumber);
+    }
+
+    if (ContactPerson_Name) {
+      whereClause += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
+      request.input('ContactPerson_Name', sql.NVarChar, ContactPerson_Name);
+    }
+
+    if (Route_Id && Route_Id !== 'ALL') {
+      whereClause += ` AND rm.Route_Id = @Route_Id`;
+      request.input('Route_Id', sql.Int, Route_Id);
+    }
+
+    if (Area_Id && Area_Id !== 'ALL') {
+      whereClause += ` AND rm.Area_Id = @Area_Id`;
+      request.input('Area_Id', sql.Int, Area_Id);
+    }
+
+    if (City && City !== 'ALL') {
+      whereClause += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
+      request.input('City', sql.NVarChar, City);
+    }
+
+    // if (search) {
+    //   whereClause += `
+    //     AND (
+    //       rm.Retailer_Name LIKE @search
+    //       OR rm.Mobile_No LIKE @search
+    //       OR rm.Contact_Person LIKE @search
+    //     )
+    //   `;
+    // }
+
+
+    const parseValues = v =>
+      v ? v.split(',').map(x => x.trim()).filter(Boolean) : null;
+
+    const filterValues = [
+      parseValues(filter1),
+      parseValues(filter2),
+      parseValues(filter3)
+    ];
+
+    const mobileFilters = await new sql.Request().query(`
+      SELECT 
+        mrd.Column_Name AS ColumnName,
+        tm.Table_Name AS TableName,
+        mrd.FilterLevel
+      FROM tbl_Mobile_Report_Details mrd
+      INNER JOIN tbl_Mobile_Report_Type mrt 
+        ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
+      LEFT JOIN tbl_Mobile_Rpt_Table_Master tm 
+        ON tm.Table_Id = mrd.Table_Id
+      WHERE mrt.Report_Name = 'Transaction'
+      ORDER BY mrd.FilterLevel
+    `);
+
+    const dynamicConditions = [];
+
+    const buildFilterCondition = (cfg, values, paramName) => {
+      if (!cfg || !values || !values.length) return null;
+
+      const isSingle = values.length === 1;
+      const placeholders = isSingle
+        ? `@${paramName}`
+        : values.map((_, i) => `@${paramName}${i}`).join(',');
+
+      const column = cfg.ColumnName;
+
+      // ✅ tbl_Ledger_LOL (MAIN FIX)
+      if (cfg.TableName === 'tbl_Ledger_LOL') {
+        return `
+          EXISTS (
+            SELECT 1
+            FROM tbl_Ledger_LOL llol
+            WHERE llol.${column} ${isSingle ? '=' : 'IN'} (${placeholders})
+              AND llol.Ret_Id = rm.Retailer_Id
+          )
+        `;
+      }
+
+      // ✅ Generic direct-table filter
+      return `
+        EXISTS (
+          SELECT 1
+          FROM ${cfg.TableName} t
+          WHERE t.${column} ${isSingle ? '=' : 'IN'} (${placeholders})
+            AND t.Ret_Id = rm.Retailer_Id
+        )
+      `;
+    };
+
+    filterValues.forEach((values, index) => {
+      if (values && mobileFilters.recordset[index]) {
+        const param = `filter${index + 1}`;
+        const condition = buildFilterCondition(
+          mobileFilters.recordset[index],
+          values,
+          param
+        );
+
+        if (condition) {
+          dynamicConditions.push(condition);
+
+          if (values.length === 1) {
+            request.input(param, values[0]);
+          } else {
+            values.forEach((v, i) => {
+              request.input(`${param}${i}`, v);
+            });
+          }
+        }
+      }
+    });
+
+    if (dynamicConditions.length) {
+      whereClause += ` AND ${dynamicConditions.join(' AND ')}`;
+    }
+
+    /* ---------------- Count Query ---------------- */
+    const countQuery = `
+      SELECT COUNT(*) AS totalRecords
+      FROM tbl_Retailers_Master rm
+      ${whereClause}
+    `;
+
+    const countResult = await request.query(countQuery);
+    // const totalRecords = countResult.recordset[0].totalRecords;
+    // const totalPages = Math.ceil(totalRecords / pageSize);
+
+    /* ---------------- Data Query ---------------- */
+    const dataQuery = `
+      SELECT 
+        rm.*,
+        COALESCE(rom.Route_Name, '') AS RouteGet,
+        COALESCE(am.Area_Name, '') AS AreaGet,
+        COALESCE(sm.State_Name, '') AS StateGet,
+        COALESCE(cm.Company_Name, '') AS Company_Name,
+        COALESCE(modify.Name, '') AS lastModifiedBy,
+        COALESCE(created.Name, '') AS createdBy,
+        COALESCE((
+          SELECT TOP 1 *
+          FROM tbl_Retailers_Locations
+          WHERE Retailer_Id = rm.Retailer_Id AND isActiveLocation = 1
+          FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        ), '{}') AS VERIFIED_LOCATION,
+        COALESCE((
+          SELECT TOP 5 ml.*,
+            COALESCE((SELECT Name FROM tbl_Users WHERE UserId = ml.EntryBy),'unknown') AS EntryByGet
+          FROM tbl_Retailers_Locations ml
+          WHERE rm.Retailer_Id = ml.Retailer_Id
+          ORDER BY CONVERT(DATETIME, EntryAt) DESC
+          FOR JSON PATH
+        ), '[]') AS AllLocations
+      FROM tbl_Retailers_Master rm
+      LEFT JOIN tbl_Route_Master rom ON rom.Route_Id = rm.Route_Id
+      LEFT JOIN tbl_Area_Master am ON am.Area_Id = rm.Area_Id
+      LEFT JOIN tbl_State_Master sm ON sm.State_Id = rm.State_Id
+      LEFT JOIN tbl_Company_Master cm ON cm.Company_id = rm.Company_Id
+      LEFT JOIN tbl_Users modify ON modify.UserId = rm.Updated_By
+      LEFT JOIN tbl_Users created ON created.UserId = rm.Created_By
+      ${whereClause}
+      ORDER BY rm.Retailer_Id DESC
+      --OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `;
+
+    const result = await request.query(dataQuery);
+
+    const parsed = result.recordset.map(r => ({
+      ...r,
+      VERIFIED_LOCATION: JSON.parse(r.VERIFIED_LOCATION || '{}'),
+      AllLocations: JSON.parse(r.AllLocations || '[]'),
+      imageUrl: getImage('retailers', r?.ImageName)
+    }));
+
+    return res.json({
+      success: true,
+    //   page: pageNo,
+    //   limit: pageSize,
+    //   totalRecords,
+    //   totalPages,
+      data: parsed
+    });
+
+  } catch (err) {
+    console.error('Customer API Error:', err);
+    return servError(err, res);
+  }
+};
+
+
+
+
     return {
         getSFCustomers,
         getRetailerDropDown,
@@ -1103,7 +1332,8 @@ const RetailerControll = () => {
         syncTallyLOL,
         posRetailesSync,
         retailerSoldProduct,
-        getRetailersWhoHasClosingStock
+        getRetailersWhoHasClosingStock,
+        getSFCustomersPaginated
     }
 }
 
