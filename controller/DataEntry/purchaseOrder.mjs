@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, success, failed, invalidInput, sentData } from '../../res.mjs';
-import { checkIsNumber, createPadString, isEqualNumber, ISOString } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Subraction } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 
 const PurchaseOrderDataEntry = () => {
@@ -728,64 +728,130 @@ const PurchaseOrderDataEntry = () => {
             const request = new sql.Request()
                 .input('VendorId', VendorId)
                 .query(`
-                    ;WITH pendingOrderConvertion AS (
-                    	SELECT 
-                            d.*, 
-                        	COALESCE(g.PO_ID, 'not found') AS PO_ID,
-                        	COALESCE(pui.Bill_Qty, 0) AS pendingInvoiceWeight,
-                        	COALESCE(pui.Bill_Qty, 0) AS convertableQuantity
-                        FROM tbl_PurchaseOrderDeliveryDetails AS d
-                        JOIN tbl_PurchaseOrderGeneralDetails AS g ON d.OrderId = g.Sno
-                        LEFT JOIN (
-                        	SELECT 
-                        		igo.Order_Id,
-                        		isd.Item_Id,
-                        		isd.Bill_Qty,
-                        		isd.DeliveryId
-                        	FROM tbl_Purchase_Order_Inv_Gen_Order AS igo 
-                        	JOIN tbl_Purchase_Order_Inv_Stock_Info AS isd ON igo.PIN_Id = isd.PIN_Id
-                        ) AS pui 
-                        ON 
-                        	pui.Order_Id = d.OrderId 
-                        	AND pui.DeliveryId = d.Trip_Item_SNo
-                        	AND pui.Item_Id = d.ItemId
-                        WHERE 
-                        	g.PartyId = @VendorId 
-                        	AND g.OrderStatus = 'Completed'
-                        	AND d.Trip_Id IS NOT NULL
-                        	AND COALESCE(pui.Bill_Qty, 0) = 0
-                    ), involvedStaffs AS (
-                        SELECT 
-                            poe.OrderId, poe.EmployeeId, poe.CostType,
-                            COALESCE(cc.Cost_Center_Name, 'Not found') AS EmployeeName, 
-                            COALESCE(cct.Cost_Category, 'Not found') AS EmployeeType
-                        FROM tbl_PurchaseOrderEmployeesInvolved AS poe
-                        LEFT JOIN tbl_ERP_Cost_Center AS cc
-                            ON cc.Cost_Center_Id = poe.EmployeeId
-                        LEFT JOIN tbl_ERP_Cost_Category AS cct
-                            ON cct.Cost_Category_Id = poe.CostType
-                        WHERE poe.OrderId IN (SELECT OrderId FROM pendingOrderConvertion)
-                    )
+                -- order details
                     SELECT 
-                    	poi.*,
-                    	    ISNULL((
-                            SELECT poe.*
-                            FROM involvedStaffs AS poe
-                            WHERE poi.OrderId = poe.OrderId
-                            FOR JSON PATH
-                        ), '[]') AS EmployeesInvolved
-                    FROM pendingOrderConvertion AS poi`
+                    	del.*,
+                    	pogd.PO_ID
+                    FROM tbl_PurchaseOrderDeliveryDetails AS del
+                    JOIN tbl_PurchaseOrderGeneralDetails AS pogd ON pogd.Sno = del.OrderId
+                    WHERE 
+                    	pogd.PartyId = @VendorId
+                    	AND pogd.OrderStatus = 'Completed'
+                    	AND del.Trip_Id IS NOT NULL
+                -- p.order staffs
+                    SELECT 
+                    	poe.OrderId, 
+                    	poe.EmployeeId, 
+                    	poe.CostType,
+                    	COALESCE(cc.Cost_Center_Name, 'Not found') AS EmployeeName, 
+                    	COALESCE(cct.Cost_Category, 'Not found') AS EmployeeType
+                    FROM tbl_PurchaseOrderEmployeesInvolved AS poe
+                    LEFT JOIN tbl_ERP_Cost_Center AS cc ON cc.Cost_Center_Id = poe.EmployeeId
+                    LEFT JOIN tbl_ERP_Cost_Category AS cct ON cct.Cost_Category_Id = poe.CostType
+                    JOIN tbl_PurchaseOrderGeneralDetails AS pogi ON pogi.Sno = poe.OrderId
+                    WHERE pogi.PartyId = @VendorId
+                -- invoised orders 
+                    SELECT 
+                    	invOrder.Order_Id,
+                    	invGeneral.PIN_Id,
+                    	invStock.Item_Id,
+                       	invStock.Bill_Qty,
+                       	invStock.DeliveryId
+                    FROM tbl_Purchase_Order_Inv_Gen_Order AS invOrder
+                    JOIN tbl_Purchase_Order_Inv_Stock_Info AS invStock ON invOrder.PIN_Id = invStock.PIN_Id
+                    JOIN tbl_Purchase_Order_Inv_Gen_Info AS invGeneral ON invGeneral.PIN_Id = invOrder.PIN_Id
+                    WHERE
+                    	invGeneral.Retailer_Id = @VendorId
+                    	AND COALESCE(invOrder.Order_Id, 0) <> 0
+                    	AND invGeneral.Cancel_status = 0`
                 )
 
             const result = await request;
 
-            const parsedData = result.recordset.map(item => ({
+            const [order, staffs, invoice] = result.recordsets;
+
+            const compiledDate = order.map(item => ({
                 ...item,
-                ConvertedAsInvoices: [],
-                EmployeesInvolved: JSON.parse(item.EmployeesInvolved),
+                ConvertedAsInvoices: invoice.filter(inv => (
+                    isEqualNumber(inv.Order_Id, item.OrderId)
+                    && isEqualNumber(inv.DeliveryId, item.Trip_Item_SNo)
+                    && isEqualNumber(inv.Item_Id, item.ItemId)
+                )),
+                EmployeesInvolved: staffs.filter(staff => isEqualNumber(staff.OrderId, item.OrderId)),
             }));
 
-            sentData(res, parsedData);
+            const convertableData = compiledDate.map(item => {
+                const converted = item.ConvertedAsInvoices.reduce((acc, inv) => Addition(acc, inv.Bill_Qty), 0);
+                return {
+                    ...item,
+                    pendingInvoiceWeight: Subraction(item.Weight, converted),
+                    convertableQuantity: converted
+                }
+            }).filter(item => item.pendingInvoiceWeight > 0);
+
+            sentData(res, convertableData);
+
+            // const request = new sql.Request()
+            //     .input('VendorId', VendorId)
+            //     .query(`
+            //         ;WITH pendingOrderConvertion AS (
+            //         	SELECT 
+            //                 d.*, 
+            //             	g.PO_ID,
+            //             	COALESCE(pui.Bill_Qty, 0) AS pendingInvoiceWeight,
+            //             	COALESCE(pui.Bill_Qty, 0) AS convertableQuantity
+            //             FROM tbl_PurchaseOrderDeliveryDetails AS d
+            //             JOIN tbl_PurchaseOrderGeneralDetails AS g ON d.OrderId = g.Sno
+            //             LEFT JOIN (
+            //             	SELECT 
+            //             		igo.Order_Id,
+            //             		isd.Item_Id,
+            //             		isd.Bill_Qty,
+            //             		isd.DeliveryId
+            //             	FROM tbl_Purchase_Order_Inv_Gen_Order AS igo 
+            //             	JOIN tbl_Purchase_Order_Inv_Stock_Info AS isd ON igo.PIN_Id = isd.PIN_Id
+            //             ) AS pui 
+            //             ON 
+            //             	pui.Order_Id = d.OrderId 
+            //             	AND pui.DeliveryId = d.Trip_Item_SNo
+            //             	AND pui.Item_Id = d.ItemId
+            //             WHERE 
+            //             	g.PartyId = @VendorId 
+            //             	AND g.OrderStatus = 'Completed'
+            //             	AND d.Trip_Id IS NOT NULL
+            //             	AND COALESCE(pui.Bill_Qty, 0) = 0
+            //         ), involvedStaffs AS (
+            //             SELECT 
+            //                 poe.OrderId, poe.EmployeeId, poe.CostType,
+            //                 COALESCE(cc.Cost_Center_Name, 'Not found') AS EmployeeName, 
+            //                 COALESCE(cct.Cost_Category, 'Not found') AS EmployeeType
+            //             FROM tbl_PurchaseOrderEmployeesInvolved AS poe
+            //             LEFT JOIN tbl_ERP_Cost_Center AS cc
+            //                 ON cc.Cost_Center_Id = poe.EmployeeId
+            //             LEFT JOIN tbl_ERP_Cost_Category AS cct
+            //                 ON cct.Cost_Category_Id = poe.CostType
+            //             WHERE poe.OrderId IN (SELECT OrderId FROM pendingOrderConvertion)
+            //         )
+            //         SELECT 
+            //         	poi.*,
+            //         	    ISNULL((
+            //                 SELECT poe.*
+            //                 FROM involvedStaffs AS poe
+            //                 WHERE poi.OrderId = poe.OrderId
+            //                 FOR JSON PATH
+            //             ), '[]') AS EmployeesInvolved
+            //         FROM pendingOrderConvertion AS poi`
+            //     )
+
+            // const result = await request;
+
+            // const parsedData = result.recordset.map(item => ({
+            //     ...item,
+            //     ConvertedAsInvoices: [],
+            //     EmployeesInvolved: JSON.parse(item.EmployeesInvolved),
+            // }));
+
+            // sentData(res, parsedData);
 
             // const request = new sql.Request()
             //     .input('VendorId', VendorId)

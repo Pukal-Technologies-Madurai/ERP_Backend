@@ -393,15 +393,9 @@ const PurchaseOrder = () => {
                 }
             }
 
-            const DE_PO_ID = Product_Array.reduce((acc, pro) => {
-                const existIndex = acc.findIndex(ind => isEqualNumber(ind, pro.OrderId));
-
-                if (existIndex === -1) {
-                    return acc.concat(pro.OrderId);
-                } else {
-                    return acc;
-                }
-            }, []);
+            const DE_PO_ID = [
+                ...new Set(Product_Array.map(pro => pro?.OrderId))
+            ].filter(OrderId => !isEqualNumber(OrderId, 0));
 
             for (let i = 0; i < DE_PO_ID.length; i++) {
                 const request = new sql.Request(transaction)
@@ -720,15 +714,9 @@ const PurchaseOrder = () => {
                 }
             }
 
-            const DE_PO_ID = Product_Array.reduce((acc, pro) => {
-                const isOrderExist = acc.findIndex(OrderId => isEqualNumber(OrderId, pro.OrderId));
-
-                if (isOrderExist === -1) {
-                    return acc.concat(pro.OrderId);
-                } else {
-                    return acc;
-                }
-            }, []);
+            const DE_PO_ID = [
+                ...new Set(Product_Array.map(pro => pro?.OrderId))
+            ].filter(OrderId => !isEqualNumber(OrderId, 0));
 
             for (let i = 0; i < DE_PO_ID.length; i++) {
                 const request = new sql.Request(transaction)
@@ -855,7 +843,10 @@ const PurchaseOrder = () => {
                     -- Step 6: Get is direct order or from purchase order
                     SELECT DISTINCT PIN_Id, Order_Id
                     FROM tbl_Purchase_Order_Inv_Gen_Order
-                    WHERE PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)`
+                    WHERE 
+                        PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)
+                        AND COALESCE(Order_Id, 0) <> 0
+                    `
                 );
 
             const result = await request;

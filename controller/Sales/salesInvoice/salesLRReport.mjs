@@ -314,7 +314,8 @@ export const invoiceCopyPrintOut = async (req, res) => {
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
                 LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
-                WHERE sdgi.Do_Id = @Do_Id;`);
+                WHERE sdgi.Do_Id = @Do_Id;`
+            );
 
         const result = await request;
 
