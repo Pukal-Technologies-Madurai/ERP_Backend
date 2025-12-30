@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { checkIsNumber, isEqualNumber, ISOString, toArray } from '../../../helper_functions.mjs';
-import { servError, sentData, success, invalidInput } from '../../../res.mjs';
+import { servError, sentData, success, invalidInput, failed } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 
@@ -332,12 +332,8 @@ export const invoiceCopyPrintOut = async (req, res) => {
     }
 }
 
-
-export const deliverySlipPrintOut = async (req, res) => {
+export const getSalesInvoiceDetails = async (Do_Id) => {
     try {
-        const { Do_Id } = req.query;
-
-        if (!checkIsNumber(Do_Id)) return invalidInput(res, 'Do_Id is required');
 
         const request = new sql.Request()
             .input('Do_Id', sql.BigInt, Do_Id)
@@ -395,9 +391,34 @@ export const deliverySlipPrintOut = async (req, res) => {
             ...inv,
             productDetails: JSON.parse(inv.productDetails),
             staffDetails: JSON.parse(inv.staffDetails)
-        }))
+        }));
 
-        sentData(res, parseData);
+        return {
+            success: true,
+            data: parseData
+        }
+
+    } catch (e) {
+        console.log(e);
+        return {
+            success: false,
+            data: [],
+            error: e
+        }
+    }
+}
+
+export const deliverySlipPrintOut = async (req, res) => {
+    try {
+        const { Do_Id } = req.query;
+
+        if (!checkIsNumber(Do_Id)) return invalidInput(res, 'Do_Id is required');
+
+        const salesDetails = await getSalesInvoiceDetails(Do_Id);
+
+        if (!salesDetails.success) return failed(res);
+
+        sentData(res, salesDetails);
     } catch (e) {
         servError(e, res);
     }

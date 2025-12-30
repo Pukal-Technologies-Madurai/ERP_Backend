@@ -3,6 +3,7 @@ import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Mul
 import { invalidInput, servError, dataFound, noData, success } from '../../../res.mjs';
 import { getNextId, getProducts } from '../../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../../middleware/taxCalculator.mjs';
+import { getSalesInvoiceDetails } from './salesLRReport.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
@@ -720,7 +721,10 @@ export const createSalesInvoice = async (req, res) => {
 
         await transaction.commit();
 
-        success(res, 'Invoice created!')
+        // const salesDetails = await getSalesInvoiceDetails(Do_Id);
+        // const salesInvoice = salesDetails.success ? (salesDetails?.data[0] ? salesDetails?.data[0] : {}) : {};
+
+        success(res, 'Invoice created!', [], { Do_Id })
     } catch (e) {
         if (transaction._aborted === false) {
             await transaction.rollback();
