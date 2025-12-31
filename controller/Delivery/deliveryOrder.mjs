@@ -2450,6 +2450,8 @@ SELECT
                     sdsi.Batch_Name,
                     sgi2.Do_Inv_No,
                     pm.Product_Name,
+                    pm.Pack_Id,
+                    ppm.Pack,
                     pm.Product_Image_Name,
                     tm.BranchName AS Branch,
                     rm2.Retailer_Name,
@@ -2471,6 +2473,7 @@ SELECT
                     ) AS Delivery_Staff
                 FROM tbl_Sales_Delivery_Stock_Info sdsi
                 LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_Pack_Master ppm ON ppm.Pack_Id =pm.Pack_Id
                 LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
                 LEFT JOIN tbl_Retailers_Master rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
                 WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
@@ -2531,6 +2534,7 @@ FROM TRIP_MASTER tm
         servError(e, res);
     }
 };
+
 
 
     const updateDeliveryOrderTrip = async (req, res) => {
