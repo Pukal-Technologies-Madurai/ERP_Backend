@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { checkIsNumber, isEqualNumber, ISOString, toArray } from '../../../helper_functions.mjs';
+import { checkIsNumber, Division, isEqualNumber, ISOString, Multiplication, Subraction, toArray, toNumber } from '../../../helper_functions.mjs';
 import { servError, sentData, success, invalidInput, failed } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
@@ -7,20 +7,21 @@ import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
+        const status = req.query.staffStatus ? req.query.staffStatus : 0;
 
         const getSalesInvoice = new sql.Request()
             .input('reqDate', sql.Date, reqDate)
+            .input('status', sql.Int, toNumber(status))
             .query(`
-                -- filtered invoices ids temp table
-                -- DECLARE @reqDate DATE = '2025-11-11';
+            -- filtered invoices ids temp table
                 DECLARE @FilteredInvoice TABLE (Do_Id BIGINT);
-                -- inserting data to temp table
+            -- inserting data to temp table
                 INSERT INTO @FilteredInvoice (Do_Id)
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 
                     Do_Date = @reqDate
-                    AND ISNULL(staffInvolvedStatus, 0) <> 1;
+                    ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
                 SELECT 
                     gen.Do_Id,
                     gen.Do_Inv_No,
@@ -44,7 +45,7 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
                 WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY Do_Id;
-                -- involved staffs
+            -- involved staffs
                 SELECT 
                     stf.*,
                     e.Cost_Center_Name AS Emp_Name,
@@ -56,11 +57,11 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                     ON cc.Cost_Category_Id = stf.Emp_Type_Id
                 WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
                 ORDER BY stf.Do_Id;
-                -- Unique Cost Category IDs
+            -- Unique Cost Category IDs
                 SELECT DISTINCT Emp_Type_Id
                 FROM tbl_Sales_Delivery_Staff_Info
                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
-                -- Cost Types
+            -- Cost Types
                 SELECT Cost_Category_Id, Cost_Category
                 FROM tbl_ERP_Cost_Category
                 ORDER BY Cost_Category;`);
@@ -261,7 +262,7 @@ export const invoiceCopyPrintOut = async (req, res) => {
                     sdgi.Do_Inv_No voucherNumber,
                 	v.Voucher_Type voucherTypeGet, 
                 	r.Retailer_Name retailerNameGet,
-                	r.Gstno retailerGstNumber,
+                	ISNULL(sdgi.gstNumber, r.Gstno) retailerGstNumber,
                 	cb.Name createdByGet,
                 	sdgi.Created_on createdOn,
                 	sda.deliveryName mailingName,
@@ -419,6 +420,87 @@ export const deliverySlipPrintOut = async (req, res) => {
         if (!salesDetails.success) return failed(res);
 
         sentData(res, salesDetails);
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+export const salesInvoicePaper = async (req, res) => {
+    try {
+        const reqDate = req.query?.reqDate ? ISOString(req.query.reqDate) : ISOString();
+
+        const request = new sql.Request()
+            .input('reqDate', sql.Date, reqDate)
+            .query(`
+            -- SALES GENERAL INFO
+                SELECT 
+                	sdgi.Do_Id AS invId,
+                	sdgi.Voucher_Type AS voucherId,
+                	COALESCE(v.Voucher_Type, '-') AS voucheGet,
+                	sdgi.Retailer_Id AS retailerId,
+                	COALESCE(r.Retailer_Name, '-') AS retailerGet,
+                	sdgi.Do_Inv_No voucherNumber
+                FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
+                WHERE sdgi.Do_Date = @reqDate AND sdgi.Cancel_status <> 0
+                ORDER BY v.Voucher_Type;
+            -- SALES STOCK INFO
+                SELECT
+                	sdgi.Do_Id AS invId,
+                	sdsi.Item_Id AS itemId,
+                	p.Product_Name AS itemNameGet,
+                	COALESCE(sdsi.Bill_Qty, 0) AS billedQuantity,
+                	COALESCE(sdsi.Act_Qty, 0) AS actQuantity,
+                	COALESCE(sdsi.Alt_Act_Qty, 0) AS unitQuantity,
+                	COALESCE(pck.Pack, '0') AS unitValue,
+                	COALESCE(p.Product_Rate, 0) AS itemRate,
+                	COALESCE(sdsi.Item_Rate, 0) AS billedRate
+                FROM tbl_Sales_Delivery_Stock_Info AS sdsi
+                LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON sdgi.Do_Id = sdsi.Delivery_Order_Id
+                WHERE sdgi.Do_Date = @reqDate AND sdgi.Cancel_status <> 0;
+            -- SALES STAFF DETAILS
+                SELECT 
+                	sdgi.Do_Id AS invId,
+                	stf.Emp_Id AS empId,
+                	stf.Emp_Type_Id AS empTypeId,
+                	e.Cost_Center_Name AS empName,
+                    cc.Cost_Category AS empType
+                FROM tbl_Sales_Delivery_Staff_Info AS stf
+                LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = stf.Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON sdgi.Do_Id = stf.Do_Id
+                WHERE 
+                	sdgi.Do_Date = @reqDate AND sdgi.Cancel_status <> 0
+                	AND cc.Cost_Category IN ('Broker', 'Load Man', 'Transport');`
+            );
+
+        const result = await request;
+
+        const [salesDetails, stockDetails, staffDetails] = result.recordsets;
+
+        const compiledData = salesDetails.map(inv => {
+            const products = stockDetails.filter(stock => isEqualNumber(stock.invId, inv.invId));
+            const staffs = staffDetails.filter(staff => isEqualNumber(staff.invId, inv.invId));
+
+            const productsDifference = products.map(product => {
+                return {
+                    ...product,
+                    quantityDifference: Subraction(product.billedQuantity, product.actQuantity),
+                    actUnitQuantity: Division(product.actQuantity, product.unitValue)
+                }
+            })
+
+            return {
+                ...inv,
+                productDetails: productsDifference,
+                staffDetails: staffs
+            }
+        });
+
+        sentData(res, compiledData);
     } catch (e) {
         servError(e, res);
     }

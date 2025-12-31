@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../../helper_functions.mjs';
+import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../../helper_functions.mjs';
 import { invalidInput, servError, dataFound, noData, success } from '../../../res.mjs';
 import { getNextId, getProducts } from '../../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../../middleware/taxCalculator.mjs';
@@ -7,7 +7,7 @@ import { getSalesInvoiceDetails } from './salesLRReport.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
-function buildBulkSalesRows(Product_Array, productsData, flags = {}) {
+function buildBulkSalesRows(Product_Array, productsData, flags = {}, packData = []) {
     const { isInclusive = false, isNotTaxableBill = false, isIGST = false, isSO = false } = flags;
 
     const stockRows = [];
@@ -32,8 +32,10 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}) {
         const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
         const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
 
+        const pack = toNumber(details?.Pack);
+
         const Act_Qty = toNumber(product?.Act_Qty) || Bill_Qty;
-        const Alt_Act_Qty = isSO ? toNumber(product?.Alt_Act_Qty) : Act_Qty;
+        const Alt_Act_Qty = isSO ? toNumber(product?.Alt_Act_Qty) : Division(Bill_Qty, pack);
 
         stockRows.push({
             S_No: index + 1,
@@ -155,7 +157,7 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
                     sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
-                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, 
+                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.gstNumber,
                     ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
                     ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
                     ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
@@ -254,7 +256,7 @@ export const createSalesInvoice = async (req, res) => {
             Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status = 1, Ref_Inv_Number = '',
             Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
-            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress,
+            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress, gstNumber = '',
             Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0
         } = req.body;
 
@@ -450,6 +452,7 @@ export const createSalesInvoice = async (req, res) => {
             .input('Delivery_Status', Delivery_Status)
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
+            .input('gstNumber', gstNumber)
 
             .input('Trans_Type', 'INSERT')
             .input('Alter_Id', sql.BigInt, Alter_Id)
@@ -463,14 +466,14 @@ export const createSalesInvoice = async (req, res) => {
                     GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
                     Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name,
                     Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number, deliveryAddressId,
-                    Delivery_Status, Payment_Mode, Payment_Status
+                    Delivery_Status, Payment_Mode, Payment_Status, gstNumber
                 ) VALUES (
                     @Do_Id, @Do_Inv_No, @Voucher_Type, @Do_No, @Do_Year,
                     @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
                     @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
                     @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Stock_Item_Ledger_Name,
                     @Trans_Type, @Alter_Id, @Created_by, @Created_on, @Ref_Inv_Number, @deliveryAddressId,
-                    @Delivery_Status, @Payment_Mode, @Payment_Status
+                    @Delivery_Status, @Payment_Mode, @Payment_Status, @gstNumber
                 )`
             );
 
@@ -741,7 +744,7 @@ export const updateSalesInvoice = async (req, res) => {
             Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status, Ref_Inv_Number = '',
             Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
-            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress,
+            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress, gstNumber = '',
             Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0
         } = req.body;
 
@@ -882,6 +885,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Delivery_Status', Delivery_Status)
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
+            .input('gstNumber', gstNumber)
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET 
@@ -910,7 +914,8 @@ export const updateSalesInvoice = async (req, res) => {
                     deliveryAddressId = @deliveryAddressId,
                     Delivery_Status = @Delivery_Status,
                     Payment_Mode = @Payment_Mode,
-                    Payment_Status = @Payment_Status
+                    Payment_Status = @Payment_Status,
+                    gstNumber = @gstNumber
                 WHERE
                     Do_Id = @Do_Id`
             );

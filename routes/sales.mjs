@@ -8,7 +8,7 @@ import {
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
 } from '../controller/Sales/salesInvoice/invoiceDependency.mjs';
-import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPrintOut, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice,deliverySlipPrintOut } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
+import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPrintOut, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice,deliverySlipPrintOut, salesInvoicePaper } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
 import salesReports from '../controller/Sales/reports.mjs';
 const SalesRouter = express.Router();
@@ -60,6 +60,9 @@ SalesRouter.get('/invoicesNumber',salesInvoice.getSalesOrderInvoice)
 SalesRouter.get('/salesInvoice/lrReport', getSalesInvoiceForAssignCostCenter);
 SalesRouter.post('/salesInvoice/lrReport', postAssignCostCenterToSalesInvoice);
 SalesRouter.post('/salesInvoice/lrReport/multiple', multipleSalesInvoiceStaffUpdate);
+
+// sales Invoice Paper
+SalesRouter.get('/salesInvoice/salesInvoicePaper', salesInvoicePaper);
 
 // sales print out routes
 SalesRouter.get('/salesInvoice/printOuts/katchath', katchathCopyPrintOut);

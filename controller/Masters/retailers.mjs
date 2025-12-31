@@ -144,7 +144,8 @@ const RetailerControll = () => {
                     SELECT 
                         Retailer_Id,
                         Retailer_Name,
-                        Reatailer_Address
+                        Reatailer_Address,
+                        COALESCE(Gstno, '') AS Gstno
                     FROM tbl_Retailers_Master
                     WHERE Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
                     -- getting retailer gen info
