@@ -35,7 +35,7 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}, packData = 
         const pack = toNumber(details?.Pack);
 
         const Act_Qty = toNumber(product?.Act_Qty) || Bill_Qty;
-        const Alt_Act_Qty = isSO ? toNumber(product?.Alt_Act_Qty) : Division(Bill_Qty, pack);
+        const Alt_Act_Qty = isSO ? toNumber(product?.Alt_Act_Qty) : Division(Act_Qty, pack);
 
         stockRows.push({
             S_No: index + 1,
