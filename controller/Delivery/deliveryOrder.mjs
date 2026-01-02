@@ -2415,8 +2415,6 @@ SELECT
             sgi.So_No,
             rm.Retailer_Name,
             sgi.Do_Date AS Product_Do_Date,
-            lol.Party_Mailing_Name,
-              lol.Party_Location,
             (
                 SELECT
                     sdsi.DO_St_Id,
@@ -2459,8 +2457,8 @@ SELECT
                     rm2.Retailer_Name,
                     rm2.Latitude,
                     rm2.Longitude,
-                     lol.Party_Mailing_Name,
-              lol.Party_Location,
+                    sda.deliveryName as Party_Mailing_Name,
+                    sda.cityName as Party_Location,
                     (
                         SELECT
                             ssi.Id,
@@ -2480,13 +2478,12 @@ SELECT
                 LEFT JOIN tbl_Pack_Master ppm ON ppm.Pack_Id =pm.Pack_Id
                 LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
                 LEFT JOIN tbl_Retailers_Master rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
-                 LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = rm.Retailer_Id
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sgi2.deliveryAddressId
                 WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
                 FOR JSON PATH
             ) AS Products_List
         FROM tbl_Sales_Delivery_Gen_Info sgi
         LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sgi.Retailer_Id
-          LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = rm.Retailer_Id
         WHERE sgi.Do_Id IN (
             SELECT td.Delivery_Id
             FROM TRIP_DETAILS td
