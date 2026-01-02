@@ -175,7 +175,8 @@ export const getSalesInvoice = async (req, res) => {
                     ON cb.UserId = sdgi.Created_by
                 LEFT JOIN tbl_Voucher_Type AS v
                     ON v.Vocher_Type_Id = sdgi.Voucher_Type
-                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
+                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+                ORDER BY  sdgi.Do_Id desc;
                 -- product details
                 SELECT
                     oi.*,
