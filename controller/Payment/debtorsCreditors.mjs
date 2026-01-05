@@ -174,7 +174,7 @@ const DebitorsCreditors = () => {
         request.input('Todate', sql.NVarChar(200), toDate);
         request.input('Acc_Id', sql.Int, accountId);
 
-        const result = await request.execute('Transaction_Report_vw_By_Acc_Id');
+        const result = await request.execute('Transaction_Report_vw_By_Acc_Id_1');
 
         if (result.recordset && result.recordset.length > 0) {
             return sentData(res, result.recordset);
