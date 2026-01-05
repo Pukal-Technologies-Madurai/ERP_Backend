@@ -101,8 +101,8 @@ const getAccountPendingReference = async (req, res) => {
                         pig.Cancel_status <> 0
                         AND a.Acc_Id = @Acc_Id
                         AND pig.Do_Date >= @OB_Date
-                        AND TRIM(COALESCE(pig.Ref_Inv_Number, '')) NOT IN (
-                            SELECT TRIM(COALESCE(Po_Inv_No, '')) 
+                        AND pig.Do_Inv_No NOT IN (
+                            SELECT TRIM(COALESCE(Ref_Po_Inv_No, '')) 
                             FROM tbl_Purchase_Order_Inv_Gen_Info
                             WHERE Po_Entry_Date >= @OB_Date
                         )
@@ -149,7 +149,7 @@ const getAccountPendingReference = async (req, res) => {
                         AND cb.Retailer_id = @Acc_Id
                         AND cb.cr_amount = 0
                         AND TRIM(COALESCE(cb.bill_no, '')) NOT IN (
-                            SELECT TRIM(COALESCE(Po_Inv_No, '')) 
+                            SELECT TRIM(COALESCE(Ref_Po_Inv_No, '')) 
                             FROM tbl_Purchase_Order_Inv_Gen_Info
                             WHERE Po_Entry_Date >= @OB_Date
                         )
@@ -250,8 +250,8 @@ const getAccountPendingReference = async (req, res) => {
                         pig.Cancel_status = 0
                         AND a.Acc_Id = @Acc_Id
                         AND pig.Po_Entry_Date >= @OB_Date
-                        AND TRIM(COALESCE(pig.Ref_Po_Inv_No, '')) NOT IN (
-							SELECT TRIM(COALESCE(Do_Inv_No, '')) 
+                        AND pig.Po_Inv_No NOT IN (
+							SELECT TRIM(COALESCE(Ref_Inv_Number, '')) 
 							FROM tbl_Sales_Delivery_Gen_Info
 							WHERE Do_Date >= @OB_Date
 						)
@@ -297,8 +297,8 @@ const getAccountPendingReference = async (req, res) => {
                         cb.OB_date >= @OB_Date
                         AND cb.Retailer_id = @Acc_Id
                         AND cb.dr_amount = 0
-                        AND TRIM(COALESCE(cb.bill_no, '')) NOT IN (
-							SELECT TRIM(COALESCE(Do_Inv_No, '')) 
+                        AND cb.bill_no NOT IN (
+							SELECT TRIM(COALESCE(Ref_Inv_Number, '')) 
 							FROM tbl_Sales_Delivery_Gen_Info
 							WHERE Do_Date >= @OB_Date
 						)

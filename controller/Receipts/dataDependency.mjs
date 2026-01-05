@@ -80,6 +80,16 @@ const ReceiptDataDependency = () => {
                 .input('Todate', Todate)
                 .query(`
                     DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
+                --filtering sales returns
+                    DECLARE @PurchaseInvoiceNumber TABLE (invNumber NVARCHAR(50) NOT NULL);
+                    INSERT INTO @PurchaseInvoiceNumber (invNumber)
+                    SELECT DISTINCT Ref_Po_Inv_No 
+                    FROM tbl_Purchase_Order_Inv_Gen_Info
+                    WHERE 
+                        Po_Entry_Date >= @OB_Date
+                    	AND Ref_Po_Inv_No IS NOT NULL
+                    	AND TRIM(COALESCE(Ref_Po_Inv_No, '')) <> ''
+                -- outstandings
                     SELECT 
                     	inv.*,
                     	inv.Paid_Amount + inv.journalAdjustment AS totalReference
@@ -127,6 +137,7 @@ const ReceiptDataDependency = () => {
                             pig.Cancel_status <> 0
                             AND a.Acc_Id = @Acc_Id
                             AND pig.Do_Date >= @OB_Date
+                    		AND	pig.Do_Inv_No NOT IN (SELECT invNumber FROM @PurchaseInvoiceNumber)
                         UNION ALL
                     -- from opening balance
                         SELECT 
@@ -168,6 +179,7 @@ const ReceiptDataDependency = () => {
                             cb.OB_date >= @OB_Date 
                             AND cb.Retailer_id = @Acc_Id 
                             AND cb.cr_amount = 0
+                    		AND cb.bill_no NOT IN (SELECT invNumber FROM @PurchaseInvoiceNumber)
                     	UNION ALL
                     -- Payment outstanding
                     	SELECT
@@ -257,11 +269,6 @@ const ReceiptDataDependency = () => {
                     ) AS inv
                     WHERE 
                         inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
-                        AND TRIM(COALESCE(inv.bill_ref_number, '')) NOT IN (
-                            SELECT TRIM(COALESCE(Po_Inv_No, '')) 
-                            FROM tbl_Purchase_Order_Inv_Gen_Info
-                            WHERE Po_Entry_Date >= @OB_Date
-                        )
                     ORDER BY inv.Do_Date ASC;`
                 );
 

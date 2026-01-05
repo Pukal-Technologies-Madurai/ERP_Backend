@@ -124,12 +124,12 @@ const PaymentDataDependency = () => {
                     );
                     DECLARE @SalesInvoiceNumber TABLE (invNumber NVARCHAR(50) NOT NULL);
                     INSERT INTO @SalesInvoiceNumber (invNumber)
-                    SELECT DISTINCT Do_Inv_No 
+                    SELECT DISTINCT Ref_Inv_Number 
                     FROM tbl_Sales_Delivery_Gen_Info
                     WHERE 
                     	Do_Date >= @OB_Date
-                    	AND Do_Inv_No IS NOT NULL
-                    	AND TRIM(COALESCE(Do_Inv_No, '')) <> ''
+                    	AND Ref_Inv_Number IS NOT NULL
+                    	AND TRIM(COALESCE(Ref_Inv_Number, '')) <> ''
                     SELECT 
                     	inv.*,
                     	inv.Paid_Amount + inv.journalAdjustment AS totalReference
@@ -177,7 +177,7 @@ const PaymentDataDependency = () => {
                             pig.Cancel_status = 0
                             AND a.Acc_Id = @Acc_Id
                             AND pig.Po_Entry_Date >= @OB_Date
-                    		AND TRIM(COALESCE(pig.Ref_Po_Inv_No, '')) NOT IN (SELECT invNumber FROM @SalesInvoiceNumber)
+                    		AND pig.Po_Inv_No NOT IN (SELECT invNumber FROM @SalesInvoiceNumber)
                         UNION ALL
                     -- from purchase invoice
                         SELECT 
@@ -219,7 +219,7 @@ const PaymentDataDependency = () => {
                             cb.OB_date >= @OB_Date 
                             AND cb.Retailer_id = @Acc_Id 
                             AND cb.dr_amount = 0
-                    		AND TRIM(COALESCE(cb.bill_no, '')) NOT IN (SELECT invNumber FROM @SalesInvoiceNumber)
+                    		AND cb.bill_no NOT IN (SELECT invNumber FROM @SalesInvoiceNumber)
                     	UNION ALL
                     -- receipt outstanding
                     	SELECT 
