@@ -10,7 +10,7 @@ import { connectDB } from './config/dbconfig.mjs';
 import dotenv from 'dotenv';
 import { listRoutes } from './middleware/apiList.mjs';
 import { failed } from './res.mjs';
-import { staticPaths } from './staticPaths.mjs'
+import { staticPaths } from './staticPaths.mjs';
 import crypto from "node:crypto";
 
 dotenv.config();
