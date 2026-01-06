@@ -137,8 +137,8 @@ const los = () => {
                 .input('Active', sql.Bit, Active || null)
                 .input('POS_Item_Name', sql.VarChar, POS_Item_Name || null)
                 .input('Item_Group_Id', sql.Int, Item_Group_Id || null)
-                .input('Auto_Id', sql.Int, Auto_Id);
-
+                .input('Auto_Id', sql.Int, Auto_Id)
+                 .input('IsUpdated', 1);
             const stockResult = await stockRequest.query(`
                 UPDATE tbl_Stock_LOS
                 SET 
@@ -154,8 +154,9 @@ const los = () => {
                     POS_Group = @POS_Group,
                     Active = @Active,
                     POS_Item_Name = @POS_Item_Name,
-                    Item_Group_Id = @Item_Group_Id
-                WHERE Auto_Id = @Auto_Id;`
+                    Item_Group_Id = @Item_Group_Id,
+                    IsUpdated = @IsUpdated
+                   WHERE Auto_Id = @Auto_Id;`
             );
 
             if (stockResult.rowsAffected[0] === 0) {

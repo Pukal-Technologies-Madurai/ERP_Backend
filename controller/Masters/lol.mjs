@@ -152,6 +152,7 @@ const lol = () => {
                 .input('GST_No', GST_No || null)
                 .input('Route_Name', Route_Name || null)
                 .input('Auto_Id', sql.Int, Auto_Id)
+                .input('IsUpdated', 1)
                 .query(`
                    UPDATE tbl_Ledger_LOL 
                    SET 
@@ -179,7 +180,9 @@ const lol = () => {
                        A4 = @A4,
                        A5 = @A5,
                        GST_No=@GST_No,
-                       Route_Name=@Route_Name
+                       Route_Name=@Route_Name,
+                       IsUpdated=@IsUpdated
+
                    WHERE Ledger_Tally_Id = @Ledger_Tally_Id`
                 );
 
