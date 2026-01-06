@@ -262,7 +262,7 @@ export const invoiceCopyPrintOut = async (req, res) => {
                     sdgi.Do_Inv_No voucherNumber,
                 	v.Voucher_Type voucherTypeGet, 
                 	r.Retailer_Name retailerNameGet,
-                	ISNULL(sdgi.gstNumber, r.Gstno) retailerGstNumber,
+                	ISNULL(sda.gstNumber, r.Gstno) retailerGstNumber,
                 	cb.Name createdByGet,
                 	sdgi.Created_on createdOn,
                 	sda.deliveryName mailingName,

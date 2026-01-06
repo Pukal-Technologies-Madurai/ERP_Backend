@@ -155,7 +155,9 @@ const RetailerControll = () => {
                         deliveryName,
                         phoneNumber,
                         cityName,
-                        deliveryAddress 
+                        deliveryAddress,
+                        gstNumber,
+                        stateName
                     FROM tbl_Sales_Delivery_Address 
                     WHERE retailerId IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);`
                 );

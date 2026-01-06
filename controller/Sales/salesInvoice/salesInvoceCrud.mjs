@@ -3,7 +3,6 @@ import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOS
 import { invalidInput, servError, dataFound, noData, success } from '../../../res.mjs';
 import { getNextId, getProducts } from '../../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../../middleware/taxCalculator.mjs';
-import { getSalesInvoiceDetails } from './salesLRReport.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
@@ -81,7 +80,11 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}, packData = 
     return { stockRows, batchRows };
 }
 
-const createRetailerDeliveryAddress = async ({ retailerId, deliveryName, phoneNumber, cityName, deliveryAddress, transaction }) => {
+const createRetailerDeliveryAddress = async ({
+    retailerId, deliveryName, phoneNumber,
+    cityName, deliveryAddress, transaction,
+    gstNumber, stateName
+}) => {
     try {
         const request = new sql.Request(transaction)
             .input('retailerId', toNumber(retailerId))
@@ -89,11 +92,13 @@ const createRetailerDeliveryAddress = async ({ retailerId, deliveryName, phoneNu
             .input('phoneNumber', phoneNumber)
             .input('cityName', cityName)
             .input('deliveryAddress', deliveryAddress)
+            .input('gstNumber', gstNumber)
+            .input('stateName', stateName)
             .query(`
                 INSERT INTO tbl_Sales_Delivery_Address (
-                    retailerId, deliveryName, phoneNumber, cityName, deliveryAddress
+                    retailerId, deliveryName, phoneNumber, cityName, deliveryAddress, gstNumber, stateName
                 ) VALUES (
-                    @retailerId, @deliveryName, @phoneNumber, @cityName, @deliveryAddress
+                    @retailerId, @deliveryName, @phoneNumber, @cityName, @deliveryAddress, @gstNumber, @stateName
                 );
                 SELECT SCOPE_IDENTITY() AS DeliveryAddressId;`
             );
@@ -157,7 +162,7 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
                     sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
-                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.gstNumber,
+                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
                     ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
                     ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
                     ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
@@ -257,7 +262,7 @@ export const createSalesInvoice = async (req, res) => {
             Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status = 1, Ref_Inv_Number = '',
             Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
-            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress, gstNumber = '',
+            deliveryAddressDetails = {}, shipingAddressDetails = {},
             Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0
         } = req.body;
 
@@ -404,15 +409,24 @@ export const createSalesInvoice = async (req, res) => {
         // const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
 
         await transaction.begin();
-        let delivery_id_to_post = delivery_id;
+        let delivery_id_to_post = deliveryAddressDetails.delivery_id;
+        let shiping_id_to_post = shipingAddressDetails.shiping_id;
 
-        if (!checkIsNumber(delivery_id) && (deliveryName || phoneNumber || cityName || deliveryAddress)) {
+        if (
+            !checkIsNumber(deliveryAddressDetails.delivery_id)
+            && (
+                deliveryAddressDetails.deliveryName || deliveryAddressDetails.phoneNumber
+                || deliveryAddressDetails.cityName || deliveryAddressDetails.deliveryAddress
+                || deliveryAddressDetails.gstNumber || deliveryAddressDetails.stateName
+            )) {
             const newDeliveryId = await createRetailerDeliveryAddress({
                 retailerId: Retailer_Id,
-                deliveryName: String(deliveryName),
-                phoneNumber: String(phoneNumber),
-                cityName: String(cityName),
-                deliveryAddress: String(deliveryAddress),
+                deliveryName: String(deliveryAddressDetails.deliveryName),
+                phoneNumber: String(deliveryAddressDetails.phoneNumber),
+                cityName: String(deliveryAddressDetails.cityName),
+                deliveryAddress: String(deliveryAddressDetails.deliveryAddress),
+                gstNumber: String(deliveryAddressDetails.gstNumber),
+                stateName: String(deliveryAddressDetails.stateName),
                 transaction
             });
 
@@ -420,6 +434,30 @@ export const createSalesInvoice = async (req, res) => {
                 throw new Error('Failed to create delivery address');
             }
             delivery_id_to_post = newDeliveryId;
+        }
+
+        if (
+            !checkIsNumber(shipingAddressDetails.delivery_id)
+            && (
+                shipingAddressDetails.deliveryName || shipingAddressDetails.phoneNumber
+                || shipingAddressDetails.cityName || shipingAddressDetails.deliveryAddress
+                || shipingAddressDetails.gstNumber || shipingAddressDetails.stateName
+            )) {
+            const newShipingId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(shipingAddressDetails.deliveryName),
+                phoneNumber: String(shipingAddressDetails.phoneNumber),
+                cityName: String(shipingAddressDetails.cityName),
+                deliveryAddress: String(shipingAddressDetails.deliveryAddress),
+                gstNumber: String(shipingAddressDetails.gstNumber),
+                stateName: String(shipingAddressDetails.stateName),
+                transaction
+            });
+
+            if (!checkIsNumber(newShipingId)) {
+                throw new Error('Failed to create shiping address');
+            }
+            shiping_id_to_post = newShipingId;
         }
 
         const request = new sql.Request(transaction)
@@ -453,13 +491,13 @@ export const createSalesInvoice = async (req, res) => {
             .input('Delivery_Status', Delivery_Status)
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
-            .input('gstNumber', gstNumber)
 
             .input('Trans_Type', 'INSERT')
             .input('Alter_Id', sql.BigInt, Alter_Id)
             .input('Created_by', sql.BigInt, Created_by)
             .input('Created_on', sql.DateTime, new Date())
             .input('deliveryAddressId', delivery_id_to_post)
+            .input('shipingAddressId', shiping_id_to_post)
             .query(`
                 INSERT INTO tbl_Sales_Delivery_Gen_Info (
                     Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year, 
@@ -467,14 +505,14 @@ export const createSalesInvoice = async (req, res) => {
                     GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
                     Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name,
                     Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number, deliveryAddressId,
-                    Delivery_Status, Payment_Mode, Payment_Status, gstNumber
+                    Delivery_Status, Payment_Mode, Payment_Status, shipingAddressId
                 ) VALUES (
                     @Do_Id, @Do_Inv_No, @Voucher_Type, @Do_No, @Do_Year,
                     @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
                     @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
                     @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Stock_Item_Ledger_Name,
                     @Trans_Type, @Alter_Id, @Created_by, @Created_on, @Ref_Inv_Number, @deliveryAddressId,
-                    @Delivery_Status, @Payment_Mode, @Payment_Status, @gstNumber
+                    @Delivery_Status, @Payment_Mode, @Payment_Status, @shipingAddressId
                 )`
             );
 
@@ -745,7 +783,7 @@ export const updateSalesInvoice = async (req, res) => {
             Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status, Ref_Inv_Number = '',
             Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
-            delivery_id, deliveryName, phoneNumber, cityName, deliveryAddress, gstNumber = '',
+            deliveryAddressDetails = {}, shipingAddressDetails = {},
             Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0
         } = req.body;
 
@@ -841,14 +879,23 @@ export const updateSalesInvoice = async (req, res) => {
         await transaction.begin();
 
         let delivery_id_to_post = delivery_id;
+        let shiping_id_to_post = shiping_id;
 
-        if (!checkIsNumber(delivery_id) && (deliveryName || phoneNumber || cityName || deliveryAddress)) {
+        if (
+            !checkIsNumber(deliveryAddressDetails.delivery_id)
+            && (
+                deliveryAddressDetails.deliveryName || deliveryAddressDetails.phoneNumber
+                || deliveryAddressDetails.cityName || deliveryAddressDetails.deliveryAddress
+                || deliveryAddressDetails.gstNumber || deliveryAddressDetails.stateName
+            )) {
             const newDeliveryId = await createRetailerDeliveryAddress({
                 retailerId: Retailer_Id,
-                deliveryName: String(deliveryName),
-                phoneNumber: String(phoneNumber),
-                cityName: String(cityName),
-                deliveryAddress: String(deliveryAddress),
+                deliveryName: String(deliveryAddressDetails.deliveryName),
+                phoneNumber: String(deliveryAddressDetails.phoneNumber),
+                cityName: String(deliveryAddressDetails.cityName),
+                deliveryAddress: String(deliveryAddressDetails.deliveryAddress),
+                gstNumber: String(deliveryAddressDetails.gstNumber),
+                stateName: String(deliveryAddressDetails.stateName),
                 transaction
             });
 
@@ -856,6 +903,30 @@ export const updateSalesInvoice = async (req, res) => {
                 throw new Error('Failed to create delivery address');
             }
             delivery_id_to_post = newDeliveryId;
+        }
+
+        if (
+            !checkIsNumber(shipingAddressDetails.delivery_id)
+            && (
+                shipingAddressDetails.deliveryName || shipingAddressDetails.phoneNumber
+                || shipingAddressDetails.cityName || shipingAddressDetails.deliveryAddress
+                || shipingAddressDetails.gstNumber || shipingAddressDetails.stateName
+            )) {
+            const newShipingId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(shipingAddressDetails.deliveryName),
+                phoneNumber: String(shipingAddressDetails.phoneNumber),
+                cityName: String(shipingAddressDetails.cityName),
+                deliveryAddress: String(shipingAddressDetails.deliveryAddress),
+                gstNumber: String(shipingAddressDetails.gstNumber),
+                stateName: String(shipingAddressDetails.stateName),
+                transaction
+            });
+
+            if (!checkIsNumber(newShipingId)) {
+                throw new Error('Failed to create shiping address');
+            }
+            shiping_id_to_post = newShipingId;
         }
 
         const request = new sql.Request(transaction)
@@ -886,7 +957,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Delivery_Status', Delivery_Status)
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
-            .input('gstNumber', gstNumber)
+            .input('shipingAddressId', shipingAddressId)
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET 
@@ -916,7 +987,7 @@ export const updateSalesInvoice = async (req, res) => {
                     Delivery_Status = @Delivery_Status,
                     Payment_Mode = @Payment_Mode,
                     Payment_Status = @Payment_Status,
-                    gstNumber = @gstNumber
+                    shipingAddressId = @shipingAddressId
                 WHERE
                     Do_Id = @Do_Id`
             );
