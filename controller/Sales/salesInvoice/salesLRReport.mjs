@@ -21,6 +21,7 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 
                     Do_Date = @reqDate
+                    AND Cancel_status <> 0
                     ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
                 SELECT 
                     gen.Do_Id,
@@ -424,8 +425,6 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
 //         servError(e, res);
 //     }
 // }
-
-
 
 export const deliverySlipPrintOut = async (req, res) => {
     try {

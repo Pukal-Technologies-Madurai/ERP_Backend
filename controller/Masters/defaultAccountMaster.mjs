@@ -19,7 +19,8 @@ const getDefaultAccounts = async (req, res) => {
                     dc.Type,
                     am.Account_Name,
                     am.Group_Id,
-                    ag.Group_Name
+                    ag.Group_Name,
+                    COALESCE(am.percentageValue, 0) AS percentageValue
                 FROM tbl_Default_AC_Master AS dc
                 JOIN tbl_Account_Master AS am
                     ON am.Acc_Id = dc.Acc_Id

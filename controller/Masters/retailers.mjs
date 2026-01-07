@@ -142,12 +142,16 @@ const RetailerControll = () => {
                     WHERE isRetailer = @isRetailer AND isVendor = @isVendor;  
                     -- getting retailers
                     SELECT 
-                        Retailer_Id,
-                        Retailer_Name,
-                        Reatailer_Address,
-                        COALESCE(Gstno, '') AS Gstno
-                    FROM tbl_Retailers_Master
-                    WHERE Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
+                        r.Retailer_Id,
+                        r.Retailer_Name,
+                        r.Reatailer_Address,
+                        COALESCE(r.Gstno, '') AS Gstno,
+                    	COALESCE(a.creditLimit, 0) AS creditLimit,
+                    	COALESCE(a.creditDays, 0) AS creditDays,
+                    	COALESCE(a.percentageValue, 0) AS percentageValue
+                    FROM tbl_Retailers_Master AS r
+                    LEFT JOIN tbl_Account_Master AS a ON a.Acc_Id = r.AC_Id 
+                    WHERE r.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
                     -- getting retailer gen info
                     SELECT 
                         id,
