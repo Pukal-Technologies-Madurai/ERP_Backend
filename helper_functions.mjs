@@ -458,6 +458,18 @@ export const checkIsNumber = (num) => {
     return (num !== '' && num !== null && num !== undefined) ? isNaN(num) ? false : true : false
 }
 
+export const isValidNumber = (num) => {
+    return checkIsNumber(num) && Number(num) !== 0
+}
+
+export const isPositiveNumber = (num) => {
+    return checkIsNumber(num) && Number(num) > 0
+}
+
+export const isNegativeNumber = (num) => {
+    return checkIsNumber(num) && Number(num) < 0
+}
+
 export const isValidJSON = (str) => {
     try {
         JSON.parse(str);
