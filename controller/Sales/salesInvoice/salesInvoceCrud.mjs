@@ -878,8 +878,8 @@ export const updateSalesInvoice = async (req, res) => {
 
         await transaction.begin();
 
-        let delivery_id_to_post = delivery_id;
-        let shiping_id_to_post = shiping_id;
+        let delivery_id_to_post = deliveryAddressDetails.delivery_id;
+        let shiping_id_to_post = shipingAddressDetails.shiping_id;
 
         if (
             !checkIsNumber(deliveryAddressDetails.delivery_id)
