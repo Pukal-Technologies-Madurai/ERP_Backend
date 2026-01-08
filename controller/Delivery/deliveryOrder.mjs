@@ -3313,7 +3313,12 @@ TRANSPORTER_INFO AS (
 )
 SELECT 
     sdgi.*,
-    COALESCE(rm.Retailer_Name, '') AS Retailer_Name,
+     COALESCE(sda.deliveryName, '') AS Retailer_Name,
+    COALESCE(sda.deliveryAddress, '') AS Delivery_Address,
+    COALESCE(sda.cityName, '') AS City_Name,
+    COALESCE(sda.stateName, '') AS State_Name,
+    COALESCE(sda.phoneNumber, '') AS Phone_Number,
+    COALESCE(sda.gstNumber, '') AS GST_Number,
     COALESCE(sp.Name, '') AS Sales_Person_Name,
     COALESCE(bm.BranchName, '') AS Branch_Name,
     COALESCE(cb.Name, '') AS Created_BY_Name,
@@ -3368,7 +3373,7 @@ SELECT
             sd.*,
             sdgi.Do_Inv_No,
             COALESCE(ti.Transporter_Name, '') AS Transporter_Name,
-            COALESCE(rm.Retailer_Name, '') AS Retailer_Name
+              COALESCE(sda.deliveryName, '') AS Retailer_Name
         FROM DELIVERY_DETAILS AS sd
         LEFT JOIN TRANSPORTER_INFO ti ON ti.Do_Id = sdgi.Do_Id
         WHERE sd.Delivery_Order_Id = sdgi.Do_Id
@@ -3377,6 +3382,7 @@ SELECT
 FROM 
     tbl_Sales_Delivery_Gen_Info AS sdgi
 LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No 
+LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId 
 LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
 LEFT JOIN tbl_Users AS sp ON sp.UserId = sogi.Sales_Person_Id 
 LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
