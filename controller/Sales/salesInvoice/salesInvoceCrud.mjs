@@ -410,7 +410,7 @@ export const createSalesInvoice = async (req, res) => {
 
         await transaction.begin();
         let delivery_id_to_post = deliveryAddressDetails.delivery_id;
-        let shiping_id_to_post = shipingAddressDetails.shiping_id;
+        let shiping_id_to_post = shipingAddressDetails.delivery_id;
 
         if (
             !checkIsNumber(deliveryAddressDetails.delivery_id)
@@ -879,7 +879,7 @@ export const updateSalesInvoice = async (req, res) => {
         await transaction.begin();
 
         let delivery_id_to_post = deliveryAddressDetails.delivery_id;
-        let shiping_id_to_post = shipingAddressDetails.shiping_id;
+        let shiping_id_to_post = shipingAddressDetails.delivery_id;
 
         if (
             !checkIsNumber(deliveryAddressDetails.delivery_id)

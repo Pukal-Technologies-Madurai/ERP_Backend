@@ -66,26 +66,12 @@ const ReceiptDataDependency = () => {
 
     const getPendingReceipts = async (req, res) => {
         try {
-            const { Acc_Id, Retailer_id } = req.query;
+            const { Acc_Id } = req.query;
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
             const reqDate = req.query?.reqDate ? ISOString(req.query?.reqDate) : ISOString();
 
-            if (!isValidNumber(Acc_Id) && !isValidNumber(Retailer_id)) return invalidInput(res, 'Acc_Id or Retailer_id is required');
-
-            let accountIDToUse = Acc_Id;
-            if (isValidNumber(Retailer_id) && !isValidNumber(Acc_Id)) {
-                const getRetailerAccountId = await new sql.Request()
-                    .input('Retailer_Id', Retailer_id)
-                    .query(`
-                        SELECT AC_Id
-                        FROM tbl_Retailers_Master
-                        WHERE Retailer_Id = @Retailer_Id; `);
-
-                if (getRetailerAccountId.recordset.length > 0) {
-                    accountIDToUse = getRetailerAccountId.recordset[0].AC_Id;
-                }
-            }
+            if (!isValidNumber(Acc_Id)) return invalidInput(res, 'Acc_Id is required');
 
             const request = new sql.Request()
                 .input('Acc_Id', Acc_Id)
