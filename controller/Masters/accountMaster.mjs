@@ -39,6 +39,9 @@ const accountMaster = () => {
                         a.Account_name,
                         a.Group_Id,
                         COALESCE(ag.Group_Name, 'Not found') AS Group_Name
+                        a.creditLimit,
+                        a.creditDays,
+                        a.percentageValue
                     FROM tbl_Account_Master AS a 
                     LEFT JOIN tbl_Accounting_Group AS ag
                         ON ag.Group_Id = a.Group_Id
@@ -67,6 +70,9 @@ const accountMaster = () => {
                         a.Account_name,
                         a.Account_Alias_Name,
                         a.Group_Id,
+                        a.creditLimit,
+                        a.creditDays,
+                        a.percentageValue,
                         COALESCE(ag.Group_Name, 'Not found') AS Group_Name
                     FROM tbl_Account_Master AS a 
                     LEFT JOIN tbl_Accounting_Group AS ag
@@ -151,7 +157,10 @@ const accountMaster = () => {
                 Account_name,
                 Account_Alias_Name,
                 Group_Id,
-                Created_By
+                Created_By,
+                creditLimit,
+                creditDays,
+                percentageValue
             } = req.body;
             if (!Account_name || !Group_Id) {
                 return invalidInput(res, 'Account_name, Group_Id, and Created_By are required');
@@ -170,16 +179,19 @@ const accountMaster = () => {
                 .input('Account_name', sql.VarChar, Account_name)
                 .input('Account_Alias_Name', sql.VarChar, Account_Alias_Name)
                 .input('Group_Id', sql.Int, Group_Id)
+                .input('creditLimit', sql.Decimal(18, 2), parseFloat(creditLimit) || 0) 
+                .input('percentageValue', sql.Decimal(5, 2), parseFloat(percentageValue) || 0) 
+                .input('creditDays', sql.Int, parseInt(creditDays) || 0)
                 .input('Alter_Id', sql.Int, Alter_Id)
                 .input('Created_By', sql.VarChar, Created_By)
                 .input('Created_Time', sql.DateTime, Created_Time)
 
             await insertRequest.query(`
                 INSERT INTO tbl_Account_Master (
-                    Acc_Id, Account_name, Account_Alias_Name, Group_Id,
+                    Acc_Id, Account_name, Account_Alias_Name, Group_Id,creditLimit,percentageValue,creditDays
                     Alter_Id, Created_By, Created_Time
                 ) VALUES (
-                    @Acc_Id, @Account_name, @Account_Alias_Name, @Group_Id,
+                    @Acc_Id, @Account_name, @Account_Alias_Name, @Group_Id,@creditLimit,@percentageValue,@creditDays
                     @Alter_Id, @Created_By, @Created_Time
                 );`
             );
@@ -198,7 +210,10 @@ const accountMaster = () => {
                 Account_name,
                 Account_Alias_Name,
                 Group_Id,
-                Alter_By
+                Alter_By,
+                   creditLimit,
+                creditDays,
+                percentageValue
             } = req.body;
 
 
@@ -213,6 +228,9 @@ const accountMaster = () => {
                 .input('Account_name', sql.NVarChar, Account_name)
                 .input('Account_Alias_Name', sql.NVarChar, Account_Alias_Name)
                 .input('Group_Id', sql.Int, Number(Group_Id))
+                .input('creditLimit', sql.Decimal(18, 2), parseFloat(creditLimit) || 0) 
+                .input('creditDays', sql.Int, parseInt(creditDays) || 0) 
+                .input('percentageValue', sql.Decimal(5, 2), parseFloat(percentageValue) || 0)
                 .input('Alter_Id', sql.Int, Alter_Id)
                 .input('Alter_By', sql.Int, Number(Alter_By))
                 .input('Alter_Time', sql.DateTime, new Date());
@@ -223,6 +241,9 @@ const accountMaster = () => {
                 Account_name = @Account_name,
                 Account_Alias_Name = @Account_Alias_Name,
                 Group_Id = @Group_Id,
+                creditLimit=@creditLimit,
+                creditDays=@creditDays,
+                percentageValue=@percentageValue,
                 Alter_Id = @Alter_Id,
                 Alter_By = @Alter_By,
                 Alter_Time = @Alter_Time
