@@ -957,7 +957,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Delivery_Status', Delivery_Status)
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
-            .input('shipingAddressId', shipingAddressId)
+            .input('shipingAddressId', shiping_id_to_post)
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET 

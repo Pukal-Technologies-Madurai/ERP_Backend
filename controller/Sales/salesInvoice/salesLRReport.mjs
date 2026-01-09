@@ -21,7 +21,6 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 
                     Do_Date = @reqDate
-                    AND Cancel_status <> 0
                     ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
                 SELECT 
                     gen.Do_Id,
@@ -30,7 +29,10 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                     vt.Voucher_Type AS voucherTypeGet,
                     gen.Do_Date,
                     gen.Retailer_Id,
-                    r.Retailer_Name AS retailerNameGet,
+                    CASE  
+                        WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
+                        ELSE r.Retailer_Name
+                    END AS retailerNameGet,
                     gen.Branch_Id,
                     b.BranchName AS branchNameGet,
                     gen.Total_Invoice_value,
@@ -141,23 +143,37 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
             return;
         }
 
-        const { CostCategory, Do_Id, involvedStaffs } = req.body;
+        const { CostCategory, Do_Id, involvedStaffs, staffInvolvedStatus = 0 } = req.body;
         const invoiceIdsStr = Do_Id.join(',');
 
         await transaction.begin();
 
         await new sql.Request(transaction)
             .input('invoiceIds', sql.NVarChar(sql.MAX), invoiceIdsStr)
-            .input('Emp_Type_Id', sql.Int, CostCategory)
+            .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
             .query(`
-                DELETE FROM tbl_Sales_Delivery_Staff_Info
-                WHERE 
-                    Do_Id IN (
-                        SELECT CAST(value AS INT)
-                        FROM STRING_SPLIT(@invoiceIds, ',')
-                    )
-                    AND Emp_Type_Id = @Emp_Type_Id;`
+                UPDATE tbl_Sales_Delivery_Gen_Info
+                SET staffInvolvedStatus = @staffInvolvedStatus
+                WHERE Do_Id IN (
+                    SELECT CAST(value AS INT)
+                    FROM STRING_SPLIT(@invoiceIds, ',')
+                );`
             );
+
+        if (Do_Id.length > 0 && CostCategory) {
+            await new sql.Request(transaction)
+                .input('invoiceIds', sql.NVarChar(sql.MAX), invoiceIdsStr)
+                .input('Emp_Type_Id', sql.Int, CostCategory)
+                .query(`
+                    DELETE FROM tbl_Sales_Delivery_Staff_Info
+                    WHERE 
+                        Do_Id IN (
+                            SELECT CAST(value AS INT)
+                            FROM STRING_SPLIT(@invoiceIds, ',')
+                        )
+                        AND Emp_Type_Id = @Emp_Type_Id;`
+                );
+        }
 
         if (involvedStaffs.length > 0) {
             const values = [];
@@ -170,8 +186,7 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
             if (values.length > 0) {
                 const query = `
                     INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
-                    VALUES ${values.join(',')};
-                `;
+                    VALUES ${values.join(',')};`;
                 const request = new sql.Request(transaction);
                 await request.query(query);
             }

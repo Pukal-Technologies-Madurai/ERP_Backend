@@ -32,6 +32,7 @@ ReceiptsRouter.get('/receiptMasterMobile',receiptMaster.getReceiptMobile);
 
 ReceiptsRouter.get('/getCustomerWhoHasBills', dataDependency.getSalesInvoicedCustomers);
 ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt', dataDependency.getPendingReceipts);
+ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt/amount', dataDependency.getPendingReceiptsAmount);
 ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt/retailerBased', dataDependency.getPendingReceiptsRetailerBased);
 
 ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);
