@@ -278,7 +278,8 @@ export const invoiceCopyPrintOut = async (req, res) => {
                     sdgi.Do_Inv_No voucherNumber,
                 	v.Voucher_Type voucherTypeGet, 
                 	r.Retailer_Name retailerNameGet,
-                	ISNULL(sda.gstNumber, r.Gstno) retailerGstNumber,
+                	ISNULL(sda.gstNumber, '') retailerGstNumber,
+                    
                 	cb.Name createdByGet,
                 	sdgi.Created_on createdOn,
                 	sda.deliveryName mailingName,
@@ -330,7 +331,7 @@ export const invoiceCopyPrintOut = async (req, res) => {
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.shipingAddressId
                 WHERE sdgi.Do_Id = @Do_Id;`
             );
 
@@ -494,7 +495,7 @@ export const deliverySlipPrintOut = async (req, res) => {
                 FROM tbl_Sales_Delivery_Gen_Info AS sdgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.shipingAddressId
                 WHERE sdgi.Do_Id = @Do_Id;`);
 
         const result = await request;
