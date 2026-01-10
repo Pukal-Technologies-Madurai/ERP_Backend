@@ -70,6 +70,7 @@ const salesReturn = () => {
 
     const createSalesReturn = async (req, res) => {
         const transaction = new sql.Transaction();
+        let transactionStarted = false;
 
         try {
             const {
@@ -91,9 +92,9 @@ const salesReturn = () => {
             }
 
             await transaction.begin();
+            transactionStarted = true;
 
             const headerId = crypto.randomUUID();
-            console.log('here 1');
 
             /** INSERT HEADER */
             await new sql.Request(transaction)
@@ -116,8 +117,6 @@ const salesReturn = () => {
                         0, @createdBy, GETDATE()
                     )
                 `);
-
-            console.log('here 2');
 
             let totalAmount = 0;
 
@@ -164,7 +163,6 @@ const salesReturn = () => {
                     `);
             }
 
-            console.log('here 3');
 
             await new sql.Request(transaction)
                 .input('totalAmount', totalAmount)
@@ -180,13 +178,16 @@ const salesReturn = () => {
             success(res, 'Sales Return created successfully');
 
         } catch (error) {
-            await transaction.rollback();
+            if (transactionStarted) {
+                await transaction.rollback();
+            }
             servError(error, res);
         }
     };
 
     const updateSalesReturn = async (req, res) => {
         const transaction = new sql.Transaction();
+        let transactionStarted = false;
 
         try {
             const {
@@ -212,6 +213,7 @@ const salesReturn = () => {
             }
 
             await transaction.begin();
+            transactionStarted = true;
 
             const check = await new sql.Request(transaction)
                 .input('id', id)
@@ -313,7 +315,9 @@ const salesReturn = () => {
             success(res, 'Sales Return updated successfully');
 
         } catch (error) {
-            await transaction.rollback();
+            if (transactionStarted) {
+                await transaction.rollback();
+            }
             servError(error, res);
         }
     };
