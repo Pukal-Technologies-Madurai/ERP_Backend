@@ -11,6 +11,7 @@ import {
 import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPrintOut, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice,deliverySlipPrintOut, salesInvoicePaper } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
 import salesReports from '../controller/Sales/reports.mjs';
+import salesRetrunEntry from '../controller/Sales/salesReturn/salesRetrunEntry.mjs';
 const SalesRouter = express.Router();
 
 SalesRouter.get('/saleOrder', salesOrder.getSaleOrder);
@@ -74,5 +75,12 @@ SalesRouter.get('/salesInvoice/printOuts/deliverySlip', deliverySlipPrintOut);
 
 SalesRouter.get('/lrReport', salesReports.getLRreport)
 SalesRouter.post('/lrReport', salesReports.costCenterUpdate)
+
+
+// sales Returns
+
+SalesRouter.get('/salesReturn', salesRetrunEntry.getSalesReturn);
+SalesRouter.post('/salesReturn', salesRetrunEntry.createSalesReturn);
+SalesRouter.put('/salesReturn', salesRetrunEntry.updateSalesReturn);
 
 export default SalesRouter;
