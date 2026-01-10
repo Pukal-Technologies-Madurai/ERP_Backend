@@ -76,6 +76,7 @@ SalesRouter.get('/salesInvoice/printOuts/deliverySlip', deliverySlipPrintOut);
 SalesRouter.get('/lrReport', salesReports.getLRreport)
 SalesRouter.post('/lrReport', salesReports.costCenterUpdate)
 
+SalesRouter.get('/salesOrderPendingDelivery',salesOrder.getSalesOrderPending)
 
 // sales Returns
 
