@@ -1918,6 +1918,127 @@ const SaleOrder = () => {
         }
     };
 
+const getSalesOrderPending = async (req, res) => {
+    const Fromdate = ISOString(req.query?.Fromdate || new Date());
+    const Todate = ISOString(req.query?.Todate || new Date());
+
+    try {
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate);
+
+        const result = await request.query(`
+       DECLARE @FilteredOrders TABLE (Sno INT);
+
+                INSERT INTO @FilteredOrders (Sno)
+                SELECT so.So_Id
+                FROM tbl_Sales_order_Gen_Info so
+                WHERE CONVERT(DATE, so.So_Date)
+                BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate);
+
+                -------------------- General Info --------------------
+
+                SELECT sogi.*,
+				 COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
+                        COALESCE(lol.Party_District, 'Not found') AS Party_District
+                FROM tbl_Sales_order_Gen_Info sogi
+					 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sogi.Retailer_Id
+                    LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ledger_Tally_Id = r.ERP_Id
+                WHERE So_Id IN (SELECT Sno FROM @FilteredOrders);
+
+                -------------------- Order Stock Info ----------------
+                SELECT sosi.*, COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
+                        COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
+                FROM tbl_Sales_Order_Stock_Info sosi
+				 LEFT JOIN tbl_Product_Master AS p ON sosi.Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
+                WHERE Sales_Order_Id IN (SELECT Sno FROM @FilteredOrders);
+
+                -------------------- Delivery General ----------------
+                SELECT pdgi.*,
+				 COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
+                        COALESCE(lol.Party_District, 'Not found') AS Party_District
+                FROM tbl_Sales_Delivery_Gen_Info pdgi
+				 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pdgi.Retailer_Id
+                    LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ledger_Tally_Id = r.ERP_Id
+                WHERE So_No IN (SELECT Sno FROM @FilteredOrders);
+
+                -------------------- Delivery Stock ------------------
+                SELECT i.*,  COALESCE(los.Stock_Item, 'Not Found') AS Stock_Item,
+                        COALESCE(los.Stock_Group, 'Not Found') AS Stock_Group
+                FROM tbl_Sales_Delivery_Stock_Info i
+				  LEFT JOIN tbl_Product_Master AS p ON i.Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Stock_LOS AS los ON los.Stock_Tally_Id = p.ERP_Id
+                WHERE Delivery_Order_Id IN (SELECT Sno FROM @FilteredOrders);
+
+                -------------------- Delivery Staff ------------------
+                SELECT *
+                FROM tbl_Sales_Delivery_Staff_Info
+                WHERE Do_Id IN (SELECT Sno FROM @FilteredOrders);
+        `);
+
+        const [
+            generalInfo,
+            orderStock,
+            deliveryGen,
+            deliveryStock,
+            deliveryStaff
+        ] = result.recordsets;
+
+        if (!generalInfo?.length) return noData(res);
+
+        const structuredData = generalInfo.map(order => {
+            const deliveries = deliveryGen.filter(d =>
+                isEqualNumber(d.So_No, order.So_Id)
+            );
+
+            const deliveryDetails = deliveries.map(del => {
+                const stocks = deliveryStock.filter(ds =>
+                    isEqualNumber(ds.Delivery_Order_Id, order.So_Id)
+                );
+
+                return {
+                    ...del,
+                    StockDetails: stocks.map(stock => ({
+                        ...stock,
+                        pendingInvoiceWeight: Number(stock.Weight || 0),
+                        convertableQuantity: Number(stock.Weight || 0)
+                    }))
+                };
+            });
+
+            return {
+                ...order,
+                OrderStockDetails: orderStock.filter(os =>
+                    isEqualNumber(os.Sales_Order_Id, order.So_Id)
+                ),
+                DeliveryDetails: deliveryDetails,
+                StaffDetails: deliveryStaff.filter(st =>
+                    isEqualNumber(st.Do_Id, order.So_Id)
+                )
+            };
+        });
+
+        const finalStatus = structuredData.map(order => ({
+            ...order,
+            IsConvertedAsInvoice:
+                order.DeliveryDetails.flatMap(d => d.StockDetails)
+                    .reduce((a, b) => a + Number(b.convertableQuantity), 0) <= 0 ? 1 : 0,
+
+            isConvertableArrivalExist:
+                order.DeliveryDetails.flatMap(d => d.StockDetails)
+                    .reduce((a, b) => a + Number(b.pendingInvoiceWeight), 0) > 0 ? 1 : 0
+        }));
+
+        dataFound(res, finalStatus);
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
+
+
+
     return {
         saleOrderCreation,
         getSaleOrder,
@@ -1929,9 +2050,11 @@ const SaleOrder = () => {
         saleOrderCreationWithPso,
         updatesaleOrderWithPso,
         getSaleOrderMobile,
-        saleOrderReport
+        saleOrderReport,
+        getSalesOrderPending
     }
 }
+
 
 
 export default SaleOrder();
