@@ -8,7 +8,7 @@ const salesReturn = () => {
 
     const getSalesReturn = async (req, res) => {
         try {
-            const { retailerId, branchId, godownId } = req.query;
+            const { retailerId, branchId, godownId, createdBy, updatedBy } = req.query;
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
 
@@ -18,6 +18,7 @@ const salesReturn = () => {
                 .input('retailerId', retailerId)
                 .input('branchId', branchId)
                 .input('godownId', godownId)
+                .input('updatedBy', updatedBy)
                 .query(`
                     DECLARE @filteredRows TABLE (id uniqueidentifier);
                     INSERT INTO @filteredRows
@@ -28,6 +29,8 @@ const salesReturn = () => {
                     	${isValidNumber(retailerId) ? ' AND retailerId = @retailerId ' : ''}
                     	${isValidNumber(branchId) ? ' AND branchId = @branchId ' : ''}
                     	${isValidNumber(godownId) ? ' AND godownId = @godownId ' : ''}
+                    	${isValidNumber(createdBy) ? ' AND createdBy = @createdBy ' : ''}
+                    	${isValidNumber(updatedBy) ? ' AND updatedBy = @updatedBy ' : ''}
                     SELECT 
                     	sr.*,
                     	COALESCE(r.Retailer_Name, 'Not found') retailerNameGet,
