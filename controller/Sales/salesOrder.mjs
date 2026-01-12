@@ -337,7 +337,7 @@ const SaleOrder = () => {
 
     const editSaleOrder = async (req, res) => {
         const {
-            So_Id, Retailer_Id, Sales_Person_Id, Branch_Id,
+            So_Id, Retailer_Id, Sales_Person_Id, Branch_Id,Cancel_status,
             Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0,
             Staff_Involved_List = []
         } = req.body;
@@ -415,6 +415,7 @@ const SaleOrder = () => {
                 .input('retailer', Retailer_Id)
                 .input('salesperson', Sales_Person_Id)
                 .input('branch', Branch_Id)
+                 .input('Cancel_status', Cancel_status)
                 .input('GST_Inclusive', GST_Inclusive)
                 .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
                 .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
@@ -437,6 +438,7 @@ const SaleOrder = () => {
                         Retailer_Id = @retailer, 
                         Sales_Person_Id = @salesperson, 
                         Branch_Id = @branch, 
+                        Cancel_status=@Cancel_status,
                         GST_Inclusive = @GST_Inclusive, 
                         IS_IGST = @IS_IGST, 
                         CSGT_Total = @CSGT_Total, 

@@ -67,20 +67,30 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
             -- Cost Types
                 SELECT Cost_Category_Id, Cost_Category
                 FROM tbl_ERP_Cost_Category
-                ORDER BY Cost_Category;`);
+                ORDER BY Cost_Category;
+                
+                SELECT sdsi.Do_Date,sdsi.Delivery_Order_Id,sdsi.Bill_Qty,sdsi.Alt_Act_Qty FROM tbl_Sales_Delivery_Stock_Info sdsi
+				WHERE Delivery_Order_Id IN(SELECT Delivery_Order_Id From @FilteredInvoice)
+                
+                `);
 
         const result = await getSalesInvoice;
 
-        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = []] = result.recordsets;
+        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [],stockDetails=[]] = result.recordsets;
 
         const invoicesWithStaffs = invoices.map(invoice => {
             const involvedStaffs = staffs.filter(staff => isEqualNumber(staff.Do_Id, invoice.Do_Id));
-            return { ...invoice, involvedStaffs: involvedStaffs };
+                const invoiceStockDetails = stockDetails.filter(stock => 
+                isEqualNumber(stock.Delivery_Order_Id, invoice.Do_Id)
+            );
+
+            return { ...invoice, involvedStaffs: involvedStaffs, stockDetails: invoiceStockDetails };
         });
 
         sentData(res, invoicesWithStaffs, {
             costTypes: toArray(costTypes),
             uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(item => item.Emp_Type_Id)
+            
         });
     } catch (e) {
         servError(e, res);
@@ -246,7 +256,7 @@ export const katchathCopyPrintOut = async (req, res) => {
                 FROM tbl_Sales_Delivery_Gen_Info AS sdgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.shipingAddressId
                 WHERE sdgi.Do_Id = @Do_Id;`);
 
         const result = await request;
@@ -331,7 +341,7 @@ export const invoiceCopyPrintOut = async (req, res) => {
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.shipingAddressId
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
                 WHERE sdgi.Do_Id = @Do_Id;`
             );
 
@@ -495,7 +505,7 @@ export const deliverySlipPrintOut = async (req, res) => {
                 FROM tbl_Sales_Delivery_Gen_Info AS sdgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.shipingAddressId
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId
                 WHERE sdgi.Do_Id = @Do_Id;`);
 
         const result = await request;
