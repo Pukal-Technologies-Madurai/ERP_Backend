@@ -2806,7 +2806,7 @@ FROM TRIP_MASTER tm
                 genInfoRequest.input('Total_Before_Tax', sql.Decimal(18, 2), product?.Total_Before_Tax || 0);
                 genInfoRequest.input('Total_Tax', sql.Decimal(18, 2), totalCGST + totalSGST + totalIGST);
                 genInfoRequest.input('Total_Invoice_value', sql.Decimal(18, 2), product?.Total_Invoice_value || 0);
-                genInfoRequest.input('Cancel_status', sql.Int, 1);
+                genInfoRequest.input('Cancel_status', sql.Int, 0);
                 genInfoRequest.input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name);
                 genInfoRequest.input('So_No', sql.Int, product?.So_Id || null);
                 genInfoRequest.input('Delivery_Status', sql.Int, 1);
