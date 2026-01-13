@@ -69,7 +69,6 @@ const getReportColumnVisiblityState = async (req, res) => {
                 SELECT 
                     columnName, 
                     COALESCE(orderNum, 1) AS orderNum,
-                    groupingColumn, 
                     displayName,
                     reportGroup,
                     reportName,

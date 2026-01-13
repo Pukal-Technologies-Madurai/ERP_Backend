@@ -14,6 +14,7 @@ import reportsColumnVisiblity from '../controller/Reports/reportsColumnVisiblity
 import deliveryReports from '../controller/Reports/deliveryReports.mjs';
 import expences from '../controller/Masters/expences.mjs';
 import templateMobile from '../controller/Reports/templateMobile.mjs';
+import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
 
 
 
@@ -122,6 +123,9 @@ ReportRouter.get('/reportsNonconvert/salesMobileItem', deliveryReports.getNonCon
 
 ReportRouter.get('/reportState/columnVisiblity', reportsColumnVisiblity.getReportColumnVisiblityState);
 ReportRouter.post('/reportState/columnVisiblity', reportsColumnVisiblity.createReportColumnVisiblityState);
+ReportRouter.get('/reportState/columnGrouping', getReportColumnGroupingState);
+ReportRouter.post('/reportState/columnGrouping', createReportColumnGroupingState);
+
 
 ReportRouter.get('/brokerageNakalReport/salesEntry', nagalReports.nakalSalesDataEntryReport)
 

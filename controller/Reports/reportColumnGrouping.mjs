@@ -24,7 +24,7 @@ export const createReportColumnGroupingState = async (req, res) => {
                 DELETE FROM tbl_reports_column_grouping_state
                 WHERE reportName = @reportName AND reportUrl = @reportUrl;
                 -- inserting new state
-                INSERT INTO tbl_reports_column_grouping_state (reportName, reportUrl, reportGroup, groupingColumn, orderNum)
+                INSERT INTO tbl_reports_column_grouping_state (reportName, reportUrl, reportGroup, columnName, orderNum)
                 SELECT
                     @reportName,
                     @reportUrl,
@@ -42,7 +42,7 @@ export const createReportColumnGroupingState = async (req, res) => {
 
         const insertedRows = result.rowsAffected?.[1] ?? 0;
 
-        if (insertedRows === toArray(visibleColumns).length) {
+        if (insertedRows === toArray(groupingColumns).length) {
             success(res, 'Changes saved');
         } else {
             failed(res);
@@ -67,12 +67,10 @@ export const getReportColumnGroupingState = async (req, res) => {
                 SELECT 
                     columnName, 
                     COALESCE(orderNum, 1) AS orderNum,
-                    groupingColumn, 
-                    displayName,
                     reportGroup,
                     reportName,
                     reportUrl
-                FROM tbl_reports_column_visiblity_state 
+                FROM tbl_reports_column_grouping_state 
                 ${(reportName || reportUrl || reportGroup) ? ' WHERE ' : ''} 
                     ${reportName ? ' reportName = @reportName ' : ''} 
                     ${reportUrl ? ' AND reportUrl = @reportUrl ' : ''}
