@@ -2478,7 +2478,7 @@ SELECT
                 LEFT JOIN tbl_Pack_Master ppm ON ppm.Pack_Id =pm.Pack_Id
                 LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
                 LEFT JOIN tbl_Retailers_Master rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sgi2.deliveryAddressId
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sgi2.shipingAddressId
                 WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
                 FOR JSON PATH
             ) AS Products_List
@@ -3263,7 +3263,7 @@ FROM TRIP_MASTER tm
 
 const getDeliveryDetailsListing = async (req, res) => {
     const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Loadman, Item, Godown, Retailer } = req.query;
-    // Note: Changed from LoadMan to Loadman to match your API parameter
+
 
     const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
@@ -3382,7 +3382,7 @@ SELECT
 FROM 
     tbl_Sales_Delivery_Gen_Info AS sdgi
 LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No 
-LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.deliveryAddressId 
+LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sdgi.shipingAddressId 
 LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
 LEFT JOIN tbl_Users AS sp ON sp.UserId = sogi.Sales_Person_Id 
 LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
