@@ -18,6 +18,7 @@ const salesReturn = () => {
                 .input('retailerId', retailerId)
                 .input('branchId', branchId)
                 .input('godownId', godownId)
+                .input('createdBy', createdBy)
                 .input('updatedBy', updatedBy)
                 .query(`
                     DECLARE @filteredRows TABLE (id uniqueidentifier);

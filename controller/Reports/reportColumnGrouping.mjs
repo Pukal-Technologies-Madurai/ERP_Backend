@@ -3,37 +3,35 @@ import { failed, invalidInput, sentData, servError, success } from '../../res.mj
 import { toArray, toNumber } from '../../helper_functions.mjs';
 
 
-const createReportColumnVisiblityState = async (req, res) => {
+export const createReportColumnGroupingState = async (req, res) => {
     try {
-        const { visibleColumns = [], reportName = '', reportUrl = '', displayName = '', reportGroup= '' } = req.body;
+        const { groupingColumns = [], reportName = '', reportUrl = '', reportGroup= '' } = req.body;
 
         if (!reportName || !reportUrl || !reportGroup) return invalidInput(res, 'reportName and reportUrl and reportGroup are required')
 
-        const columnsJson = JSON.stringify(toArray(visibleColumns).map(col => ({
+        const columnsJson = JSON.stringify(toArray(groupingColumns).map(col => ({
             ColumnName: String(col?.ColumnName),
             ColumnOrder: toNumber(col?.ColumnOrder),
         })));
 
         const request = new sql.Request()
-            .input('jsonVisibleColumns', sql.NVarChar(sql.MAX), columnsJson)
+            .input('jsonGroupingColumns', sql.NVarChar(sql.MAX), columnsJson)
             .input('reportName', sql.NVarChar, reportName)
             .input('reportUrl', sql.NVarChar, reportUrl)
-            .input('displayName', sql.NVarChar, displayName)
             .input('reportGroup', sql.NVarChar, reportGroup)
             .query(`
                 -- removing existing
-                DELETE FROM tbl_reports_column_visiblity_state
+                DELETE FROM tbl_reports_column_grouping_state
                 WHERE reportName = @reportName AND reportUrl = @reportUrl;
                 -- inserting new state
-                INSERT INTO tbl_reports_column_visiblity_state (reportName, reportUrl, displayName, reportGroup, columnName, orderNum)
+                INSERT INTO tbl_reports_column_grouping_state (reportName, reportUrl, reportGroup, groupingColumn, orderNum)
                 SELECT
                     @reportName,
                     @reportUrl,
-                    @displayName,
                     @reportGroup,
                     j.[ColumnName],
                     j.[ColumnOrder]
-                FROM OPENJSON(@jsonVisibleColumns)
+                FROM OPENJSON(@jsonGroupingColumns)
                 WITH (
                     ColumnName NVARCHAR(200),
                     ColumnOrder INT
@@ -55,7 +53,7 @@ const createReportColumnVisiblityState = async (req, res) => {
     }
 }
 
-const getReportColumnVisiblityState = async (req, res) => {
+export const getReportColumnGroupingState = async (req, res) => {
     try {
         const { reportName = '', reportUrl = '', reportGroup = '' } = req.query;
 
@@ -87,9 +85,4 @@ const getReportColumnVisiblityState = async (req, res) => {
     } catch (e) {
         servError(e, res)
     }
-}
-
-export default {
-    createReportColumnVisiblityState,
-    getReportColumnVisiblityState
 }
