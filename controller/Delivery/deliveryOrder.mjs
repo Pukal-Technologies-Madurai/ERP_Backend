@@ -1317,7 +1317,7 @@ const editmobileApi = async (req, res) => {
             Do_Id, Retailer_Id, Delivery_Person_Id,
             Delivery_Status, Delivery_Time, Delivery_Location, 
             Delivery_Latitude, Delivery_Longitude, Payment_Mode, 
-            Payment_Status, Payment_Ref_No, Altered_by, Altered_on,
+            Payment_Status, Payment_Ref_No, Altered_by, Altered_on,Cancel_Status,
             Product_Array,
             Branch_Id, Narration, GST_Inclusive = 1, IS_IGST = 0
         } = req.body;
@@ -1563,6 +1563,7 @@ const editmobileApi = async (req, res) => {
                 .input("deliveryLocation", Delivery_Location)
                 .input("deliverylatitude", Delivery_Latitude)
                 .input("deliverylongitute", Delivery_Longitude)
+                .input("Cancel_Status",Cancel_Status)
                 .input("paymentMode", Payment_Mode)
                 .input("paymentStatus", Payment_Status)
                 .input("paymentrefno", Payment_Ref_No)
@@ -1588,6 +1589,7 @@ const editmobileApi = async (req, res) => {
                     Delivery_Person_Id = @deliveryperson,
                     Delivery_Time = @deliveryTime,
                     Delivery_Status = @deliverystatus,
+                    Cancel_Status=@Cancel_Status,
                     Delivery_Location = @deliveryLocation,
                     Delivery_Latitude = @deliverylatitude,
                     Delivery_Longitude = @deliverylongitute,
@@ -1771,6 +1773,7 @@ const editmobileApi = async (req, res) => {
                 .input('paymentMode', Payment_Mode)
                 .input('paymentStatus', Payment_Status)
                 .input('paymentrefno', Payment_Ref_No)
+                .input('Cancel_Status',Cancel_Status)
                 .input('Altered_by', Altered_by)
                 .input('Alterd_on', new Date())
                 .input('Trans_Type', 'UPDATE')
@@ -1786,6 +1789,7 @@ const editmobileApi = async (req, res) => {
                         Payment_Mode = @paymentMode,
                         Payment_Status = @paymentStatus,
                         Payment_Ref_No = @paymentrefno,
+                        Cancel_Status=@Cancel_Status,
                         Altered_by = @Altered_by,
                         Alterd_on = @Alterd_on,
                         Trans_Type = @Trans_Type
