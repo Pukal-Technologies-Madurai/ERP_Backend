@@ -71,8 +71,8 @@ export const getReportColumnGroupingState = async (req, res) => {
                     reportName,
                     reportUrl
                 FROM tbl_reports_column_grouping_state 
-                ${(reportName || reportUrl || reportGroup) ? ' WHERE ' : ''} 
-                    ${reportName ? ' reportName = @reportName ' : ''} 
+                WHERE reportName <> '' 
+                    ${reportName ? ' AND reportName = @reportName ' : ''} 
                     ${reportUrl ? ' AND reportUrl = @reportUrl ' : ''}
                     ${reportGroup ? ' AND reportGroup = @reportGroup ' : ''};`
             );

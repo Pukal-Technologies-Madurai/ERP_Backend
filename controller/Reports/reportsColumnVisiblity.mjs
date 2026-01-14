@@ -74,8 +74,8 @@ const getReportColumnVisiblityState = async (req, res) => {
                     reportName,
                     reportUrl
                 FROM tbl_reports_column_visiblity_state 
-                ${(reportName || reportUrl || reportGroup) ? ' WHERE ' : ''} 
-                    ${reportName ? ' reportName = @reportName ' : ''} 
+                WHERE reportName <> '' 
+                    ${reportName ? ' AND reportName = @reportName ' : ''} 
                     ${reportUrl ? ' AND reportUrl = @reportUrl ' : ''}
                     ${reportGroup ? ' AND reportGroup = @reportGroup ' : ''};`
             );
@@ -87,6 +87,42 @@ const getReportColumnVisiblityState = async (req, res) => {
         servError(e, res)
     }
 }
+
+// const getReportVisiblityAndGroupinState = async (req, res) => {
+//     try {
+//         const { reportGroup } = req.query;
+
+//         if (!reportGroup) return invalidInput(res, 'reportGroup is required');
+
+//         const request = new sql.Request()
+//             .input('reportGroup', sql.NVarChar, reportGroup)
+//             .query(`
+//                 SELECT 
+//                     columnName, 
+//                     COALESCE(orderNum, 1) AS orderNum,
+//                     displayName,
+//                     reportGroup,
+//                     reportName,
+//                     reportUrl
+//                 FROM tbl_reports_column_visiblity_state 
+//                 WHERE reportGroup = @reportGroup;
+//                 SELECT 
+//                     columnName, 
+//                     COALESCE(orderNum, 1) AS orderNum,
+//                     reportGroup,
+//                     reportName,
+//                     reportUrl
+//                 FROM tbl_reports_column_grouping_state 
+//                 WHERE reportGroup = @reportGroup;
+//             `);
+
+//         const result = await request;
+
+//         sentData(res, result.recordset);
+//     } catch (e) {
+//         servError(e, res)
+//     }
+// }
 
 export default {
     createReportColumnVisiblityState,
