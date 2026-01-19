@@ -20,7 +20,8 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 
-                    Do_Date = @reqDate
+                    -- FIX: Convert both sides to DATE for comparison
+                    CONVERT(DATE, Do_Date) = @reqDate
                     ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
                 SELECT 
                     gen.Do_Id,
@@ -69,34 +70,63 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 FROM tbl_ERP_Cost_Category
                 ORDER BY Cost_Category;
                 
-                SELECT sdsi.Do_Date,sdsi.Delivery_Order_Id,sdsi.Bill_Qty,sdsi.Alt_Act_Qty FROM tbl_Sales_Delivery_Stock_Info sdsi
-				WHERE Delivery_Order_Id IN(SELECT Delivery_Order_Id From @FilteredInvoice)
-                
+              SELECT 
+                    sdsi.Do_Date,
+                    sdsi.Delivery_Order_Id,
+                 	COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
+                	COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
+                	COALESCE(sdsi.Alt_Act_Qty, 0) AS Alt_Act_Qty,
+                	COALESCE(pck.Pack, '0') AS unitValue,
+                    case when COALESCE(sdsi.Bill_Qty, 0)/COALESCE(pck.Pack, '0') = NULL
+					then 0 else (convert(decimal(18,2),COALESCE(sdsi.Bill_Qty, 0)/COALESCE(pck.Pack, '0')))end as Alt_Act_Qty
+					,
+                	COALESCE(p.Product_Rate, 0) AS itemRate,
+                	COALESCE(sdsi.Item_Rate, 0) AS billedRate
+                FROM tbl_Sales_Delivery_Stock_Info sdsi
+                LEFT JOIN tbl_Product_Master AS p
+                    ON p.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_Pack_Master AS pck
+                    ON pck.Pack_Id = p.Pack_Id
+				WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 `);
 
         const result = await getSalesInvoice;
 
-        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [],stockDetails=[]] = result.recordsets;
+        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [], stockDetails = []] = result.recordsets;
 
+        const calculatedStockDetails = stockDetails.map(stock => ({
+            ...stock,
+          
+            Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
+            quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
+        }));
+
+      
         const invoicesWithStaffs = invoices.map(invoice => {
-            const involvedStaffs = staffs.filter(staff => isEqualNumber(staff.Do_Id, invoice.Do_Id));
-                const invoiceStockDetails = stockDetails.filter(stock => 
-                isEqualNumber(stock.Delivery_Order_Id, invoice.Do_Id)
+            const involvedStaffs = staffs.filter(stf =>
+                isEqualNumber(stf.Do_Id, invoice.Do_Id)
             );
 
-            return { ...invoice, involvedStaffs: involvedStaffs, stockDetails: invoiceStockDetails };
+            const invoiceStockDetails = calculatedStockDetails.filter(stk =>
+                isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
+            );
+
+            return {
+                ...invoice,
+                involvedStaffs,
+                stockDetails: invoiceStockDetails
+            };
         });
 
         sentData(res, invoicesWithStaffs, {
             costTypes: toArray(costTypes),
-            uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(item => item.Emp_Type_Id)
-            
+            uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
         });
+
     } catch (e) {
         servError(e, res);
     }
-}
-
+};
 export const postAssignCostCenterToSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
 
@@ -105,7 +135,7 @@ export const postAssignCostCenterToSalesInvoice = async (req, res) => {
 
         await transaction.begin();
 
-        // Update staffInvolvedStatus in main table
+   
         const updateStatusRequest = new sql.Request(transaction);
         await updateStatusRequest
             .input('Do_Id', sql.BigInt, Do_Id)
