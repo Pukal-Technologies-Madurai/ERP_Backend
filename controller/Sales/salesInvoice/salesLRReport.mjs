@@ -262,12 +262,20 @@ export const katchathCopyPrintOut = async (req, res) => {
                 	sda.cityName mailingCity,
                 	sda.phoneNumber mailingNumber,
                 	COALESCE((
-                		SELECT 
+                			SELECT 
                 			sdsi.Item_Id itemId,
                 			p.Short_Name itemName,
-                			sdsi.Alt_Act_Qty quantity
+                			sdsi.Alt_Act_Qty,
+							sdsi.Act_Qty,
+							pm.Pack,
+							 CASE 
+        WHEN COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
+        THEN 0 
+        ELSE CONVERT(DECIMAL(18,2), COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0))
+    END AS quantity
                 		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+						LEFT JOIN tbl_Pack_Master as pm ON pm.Pack_Id=p.Pack_Id
                 		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
                 		FOR JSON PATH
                 	), '[]') AS productDetails,
@@ -334,12 +342,19 @@ export const invoiceCopyPrintOut = async (req, res) => {
                 			p.HSN_Code hsnCode,
                 			COALESCE((sdsi.Cgst + sdsi.Sgst + sdsi.Igst), 0) AS gstPercentage,
                 			COALESCE((sdsi.Cgst_Amo + sdsi.Sgst_Amo + sdsi.Igst_Amo), 0) AS gstAmount,
-                			sdsi.Alt_Act_Qty quantity,
+                			sdsi.Alt_Act_Qty,
+                            sdsi.Act_Qty,
                             sdsi.Bill_Qty billQuantity,
                 			sdsi.Item_Rate itemRate,
-                			sdsi.Final_Amo amount
+                			sdsi.Final_Amo amount,
+                            CASE 
+                            WHEN COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
+                            THEN 0 
+                            ELSE CONVERT(DECIMAL(18,2), COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0))
+                            END AS quantity
                 		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+                        LEFT JOIN tbl_Pack_Master AS pm ON pm.Pack_Id = p.Pack_Id
                 		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
                 		FOR JSON PATH
                 	), '[]') AS productDetails,
@@ -510,10 +525,15 @@ export const deliverySlipPrintOut = async (req, res) => {
 							p.Pack_Id,
                 			sdsi.Item_Id itemId,
                 			p.Product_Name itemName,
-                			sdsi.Alt_Act_Qty quantity,
+                			sdsi.Alt_Act_Qty,
                             sdsi.Bill_Qty,
-                            sdsi.Alt_Act_Qty,
-						pm.Pack
+                            sdsi.Act_Qty,
+						pm.Pack,
+                        	 CASE 
+        WHEN COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
+        THEN 0 
+        ELSE CONVERT(DECIMAL(18,2), COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0))
+    END AS quantity
                 		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
 						LEFT JOIN tbl_Pack_Master As pm ON pm.Pack_Id=p.Pack_Id
