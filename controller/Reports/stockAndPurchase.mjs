@@ -120,7 +120,7 @@ const StockAndPurchaseReport = () => {
 
         try {
 
-            const result = await new sql.Request(req.db)
+            const result = await new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('To_date', Todate)
                 .execute('Avg_Live_Sales_Report_3')
