@@ -181,9 +181,36 @@ OPTION (MAXRECURSION 0);
             servError(e, res)
         }
     };
+
+
+    
+    const itemsTransactionExpandable = async (req, res) => {
+        const { fromDate, toDate, Product_Id } = req.query;
+        try {
+            const request = new sql.Request();
+            request.input('fromDate', fromDate);
+
+            request.input('ToDate', toDate);
+            request.input('Product_Id', sql.Int, Number(Product_Id));
+
+          
+
+            const result = await request.execute('Transaction_Stock_Report_vw_By_Pro_Id');
+
+            if (result.rowsAffected.length > 0) {
+                dataFound(res, result.recordset);
+            } else {
+                failed(res, 'Failed to add company');
+            }
+        } catch (e) {
+            servError(e, res)
+        }
+    };
+    
     return {
         getExpences,
-        expensesExpandable
+        expensesExpandable,
+        itemsTransactionExpandable
     };
 };
 
