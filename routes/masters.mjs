@@ -170,6 +170,7 @@ MastersRouter.post('/users/costcenter', user.createUserForCostcenter);
 MastersRouter.get('/userTypecostcenter', userType.userTypeforcostcenter);
 
 MastersRouter.get('/voucher', voucherType.getVoucherType);
+MastersRouter.get('/voucher/dropDown', voucherType.getVoucherTypeDropDown);
 MastersRouter.post('/voucher', voucherType.addVoucherType);
 MastersRouter.put('/voucher', voucherType.editVoucherType);
 MastersRouter.delete('/voucher', voucherType.deleteVoucherType);

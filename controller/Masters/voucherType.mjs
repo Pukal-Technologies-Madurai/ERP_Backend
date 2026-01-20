@@ -31,7 +31,36 @@ const voucherType = () => {
 				    LEFT JOIN tbl_Users AS cb ON cb.UserId = vt.Created_By
 				    LEFT JOIN tbl_Users AS ub ON ub.UserId = vt.Alter_By
                     WHERE 
-				    	COALESCE(vt.Vocher_Type_Id, 0) <> 0
+				    	vt.Vocher_Type_Id IS NOT NULL
+				    	AND TRIM(COALESCE(vt.Voucher_Code, '')) <> ''
+                    ${module ? ' AND vt.Type = @module ' : ''}
+                    ${isEqualNumber(showDeleted, 1) ? '' : ' AND COALESCE(vt.deleteFlag, 0) = 0 '}
+                    ORDER BY vt.Voucher_Type ASC;`
+                );
+
+            const result = await request;
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+    const getVoucherTypeDropDown = async (req, res) => {
+        try {
+            const { module, showDeleted = 0 } = req.query;
+
+            const request = new sql.Request()
+                .input('module', module)
+                .query(`
+                    SELECT 
+                        vt.Vocher_Type_Id value,
+                        vt.Voucher_Type label,
+                        vt.Voucher_Code code,
+                        vt.Branch_Id branchId,
+                        vt.Type type
+                    FROM tbl_Voucher_Type vt
+                    WHERE 
+				    	vt.Vocher_Type_Id IS NOT NULL
 				    	AND TRIM(COALESCE(vt.Voucher_Code, '')) <> ''
                     ${module ? ' AND vt.Type = @module ' : ''}
                     ${isEqualNumber(showDeleted, 1) ? '' : ' AND COALESCE(vt.deleteFlag, 0) = 0 '}
@@ -194,7 +223,8 @@ const voucherType = () => {
         getVoucherType,
         addVoucherType,
         editVoucherType,
-        deleteVoucherType
+        deleteVoucherType,
+        getVoucherTypeDropDown
     }
 }
 
