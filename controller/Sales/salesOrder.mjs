@@ -165,7 +165,7 @@ const SaleOrder = () => {
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
                 .input('Narration', Narration)
-                .input('Cancel_status', 0)
+                .input('Cancel_status', 1)
                 .input('Created_by', Created_by)
                 .input('Altered_by', Created_by)
                 .input('Alter_Id', Alter_Id)
@@ -1295,7 +1295,7 @@ const SaleOrder = () => {
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
                 .input('Narration', Narration)
-                .input('Cancel_status', 0)
+                .input('Cancel_status', 1)
                 .input('Created_by', Created_by)
                 .input('Altered_by', Created_by)
                 .input('Alter_Id', Alter_Id)
@@ -1557,7 +1557,7 @@ const SaleOrder = () => {
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
                 .input('Narration', Narration)
-                .input('Cancel_status', 0)
+                .input('Cancel_status', 1)
                 .input('Created_by', Created_by)
                 .input('Altered_by', Created_by)
                 .input('Alter_Id', Alter_Id)
@@ -1718,19 +1718,19 @@ const SaleOrder = () => {
                 .input("User_Id", sql.Int, User_Id || null)
                 .input("Branch_Id", sql.Int, Branch_Id || null);
 
-            // ✅ Branch Rights Logic using exact table name
+   
             let branchFilter = "";
             if (Branch_Id && !isNaN(Branch_Id)) {
-                // Single branch selected
+           
                 branchFilter = "AND so.Branch_Id = @Branch_Id";
             } else if (req.query.BranchIds) {
-                // Multiple branches selected (comma separated)
+            
                 const ids = req.query.BranchIds.split(",").map(id => parseInt(id.trim())).filter(Boolean);
                 if (ids.length > 0) {
                     branchFilter = `AND so.Branch_Id IN (${ids.join(",")})`;
                 }
             } else if (User_Id && !isNaN(User_Id)) {
-                // No branch selected → fetch allowed branches for the logged-in user
+    
                 branchFilter = `
         AND so.Branch_Id IN (
             SELECT Branch_Id 
@@ -1740,7 +1740,7 @@ const SaleOrder = () => {
     `;
             }
 
-            // ✅ Main SQL Query (web-equivalent + branch-based filtering)
+         
             const result = await request.query(`
             -- Step 1: Filter Orders
             DECLARE @FilteredOrders TABLE (So_Id INT);
@@ -1831,7 +1831,7 @@ const SaleOrder = () => {
             );
         `);
 
-            // ✅ Extract datasets (6 queries)
+           
             const [
                 OrderData,
                 ProductDetails,
@@ -1873,7 +1873,7 @@ const SaleOrder = () => {
                     };
                 });
 
-                // ✅ Apply order status filter (if any)
+             
                 const filteredData = OrderStatus
                     ? resData.filter((o) => o.OrderStatus === OrderStatus.toLowerCase())
                     : resData;
