@@ -148,9 +148,14 @@ const RetailerControll = () => {
                         COALESCE(r.Gstno, '') AS Gstno,
                     	COALESCE(a.creditLimit, 0) AS creditLimit,
                     	COALESCE(a.creditDays, 0) AS creditDays,
-                    	COALESCE(a.percentageValue, 0) AS percentageValue
+                    	COALESCE(a.percentageValue, 0) AS percentageValue,
+                        COALESCE(pos.Broker_Id, 0) as brokerId,
+                        COALESCE(pos.Broker, 'not found') as brokerName,
+                        COALESCE(pos.Transporter_Id, 0) as transporterId,
+                        COALESCE(pos.Transporter, 'not found') as transporterName
                     FROM tbl_Retailers_Master AS r
                     LEFT JOIN tbl_Account_Master AS a ON a.Acc_Id = r.AC_Id 
+                    LEFT JOIN tbl_ERP_POS_Master AS pos ON pos.Retailer_Id = r.Retailer_Id 
                     WHERE r.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
                     -- getting retailer gen info
                     SELECT 
@@ -163,18 +168,26 @@ const RetailerControll = () => {
                         gstNumber,
                         stateName
                     FROM tbl_Sales_Delivery_Address 
-                    WHERE retailerId IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);`
+                    WHERE retailerId IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
+                    -- COST CATEGORY
+                    SELECT 
+                        Cost_Category_Id AS costTypeId,
+                        Cost_Category AS costType
+                    FROM tbl_ERP_Cost_Category
+                    WHERE Cost_Category IN ('Broker', 'Transport');`
                 );
 
             const result = await request;
 
-            const [retailers, deliveryAddresses] = result.recordsets;
+            const [retailers, deliveryAddresses, costTypeDetails] = result.recordsets;
 
             const withAddresses = retailers.map(retailer => ({
                 ...retailer,
                 deliveryAddresses: deliveryAddresses.filter(
                     address => isEqualNumber(address.retailerId, retailer.Retailer_Id)
-                )
+                ),
+                brokerTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Broker')?.costTypeId), 
+                transporterTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Transport')?.costTypeId), 
             }));
 
             if (result.recordset.length > 0) {

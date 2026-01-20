@@ -136,7 +136,7 @@ const salesReturn = () => {
                     Reason
                 } = item;
 
-                if (!productId || !unitId || !returnQuantity || !itemRate) {
+                if (!productId || !returnQuantity) {
                     throw new Error('Invalid product detail data');
                 }
 
@@ -149,9 +149,9 @@ const salesReturn = () => {
                     .input('productId', productId)
                     .input('batch', batch)
                     .input('expireDate', expireDate)
-                    .input('unitId', unitId)
+                    .input('unitId', toNumber(unitId))
                     .input('returnQuantity', returnQuantity)
-                    .input('itemRate', itemRate)
+                    .input('itemRate', toNumber(itemRate))
                     .input('Reason', Reason)
                     .query(`
                         INSERT INTO tbl_Sales_Return_Details (
@@ -274,7 +274,7 @@ const salesReturn = () => {
                     Reason
                 } = item;
 
-                if (!productId || !unitId || !returnQuantity || !itemRate) {
+                if (!productId || !returnQuantity) {
                     throw new Error('Invalid product detail data');
                 }
 
@@ -287,9 +287,9 @@ const salesReturn = () => {
                     .input('productId', productId)
                     .input('batch', batch)
                     .input('expireDate', expireDate)
-                    .input('unitId', unitId)
+                    .input('unitId', toNumber(unitId))
                     .input('returnQuantity', returnQuantity)
-                    .input('itemRate', itemRate)
+                    .input('itemRate', toNumber(itemRate))
                     .input('Reason', Reason)
                     .query(`
                     INSERT INTO tbl_Sales_Return_Details (
