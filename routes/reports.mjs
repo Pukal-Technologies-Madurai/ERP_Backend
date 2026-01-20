@@ -156,5 +156,6 @@ ReportRouter.get('/tablesAndColumnsMobile', templateMobile.getTablesandColumnsFo
 ReportRouter.get('/returnReports',deliveryReports.ReturnDelivery)
 
 ReportRouter.get('/itemexpenseReport',expences.itemsTransactionExpandable)
+ReportRouter.get('/godownexpenseReport',expences.godownTransactionExpandable)
 
 export default ReportRouter;

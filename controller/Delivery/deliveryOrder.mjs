@@ -170,7 +170,7 @@ const DeliveryOrder = () => {
                 await new sql.Request(transaction).input("So_No", sql.Int, So_No)
                     .query(`
                     UPDATE tbl_Sales_Delivery_Gen_Info
-                    SET Cancel_Status = 0
+                    SET Cancel_status = 1
                     WHERE So_No = @So_No`);
 
                 await transaction.commit();
@@ -316,7 +316,7 @@ const DeliveryOrder = () => {
                 .input("Total_Before_Tax", sql.Decimal(18, 2), Total_Before_Tax)
                 .input("Total_Tax", sql.Decimal(18, 2), Total_Tax)
                 .input("Narration", sql.NVarChar(sql.MAX), Narration)
-                .input("Cancel_status", sql.Int, 0)
+                .input("Cancel_status", sql.Int, 1)
                 .input("So_No", sql.Int, So_No)
                 .input("Delivery_Status", sql.Int, Delivery_Status)
                 .input("Delivery_Time", sql.NVarChar(50), Delivery_Time)
@@ -1317,7 +1317,7 @@ const editmobileApi = async (req, res) => {
             Do_Id, Retailer_Id, Delivery_Person_Id,
             Delivery_Status, Delivery_Time, Delivery_Location, 
             Delivery_Latitude, Delivery_Longitude, Payment_Mode, 
-            Payment_Status, Payment_Ref_No, Altered_by, Altered_on,Cancel_Status,
+            Payment_Status, Payment_Ref_No, Altered_by, Altered_on,Cancel_status,
             Product_Array,
             Branch_Id, Narration, GST_Inclusive = 1, IS_IGST = 0
         } = req.body;
@@ -1563,7 +1563,7 @@ const editmobileApi = async (req, res) => {
                 .input("deliveryLocation", Delivery_Location)
                 .input("deliverylatitude", Delivery_Latitude)
                 .input("deliverylongitute", Delivery_Longitude)
-                .input("Cancel_Status",Cancel_Status)
+                .input("Cancel_status",Cancel_status)
                 .input("paymentMode", Payment_Mode)
                 .input("paymentStatus", Payment_Status)
                 .input("paymentrefno", Payment_Ref_No)
@@ -1589,7 +1589,7 @@ const editmobileApi = async (req, res) => {
                     Delivery_Person_Id = @deliveryperson,
                     Delivery_Time = @deliveryTime,
                     Delivery_Status = @deliverystatus,
-                    Cancel_Status=@Cancel_Status,
+                    Cancel_status=@Cancel_status,
                     Delivery_Location = @deliveryLocation,
                     Delivery_Latitude = @deliverylatitude,
                     Delivery_Longitude = @deliverylongitute,
@@ -1773,7 +1773,7 @@ const editmobileApi = async (req, res) => {
                 .input('paymentMode', Payment_Mode)
                 .input('paymentStatus', Payment_Status)
                 .input('paymentrefno', Payment_Ref_No)
-                .input('Cancel_Status',Cancel_Status)
+                .input('Cancel_status',Cancel_status)
                 .input('Altered_by', Altered_by)
                 .input('Alterd_on', new Date())
                 .input('Trans_Type', 'UPDATE')
@@ -1789,7 +1789,7 @@ const editmobileApi = async (req, res) => {
                         Payment_Mode = @paymentMode,
                         Payment_Status = @paymentStatus,
                         Payment_Ref_No = @paymentrefno,
-                        Cancel_Status=@Cancel_Status,
+                        Cancel_status=@Cancel_status,
                         Altered_by = @Altered_by,
                         Alterd_on = @Alterd_on,
                         Trans_Type = @Trans_Type
