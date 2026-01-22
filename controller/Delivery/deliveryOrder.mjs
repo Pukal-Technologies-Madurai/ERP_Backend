@@ -1031,13 +1031,16 @@ const DeliveryOrder = () => {
     }
 
   const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Sales_Person_Id,Branch_Id } = req.query;
+        const { Retailer_Id, Delivery_Status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Sales_Person_Id,Branch_Id } = req.query;
 
         try {
 
             const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-
+   const deliveryStatus =
+            Delivery_Status !== undefined && Delivery_Status !== ""
+                ? Number(Delivery_Status)
+                : undefined;
             let query = `
                         WITH SALES_DETAILS AS (
                          SELECT
@@ -1133,6 +1136,9 @@ const DeliveryOrder = () => {
           if (Branch_Id) {
                 query += ` AND so.Branch_Id = @Branch_Id`;
             }
+           if (deliveryStatus !== undefined) {
+            query += ` AND so.Delivery_Status = @Delivery_Status`;
+        }
 
             query += ` ORDER BY so.Do_Id DESC`;
 
@@ -1140,13 +1146,15 @@ const DeliveryOrder = () => {
             request.input('from', Fromdate);
             request.input('to', Todate);
             request.input('retailer', Retailer_Id);
-            request.input('cancel', Cancel_status);
             request.input('creater', Created_by);
             request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
             request.input('Sales_Person_Id', sql.Int, Sales_Person_Id);
             request.input('Route_Id', sql.Int, Route_Id);
             request.input('Area_Id', sql.Int, Area_Id);
             request.input('Branch_Id', sql.Int, Branch_Id);
+               if (deliveryStatus !== undefined) {
+            request.input('Delivery_Status', sql.Int, deliveryStatus);
+        }
 
             const result = await request.query(query);
 
@@ -2810,7 +2818,7 @@ FROM TRIP_MASTER tm
                 genInfoRequest.input('Total_Before_Tax', sql.Decimal(18, 2), product?.Total_Before_Tax || 0);
                 genInfoRequest.input('Total_Tax', sql.Decimal(18, 2), totalCGST + totalSGST + totalIGST);
                 genInfoRequest.input('Total_Invoice_value', sql.Decimal(18, 2), product?.Total_Invoice_value || 0);
-                genInfoRequest.input('Cancel_status', sql.Int, 0);
+                genInfoRequest.input('Cancel_status', sql.Int, 1);
                 genInfoRequest.input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name);
                 genInfoRequest.input('So_No', sql.Int, product?.So_Id || null);
                 genInfoRequest.input('Delivery_Status', sql.Int, 1);
