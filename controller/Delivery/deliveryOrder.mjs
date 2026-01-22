@@ -2437,7 +2437,17 @@ SELECT
                     sdsi.Item_Id,
                     sdsi.Bill_Qty,
                     sdsi.Act_Qty,
-                    sdsi.Alt_Act_Qty,
+                   CASE 
+    WHEN COALESCE(sdsi.Act_Qty, 0) 
+         / NULLIF(COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
+    THEN 0
+    ELSE CONVERT(
+        DECIMAL(18,2),
+        COALESCE(sdsi.Act_Qty, 0) 
+        / NULLIF(COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0), 0)
+    )
+END AS Alt_Act_Qty,
+
                     sdsi.Taxable_Rate,
                     sdsi.Item_Rate,
                     sdsi.Amount,
@@ -2492,6 +2502,8 @@ SELECT
                 LEFT JOIN tbl_Retailers_Master rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
                 LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sgi2.shipingAddressId
                 WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
+                
+               
                 FOR JSON PATH
             ) AS Products_List
         FROM tbl_Sales_Delivery_Gen_Info sgi
@@ -2501,7 +2513,9 @@ SELECT
             FROM TRIP_DETAILS td
             WHERE td.Trip_Id = tm.Trip_Id
         )
+      ORDER BY sgi.Do_Inv_No ASC     
         FOR JSON PATH
+
     ), '[]') AS Product_Array,
 
     COALESCE((
