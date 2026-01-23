@@ -96,12 +96,12 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
 
         const calculatedStockDetails = stockDetails.map(stock => ({
             ...stock,
-          
+
             Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
             quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
         }));
 
-      
+
         const invoicesWithStaffs = invoices.map(invoice => {
             const involvedStaffs = staffs.filter(stf =>
                 isEqualNumber(stf.Do_Id, invoice.Do_Id)
@@ -136,7 +136,6 @@ export const postAssignCostCenterToSalesInvoice = async (req, res) => {
 
         await transaction.begin();
 
-   
         const updateStatusRequest = new sql.Request(transaction);
         await updateStatusRequest
             .input('Do_Id', sql.BigInt, Do_Id)
@@ -184,7 +183,7 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
             return;
         }
 
-        const { CostCategory, Do_Id, involvedStaffs, staffInvolvedStatus = 0 } = req.body;
+        const { CostCategory, Do_Id, involvedStaffs, staffInvolvedStatus = 0, deliveryStatus = 5 } = req.body;
         const invoiceIdsStr = Do_Id.join(',');
 
         await transaction.begin();
@@ -192,9 +191,12 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
         await new sql.Request(transaction)
             .input('invoiceIds', sql.NVarChar(sql.MAX), invoiceIdsStr)
             .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
+            .input('deliveryStatus', sql.Int, deliveryStatus)
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info
-                SET staffInvolvedStatus = @staffInvolvedStatus
+                SET 
+                    staffInvolvedStatus = @staffInvolvedStatus,
+                    Delivery_Status = @deliveryStatus
                 WHERE Do_Id IN (
                     SELECT CAST(value AS INT)
                     FROM STRING_SPLIT(@invoiceIds, ',')
