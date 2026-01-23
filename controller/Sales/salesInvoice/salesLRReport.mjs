@@ -127,6 +127,7 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
         servError(e, res);
     }
 };
+
 export const postAssignCostCenterToSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
 
@@ -327,7 +328,6 @@ export const invoiceCopyPrintOut = async (req, res) => {
                 	v.Voucher_Type voucherTypeGet, 
                 	r.Retailer_Name retailerNameGet,
                 	ISNULL(sda.gstNumber, '') retailerGstNumber,
-                    
                 	cb.Name createdByGet,
                 	sdgi.Created_on createdOn,
                 	sda.deliveryName mailingName,
@@ -586,12 +586,15 @@ export const salesInvoicePaper = async (req, res) => {
                 	COALESCE(v.Voucher_Type, '-') AS voucheGet,
                 	sdgi.Retailer_Id AS retailerId,
                 	COALESCE(r.Retailer_Name, '-') AS retailerGet,
-                	sdgi.Do_Inv_No voucherNumber
+                	sdgi.Do_Inv_No voucherNumber,
+                    sdgi.Created_on
                 FROM tbl_Sales_Delivery_Gen_Info AS sdgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
-                WHERE sdgi.Do_Date = @reqDate AND sdgi.Cancel_status <> 0
-                ORDER BY v.Voucher_Type;
+                WHERE 
+                    sdgi.Do_Date = @reqDate 
+                    AND sdgi.Cancel_status <> 0
+                ORDER BY v.Voucher_Type, sdgi.Created_on
             -- SALES STOCK INFO
                 SELECT
                 	sdgi.Do_Id AS invId,

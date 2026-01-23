@@ -235,19 +235,19 @@ const DashboardController = () => {
         }
     }
 
-const getEmployeeAbstract = async (req, res) => {
-    const { UserId, fromDate, toDate } = req.query;
+    const getEmployeeAbstract = async (req, res) => {
+        const { UserId, fromDate, toDate } = req.query;
 
-    if (isNaN(UserId)) {
-        return invalidInput(res, 'UserId is required');
-    }
+        if (isNaN(UserId)) {
+            return invalidInput(res, 'UserId is required');
+        }
 
-    if (!fromDate || !toDate) {
-        return invalidInput(res, 'fromDate and toDate are required');
-    }
+        if (!fromDate || !toDate) {
+            return invalidInput(res, 'fromDate and toDate are required');
+        }
 
-    try {
-        const query = `
+        try {
+            const query = `
         SELECT 
             u.UserId,
             u.Name,
@@ -358,55 +358,53 @@ const getEmployeeAbstract = async (req, res) => {
         WHERE u.UserId = @user;
         `;
 
-        const request = new sql.Request();
-        request.input('user', UserId);
-        request.input('fromDate', fromDate);
-        request.input('toDate', toDate);
+            const request = new sql.Request();
+            request.input('user', UserId);
+            request.input('fromDate', fromDate);
+            request.input('toDate', toDate);
 
-        const result = await request.query(query);
+            const result = await request.query(query);
 
-        if (result.recordset.length > 0) {
-            const levelOneParsed = result.recordset.map(o => ({
-                ...o,
-                Projects: JSON.parse(o.Projects),
-                AssignedTasks: JSON.parse(o.AssignedTasks),
-                WorkDetails: o?.WorkDetails ? JSON.parse(o?.WorkDetails) : []
-            }));
+            if (result.recordset.length > 0) {
+                const levelOneParsed = result.recordset.map(o => ({
+                    ...o,
+                    Projects: JSON.parse(o.Projects),
+                    AssignedTasks: JSON.parse(o.AssignedTasks),
+                    WorkDetails: o?.WorkDetails ? JSON.parse(o?.WorkDetails) : []
+                }));
 
-            const levelTwoParsed = levelOneParsed.map(o => ({
-                ...o,
-                AssignedTasks: o?.AssignedTasks?.map(ao => ({
-                    ...ao,
-                    Work_Details: JSON.parse(ao?.Work_Details),
-                    Task_Param: JSON.parse(ao?.Task_Param)
-                })),
-                WorkDetails: Array.isArray(o?.WorkDetails) ? o?.WorkDetails.map(wo => ({
-                    ...wo,
-                    Parameter_Details: JSON.parse(wo?.Parameter_Details)
-                })) : []
-            }));
-
-            const levelThreeParsed = levelTwoParsed.map(o => ({
-                ...o,
-                AssignedTasks: o?.AssignedTasks?.map(ao => ({
-                    ...ao,
-                    Work_Details: ao?.Work_Details?.map(wo => ({
+                const levelTwoParsed = levelOneParsed.map(o => ({
+                    ...o,
+                    AssignedTasks: o?.AssignedTasks?.map(ao => ({
+                        ...ao,
+                        Work_Details: JSON.parse(ao?.Work_Details),
+                        Task_Param: JSON.parse(ao?.Task_Param)
+                    })),
+                    WorkDetails: Array.isArray(o?.WorkDetails) ? o?.WorkDetails.map(wo => ({
                         ...wo,
                         Parameter_Details: JSON.parse(wo?.Parameter_Details)
+                    })) : []
+                }));
+
+                const levelThreeParsed = levelTwoParsed.map(o => ({
+                    ...o,
+                    AssignedTasks: o?.AssignedTasks?.map(ao => ({
+                        ...ao,
+                        Work_Details: ao?.Work_Details?.map(wo => ({
+                            ...wo,
+                            Parameter_Details: JSON.parse(wo?.Parameter_Details)
+                        }))
                     }))
-                }))
-            }));
+                }));
 
-            dataFound(res, levelThreeParsed);
-        } else {
-            noData(res);
+                dataFound(res, levelThreeParsed);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
         }
-    } catch (e) {
-        servError(e, res);
-    }
-};
-
-
+    };
 
     const getERPDashboardData = async (req, res) => {
         const { Fromdate, Company_Id } = req.query;
