@@ -76,7 +76,7 @@ const voucherType = () => {
 
     const addVoucherType = async (req, res) => {
 
-        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync } = req.body;
+        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync,status } = req.body;
 
         if (!Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
             return invalidInput(res, 'Voucher_Type and Branch_Id,Voucher_Code are required');
@@ -115,13 +115,14 @@ const voucherType = () => {
                 .input('Created_By', Created_By)
                 .input('Created_Time', new Date())
                 .input('tally_sync', tally_sync)
+                .input('status',status)
                 .query(`
                     INSERT INTO tbl_Voucher_Type (
                         Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_Id, 
                         Created_By, Created_Time, tally_sync, deleteFlag
                     ) VALUES (
                         @Vocher_Type_Id, @Voucher_Type, @Voucher_Code, @Branch_Id, @Type, @Alter_Id, 
-                        @Created_By, @Created_Time, @tally_sync, 0
+                        @Created_By, @Created_Time, @tally_sync,@status
                     );`
                 );
 
@@ -140,7 +141,7 @@ const voucherType = () => {
 
     const editVoucherType = async (req, res) => {
 
-        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync } = req.body;
+        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync,status } = req.body;
 
         if (!checkIsNumber(Vocher_Type_Id) ||
             !Voucher_Type ||
@@ -151,8 +152,6 @@ const voucherType = () => {
             return invalidInput(res, 'All fields are required and must be valid');
         }
 
-        // Convert frontend boolean → DB value (0=Yes,1=No)
-        const tally_sync = (tallySync == true || tallySync == "true") ? 0 : 1;
 
         try {
             const Alter_Id = randomNumber();
@@ -165,7 +164,8 @@ const voucherType = () => {
                 .input('Alter_Id', Alter_Id)
                 .input('Alter_By', Alter_By)
                 .input('Alter_Time', new Date())
-                .input('tally_sync', tally_sync)
+                .input('tally_sync', tallySync)
+                .input('deleteFlag', status)
                 .query(`
                 UPDATE tbl_Voucher_Type 
                 SET 
@@ -176,7 +176,8 @@ const voucherType = () => {
                     Alter_Id = @Alter_Id,
                     Alter_By = @Alter_By,
                     Alter_Time = @Alter_Time,
-                    tally_sync = @tally_sync
+                    tally_sync = @tally_sync,
+                    deleteFlag = @deleteFlag
                 WHERE Vocher_Type_Id = @Vocher_Type_Id
             `);
 
