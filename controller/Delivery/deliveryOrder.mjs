@@ -1871,17 +1871,43 @@ const editmobileApi = async (req, res) => {
 
             if (!checkIsNumber(Trip_Id)) throw new Error('Failed to get Trip Id');
 
-            const Trip_No = Number((await new sql.Request()
+   
+
+            // const Trip_No = Number((await new sql.Request()
+            //     .input('Trip_Date', Trip_Date)
+            //     .query(`
+            //                    SELECT COALESCE(MAX(Trip_No), 0) AS MaxId
+            //                    FROM tbl_Trip_Master    
+            //                    WHERE 
+            //                        Trip_Date = @Trip_Date
+            //                     `
+            //     ))?.recordset[0]?.MaxId) + 1;
+
+            // if (!checkIsNumber(Trip_No)) throw new Error('Failed to get Trip_No');
+
+
+   let finalTripNo;
+        
+       
+        if (Trip_No && Trip_No !== '') {
+        
+            
+            finalTripNo = Trip_No; 
+        } else {
+     
+            const maxTripNo = Number((await new sql.Request()
                 .input('Trip_Date', Trip_Date)
                 .query(`
-                               SELECT COALESCE(MAX(Trip_No), 0) AS MaxId
-                               FROM tbl_Trip_Master    
-                               WHERE 
-                                   Trip_Date = @Trip_Date
-                                `
-                ))?.recordset[0]?.MaxId) + 1;
+                    SELECT COALESCE(MAX(Trip_No), 0) AS MaxId
+                    FROM tbl_Trip_Master    
+                    WHERE Trip_Date = @Trip_Date
+                `))?.recordset[0]?.MaxId) + 1;
 
-            if (!checkIsNumber(Trip_No)) throw new Error('Failed to get Trip_No');
+            if (!checkIsNumber(maxTripNo)) throw new Error('Failed to generate Trip_No');
+            finalTripNo = maxTripNo;
+        }
+
+
 
             const getYearId = await new sql.Request()
                 .input('Trip_Date', Trip_Date)
@@ -1910,9 +1936,14 @@ const editmobileApi = async (req, res) => {
 
             const recordCount = countResult.recordset[0].RecordCount;
             const T_No = recordCount + 1;
-
-
-
+            let Trip_Number;
+            if(Trip_No !=''){
+                Trip_Number=Trip_No
+            }
+            else {
+                Trip_Number=T_No
+            }
+           
             if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
 
             const BranchCodeGet = await new sql.Request()
@@ -1959,7 +1990,7 @@ const editmobileApi = async (req, res) => {
                 .input('Vehicle_No', Vehicle_No)
                 .input('TripStatus', TripStatus)
                 .input('StartTime', StartTime)
-                .input('Trip_No', Trip_No)
+                 .input('Trip_No', finalTripNo) // Use the determined Trip_No
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
                 .input('Created_By', Created_By)
                 .input('Created_At', new Date())
@@ -2270,300 +2301,452 @@ const editmobileApi = async (req, res) => {
 
 const deliveryTripsheetList = async (req, res) => {
     try {
-        const FromDate = ISOString(req.query.Fromdate);
-        const ToDate = ISOString(req.query.Todate);
-        const { Branch_Id, User_Id, Delivery_Person_Id } = req.query;
+        const { Fromdate, Todate, Branch_Id, User_Id, Delivery_Person_Id } = req.query;
 
-        if (!FromDate || !ToDate) {
+        if (!Fromdate || !Todate) {
             return invalidInput(res, 'Select StartDate & EndDate');
         }
 
-        let query = `
-WITH TRIP_MASTER AS (
-    SELECT
-        tr.Trip_Id,
-        tr.Challan_No,
-        tr.EndTime,
-        tr.StartTime,
-        tr.Trip_Date,
-        tr.Trip_EN_KM,
-        tr.Trip_No,
-        tr.Trip_ST_KM,
-        tr.Trip_Tot_Kms,
-        tr.Vehicle_No,
-        tr.Branch_Id,
-        tr.BillType,
-        tr.VoucherType,
-        tr.TR_INV_ID,
-        bm.BranchName
-    FROM tbl_Trip_Master tr
-    LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
-    WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate
-      AND tr.BillType = 'SALES'
-`;
-
-        if (Branch_Id) {
-            query += ` AND tr.Branch_Id = @Branch_Id`;
-        }
+        const FromDate = new Date(Fromdate);
+        const ToDate = new Date(Todate);
         
-
-        if (Delivery_Person_Id) {
-            query += ` AND EXISTS (
-                SELECT 1 FROM tbl_Trip_Details td
-                INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id
-                WHERE td.Trip_Id = tr.Trip_Id 
-                AND sgi.Delivery_Person_Id = @Delivery_Person_Id
-            )`;
+        if (isNaN(FromDate.getTime()) || isNaN(ToDate.getTime())) {
+            return invalidInput(res, 'Invalid date format');
         }
 
-        query += `),
+        const branchIdNum = Branch_Id ? parseInt(Branch_Id, 10) : null;
+        const deliveryPersonIdNum = Delivery_Person_Id ? parseInt(Delivery_Person_Id, 10) : null;
 
-TRIP_DETAILS AS (
-    SELECT DISTINCT
-        td.Trip_Id,
-        td.Delivery_Id,
-        sgi.Do_Id,
-        sgi.So_No,
-        sgi.Total_Before_Tax,
-        sgi.Total_Invoice_Value,
-        sgi.SGST_Total,
-        sgi.CSGT_Total,
-        sgi.IGST_Total,
-        sgi.Delivery_Person_Id,
-        sgi.Delivery_Status,
-        sgi.Cancel_status,
-        sgi.Total_Tax,
-        sgi.Created_by,
-        sgi.Altered_by,
-        sgi.Do_Date AS Delivery_Do_Date,
-        sogi.So_Id AS Sales_Order_Id,
-        sogi.Retailer_Id AS Order_Retailer_Id
-    FROM tbl_Trip_Details td
-    LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id
-    LEFT JOIN tbl_Sales_Order_Gen_Info sogi ON sogi.So_Id = sgi.So_No
-    WHERE 1 = 1
+        // 1. Get Trip Master Data
+        let tripMasterQuery = `
+SELECT
+    tr.Trip_Id,
+    tr.Challan_No,
+    tr.EndTime,
+    tr.StartTime,
+    tr.Trip_Date,
+    tr.Trip_EN_KM,
+    tr.Trip_No,
+    tr.Trip_ST_KM,
+    tr.Trip_Tot_Kms,
+    tr.Vehicle_No,
+    tr.Branch_Id,
+    tr.BillType,
+    tr.VoucherType,
+    tr.TR_INV_ID,
+    bm.BranchName,
+    MIN(sgi.Do_Date) AS DO_Date
+FROM tbl_Trip_Master tr
+LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
+LEFT JOIN tbl_Trip_Details td ON td.Trip_Id = tr.Trip_Id
+LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(td.Delivery_Id AS INT)
+WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate
+    AND tr.BillType = 'SALES'
 `;
 
-        if (Delivery_Person_Id) {
-            query += ` AND sgi.Delivery_Person_Id = @Delivery_Person_Id`;
+        const conditions = [];
+        if (branchIdNum && !isNaN(branchIdNum)) {
+            conditions.push(`AND tr.Branch_Id = @Branch_Id`);
+        }
+        if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
+            conditions.push(`AND EXISTS (
+                SELECT 1 FROM tbl_Trip_Details td2
+                INNER JOIN tbl_Sales_Delivery_Gen_Info sgi2 ON TRY_CAST(sgi2.Do_Id AS INT) = TRY_CAST(td2.Delivery_Id AS INT)
+                WHERE td2.Trip_Id = tr.Trip_Id 
+                AND TRY_CAST(sgi2.Delivery_Person_Id AS INT) = @Delivery_Person_Id
+            )`);
         }
 
-        query += `),
+        if (conditions.length > 0) {
+            tripMasterQuery += ' ' + conditions.join(' ');
+        }
 
-TRIP_EMPLOYEES AS (
-    SELECT
-        te.Trip_Id,
-        te.Involved_Emp_Id,
-        e.Cost_Center_Name AS Emp_Name,
-        cc.Cost_Category,
-        cc.Cost_Category_Id
-    FROM tbl_Trip_Employees te
-    LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = te.Involved_Emp_Id
-    LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
-)
-
-SELECT
-    tm.Trip_Id,
-    tm.Challan_No,
-    tm.EndTime,
-    tm.StartTime,
-    tm.Trip_Date,
-    tm.Trip_EN_KM,
-    tm.Trip_No,
-    tm.Trip_ST_KM,
-    tm.Trip_Tot_Kms,
-    tm.Vehicle_No,
-    tm.Branch_Id,
-    tm.BillType,
-    tm.VoucherType,
-    tm.TR_INV_ID,
-    tm.BranchName,
-
-    (SELECT MIN(td.Delivery_Do_Date)
-     FROM TRIP_DETAILS td
-     WHERE td.Trip_Id = tm.Trip_Id) AS DO_Date,
-
-    COALESCE((
-        SELECT DISTINCT
-            td.Delivery_Id,
-            td.Do_Id,
-            td.So_No,
-            td.Total_Before_Tax,
-            td.Total_Invoice_Value,
-            td.SGST_Total,
-            td.CSGT_Total,
-            td.IGST_Total,
-            td.Delivery_Person_Id,
-            td.Delivery_Status,
-            td.Cancel_status,
-            td.Total_Tax,
-            td.Created_by,
-            td.Altered_by,
-            td.Sales_Order_Id,
-            td.Order_Retailer_Id,
-            ecc.Cost_Center_Name,
-            ecc.User_Id,
-            us.Name,
-            ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,
-            ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
-            ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
-            ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
-            ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
-            ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
-            ISNULL(sgi.Collected_By, '') AS Collected_By,
-            ISNULL(sgi.Collected_Status, '') AS Collected_Status,
-            sgi.Payment_Status
-        FROM TRIP_DETAILS td
-        LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
-        LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id
-        LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id
-        WHERE td.Trip_Id = tm.Trip_Id
-        FOR JSON PATH
-    ), '[]') AS Trip_Details,
-
-    COALESCE((
-        SELECT
-            sgi.Do_Id,
-            sgi.So_No,
-            rm.Retailer_Name,
-            sgi.Do_Date AS Product_Do_Date,
-            (
-                SELECT
-                    sdsi.DO_St_Id,
-                    sdsi.Do_Date,
-                    sdsi.Delivery_Order_Id,
-                    sdsi.GoDown_Id,
-                    sdsi.S_No,
-                    sdsi.Item_Id,
-                    sdsi.Bill_Qty,
-                    sdsi.Act_Qty,
-                   CASE 
-    WHEN COALESCE(sdsi.Act_Qty, 0) 
-         / NULLIF(COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
-    THEN 0
-    ELSE CONVERT(
-        DECIMAL(18,2),
-        COALESCE(sdsi.Act_Qty, 0) 
-        / NULLIF(COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0), 0)
-    )
-END AS Alt_Act_Qty,
-
-                    sdsi.Taxable_Rate,
-                    sdsi.Item_Rate,
-                    sdsi.Amount,
-                    sdsi.Free_Qty,
-                    sdsi.Total_Qty,
-                    sdsi.Taxble,
-                    sdsi.HSN_Code,
-                    sdsi.Unit_Id,
-                    sdsi.Unit_Name,
-                    sdsi.Act_unit_Id,
-                    sdsi.Alt_Act_Unit_Id,
-                    sdsi.Taxable_Amount,
-                    sdsi.Tax_Rate,
-                    sdsi.Cgst,
-                    sdsi.Cgst_Amo,
-                    sdsi.Sgst,
-                    sdsi.Sgst_Amo,
-                    sdsi.Igst,
-                    sdsi.Igst_Amo,
-                    sdsi.Final_Amo,
-                    sdsi.Created_on,
-                    sdsi.Batch_Name,
-                    sgi2.Do_Inv_No,
-                    pm.Product_Name,
-                    pm.Pack_Id,
-                    ppm.Pack,
-                    pm.Product_Image_Name,
-                    tm.BranchName AS Branch,
-                    rm2.Retailer_Name,
-                    rm2.Latitude,
-                    rm2.Longitude,
-                    sda.deliveryName as Party_Mailing_Name,
-                    sda.cityName as Party_Location,
-                    (
-                        SELECT
-                            ssi.Id,
-                            ssi.Do_Id,
-                            ssi.Emp_Id,
-                            ecc.Cost_Center_Name AS Emp_Name,
-                            ssi.Emp_Type_Id,
-                            et.Cost_Category AS Emp_Type_Name
-                        FROM tbl_Sales_Delivery_Staff_Info ssi
-                        LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
-                        LEFT JOIN tbl_ERP_Cost_Category et ON et.Cost_Category_Id = ssi.Emp_Type_Id
-                        WHERE ssi.Do_Id = sgi2.Do_Id
-                        FOR JSON PATH
-                    ) AS Delivery_Staff
-                FROM tbl_Sales_Delivery_Stock_Info sdsi
-                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = sdsi.Item_Id
-                LEFT JOIN tbl_Pack_Master ppm ON ppm.Pack_Id =pm.Pack_Id
-                LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
-                LEFT JOIN tbl_Retailers_Master rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.id = sgi2.shipingAddressId
-                WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
-                
-               
-                FOR JSON PATH
-            ) AS Products_List
-        FROM tbl_Sales_Delivery_Gen_Info sgi
-        LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sgi.Retailer_Id
-        WHERE sgi.Do_Id IN (
-            SELECT td.Delivery_Id
-            FROM TRIP_DETAILS td
-            WHERE td.Trip_Id = tm.Trip_Id
-        )
-      ORDER BY sgi.Do_Inv_No ASC     
-        FOR JSON PATH
-
-    ), '[]') AS Product_Array,
-
-    COALESCE((
-        SELECT
-            te.Involved_Emp_Id,
-            te.Emp_Name,
-            te.Cost_Category,
-            te.Cost_Category_Id AS Cost_Center_Type_Id
-        FROM TRIP_EMPLOYEES te
-        WHERE te.Trip_Id = tm.Trip_Id
-        FOR JSON PATH
-    ), '[]') AS Employees_Involved
-
-FROM TRIP_MASTER tm
+        tripMasterQuery += `
+GROUP BY 
+    tr.Trip_Id, tr.Challan_No, tr.EndTime, tr.StartTime, tr.Trip_Date,
+    tr.Trip_EN_KM, tr.Trip_No, tr.Trip_ST_KM, tr.Trip_Tot_Kms,
+    tr.Vehicle_No, tr.Branch_Id, tr.BillType, tr.VoucherType,
+    tr.TR_INV_ID, bm.BranchName
+ORDER BY tr.Trip_Date DESC
 `;
 
         const request = new sql.Request();
         request.input('FromDate', sql.Date, FromDate);
         request.input('ToDate', sql.Date, ToDate);
-
-        if (Branch_Id) {
-            request.input('Branch_Id', sql.Int, Branch_Id);
+        
+        if (branchIdNum && !isNaN(branchIdNum)) {
+            request.input('Branch_Id', sql.Int, branchIdNum);
         }
-       
-        if (Delivery_Person_Id) {
-            request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
+        if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
+            request.input('Delivery_Person_Id', sql.Int, deliveryPersonIdNum);
         }
 
-        const result = await request.query(query);
+        const tripMasterResult = await request.query(tripMasterQuery);
+        
+        if (!tripMasterResult.recordset?.length) {
+            return noData(res);
+        }
 
-        if (result.recordset?.length) {
-            const parsed = result.recordset.map(o => ({
-                ...o,
-                Product_Array: o.Product_Array ? JSON.parse(o.Product_Array) : [],
-                Trip_Details: o.Trip_Details ? JSON.parse(o.Trip_Details) : [],
-                Employees_Involved: o.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
-            }));
+        const tripIds = tripMasterResult.recordset.map(t => t.Trip_Id);
+        if (tripIds.length === 0) {
+            return noData(res);
+        }
 
-            dataFound(res, parsed);
+        // 2. Get Trip Details
+        const tripDetailsQuery = `
+SELECT DISTINCT
+    td.Trip_Id,
+    td.Delivery_Id,
+    sgi.Do_Id,
+    sgi.So_No,
+    sgi.Do_Inv_No,  -- Added Sales Invoice No
+    CAST(COALESCE(TRY_CAST(sgi.Total_Before_Tax AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Before_Tax,
+    CAST(COALESCE(TRY_CAST(sgi.Total_Invoice_Value AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Invoice_Value,
+    CAST(COALESCE(TRY_CAST(sgi.SGST_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as SGST_Total,
+    CAST(COALESCE(TRY_CAST(sgi.CSGT_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as CSGT_Total,
+    CAST(COALESCE(TRY_CAST(sgi.IGST_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as IGST_Total,
+    TRY_CAST(sgi.Delivery_Person_Id AS INT) as Delivery_Person_Id,
+    sgi.Delivery_Status,
+    sgi.Cancel_status,
+    CAST(COALESCE(TRY_CAST(sgi.Total_Tax AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Tax,
+    sgi.Created_by,
+    sgi.Altered_by,
+    sgi.Do_Date AS Delivery_Do_Date,
+    ecc.Cost_Center_Name,
+    ecc.User_Id,
+    us.Name,
+    ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,
+    ISNULL(sgi.Payment_Mode, 0) AS Payment_Mode,
+    ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
+    ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
+    ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
+    ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
+    ISNULL(sgi.Collected_By, 0) AS Collected_By,
+    ISNULL(sgi.Collected_Status, 0) AS Collected_Status,
+    sgi.Payment_Status
+FROM tbl_Trip_Details td
+INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(td.Delivery_Id AS INT)
+LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = TRY_CAST(sgi.Delivery_Person_Id AS INT)
+LEFT JOIN tbl_Users us ON us.UserId = TRY_CAST(ecc.User_Id AS INT)
+WHERE td.Trip_Id IN (${tripIds.map((_, i) => `@TripId${i}`).join(',')})
+`;
+
+        const detailsRequest = new sql.Request();
+        tripIds.forEach((id, i) => {
+            detailsRequest.input(`TripId${i}`, sql.Int, id);
+        });
+        
+        let tripDetailsResult;
+        if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
+            const newQuery = tripDetailsQuery + ` AND TRY_CAST(sgi.Delivery_Person_Id AS INT) = @Delivery_Person_Id`;
+            detailsRequest.input('Delivery_Person_Id', sql.Int, deliveryPersonIdNum);
+            tripDetailsResult = await detailsRequest.query(newQuery);
         } else {
-            noData(res);
+            tripDetailsResult = await detailsRequest.query(tripDetailsQuery);
+        }
+
+        return await processResults(tripDetailsResult);
+
+        async function processResults(tripDetailsResult) {
+            const tripDetailsMap = {};
+            const deliveryIds = [];
+            
+            tripDetailsResult.recordset.forEach(detail => {
+                const tripId = detail.Trip_Id;
+                if (!tripDetailsMap[tripId]) {
+                    tripDetailsMap[tripId] = [];
+                }
+                tripDetailsMap[tripId].push(detail);
+                
+                if (detail.Do_Id && !deliveryIds.includes(detail.Do_Id)) {
+                    deliveryIds.push(detail.Do_Id);
+                }
+            });
+
+            // 3. Get Products Data
+            let productMap = {};
+            let staffMap = {};
+            let deliveryInvoiceMap = {}; // Store Do_Inv_No for each Do_Id
+            
+            if (deliveryIds.length > 0) {
+                // Get Products Data
+                const productsQuery = `
+SELECT DISTINCT
+    TRY_CAST(sdsi.Delivery_Order_Id AS INT) AS Do_Id,
+    sdsi.S_No,
+    TRY_CAST(sdsi.Item_Id AS INT) AS Item_Id,
+    CAST(COALESCE(TRY_CAST(sdsi.Bill_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Bill_Qty,
+    CAST(COALESCE(TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Act_Qty,
+    CAST(COALESCE(TRY_CAST(sdsi.Taxable_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxable_Rate,
+    CAST(COALESCE(TRY_CAST(sdsi.Item_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Item_Rate,
+    CAST(COALESCE(TRY_CAST(sdsi.Amount AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Amount,
+    CAST(COALESCE(TRY_CAST(sdsi.Free_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Free_Qty,
+    CAST(COALESCE(TRY_CAST(sdsi.Total_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Qty,
+    CAST(COALESCE(TRY_CAST(sdsi.Taxble AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxble,
+    sdsi.HSN_Code,
+    TRY_CAST(sdsi.Unit_Id AS INT) AS Unit_Id,
+    sdsi.Unit_Name,
+    TRY_CAST(sdsi.Act_unit_Id AS INT) AS Act_unit_Id,
+    TRY_CAST(sdsi.Alt_Act_Unit_Id AS INT) AS Alt_Act_Unit_Id,
+    CAST(COALESCE(TRY_CAST(sdsi.Taxable_Amount AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxable_Amount,
+    CAST(COALESCE(TRY_CAST(sdsi.Tax_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Tax_Rate,
+    CAST(COALESCE(TRY_CAST(sdsi.Cgst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Cgst,
+    CAST(COALESCE(TRY_CAST(sdsi.Cgst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Cgst_Amo,
+    CAST(COALESCE(TRY_CAST(sdsi.Sgst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Sgst,
+    CAST(COALESCE(TRY_CAST(sdsi.Sgst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Sgst_Amo,
+    CAST(COALESCE(TRY_CAST(sdsi.Igst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Igst,
+    CAST(COALESCE(TRY_CAST(sdsi.Igst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Igst_Amo,
+    CAST(COALESCE(TRY_CAST(sdsi.Final_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Final_Amo,
+    sdsi.Created_on,
+    sdsi.Batch_Name,
+    sgi.Do_Inv_No,
+    pm.Product_Name,
+    TRY_CAST(pm.Pack_Id AS INT) AS Pack_Id,
+    CAST(COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) AS Pack,
+    pm.Product_Image_Name,
+    bm.BranchName AS Branch,
+    rm.Retailer_Name,
+    CAST(COALESCE(TRY_CAST(rm.Latitude AS DECIMAL(10,6)), 0) AS DECIMAL(10,6)) as Latitude,
+    CAST(COALESCE(TRY_CAST(rm.Longitude AS DECIMAL(10,6)), 0) AS DECIMAL(10,6)) as Longitude,
+    sda.deliveryName AS Party_Mailing_Name,
+    sda.cityName AS Party_Location,
+    -- Calculate Alt_Act_Qty with safe conversion
+    CASE 
+        WHEN COALESCE(TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)), 0) = 0 
+             OR COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0) = 0
+        THEN 0
+        ELSE CAST(
+            TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)) 
+            / NULLIF(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0)
+            AS DECIMAL(18,2)
+        )
+    END AS Alt_Act_Qty,
+    sdsi.DO_St_Id,
+    sdsi.Do_Date,
+    TRY_CAST(sdsi.Delivery_Order_Id AS INT) AS Delivery_Order_Id,
+    TRY_CAST(sdsi.GoDown_Id AS INT) AS GoDown_Id
+FROM tbl_Sales_Delivery_Stock_Info sdsi
+INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(sdsi.Delivery_Order_Id AS INT)
+LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = TRY_CAST(sdsi.Item_Id AS INT)
+LEFT JOIN tbl_Pack_Master ppm ON ppm.Pack_Id = TRY_CAST(pm.Pack_Id AS INT)
+LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = TRY_CAST(sgi.Branch_Id AS INT)
+LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = TRY_CAST(sgi.Retailer_Id AS INT)
+LEFT JOIN tbl_Sales_Delivery_Address sda ON sda.id = TRY_CAST(sgi.shipingAddressId AS INT)
+WHERE TRY_CAST(sdsi.Delivery_Order_Id AS INT) IN (${deliveryIds.map((_, i) => `@DeliveryId${i}`).join(',')})
+ORDER BY TRY_CAST(sdsi.Delivery_Order_Id AS INT), sdsi.S_No
+`;
+
+                const productsRequest = new sql.Request();
+                deliveryIds.forEach((id, i) => {
+                    productsRequest.input(`DeliveryId${i}`, sql.Int, id);
+                });
+
+                const productsResult = await productsRequest.query(productsQuery);
+                
+                productMap = {};
+                productsResult.recordset.forEach(product => {
+                    const doId = product.Do_Id;
+                    if (!productMap[doId]) {
+                        productMap[doId] = [];
+                    }
+                    productMap[doId].push(product);
+                });
+
+                // Get Staff Info
+                const staffQuery = `
+SELECT
+    ssi.Id,
+    TRY_CAST(ssi.Do_Id AS INT) AS Do_Id,
+    TRY_CAST(ssi.Emp_Id AS INT) AS Emp_Id,
+    ecc.Cost_Center_Name AS Emp_Name,
+    TRY_CAST(ssi.Emp_Type_Id AS INT) AS Emp_Type_Id,
+    et.Cost_Category AS Emp_Type_Name
+FROM tbl_Sales_Delivery_Staff_Info ssi
+LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = TRY_CAST(ssi.Emp_Id AS INT)
+LEFT JOIN tbl_ERP_Cost_Category et ON et.Cost_Category_Id = TRY_CAST(ssi.Emp_Type_Id AS INT)
+WHERE TRY_CAST(ssi.Do_Id AS INT) IN (${deliveryIds.map((_, i) => `@StaffDoId${i}`).join(',')})
+`;
+
+                const staffRequest = new sql.Request();
+                deliveryIds.forEach((id, i) => {
+                    staffRequest.input(`StaffDoId${i}`, sql.Int, id);
+                });
+
+                const staffResult = await staffRequest.query(staffQuery);
+                
+                staffMap = {};
+                staffResult.recordset.forEach(staff => {
+                    const doId = staff.Do_Id;
+                    if (!staffMap[doId]) {
+                        staffMap[doId] = [];
+                    }
+                    staffMap[doId].push(staff);
+                });
+            }
+
+            // 4. Get Employees Involved
+            const employeesQuery = `
+SELECT
+    te.Trip_Id,
+    te.Involved_Emp_Id,
+    e.Cost_Center_Name AS Emp_Name,
+    cc.Cost_Category,
+    cc.Cost_Category_Id AS Cost_Center_Type_Id
+FROM tbl_Trip_Employees te
+LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = te.Involved_Emp_Id
+LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
+`;
+
+            const empRequest = new sql.Request();
+            tripIds.forEach((id, i) => {
+                empRequest.input(`EmpTripId${i}`, sql.Int, id);
+            });
+
+            const employeesResult = await empRequest.query(employeesQuery);
+            
+            const employeesMap = {};
+            employeesResult.recordset.forEach(emp => {
+                const tripId = emp.Trip_Id;
+                if (!employeesMap[tripId]) {
+                    employeesMap[tripId] = [];
+                }
+                employeesMap[tripId].push({
+                    Involved_Emp_Id: emp.Involved_Emp_Id,
+                    Emp_Name: emp.Emp_Name,
+                    Cost_Category: emp.Cost_Category,
+                    Cost_Center_Type_Id: emp.Cost_Center_Type_Id
+                });
+            });
+
+            // 5. Assemble Final Data with Sales Invoice No sorting
+            const finalData = tripMasterResult.recordset.map(trip => {
+                const tripId = trip.Trip_Id;
+                const details = tripDetailsMap[tripId] || [];
+                
+                // Format Trip_Details (without Products_List)
+                const formattedTripDetails = details.map(detail => {
+                    return {
+                        Delivery_Id: detail.Delivery_Id,
+                        Do_Id: detail.Do_Id,
+                        So_No: detail.So_No,
+                        Total_Before_Tax: detail.Total_Before_Tax,
+                        Total_Invoice_Value: detail.Total_Invoice_Value,
+                        SGST_Total: detail.SGST_Total,
+                        CSGT_Total: detail.CSGT_Total,
+                        IGST_Total: detail.IGST_Total,
+                        Delivery_Person_Id: detail.Delivery_Person_Id,
+                        Delivery_Status: detail.Delivery_Status,
+                        Cancel_status: detail.Cancel_status,
+                        Total_Tax: detail.Total_Tax,
+                        Created_by: detail.Created_by,
+                        Altered_by: detail.Altered_by,
+                        Cost_Center_Name: detail.Cost_Center_Name,
+                        Delivery_Time: detail.Delivery_Time,
+                        Payment_Mode: detail.Payment_Mode,
+                        Payment_Ref_No: detail.Payment_Ref_No,
+                        Delivery_Location: detail.Delivery_Location,
+                        Delivery_Latitude: detail.Delivery_Latitude,
+                        Delivery_Longitude: detail.Delivery_Longitude,
+                        Collected_By: detail.Collected_By,
+                        Collected_Status: detail.Collected_Status,
+                        Payment_Status: detail.Payment_Status
+                    };
+                });
+                
+                // Format Product_Array with Sales Invoice No ASC sorting
+                // First, sort details by Do_Inv_No (Sales Invoice No)
+                const sortedDetails = [...details].sort((a, b) => {
+                    // Handle null/undefined values
+                    const invoiceA = a.Do_Inv_No || '';
+                    const invoiceB = b.Do_Inv_No || '';
+                    
+                    // Custom sorting for alphanumeric invoice numbers like "OGS/000175/25-26"
+                    // Extract numeric part for better sorting
+                    const numA = extractInvoiceNumber(invoiceA);
+                    const numB = extractInvoiceNumber(invoiceB);
+                    
+                    if (numA !== null && numB !== null) {
+                        return numA - numB;
+                    }
+                    
+                    // Fallback to string comparison
+                    return invoiceA.localeCompare(invoiceB);
+                });
+                
+                const productArray = sortedDetails.map(detail => {
+                    const doId = detail.Do_Id;
+                    const products = productMap[doId] || [];
+                    
+                    const formattedProducts = products.map(product => {
+                        // Remove Do_Id from product to match your structure
+                        const { Do_Id, ...productWithoutDoId } = product;
+                        return {
+                            ...productWithoutDoId,
+                            Delivery_Staff: staffMap[doId] || []
+                        };
+                    });
+                    
+                    return {
+                        Do_Id: detail.Do_Id,
+                        So_No: detail.So_No,
+                        Retailer_Name: detail.Cost_Center_Name || 'N/A',
+                        Product_Do_Date: detail.Delivery_Do_Date,
+                        Products_List: formattedProducts
+                    };
+                });
+
+                return {
+                    Trip_Id: trip.Trip_Id,
+                    Challan_No: trip.Challan_No,
+                    EndTime: trip.EndTime,
+                    StartTime: trip.StartTime,
+                    Trip_Date: trip.Trip_Date,
+                    Trip_EN_KM: trip.Trip_EN_KM,
+                    Trip_No: trip.Trip_No,
+                    Trip_ST_KM: trip.Trip_ST_KM,
+                    Trip_Tot_Kms: trip.Trip_Tot_Kms,
+                    Vehicle_No: trip.Vehicle_No,
+                    Branch_Id: trip.Branch_Id,
+                    BillType: trip.BillType,
+                    VoucherType: trip.VoucherType,
+                    TR_INV_ID: trip.TR_INV_ID,
+                    BranchName: trip.BranchName,
+                    DO_Date: trip.DO_Date,
+                    Trip_Details: formattedTripDetails,
+                    Product_Array: productArray,
+                    Employees_Involved: employeesMap[tripId] || []
+                };
+            });
+
+            dataFound(res, finalData);
         }
 
     } catch (e) {
+        console.error('Delivery Tripsheet Error:', e);
         servError(e, res);
     }
 };
 
+
+function extractInvoiceNumber(invoiceNo) {
+    if (!invoiceNo) return null;
+    
+   
+    const matches = invoiceNo.match(/\d+/g);
+    if (matches && matches.length > 0) {
+   
+        let longestNum = 0;
+        matches.forEach(match => {
+            const num = parseInt(match, 10);
+            if (!isNaN(num) && num > longestNum) {
+                longestNum = num;
+            }
+        });
+        return longestNum;
+    }
+    return null;
+}
 
 
     const updateDeliveryOrderTrip = async (req, res) => {
