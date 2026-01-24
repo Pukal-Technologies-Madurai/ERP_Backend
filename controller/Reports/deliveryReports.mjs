@@ -189,9 +189,29 @@ const getNonConvertedSales = async (req, res) => {
                     };
                 });
 
-                dataFound(res, resData);
+                // MODIFIED: Add count to response
+                dataFound(res, {
+                    orders: resData,                      // Your pending orders array
+                    totalPendingOrders: resData.length,   // Count of pending orders
+                    totalFilteredOrders: OrderData.length, // Count of all filtered orders
+                    summary: {
+                        totalOrders: OrderData.length,
+                        pendingOrders: resData.length,
+                        fulfilledOrders: OrderData.length - resData.length,
+                        dateRange: `${Fromdate} to ${Todate}`
+                    }
+                });
+                
             } else {
-                noData(res, "No pending orders found");
+                // Even when no pending orders, return counts
+                noData(res, {
+                    message: "No pending orders found",
+                    counts: {
+                        totalFilteredOrders: OrderData.length,
+                        pendingOrders: 0,
+                        fulfilledOrders: OrderData.length
+                    }
+                });
             }
         } else {
             noData(res);
