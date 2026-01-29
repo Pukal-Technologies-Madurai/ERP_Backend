@@ -881,7 +881,7 @@ LEFT JOIN
                     	ON V.Vocher_Type_Id =  P.Voucher_Type
                     	WHERE 
                     		P.Po_Entry_Date BETWEEN @Fromdate AND @Todate
-                    		AND P.Cancel_status = 0
+                    	--	AND P.Cancel_status = 0
                     	GROUP BY V.Voucher_Type
                     ), SALE_ORDER AS (
                     	SELECT 
@@ -896,7 +896,7 @@ LEFT JOIN
                     	ON V.Vocher_Type_Id =  S.VoucherType
                     	WHERE 
                     		S.So_Date BETWEEN @Fromdate AND @Todate
-                    		AND S.Cancel_status = 0
+                    		--AND S.Cancel_status = 0
                     	GROUP BY V.Voucher_Type
                     ), SALES_INVOICE AS (
                     	SELECT 
@@ -904,13 +904,13 @@ LEFT JOIN
                     		V.Voucher_Type AS Voucher_Type,
                     		'SalesInvoice' AS ModuleName,
                     		ISNULL(SUM(Total_Invoice_value), 0) AS Amount,
-                            '/erp/sales/salesInvoice' AS navLink,
+                            '/erp/sales/Invoice' AS navLink,
                     		'ERP' AS dataSource
                     	FROM tbl_Sales_Delivery_Gen_Info AS S
                     	LEFT JOIN ERP_VOUCHERS AS V
                     	ON V.Vocher_Type_Id =  S.Voucher_Type
                     	WHERE S.Do_Date BETWEEN @Fromdate AND @Todate
-                    	AND S.Cancel_status <> 0
+                    	--AND S.Cancel_status <> 0
                     	GROUP BY V.Voucher_Type
                     ), RECEIPT AS (
                     	SELECT 
