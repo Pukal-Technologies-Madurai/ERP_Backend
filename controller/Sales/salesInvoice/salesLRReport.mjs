@@ -70,25 +70,39 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 FROM tbl_ERP_Cost_Category
                 ORDER BY Cost_Category;
                 
-              SELECT 
-                    sdsi.Do_Date,
-                    sdsi.Delivery_Order_Id,
-                 	COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
-                	COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
-                	COALESCE(sdsi.Alt_Act_Qty, 0) AS Alt_Act_Qty,
-                	COALESCE(pck.Pack, '0') AS unitValue,
-                    case when COALESCE(sdsi.Bill_Qty, 0)/COALESCE(pck.Pack, '0') = NULL
-					then 0 else (convert(decimal(18,2),COALESCE(sdsi.Bill_Qty, 0)/COALESCE(pck.Pack, '0')))end as Alt_Act_Qty
-					,
-                	COALESCE(p.Product_Rate, 0) AS itemRate,
-                	COALESCE(sdsi.Item_Rate, 0) AS billedRate
-                FROM tbl_Sales_Delivery_Stock_Info sdsi
-                LEFT JOIN tbl_Product_Master AS p
-                    ON p.Product_Id = sdsi.Item_Id
-                LEFT JOIN tbl_Pack_Master AS pck
-                    ON pck.Pack_Id = p.Pack_Id
-				WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
-                `);
+           SELECT 
+    sdsi.Do_Date,
+    sdsi.Delivery_Order_Id,
+
+    COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
+    COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
+
+    -- Calculated Alt_Act_Qty (SAFE)
+    CASE 
+        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+        THEN 0
+        ELSE CONVERT(
+               DECIMAL(18,2),
+               COALESCE(sdsi.Bill_Qty, 0) 
+               / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+             )
+    END AS Alt_Act_Qty,
+
+    -- Unit value (numeric)
+    TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
+
+    COALESCE(p.Product_Rate, 0) AS itemRate,
+    COALESCE(sdsi.Item_Rate, 0) AS billedRate
+
+FROM tbl_Sales_Delivery_Stock_Info sdsi
+LEFT JOIN tbl_Product_Master AS p
+    ON p.Product_Id = sdsi.Item_Id
+LEFT JOIN tbl_Pack_Master AS pck
+    ON pck.Pack_Id = p.Pack_Id
+WHERE sdsi.Delivery_Order_Id IN (
+    SELECT Do_Id FROM @FilteredInvoice)`
+);
 
         const result = await getSalesInvoice;
 
@@ -237,6 +251,45 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
 
         await transaction.commit();
         success(res, 'Sales Invoice Staff Updated!');
+    } catch (e) {
+        if (transaction._aborted === false) {
+            await transaction.rollback();
+        }
+        servError(e, res);
+    }
+}
+export const multipleSalesInvoiceStaffDelete = async (req, res) => {
+    const transaction = new sql.Transaction();
+    try {
+        // Validate required fields
+        if (!req.body.CostCategory || !req.body.Do_Id || !Array.isArray(req.body.Do_Id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'CostCategory and Do_Id (array) are required'
+            });
+        }
+
+        const { CostCategory, Do_Id } = req.body;
+        const invoiceIdsStr = Do_Id.join(',');
+
+        await transaction.begin();
+
+        // Delete staff entries for specific Do_Ids and CostCategory
+        await new sql.Request(transaction)
+            .input('invoiceIds', sql.NVarChar(sql.MAX), invoiceIdsStr)
+            .input('Emp_Type_Id', sql.Int, CostCategory)
+            .query(`
+                DELETE FROM tbl_Sales_Delivery_Staff_Info
+                WHERE 
+                    Do_Id IN (
+                        SELECT CAST(value AS INT)
+                        FROM STRING_SPLIT(@invoiceIds, ',')
+                    )
+                    AND Emp_Type_Id = @Emp_Type_Id;`
+            );
+
+        await transaction.commit();
+        success(res, `Staff with CostCategory ${CostCategory} removed from ${Do_Id.length} invoices!`);
     } catch (e) {
         if (transaction._aborted === false) {
             await transaction.rollback();
