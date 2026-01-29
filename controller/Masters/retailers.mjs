@@ -168,7 +168,8 @@ const RetailerControll = () => {
                         gstNumber,
                         stateName
                     FROM tbl_Sales_Delivery_Address 
-                    WHERE retailerId IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
+                    WHERE retailerId IN (SELECT DISTINCT Retailer_Id FROM @retailerIds)
+                    ORDER BY id
                     -- COST CATEGORY
                     SELECT 
                         Cost_Category_Id AS costTypeId,
@@ -186,8 +187,8 @@ const RetailerControll = () => {
                 deliveryAddresses: deliveryAddresses.filter(
                     address => isEqualNumber(address.retailerId, retailer.Retailer_Id)
                 ),
-                brokerTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Broker')?.costTypeId), 
-                transporterTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Transport')?.costTypeId), 
+                brokerTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Broker')?.costTypeId),
+                transporterTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Transport')?.costTypeId),
             }));
 
             if (result.recordset.length > 0) {
@@ -1109,86 +1110,86 @@ const RetailerControll = () => {
         }
     }
 
-const getSFCustomersPaginated = async (req, res) => {
-  try {
-    const {
-      Retailer_Id,
-      PhoneNumber,
-      ContactPerson_Name,
-      Route_Id,
-      Area_Id,
-      City,
-    //   search = '',
-    //   page = 1,
-    //   limit = 100,
-      filter1,
-      filter2,
-      filter3
-    } = req.query;
+    const getSFCustomersPaginated = async (req, res) => {
+        try {
+            const {
+                Retailer_Id,
+                PhoneNumber,
+                ContactPerson_Name,
+                Route_Id,
+                Area_Id,
+                City,
+                //   search = '',
+                //   page = 1,
+                //   limit = 100,
+                filter1,
+                filter2,
+                filter3
+            } = req.query;
 
-    // const pageNo = Math.max(parseInt(page), 1);
-    // const pageSize = Math.min(parseInt(limit), 50);
-    // const offset = (pageNo - 1) * pageSize;
+            // const pageNo = Math.max(parseInt(page), 1);
+            // const pageSize = Math.min(parseInt(limit), 50);
+            // const offset = (pageNo - 1) * pageSize;
 
-    const request = new sql.Request();
-    // request.input('offset', sql.Int, offset);
-    // request.input('limit', sql.Int, pageSize);
-    // request.input('search', sql.NVarChar, `%${search}%`);
-
-  
-    let whereClause = ` WHERE rm.isRetailer = 1 `;
-
-    if (Retailer_Id) {
-      whereClause += ` AND rm.Retailer_Id = @Retailer_Id`;
-      request.input('Retailer_Id', sql.Int, Retailer_Id);
-    }
-
-    if (PhoneNumber) {
-      whereClause += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
-      request.input('PhoneNumber', sql.NVarChar, PhoneNumber);
-    }
-
-    if (ContactPerson_Name) {
-      whereClause += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
-      request.input('ContactPerson_Name', sql.NVarChar, ContactPerson_Name);
-    }
-
-    if (Route_Id && Route_Id !== 'ALL') {
-      whereClause += ` AND rm.Route_Id = @Route_Id`;
-      request.input('Route_Id', sql.Int, Route_Id);
-    }
-
-    if (Area_Id && Area_Id !== 'ALL') {
-      whereClause += ` AND rm.Area_Id = @Area_Id`;
-      request.input('Area_Id', sql.Int, Area_Id);
-    }
-
-    if (City && City !== 'ALL') {
-      whereClause += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
-      request.input('City', sql.NVarChar, City);
-    }
-
-    // if (search) {
-    //   whereClause += `
-    //     AND (
-    //       rm.Retailer_Name LIKE @search
-    //       OR rm.Mobile_No LIKE @search
-    //       OR rm.Contact_Person LIKE @search
-    //     )
-    //   `;
-    // }
+            const request = new sql.Request();
+            // request.input('offset', sql.Int, offset);
+            // request.input('limit', sql.Int, pageSize);
+            // request.input('search', sql.NVarChar, `%${search}%`);
 
 
-    const parseValues = v =>
-      v ? v.split(',').map(x => x.trim()).filter(Boolean) : null;
+            let whereClause = ` WHERE rm.isRetailer = 1 `;
 
-    const filterValues = [
-      parseValues(filter1),
-      parseValues(filter2),
-      parseValues(filter3)
-    ];
+            if (Retailer_Id) {
+                whereClause += ` AND rm.Retailer_Id = @Retailer_Id`;
+                request.input('Retailer_Id', sql.Int, Retailer_Id);
+            }
 
-    const mobileFilters = await new sql.Request().query(`
+            if (PhoneNumber) {
+                whereClause += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
+                request.input('PhoneNumber', sql.NVarChar, PhoneNumber);
+            }
+
+            if (ContactPerson_Name) {
+                whereClause += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
+                request.input('ContactPerson_Name', sql.NVarChar, ContactPerson_Name);
+            }
+
+            if (Route_Id && Route_Id !== 'ALL') {
+                whereClause += ` AND rm.Route_Id = @Route_Id`;
+                request.input('Route_Id', sql.Int, Route_Id);
+            }
+
+            if (Area_Id && Area_Id !== 'ALL') {
+                whereClause += ` AND rm.Area_Id = @Area_Id`;
+                request.input('Area_Id', sql.Int, Area_Id);
+            }
+
+            if (City && City !== 'ALL') {
+                whereClause += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
+                request.input('City', sql.NVarChar, City);
+            }
+
+            // if (search) {
+            //   whereClause += `
+            //     AND (
+            //       rm.Retailer_Name LIKE @search
+            //       OR rm.Mobile_No LIKE @search
+            //       OR rm.Contact_Person LIKE @search
+            //     )
+            //   `;
+            // }
+
+
+            const parseValues = v =>
+                v ? v.split(',').map(x => x.trim()).filter(Boolean) : null;
+
+            const filterValues = [
+                parseValues(filter1),
+                parseValues(filter2),
+                parseValues(filter3)
+            ];
+
+            const mobileFilters = await new sql.Request().query(`
       SELECT 
         mrd.Column_Name AS ColumnName,
         tm.Table_Name AS TableName,
@@ -1202,21 +1203,21 @@ const getSFCustomersPaginated = async (req, res) => {
       ORDER BY mrd.FilterLevel
     `);
 
-    const dynamicConditions = [];
+            const dynamicConditions = [];
 
-    const buildFilterCondition = (cfg, values, paramName) => {
-      if (!cfg || !values || !values.length) return null;
+            const buildFilterCondition = (cfg, values, paramName) => {
+                if (!cfg || !values || !values.length) return null;
 
-      const isSingle = values.length === 1;
-      const placeholders = isSingle
-        ? `@${paramName}`
-        : values.map((_, i) => `@${paramName}${i}`).join(',');
+                const isSingle = values.length === 1;
+                const placeholders = isSingle
+                    ? `@${paramName}`
+                    : values.map((_, i) => `@${paramName}${i}`).join(',');
 
-      const column = cfg.ColumnName;
+                const column = cfg.ColumnName;
 
-      // ✅ tbl_Ledger_LOL (MAIN FIX)
-      if (cfg.TableName === 'tbl_Ledger_LOL') {
-        return `
+                // ✅ tbl_Ledger_LOL (MAIN FIX)
+                if (cfg.TableName === 'tbl_Ledger_LOL') {
+                    return `
           EXISTS (
             SELECT 1
             FROM tbl_Ledger_LOL llol
@@ -1224,10 +1225,10 @@ const getSFCustomersPaginated = async (req, res) => {
               AND llol.Ret_Id = rm.Retailer_Id
           )
         `;
-      }
+                }
 
-      // ✅ Generic direct-table filter
-      return `
+                // ✅ Generic direct-table filter
+                return `
         EXISTS (
           SELECT 1
           FROM ${cfg.TableName} t
@@ -1235,48 +1236,48 @@ const getSFCustomersPaginated = async (req, res) => {
             AND t.Ret_Id = rm.Retailer_Id
         )
       `;
-    };
+            };
 
-    filterValues.forEach((values, index) => {
-      if (values && mobileFilters.recordset[index]) {
-        const param = `filter${index + 1}`;
-        const condition = buildFilterCondition(
-          mobileFilters.recordset[index],
-          values,
-          param
-        );
+            filterValues.forEach((values, index) => {
+                if (values && mobileFilters.recordset[index]) {
+                    const param = `filter${index + 1}`;
+                    const condition = buildFilterCondition(
+                        mobileFilters.recordset[index],
+                        values,
+                        param
+                    );
 
-        if (condition) {
-          dynamicConditions.push(condition);
+                    if (condition) {
+                        dynamicConditions.push(condition);
 
-          if (values.length === 1) {
-            request.input(param, values[0]);
-          } else {
-            values.forEach((v, i) => {
-              request.input(`${param}${i}`, v);
+                        if (values.length === 1) {
+                            request.input(param, values[0]);
+                        } else {
+                            values.forEach((v, i) => {
+                                request.input(`${param}${i}`, v);
+                            });
+                        }
+                    }
+                }
             });
-          }
-        }
-      }
-    });
 
-    if (dynamicConditions.length) {
-      whereClause += ` AND ${dynamicConditions.join(' AND ')}`;
-    }
+            if (dynamicConditions.length) {
+                whereClause += ` AND ${dynamicConditions.join(' AND ')}`;
+            }
 
-    /* ---------------- Count Query ---------------- */
-    const countQuery = `
+            /* ---------------- Count Query ---------------- */
+            const countQuery = `
       SELECT COUNT(*) AS totalRecords
       FROM tbl_Retailers_Master rm
       ${whereClause}
     `;
 
-    const countResult = await request.query(countQuery);
-    // const totalRecords = countResult.recordset[0].totalRecords;
-    // const totalPages = Math.ceil(totalRecords / pageSize);
+            const countResult = await request.query(countQuery);
+            // const totalRecords = countResult.recordset[0].totalRecords;
+            // const totalPages = Math.ceil(totalRecords / pageSize);
 
-    /* ---------------- Data Query ---------------- */
-    const dataQuery = `
+            /* ---------------- Data Query ---------------- */
+            const dataQuery = `
       SELECT 
         rm.*,
         COALESCE(rom.Route_Name, '') AS RouteGet,
@@ -1311,29 +1312,29 @@ const getSFCustomersPaginated = async (req, res) => {
       --OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `;
 
-    const result = await request.query(dataQuery);
+            const result = await request.query(dataQuery);
 
-    const parsed = result.recordset.map(r => ({
-      ...r,
-      VERIFIED_LOCATION: JSON.parse(r.VERIFIED_LOCATION || '{}'),
-      AllLocations: JSON.parse(r.AllLocations || '[]'),
-      imageUrl: getImage('retailers', r?.ImageName)
-    }));
+            const parsed = result.recordset.map(r => ({
+                ...r,
+                VERIFIED_LOCATION: JSON.parse(r.VERIFIED_LOCATION || '{}'),
+                AllLocations: JSON.parse(r.AllLocations || '[]'),
+                imageUrl: getImage('retailers', r?.ImageName)
+            }));
 
-    return res.json({
-      success: true,
-    //   page: pageNo,
-    //   limit: pageSize,
-    //   totalRecords,
-    //   totalPages,
-      data: parsed
-    });
+            return res.json({
+                success: true,
+                //   page: pageNo,
+                //   limit: pageSize,
+                //   totalRecords,
+                //   totalPages,
+                data: parsed
+            });
 
-  } catch (err) {
-    console.error('Customer API Error:', err);
-    return servError(err, res);
-  }
-};
+        } catch (err) {
+            console.error('Customer API Error:', err);
+            return servError(err, res);
+        }
+    };
 
 
 

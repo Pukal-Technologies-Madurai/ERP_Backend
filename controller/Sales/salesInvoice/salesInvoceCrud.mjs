@@ -35,11 +35,13 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}, packData = 
 
         const Act_Qty = toNumber(product?.Act_Qty) || Bill_Qty;
         const Alt_Act_Qty = isSO ? toNumber(product?.Alt_Act_Qty) : Division(Act_Qty, pack);
+        const Alt_Bill_Qty = Division(Bill_Qty, pack)
 
         stockRows.push({
             S_No: index + 1,
             Item_Id: toNumber(product.Item_Id),
             Bill_Qty,
+            Alt_Bill_Qty,
             Act_Qty,
             Alt_Act_Qty,
             Item_Rate,
@@ -545,7 +547,7 @@ export const createSalesInvoice = async (req, res) => {
                 );
                 INSERT INTO tbl_Sales_Delivery_Stock_Info (
                     Do_Date, Delivery_Order_Id, S_No, Item_Id,
-                    Bill_Qty, Act_Qty, Alt_Act_Qty,
+                    Bill_Qty, Alt_Bill_Qty, Act_Qty, Alt_Act_Qty,
                     Item_Rate, GoDown_Id, Amount, Free_Qty, Total_Qty,
                     Taxble, Taxable_Rate, HSN_Code,
                     Unit_Id, Unit_Name, Act_unit_Id, Alt_Act_Unit_Id,
@@ -562,7 +564,7 @@ export const createSalesInvoice = async (req, res) => {
                 INTO @batchDetails (DO_St_Id, Item_Id, Bill_Qty, GoDown_Id, Batch_Name)
                 SELECT
                     @Do_Date, @Do_Id, p.S_No, p.Item_Id,
-                    p.Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
+                    p.Bill_Qty, p.Alt_Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
                     p.Item_Rate, p.GoDown_Id, p.Amount, p.Free_Qty, p.Total_Qty,
                     p.Taxble, p.Taxable_Rate, p.HSN_Code,
                     p.Unit_Id, p.Unit_Name, p.Act_unit_Id, p.Alt_Act_Unit_Id,
@@ -574,6 +576,7 @@ export const createSalesInvoice = async (req, res) => {
                     S_No INT '$.S_No',
                     Item_Id BIGINT '$.Item_Id',
                     Bill_Qty DECIMAL(18,2) '$.Bill_Qty',
+                    Alt_Bill_Qty DECIMAL(18,2) '$.Alt_Bill_Qty',
                     Act_Qty DECIMAL(18,2) '$.Act_Qty',
                     Alt_Act_Qty DECIMAL(18,2) '$.Alt_Act_Qty',
                     Item_Rate DECIMAL(18,2) '$.Item_Rate',
@@ -1041,7 +1044,7 @@ export const updateSalesInvoice = async (req, res) => {
                 );
                 INSERT INTO tbl_Sales_Delivery_Stock_Info (
                     Do_Date, Delivery_Order_Id, S_No, Item_Id,
-                    Bill_Qty, Act_Qty, Alt_Act_Qty,
+                    Bill_Qty, Alt_Bill_Qty, Act_Qty, Alt_Act_Qty,
                     Item_Rate, GoDown_Id, Amount, Free_Qty, Total_Qty,
                     Taxble, Taxable_Rate, HSN_Code,
                     Unit_Id, Unit_Name, Act_unit_Id, Alt_Act_Unit_Id,
@@ -1058,7 +1061,7 @@ export const updateSalesInvoice = async (req, res) => {
                 INTO @batchDetails (DO_St_Id, Item_Id, Bill_Qty, GoDown_Id, Batch_Name)
                 SELECT
                     @Do_Date, @Do_Id, p.S_No, p.Item_Id,
-                    p.Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
+                    p.Bill_Qty, p.Alt_Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
                     p.Item_Rate, p.GoDown_Id, p.Amount, p.Free_Qty, p.Total_Qty,
                     p.Taxble, p.Taxable_Rate, p.HSN_Code,
                     p.Unit_Id, p.Unit_Name, p.Act_unit_Id, p.Alt_Act_Unit_Id,
@@ -1070,6 +1073,7 @@ export const updateSalesInvoice = async (req, res) => {
                     S_No INT '$.S_No',
                     Item_Id BIGINT '$.Item_Id',
                     Bill_Qty DECIMAL(18,2) '$.Bill_Qty',
+                    Alt_Bill_Qty DECIMAL(18,2) '$.Alt_Bill_Qty',
                     Act_Qty DECIMAL(18,2) '$.Act_Qty',
                     Alt_Act_Qty DECIMAL(18,2) '$.Alt_Act_Qty',
                     Item_Rate DECIMAL(18,2) '$.Item_Rate',
