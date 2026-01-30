@@ -300,7 +300,7 @@ const sfProductController = () => {
 
             const {
                 Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive, Product_Rate, Max_Rate
+                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive, Product_Rate, Max_Rate,Coolie,Packing_CH,Other_Expen
             } = req.body;
 
             const getMaxId = await sql.query(`SELECT COALESCE(MAX(Product_Id), 0) AS MaxId FROM tbl_Product_Master`);
@@ -331,15 +331,18 @@ const sfProductController = () => {
                 .input('IsActive', IsActive)
                 .input('Product_Rate', Product_Rate || 0)
                 .input('Max_Rate', Max_Rate || 0)
+                .input('Coolie', Coolie || 0 )
+                .input('Packing_CH', Packing_CH || 0)
+                .input('Other_Expen', Other_Expen ||0)
                 .query(`
                     INSERT INTO tbl_Product_Master (
                         Product_Id, Product_Code, Product_Name, Short_Name, Product_Description, Brand, 
                         Product_Group, Pack_Id, UOM_Id, IS_Sold, Display_Order_By, Product_Image_Name,
-                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id,Pos_Brand_Id,IsActive,Product_Rate,Max_Rate
+                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id,Pos_Brand_Id,IsActive,Product_Rate,Max_Rate,Coolie,Packing_CH,Other_Expen
                     ) VALUES (
                         @Product_Id, @Product_Code, @Product_Name, @Short_Name, @Product_Description, @Brand, 
                         @Product_Group, @Pack_Id, @UOM_Id, @IS_Sold, @Display_Order_By, @Product_Image_Name, 
-                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id.@Pos_Brand_Id,@IsActive,@Product_Rate,@Max_Rate
+                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id.@Pos_Brand_Id,@IsActive,@Product_Rate,@Max_Rate,@Coolie,@Packing_CH,@Other_Expen
                     )`
                 );
 
@@ -361,7 +364,7 @@ const sfProductController = () => {
     const postProductsWithoutImage = async (req, res) => {
         const {
             Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-            Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive, Product_Rate, Max_Rate
+            Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive, Product_Rate, Max_Rate,Coolie,Packing_CH,Other_Expen
         } = req?.body;
 
         try {
@@ -403,15 +406,18 @@ const sfProductController = () => {
                 .input('IsActive', IsActive)
                 .input('Product_Rate', Product_Rate || 0)
                 .input('Max_Rate', Max_Rate || 0)
+                .input('Coolie', Coolie)
+                .input('Packing_CH', Packing_CH)
+                .input('Other_Expen', Other_Expen)
                 .query(`
                     INSERT INTO tbl_Product_Master (
                         Product_Id, Product_Code, Product_Name, Short_Name, Product_Description, Brand, 
                         Product_Group, Pack_Id, UOM_Id, IS_Sold, Display_Order_By, Product_Image_Name,
-                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id,Pos_Brand_Id,IsActive,Product_Rate,Max_Rate
+                        Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id,Pos_Brand_Id,IsActive,Product_Rate,Max_Rate,Coolie,Packing_CH,Other_Expen
                     ) VALUES (
                         @Product_Id, @Product_Code, @Product_Name, @Short_Name, @Product_Description, @Brand, 
                         @Product_Group, @Pack_Id, @UOM_Id, @IS_Sold, @Display_Order_By, @Product_Image_Name, 
-                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id,@Pos_Brand_Id,@IsActive,@Product_Rate,@Max_Rate
+                        @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id,@Pos_Brand_Id,@IsActive,@Product_Rate,@Max_Rate,@Coolie,@Packing_CH,@Other_Expen
                     )`
                 );
 
@@ -432,7 +438,7 @@ const sfProductController = () => {
         try {
             const {
                 Product_Id, Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive, Product_Rate, Max_Rate
+                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive, Product_Rate, Max_Rate,Coolie,Packing_CH,Other_Expen
             } = req?.body;
 
             if (!Product_Id) {
@@ -460,6 +466,9 @@ const sfProductController = () => {
                 .input('IsActive', IsActive)
                 .input('Product_Rate', toNumber(Product_Rate))
                 .input('Max_Rate', toNumber(Max_Rate))
+                 .input('Coolie', Coolie)
+                .input('Packing_CH', Packing_CH)
+                .input('Other_Expen', Other_Expen)
                 .query(`
                     UPDATE tbl_Product_Master
                     SET 
@@ -481,7 +490,10 @@ const sfProductController = () => {
                           Pos_Brand_Id = @Pos_Brand_Id,
                             IsActive = @IsActive,
                             Product_Rate=@Product_Rate,
-                            Max_Rate=@Max_Rate
+                            Max_Rate=@Max_Rate,
+                            Coolie=@Coolie,
+                            Packing_CH=@Packing_CH,
+                            Other_Expen=@Other_Expen
                     WHERE Product_Id = @Product_Id`
                 );
 
