@@ -2399,7 +2399,10 @@ SELECT DISTINCT
     td.Delivery_Id,
     sgi.Do_Id,
     sgi.So_No,
-    sgi.Do_Inv_No,  -- Added Sales Invoice No
+    sgi.Do_Inv_No,
+    lol.Ledger_Name,
+    lol.Ledger_Alias,
+    TRY_CAST(sgi.Retailer_Id AS INT) as Retailer_Id,
     CAST(COALESCE(TRY_CAST(sgi.Total_Before_Tax AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Before_Tax,
     CAST(COALESCE(TRY_CAST(sgi.Total_Invoice_Value AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Invoice_Value,
     CAST(COALESCE(TRY_CAST(sgi.SGST_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as SGST_Total,
@@ -2428,6 +2431,8 @@ FROM tbl_Trip_Details td
 INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(td.Delivery_Id AS INT)
 LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = TRY_CAST(sgi.Delivery_Person_Id AS INT)
 LEFT JOIN tbl_Users us ON us.UserId = TRY_CAST(ecc.User_Id AS INT)
+LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id=TRY_CAST(sgi.Retailer_Id AS INT)
+LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id=TRY_CAST(rm.Retailer_Id AS INT)
 WHERE td.Trip_Id IN (${tripIds.map((_, i) => `@TripId${i}`).join(',')})
 `;
 
@@ -2630,6 +2635,7 @@ WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
                         Delivery_Id: detail.Delivery_Id,
                         Do_Id: detail.Do_Id,
                         So_No: detail.So_No,
+                        Ledger_Name:detail.Ledger_Name,
                         Total_Before_Tax: detail.Total_Before_Tax,
                         Total_Invoice_Value: detail.Total_Invoice_Value,
                         SGST_Total: detail.SGST_Total,
