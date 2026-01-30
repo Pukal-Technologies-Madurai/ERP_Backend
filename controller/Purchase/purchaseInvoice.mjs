@@ -901,7 +901,8 @@ const PurchaseOrder = () => {
                 .query(`
                     SELECT * 
                     FROM tbl_Stock_Item_Ledger_Name
-                    WHERE Type = @type`
+                    WHERE Type = @type
+                    ORDER BY orderNum ASC; `
                 );
 
             const result = await request;
