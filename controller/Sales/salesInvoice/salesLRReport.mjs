@@ -642,14 +642,22 @@ export const salesInvoicePaper = async (req, res) => {
                 	sdgi.Retailer_Id AS retailerId,
                 	COALESCE(r.Retailer_Name, '-') AS retailerGet,
                 	sdgi.Do_Inv_No voucherNumber,
-                    sdgi.Created_on
+                    sdgi.Created_on,
+                     COALESCE(tm.Trip_No, '') AS tripNumber,
+                   COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
+                   COALESCE(tm.Trip_Date, '') AS tripDate
                 FROM tbl_Sales_Delivery_Gen_Info AS sdgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
+                 LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
+               
+                LEFT JOIN tbl_Trip_mASTER AS tm ON tm.Trip_Id = td.Trip_Id
                 WHERE 
                     sdgi.Do_Date = @reqDate 
                     AND sdgi.Cancel_status <> 0
                 ORDER BY v.Voucher_Type, sdgi.Created_on
+
+
             -- SALES STOCK INFO
                 SELECT
                 	sdgi.Do_Id AS invId,
@@ -661,10 +669,16 @@ export const salesInvoicePaper = async (req, res) => {
                 	COALESCE(pck.Pack, '0') AS unitValue,
                 	COALESCE(p.Product_Rate, 0) AS itemRate,
                 	COALESCE(sdsi.Item_Rate, 0) AS billedRate
+                   --   COALESCE(tm.Trip_No, '') AS tripNumber,
+                    --COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
+                  --  COALESCE(tm.Trip_Date, '') AS tripDate
                 FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
                 LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
                 JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON sdgi.Do_Id = sdsi.Delivery_Order_Id
+             --    LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
+               
+             --   LEFT JOIN tbl_Trip_mASTER AS tm ON tm.Trip_Id = td.Trip_Id
                 WHERE sdgi.Do_Date = @reqDate AND sdgi.Cancel_status <> 0;
             -- SALES STAFF DETAILS
                 SELECT 
