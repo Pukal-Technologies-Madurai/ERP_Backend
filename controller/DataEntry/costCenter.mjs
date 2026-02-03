@@ -33,7 +33,7 @@ const CostCenter = () => {
     }
 
     const createCostCenter = async (req, res) => {
-        const { Cost_Center_Name, User_Type, Is_Converted_To_User, User_Id } = req.body;
+        const { Cost_Center_Name, User_Type, Is_Converted_To_User, User_Id, Allias_Name } = req.body;
 
         if (!Cost_Center_Name || !User_Type) {
             return invalidInput(res, 'Cost_Center_Name, User_Type are required');
@@ -70,12 +70,13 @@ const CostCenter = () => {
                 .input('User_Type', User_Type)
                 .input('Is_Converted_To_User', finalIsConvertedToUser)
                 .input('User_Id', finalUserId)
+                .input('Allias_Name', Allias_Name)
 
                 .query(`
                     INSERT INTO tbl_ERP_Cost_Center (
-                        Cost_Center_Id, Cost_Center_Name, User_Type, Is_Converted_To_User, User_Id
+                        Cost_Center_Id, Cost_Center_Name, User_Type, Is_Converted_To_User, User_Id, Allias_Name
                     ) VALUES (
-                        @Cost_Center_Id, @Cost_Center_Name, @User_Type, @Is_Converted_To_User, @User_Id
+                        @Cost_Center_Id, @Cost_Center_Name, @User_Type, @Is_Converted_To_User, @User_Id, @Allias_Name
                     );
                 `);
 
@@ -92,7 +93,7 @@ const CostCenter = () => {
     };
 
     const updateCostCenter = async (req, res) => {
-        const { Cost_Center_Id, Cost_Center_Name, User_Type } = req.body;
+        const { Cost_Center_Id, Cost_Center_Name, User_Type, Allias_Name } = req.body;
 
         if (!checkIsNumber(Cost_Center_Id) || !Cost_Center_Name || !User_Type) {
             return invalidInput(res, 'Cost_Center_Name, User_Type is required');
@@ -104,11 +105,13 @@ const CostCenter = () => {
                 .input('Cost_Center_Name', Cost_Center_Name)
                 .input('User_Type', User_Type)
                 .input('Is_Converted_To_User', 0)
+                .input('Allias_Name', Allias_Name)
                 .query(`
                     UPDATE tbl_ERP_Cost_Center
                     SET
                         Cost_Center_Name = @Cost_Center_Name,
-                        User_Type = @User_Type
+                        User_Type = @User_Type,
+                        Allias_Name = @Allias_Name
                     WHERE
                         Cost_Center_Id = @Cost_Center_Id;
                     `);
@@ -446,7 +449,7 @@ const CostCenter = () => {
                 StockJournalTotal: staff.Stock_Journals.reduce((acc, sj) => Addition(acc, sj.SJTotalTonnage), 0),
                 TripSheetTotal: staff.Trip_Sheet.reduce((acc, ts) => Addition(acc, ts.TSTotalTonnage), 0)
             })).filter(staff => staff?.Stock_Journals?.length > 0 || staff?.Trip_Sheet?.length > 0);
-            
+
 
             sentData(res, abstractData)
         } catch (e) {

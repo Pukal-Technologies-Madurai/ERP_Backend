@@ -17,7 +17,9 @@ const voucherType = () => {
                         vt.Voucher_Code,
                         vt.Branch_Id,
                         vt.Type,
-                        vt.tally_sync AS tallySync,   
+                        vt.tally_sync AS tallySync, 
+                        vt.GodownId,  
+                        g.Godown_Name AS godownNameGet,
                         bm.BranchName,
                         vt.Created_By,
 				    	cb.Name createdByGet,
@@ -30,6 +32,7 @@ const voucherType = () => {
                     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = vt.Branch_Id
 				    LEFT JOIN tbl_Users AS cb ON cb.UserId = vt.Created_By
 				    LEFT JOIN tbl_Users AS ub ON ub.UserId = vt.Alter_By
+                    LEFT JOIN tbl_Godown_Master AS g ON g.Godown_Id = vt.GodownId
                     WHERE 
 				    	vt.Vocher_Type_Id IS NOT NULL
 				    	AND TRIM(COALESCE(vt.Voucher_Code, '')) <> ''
@@ -76,7 +79,7 @@ const voucherType = () => {
 
     const addVoucherType = async (req, res) => {
 
-        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync,status } = req.body;
+        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync, status, GodownId } = req.body;
 
         if (!Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
             return invalidInput(res, 'Voucher_Type and Branch_Id,Voucher_Code are required');
@@ -115,14 +118,15 @@ const voucherType = () => {
                 .input('Created_By', Created_By)
                 .input('Created_Time', new Date())
                 .input('tally_sync', tally_sync)
-                .input('status',status)
+                .input('status', status)
+                .input('GodownId', GodownId)
                 .query(`
                     INSERT INTO tbl_Voucher_Type (
                         Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_Id, 
-                        Created_By, Created_Time, tally_sync, deleteFlag
+                        Created_By, Created_Time, tally_sync, deleteFlag, GodownId
                     ) VALUES (
                         @Vocher_Type_Id, @Voucher_Type, @Voucher_Code, @Branch_Id, @Type, @Alter_Id, 
-                        @Created_By, @Created_Time, @tally_sync,@status
+                        @Created_By, @Created_Time, @tally_sync, @status, @GodownId
                     );`
                 );
 
@@ -141,7 +145,7 @@ const voucherType = () => {
 
     const editVoucherType = async (req, res) => {
 
-        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync,status } = req.body;
+        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync, status, GodownId } = req.body;
 
         if (!checkIsNumber(Vocher_Type_Id) ||
             !Voucher_Type ||
@@ -166,6 +170,7 @@ const voucherType = () => {
                 .input('Alter_Time', new Date())
                 .input('tally_sync', tallySync)
                 .input('deleteFlag', status)
+                .input('GodownId', GodownId)
                 .query(`
                 UPDATE tbl_Voucher_Type 
                 SET 
@@ -177,7 +182,8 @@ const voucherType = () => {
                     Alter_By = @Alter_By,
                     Alter_Time = @Alter_Time,
                     tally_sync = @tally_sync,
-                    deleteFlag = @deleteFlag
+                    deleteFlag = @deleteFlag,
+                    GodownId = @GodownId
                 WHERE Vocher_Type_Id = @Vocher_Type_Id
             `);
 
