@@ -8,7 +8,10 @@ const CostCenter = () => {
         try {
             const result = await sql.query(`
                 SELECT 
-                    c.*,
+                    c.Cost_Center_Id,
+                    c.Cost_Center_Name,
+                    c.User_Type,
+                    CASE WHEN c.Allias_Name IS NULL THEN c.Cost_Center_Name ELSE c.Allias_Name END AS Allias_Name,
                     COALESCE(cc.Cost_Category, 'Not found') AS UserTypeGet,
                     COALESCE(u.Name, 'Not found') AS UserGet
                 FROM tbl_ERP_Cost_Center AS c

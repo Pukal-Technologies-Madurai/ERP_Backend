@@ -19,20 +19,18 @@ const costCenter = () => {
     }
 
     const getCostCenter = async (req, res) => {
-
-
         try {
             let query = `
-SELECT 
-    cc.*,
-	ecc.Cost_Center_Name,
-	ecc.Cost_Center_Id as value
-FROM 
-    tbl_Cost_Center_Master cc
-LEFT JOIN 
-    tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = cc.ERP_Cost_Center_Id
-LEFT JOIN 
-    tbl_User_Type ut ON ut.Id = ecc.User_Type  -- Join to UserType table`;
+                SELECT 
+                    cc.*,
+                	ecc.Cost_Center_Name,
+                	ecc.Cost_Center_Id as value
+                FROM 
+                    tbl_Cost_Center_Master cc
+                LEFT JOIN 
+                    tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = cc.ERP_Cost_Center_Id
+                LEFT JOIN 
+                    tbl_User_Type ut ON ut.Id = ecc.User_Type  -- Join to UserType table`;
 
 
             const request = new sql.Request()
