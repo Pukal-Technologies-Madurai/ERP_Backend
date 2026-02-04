@@ -992,7 +992,13 @@ export const updateSalesInvoice = async (req, res) => {
                     Payment_Status = @Payment_Status,
                     shipingAddressId = @shipingAddressId
                 WHERE
-                    Do_Id = @Do_Id`
+                    Do_Id = @Do_Id
+                -- SAVING ALTERATION DETAILS
+                INSERT INTO tbl_Alteration_History (
+                    alteredTable, alteredRowId, alterBy, alterId
+                ) VALUES (
+                    'tbl_Sales_Delivery_Gen_Info', @Do_Id, @Altered_by, @Alter_Id
+                )`
             );
 
         const result = await request;
