@@ -787,7 +787,7 @@ export const updateSalesInvoice = async (req, res) => {
             Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
             deliveryAddressDetails = {}, shipingAddressDetails = {},
-            Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0
+            Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0, Alter_Reason = ''
         } = req.body;
 
         const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -961,6 +961,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
             .input('shipingAddressId', shiping_id_to_post)
+            .input('Alter_Reason', Alter_Reason)
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET 
@@ -995,9 +996,9 @@ export const updateSalesInvoice = async (req, res) => {
                     Do_Id = @Do_Id
                 -- SAVING ALTERATION DETAILS
                 INSERT INTO tbl_Alteration_History (
-                    alteredTable, alteredRowId, alterBy, alterId
+                    alteredTable, alteredRowId, alterBy, alterId, reason
                 ) VALUES (
-                    'tbl_Sales_Delivery_Gen_Info', @Do_Id, @Altered_by, @Alter_Id
+                    'tbl_Sales_Delivery_Gen_Info', @Do_Id, @Altered_by, @Alter_Id, @Alter_Reason
                 )`
             );
 

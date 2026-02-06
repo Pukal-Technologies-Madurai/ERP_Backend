@@ -16,6 +16,9 @@ export const connectDB = () => {
         user: process.env.USER,
         password: process.env.PASSWORD,
 
+        connectionTimeout: 300000,
+        requestTimeout: 300000,
+
         options: {
             // encrypt: false,
             trustServerCertificate: true,
