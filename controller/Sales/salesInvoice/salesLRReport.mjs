@@ -536,6 +536,146 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
     }
 }
 
+
+export const PendingSalesInvoice=async(req,res)=>{
+     try {
+        // const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
+        // const status = req.query.staffStatus ? req.query.staffStatus : 0;
+
+        const getSalesInvoice = new sql.Request()
+            // .input('reqDate', sql.Date, reqDate)
+            // .input('status', sql.Int, toNumber(status))
+            .query(`
+            -- filtered invoices ids temp table
+                DECLARE @FilteredInvoice TABLE (Do_Id BIGINT);
+            -- inserting data to temp table
+                INSERT INTO @FilteredInvoice (Do_Id)
+                SELECT Do_Id
+                FROM tbl_Sales_Delivery_Gen_Info
+             --   WHERE 
+                    -- FIX: Convert both sides to DATE for comparison
+                    --CONVERT(DATE, Do_Date) = @reqDate
+               
+                SELECT 
+                    gen.Do_Id,
+                    gen.Do_Inv_No,
+                    gen.Voucher_Type,
+                    vt.Voucher_Type AS voucherTypeGet,
+                    gen.Do_Date,
+                    gen.Retailer_Id,
+                    CASE  
+                        WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
+                        ELSE r.Retailer_Name
+                    END AS retailerNameGet,
+                    gen.Branch_Id,
+                    b.BranchName AS branchNameGet,
+                    gen.Total_Invoice_value,
+                    gen.Cancel_status,
+                    gen.Created_by,
+                    gen.Created_on,
+                    gen.Delivery_Status,
+                    ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
+                    CONVERT(DATETIME, gen.Created_on) AS createdOn,
+                    gen.Narration
+                FROM tbl_Sales_Delivery_Gen_Info AS gen
+                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
+                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
+               WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice) and gen.Delivery_Status IN (5,6)
+                ORDER BY Do_Id;
+            -- involved staffs
+                SELECT 
+                    stf.*,
+                    e.Cost_Center_Name AS Emp_Name,
+                    cc.Cost_Category AS Involved_Emp_Type
+                FROM tbl_Sales_Delivery_Staff_Info AS stf
+                LEFT JOIN tbl_ERP_Cost_Center AS e
+                    ON e.Cost_Center_Id = stf.Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc
+                    ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                ORDER BY stf.Do_Id;
+            -- Unique Cost Category IDs
+                SELECT DISTINCT Emp_Type_Id
+                FROM tbl_Sales_Delivery_Staff_Info
+                WHERE Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
+            -- Cost Types
+                SELECT Cost_Category_Id, Cost_Category
+                FROM tbl_ERP_Cost_Category
+                ORDER BY Cost_Category;
+                
+           SELECT 
+    sdsi.Do_Date,
+    sdsi.Delivery_Order_Id,
+
+    COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
+    COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
+
+    -- Calculated Alt_Act_Qty (SAFE)
+    CASE 
+        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+        THEN 0
+        ELSE CONVERT(
+               DECIMAL(18,2),
+               COALESCE(sdsi.Bill_Qty, 0) 
+               / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+             )
+    END AS Alt_Act_Qty,
+
+    -- Unit value (numeric)
+    TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
+
+    COALESCE(p.Product_Rate, 0) AS itemRate,
+    COALESCE(sdsi.Item_Rate, 0) AS billedRate
+
+FROM tbl_Sales_Delivery_Stock_Info sdsi
+LEFT JOIN tbl_Product_Master AS p
+    ON p.Product_Id = sdsi.Item_Id
+LEFT JOIN tbl_Pack_Master AS pck
+    ON pck.Pack_Id = p.Pack_Id
+WHERE sdsi.Delivery_Order_Id IN (
+    SELECT Do_Id FROM @FilteredInvoice)`
+);
+
+        const result = await getSalesInvoice;
+
+        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [], stockDetails = []] = result.recordsets;
+
+        const calculatedStockDetails = stockDetails.map(stock => ({
+            ...stock,
+
+            Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
+            quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
+        }));
+
+
+        const invoicesWithStaffs = invoices.map(invoice => {
+            const involvedStaffs = staffs.filter(stf =>
+                isEqualNumber(stf.Do_Id, invoice.Do_Id)
+            );
+
+            const invoiceStockDetails = calculatedStockDetails.filter(stk =>
+                isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
+            );
+
+            return {
+                ...invoice,
+                involvedStaffs,
+                stockDetails: invoiceStockDetails
+            };
+        });
+
+        sentData(res, invoicesWithStaffs, {
+            costTypes: toArray(costTypes),
+            uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 // export const deliverySlipPrintOut = async (req, res) => {
 //     try {
 //         const { Do_Id } = req.query;
