@@ -8,7 +8,7 @@ import {
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
 } from '../controller/Sales/salesInvoice/invoiceDependency.mjs';
-import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPrintOut, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice,deliverySlipPrintOut, salesInvoicePaper, multipleSalesInvoiceStaffDelete } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
+import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPrintOut, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice,deliverySlipPrintOut, salesInvoicePaper, multipleSalesInvoiceStaffDelete, PendingSalesInvoice } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
 import salesReports from '../controller/Sales/reports.mjs';
 import salesRetrunEntry from '../controller/Sales/salesReturn/salesRetrunEntry.mjs';
@@ -62,6 +62,11 @@ SalesRouter.get('/salesInvoice/lrReport', getSalesInvoiceForAssignCostCenter);
 SalesRouter.post('/salesInvoice/lrReport', postAssignCostCenterToSalesInvoice);
 SalesRouter.post('/salesInvoice/lrReport/multiple', multipleSalesInvoiceStaffUpdate);
 SalesRouter.post('/salesInvoice/lrReport/multipleDelete', multipleSalesInvoiceStaffDelete);
+
+
+SalesRouter.get('/salesInvoice/pendingDetails', PendingSalesInvoice);
+
+
 
 // sales Invoice Paper
 SalesRouter.get('/salesInvoice/salesInvoicePaper', salesInvoicePaper);
