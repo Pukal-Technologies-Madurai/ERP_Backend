@@ -1,6 +1,6 @@
 import sql from 'mssql';
-import { servError, sentData, noData, dataFound } from '../../res.mjs'
-import { Addition, Division, groupData, isEqualNumber, ISOString, Multiplication, toArray } from '../../helper_functions.mjs';
+import { servError, sentData, noData, dataFound, invalidInput } from '../../res.mjs'
+import { Addition, Division, groupData, isEqualNumber, ISOString, isValidNumber, Multiplication, toArray } from '../../helper_functions.mjs';
 
 
 const getStorageStockItemWise = async (req, res) => {
@@ -194,6 +194,80 @@ const getStorageStockGodownWise = async (req, res) => {
     }
 }
 
+const getStorageStockGodownWiseForMobile = async (req, res) => {
+    try {
+        const { Godown_Id } = req.query;
+        if (!isValidNumber(Godown_Id)) return invalidInput(res, 'Godown_Id is required');
+
+        const
+            Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+            Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
+            .input('Godown_Id', Godown_Id)
+            .input('Item_Id', 0)
+            .execute('Stock_Summarry_Search_Mobile_New');
+
+        const result = await request;
+
+        const filteredData = result.recordset.filter(
+            row => row?.Bal_Qty > 0
+        );
+
+        const uniqueItemIdArray = [...new Set(
+            filteredData.map(row => row?.Product_Id)
+        )];
+
+        const getProductLosData = await new sql.Request()
+            .input(
+                'filterItems',
+                sql.NVarChar('max'),
+                uniqueItemIdArray.map(item => item).join(', ')
+            ).query(`
+                WITH FilteredProducts AS (
+                    SELECT 
+                        TRY_CAST(value AS INT) AS Product_Id
+                    FROM STRING_SPLIT(@filterItems, ',')
+                    WHERE TRY_CAST(value AS INT) IS NOT NULL
+                )
+                SELECT 
+                	p.Product_Id, 
+                	p.Product_Name,
+                	p.Product_Rate
+                FROM tbl_Product_Master AS p
+                WHERE (
+                    @filterItems IS NULL 
+                    OR LTRIM(RTRIM(@filterItems)) = '' 
+                    OR P.Product_Id IN (SELECT DISTINCT Product_Id FROM FilteredProducts)
+                );`
+            );
+
+        const productLosResult = getProductLosData.recordset;
+
+        const mergeLosData = filteredData.map(row => {
+            const {
+                Product_Rate = 0, 
+            } = productLosResult.find(
+                productDetails => isEqualNumber(
+                    productDetails.Product_Id,
+                    row?.Product_Id
+                )
+            ) || {};
+
+            return {
+                ...row,
+                Product_Rate
+            }
+        });
+
+        sentData(res, mergeLosData);
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 const itemGroupWiseClosingDetails = async (req, res) => {
     try {
 
@@ -334,7 +408,6 @@ const StockGroupWiseClosingDetails = async (req, res) => {
         servError(e, res);
     }
 }
-
 
 // const getStorageStockItemWiseMobile = async (req, res) => {
 //     try {
@@ -506,7 +579,6 @@ const StockGroupWiseClosingDetails = async (req, res) => {
 //     }
 // }
 
-
 const getStorageStockItemWiseMobile = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
@@ -620,9 +692,6 @@ const getStorageStockItemWiseMobile = async (req, res) => {
     }
 }
 
-
-
-
 const getStorageStockGodownWiseMobile = async (req, res) => {
     try {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
@@ -731,9 +800,6 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
         servError(e, res);
     }
 }
-
-
-
 
 // const getStorageStockGodownWiseMobile = async (req, res) => {
 //     try {
@@ -918,8 +984,6 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
 //     }
 // }
 
-
-
 const itemGroupWiseClosingDetailsMobile = async (req, res) => {
     try {
         const reqDate = req.query?.reqDate ? ISOString(req.query?.reqDate) : ISOString();
@@ -1016,9 +1080,11 @@ const itemGroupWiseClosingDetailsMobile = async (req, res) => {
         servError(e, res);
     }
 }
+
 export default {
     getStorageStockItemWise,
     getStorageStockGodownWise,
+    getStorageStockGodownWiseForMobile,
     itemGroupWiseClosingDetails,
     StockGroupWiseClosingDetails,
     getStorageStockItemWiseMobile,

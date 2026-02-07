@@ -93,6 +93,7 @@ ReportRouter.get('/customerClosingStock/itemWithRetailer', customerClosingStock.
 
 ReportRouter.get('/storageStock/itemWise', storageStockReport.getStorageStockItemWise);
 ReportRouter.get('/storageStock/godownWise', storageStockReport.getStorageStockGodownWise);
+ReportRouter.get('/storageStock/godownWiseForMobile', storageStockReport.getStorageStockGodownWiseForMobile);
 ReportRouter.get('/itemGroup/stockInfo', storageStockReport.itemGroupWiseClosingDetails);
 ReportRouter.get('/itemGroup/stockInfo/grouped', storageStockReport.StockGroupWiseClosingDetails);
 

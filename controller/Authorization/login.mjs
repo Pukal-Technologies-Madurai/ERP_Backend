@@ -6,7 +6,6 @@ dotenv.config();
 
 const userPortalDB = process.env.USERPORTALDB;
 
-
 const LoginController = () => {
 
     const getAccountsInUserPortal = async (req, res) => {
