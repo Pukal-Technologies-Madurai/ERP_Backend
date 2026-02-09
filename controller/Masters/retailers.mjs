@@ -152,10 +152,18 @@ const RetailerControll = () => {
                         COALESCE(pos.Broker_Id, 0) as brokerId,
                         COALESCE(pos.Broker, 'not found') as brokerName,
                         COALESCE(pos.Transporter_Id, 0) as transporterId,
-                        COALESCE(pos.Transporter, 'not found') as transporterName
+                        COALESCE(pos.Transporter, 'not found') as transporterName,
+                    -- lol based address
+                        COALESCE(lol.Party_Mailing_Name, '') AS lolDeliveryName,
+                        COALESCE(CONCAT_WS(', ', lol.Party_Mobile_1, lol.Party_Mobile_2), '') AS lolPhoneNumber,
+                        COALESCE(lol.Party_Location, '') AS lolCityName,
+                        COALESCE(lol.Party_Mailing_Address, '') AS lolDeliveryAddress,
+                        COALESCE(lol.GST_No, '') AS lolGstNumber,
+                        'TamilNadu' AS lolStateName
                     FROM tbl_Retailers_Master AS r
                     LEFT JOIN tbl_Account_Master AS a ON a.Acc_Id = r.AC_Id 
                     LEFT JOIN tbl_ERP_POS_Master AS pos ON pos.Retailer_Id = r.Retailer_Id 
+                    LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ret_Id = r.Retailer_Id
                     WHERE r.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
                     -- getting retailer gen info
                     SELECT 
@@ -1335,9 +1343,6 @@ const RetailerControll = () => {
             return servError(err, res);
         }
     };
-
-
-
 
     return {
         getSFCustomers,
