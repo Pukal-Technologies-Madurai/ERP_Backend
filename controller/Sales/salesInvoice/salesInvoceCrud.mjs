@@ -222,7 +222,14 @@ export const getSalesInvoice = async (req, res) => {
                     ON e.Cost_Center_Id = stf.Emp_Id
                 LEFT JOIN tbl_ERP_Cost_Category AS cc
                     ON cc.Cost_Category_Id = stf.Emp_Type_Id
-                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);`
+                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+            -- Alteration History
+                SELECT ah.*, u.Name AS alterByGet 
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                WHERE 
+                    alteredTable = 'tbl_Sales_Delivery_Gen_Info' 
+                    AND alteredRowId IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);`
             );
 
         const result = await request;
@@ -231,6 +238,7 @@ export const getSalesInvoice = async (req, res) => {
         const Products_List = toArray(result.recordsets[1]);
         const Expence_Array = toArray(result.recordsets[2]);
         const Staffs_Array = toArray(result.recordsets[3]);
+        const Alteration_History = toArray(result.recordsets[4]);
 
         if (SalesGeneralInfo.length > 0) {
             const resData = SalesGeneralInfo.map(row => ({
@@ -243,6 +251,9 @@ export const getSalesInvoice = async (req, res) => {
                 ),
                 Staffs_Array: Staffs_Array.filter(
                     fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                ),
+                alterationHistory: Alteration_History.filter(
+                    fil => isEqualNumber(fil.alteredRowId, row.Do_Id)
                 )
             }));
 
@@ -962,6 +973,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Payment_Status', Payment_Status)
             .input('shipingAddressId', shiping_id_to_post)
             .input('Alter_Reason', Alter_Reason)
+            .input('alterAt', new Date())
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET 
@@ -996,9 +1008,9 @@ export const updateSalesInvoice = async (req, res) => {
                     Do_Id = @Do_Id
                 -- SAVING ALTERATION DETAILS
                 INSERT INTO tbl_Alteration_History (
-                    alteredTable, alteredRowId, alterBy, alterId, reason
+                    alteredTable, alteredRowId, alterBy, alterAt, alterId, reason
                 ) VALUES (
-                    'tbl_Sales_Delivery_Gen_Info', @Do_Id, @Altered_by, @Alter_Id, @Alter_Reason
+                    'tbl_Sales_Delivery_Gen_Info', @Do_Id, @Altered_by, @alterAt, @Alter_Id, @Alter_Reason
                 )`
             );
 

@@ -23,7 +23,7 @@ export const connectDB = () => {
             // encrypt: false,
             trustServerCertificate: true,
             enableArithAbort: true,
-            requestTimeout: 60000,
+            // requestTimeout: 60000,
         },
 
     };
