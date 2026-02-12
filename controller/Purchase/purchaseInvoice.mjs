@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber, ISOString, RoundNumber, createPadString, Addition, toArray, Division, toNumber } from '../../helper_functions.mjs'
+import { checkIsNumber, isEqualNumber, ISOString, RoundNumber, createPadString, Addition, toArray, Division, toNumber, stringCompare } from '../../helper_functions.mjs'
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -103,8 +103,10 @@ const PurchaseOrder = () => {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
             Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
-            QualityCondition = '', PaymentDays = 0
+            QualityCondition = '', PaymentDays = 0, Expence_Array = []
         } = req.body;
+
+        console.log(Expence_Array, "Expence_Array")
 
         const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();
         const Po_Entry_Date = req?.body?.Po_Entry_Date ? ISOString(req?.body?.Po_Entry_Date) : ISOString();
@@ -190,20 +192,27 @@ const PurchaseOrder = () => {
 
             // const Po_Inv_No = 'PO_' + Branch_Id + '_' + PO_Inv_Year + '_' + createPadString(PO_Inv_Id, 4);
 
-            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
-                const Amount = RoundNumber(item?.Amount);
+            const TotalExpences = toNumber(RoundNumber(
+                toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+            ));
 
-                if (isNotTaxableBill) return Addition(acc, Amount);
+            const Total_Invoice_value = RoundNumber(Addition(
+                TotalExpences,
+                Product_Array.reduce((acc, item) => {
+                    const Amount = RoundNumber(item?.Amount);
 
-                const product = findProductDetails(productsData, item.Item_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+                    if (isNotTaxableBill) return Addition(acc, Amount);
 
-                if (isInclusive) {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-                } else {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-                }
-            }, 0))
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                    if (isInclusive) {
+                        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                    } else {
+                        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                    }
+                }, 0)
+            ));
 
             const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
                 const Amount = RoundNumber(item?.Amount);
@@ -246,6 +255,7 @@ const PurchaseOrder = () => {
                 .input('IGST_Total', isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0)
                 .input('IS_IGST', isIGST ? 1 : 0)
                 .input('Round_off', checkIsNumber(Round_off) ? Round_off : RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
+                .input('Total_Expences', TotalExpences)
                 .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
                 .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
@@ -265,12 +275,12 @@ const PurchaseOrder = () => {
                 .query(`
                     INSERT INTO tbl_Purchase_Order_Inv_Gen_Info (
                         PIN_Id, PO_Inv_Id, PO_Inv_Year, Ref_Po_Inv_No, Branch_Id, Po_Inv_No, Po_Inv_Date, Po_Entry_Date, Retailer_Id, GST_Inclusive, 
-                        IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Round_off, Total_Before_Tax, Total_Tax, Total_Invoice_value, Narration, 
+                        IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Round_off, Total_Expences, Total_Before_Tax, Total_Tax, Total_Invoice_value, Narration, 
                         Cancel_status, Created_by, Altered_by, Created_on, Alterd_on, Trans_Type, Alter_Id, Voucher_Type, Stock_Item_Ledger_Name,
                         Discount, QualityCondition, PaymentDays
                     ) VALUES (
                         @PIN_Id, @PO_Inv_Id, @PO_Inv_Year, @Ref_Po_Inv_No, @Branch_Id, @Po_Inv_No, @Po_Inv_Date, @Po_Entry_Date, @Retailer_Id, @GST_Inclusive, 
-                        @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Round_off, @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Narration, 
+                        @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Round_off, @Total_Expences, @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Narration, 
                         @Cancel_status, @Created_by, @Altered_by, @Created_on, @Alterd_on, @Trans_Type, @Alter_Id, @Voucher_Type, @Stock_Item_Ledger_Name,
                         @Discount, @QualityCondition, @PaymentDays
                     )`
@@ -410,8 +420,96 @@ const PurchaseOrder = () => {
                     );
 
                 const result = await request;
-
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to save data entry id')
+            }
+
+            if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
+                for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
+                    const exp = Expence_Array[expInd];
+                    const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                    const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? toNumber(exp?.Expence_Value) : 0;
+                    if (Expence_Value_DR === 0 && Expence_Value_CR === 0) continue;
+
+                    const request = new sql.Request(transaction)
+                        .input('PIN_Id', PIN_Id)
+                        .input('Sno', expInd + 1)
+                        .input('Expense_Id', toNumber(exp?.Expense_Id))
+                        .input('Amount_value_DR', Expence_Value_DR)
+                        .input('Amount_value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Purchase_Order_Inv_Expense_info (
+                                PIN_Id, Expense_Id, Amount_value_DR, Amount_value_CR
+                            ) VALUES (
+                                @PIN_Id, @Expense_Id, @Amount_value_DR, @Amount_value_CR
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Expence row in purchase invoice creation');
+                    }
+                }
+            }
+
+            const taxTypes = [
+                { expName: 'CGST', Value: isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2) },
+                { expName: 'SGST', Value: isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2) },
+                { expName: 'IGST', Value: isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0 },
+                { expName: 'ROUNDOFF', Value: checkIsNumber(Round_off) ? Round_off : RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value) }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            let snoOffset = toNumber(Expence_Array?.length) || 0;
+
+            const getExpName = new sql.Request();
+            taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+            const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
+
+            if (taxTypes.length > 0) {
+                const getCurrespondingAccount = getExpName.query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE AC_Reason IN (${inClause}) 
+                    AND Acc_Id IS NOT NULL;`
+                );
+
+                const expData = (await getCurrespondingAccount).recordset;
+
+                const missing = taxTypes.filter(exp =>
+                    !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+                );
+
+                if (missing.length > 0) {
+                    throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+                }
+
+                for (let i = 0; i < taxTypes.length; i++) {
+                    const { expName, Value } = taxTypes[i];
+                    const numValue = Number(Value);
+                    const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                    const Amount_value_DR = numValue >= 0 ? numValue : 0;
+                    const Amount_value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('PIN_Id', PIN_Id)
+                        .input('Sno', snoOffset + i + 1)
+                        .input('Expense_Id', Expense_Id)
+                        .input('Amount_value_DR', Amount_value_DR)
+                        .input('Amount_value_CR', Amount_value_CR)
+                        .query(`
+                            INSERT INTO tbl_Purchase_Order_Inv_Expense_info (
+                                PIN_Id, Expense_Id, Amount_value_DR, Amount_value_CR
+                            ) VALUES (
+                                @PIN_Id, @Expense_Id, @Amount_value_DR, @Amount_value_CR
+                            )`
+                        );
+
+                    const result = await request;
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert tax expense row');
+                    }
+                }
             }
 
             await transaction.commit();
@@ -430,7 +528,7 @@ const PurchaseOrder = () => {
             PIN_Id, Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
             Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
-            QualityCondition = '', PaymentDays = 0
+            QualityCondition = '', PaymentDays = 0, Expence_Array = []
         } = req.body;
 
         const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
@@ -455,20 +553,27 @@ const PurchaseOrder = () => {
             const productsData = (await getProducts(0)).dataArray;
             const Alter_Id = Math.floor(Math.random() * 999999);
 
-            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
-                const Amount = RoundNumber(item?.Amount);
+            const TotalExpences = toNumber(RoundNumber(
+                toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+            ));
 
-                if (isNotTaxableBill) return Addition(acc, Amount);
+            const Total_Invoice_value = RoundNumber(Addition(
+                TotalExpences,
+                Product_Array.reduce((acc, item) => {
+                    const Amount = RoundNumber(item?.Amount);
 
-                const product = findProductDetails(productsData, item.Item_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+                    if (isNotTaxableBill) return Addition(acc, Amount);
 
-                if (isInclusive) {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-                } else {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-                }
-            }, 0))
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                    if (isInclusive) {
+                        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                    } else {
+                        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                    }
+                }, 0)
+            ));
 
             const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
                 const Amount = RoundNumber(item?.Amount);
@@ -512,6 +617,7 @@ const PurchaseOrder = () => {
                 .input('IS_IGST', isIGST ? 1 : 0)
 
                 .input('Round_off', checkIsNumber(Round_off) ? Round_off : RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
+                .input('Total_Expences', TotalExpences)
                 .input('Total_Before_Tax', RoundNumber(totalValueBeforeTax.TotalValue))
                 .input('Total_Tax', RoundNumber(totalValueBeforeTax.TotalTax))
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
@@ -541,6 +647,7 @@ const PurchaseOrder = () => {
                         IGST_Total = @IGST_Total, 
                         IS_IGST = @IS_IGST, 
                         Round_off = @Round_off, 
+                        Total_Expences = @Total_Expences,
                         Total_Before_Tax = @Total_Before_Tax, 
                         Total_Tax = @Total_Tax,
                         Total_Invoice_value = @Total_Invoice_value, 
@@ -601,7 +708,97 @@ const PurchaseOrder = () => {
                     DELETE FROM tbl_Purchase_Order_Inv_Stock_Info WHERE PIN_Id = @PIN_Id
                     DELETE FROM tbl_Purchase_Order_Inv_Gen_Order WHERE PIN_Id = @PIN_Id
                     DELETE FROM tbl_Purchase_Order_Inv_Staff_Details WHERE PIN_Id = @PIN_Id
+                    DELETE FROM tbl_Purchase_Order_Inv_Expense_info WHERE PIN_Id = @PIN_Id
                 `);
+
+            if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
+                for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
+                    const exp = Expence_Array[expInd];
+                    const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                    const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? toNumber(exp?.Expence_Value) : 0;
+                    if (Expence_Value_DR === 0 && Expence_Value_CR === 0) continue;
+
+                    const request = new sql.Request(transaction)
+                        .input('PIN_Id', PIN_Id)
+                        .input('Sno', expInd + 1)
+                        .input('Expense_Id', toNumber(exp?.Expense_Id))
+                        .input('Amount_value_DR', Expence_Value_DR)
+                        .input('Amount_value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Purchase_Order_Inv_Expense_info (
+                                PIN_Id, Expense_Id, Amount_value_DR, Amount_value_CR
+                            ) VALUES (
+                                @PIN_Id, @Expense_Id, @Amount_value_DR, @Amount_value_CR
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Expence row in purchase invoice creation');
+                    }
+                }
+            }
+
+            const taxTypes = [
+                { expName: 'CGST', Value: isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2) },
+                { expName: 'SGST', Value: isIGST ? 0 : RoundNumber(totalValueBeforeTax.TotalTax / 2) },
+                { expName: 'IGST', Value: isIGST ? RoundNumber(totalValueBeforeTax.TotalTax) : 0 },
+                { expName: 'ROUNDOFF', Value: checkIsNumber(Round_off) ? Round_off : RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value) }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            let snoOffset = toNumber(Expence_Array?.length) || 0;
+
+            const getExpName = new sql.Request();
+            taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+            const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
+
+            if (taxTypes.length > 0) {
+                const getCurrespondingAccount = getExpName.query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE AC_Reason IN (${inClause}) 
+                    AND Acc_Id IS NOT NULL;`
+                );
+
+                const expData = (await getCurrespondingAccount).recordset;
+
+                const missing = taxTypes.filter(exp =>
+                    !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+                );
+
+                if (missing.length > 0) {
+                    throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+                }
+
+                for (let i = 0; i < taxTypes.length; i++) {
+                    const { expName, Value } = taxTypes[i];
+                    const numValue = Number(Value);
+                    const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                    const Amount_value_DR = numValue >= 0 ? numValue : 0;
+                    const Amount_value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('PIN_Id', PIN_Id)
+                        .input('Sno', snoOffset + i + 1)
+                        .input('Expense_Id', Expense_Id)
+                        .input('Amount_value_DR', Amount_value_DR)
+                        .input('Amount_value_CR', Amount_value_CR)
+                        .query(`
+                            INSERT INTO tbl_Purchase_Order_Inv_Expense_info (
+                                PIN_Id, Expense_Id, Amount_value_DR, Amount_value_CR
+                            ) VALUES (
+                                @PIN_Id, @Expense_Id, @Amount_value_DR, @Amount_value_CR
+                            )`
+                        );
+
+                    const result = await request;
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert tax expense row');
+                    }
+                }
+            }
 
             const { stockRows, batchRows } = buildBulkPurchaseRows(toArray(Product_Array), productsData, {
                 isInclusive,
@@ -845,7 +1042,21 @@ const PurchaseOrder = () => {
                     FROM tbl_Purchase_Order_Inv_Gen_Order
                     WHERE 
                         PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)
-                        AND COALESCE(Order_Id, 0) <> 0
+                        AND COALESCE(Order_Id, 0) <> 0;
+
+                    -- Step 7: Get Expense Details
+                    SELECT 
+                        exp.*, 
+                        em.Account_name AS Expence_Name, 
+                        CASE  
+                            WHEN exp.Amount_value_DR > 0 THEN exp.Amount_value_DR 
+                            ELSE -exp.Amount_value_CR
+                        END AS Expence_Value
+                    FROM tbl_Purchase_Order_Inv_Expense_info AS exp
+                    LEFT JOIN tbl_Account_Master AS em
+                        ON em.Acc_Id = exp.Expense_Id
+                    WHERE 
+                        exp.PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase);
                     `
                 );
 
@@ -855,6 +1066,7 @@ const PurchaseOrder = () => {
             const Products_List = toArray(result.recordsets[1]);
             const Staff_List = toArray(result.recordsets[2]);
             const FromPurchseOrder = toArray(result.recordsets[3]);
+            const Expence_List = toArray(result.recordsets[4]);
 
             if (PurchaseInfo.length > 0) {
                 const finalResult = PurchaseInfo.map(p => ({
@@ -864,6 +1076,7 @@ const PurchaseOrder = () => {
                         ProductImageUrl: getImage('products', pp.Product_Image_Name)
                     })),
                     Staff_List: Staff_List.filter(stf => isEqualNumber(stf.PIN_Id, p.PIN_Id)),
+                    Expence_Array: Expence_List.filter(exp => isEqualNumber(exp.PIN_Id, p.PIN_Id)),
                     isFromPurchaseOrder: toNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.Order_Id) !== 0
                 }));
                 dataFound(res, finalResult);

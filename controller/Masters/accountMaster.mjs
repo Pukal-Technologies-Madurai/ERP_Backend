@@ -38,16 +38,15 @@ const accountMaster = () => {
                         a.Acc_Id,
                         a.Account_name,
                         a.Group_Id,
-                        COALESCE(ag.Group_Name, 'Not found') AS Group_Name
+                        COALESCE(ag.Group_Name, 'Not found') AS Group_Name,
                         a.creditLimit,
                         a.creditDays,
                         a.percentageValue
                     FROM tbl_Account_Master AS a 
-                    LEFT JOIN tbl_Accounting_Group AS ag
-                        ON ag.Group_Id = a.Group_Id
-                    WHERE Acc_Id IS NOT NULL
-                    ${checkIsNumber(Acc_Id) ? ' AND a.Acc_Id = @Acc_Id ' : ''}
-                    ${checkIsNumber(Group_Id) ? ' AND a.Group_Id = @Group_Id ' : ''}
+                    LEFT JOIN tbl_Accounting_Group AS ag ON ag.Group_Id = a.Group_Id
+                    WHERE a.Acc_Id IS NOT NULL
+                    ${checkIsNumber(Acc_Id) ? ' AND a.Acc_Id = @Acc_Id ' : ' '}
+                    ${checkIsNumber(Group_Id) ? ' AND a.Group_Id = @Group_Id ' : ' '}
                     ORDER BY a.Account_name;`
                 );
 

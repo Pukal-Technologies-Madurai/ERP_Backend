@@ -7,6 +7,7 @@ import sql from 'mssql';
 const getDefaultAccounts = async (req, res) => {
     try {
         const { Type = '', AC_Reason = '' } = req.query;
+        console.log(Type, AC_Reason);
 
         const request = new sql.Request()
             .input('Type', Type)
