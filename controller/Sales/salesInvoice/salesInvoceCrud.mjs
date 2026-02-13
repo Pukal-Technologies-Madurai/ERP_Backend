@@ -276,7 +276,7 @@ export const createSalesInvoice = async (req, res) => {
             Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
             deliveryAddressDetails = {}, shipingAddressDetails = {},
-            Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
+            Delivery_Status = 1, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
         } = req.body;
 
         const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -501,7 +501,7 @@ export const createSalesInvoice = async (req, res) => {
             .input('Total_Invoice_value', Math.round(Total_Invoice_value))
             .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
 
-            .input('Delivery_Status', Delivery_Status)
+            .input('Delivery_Status', 1)
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
             .input('paymentDueDays', toNumber(paymentDueDays))
