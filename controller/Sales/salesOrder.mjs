@@ -706,7 +706,6 @@ const SaleOrder = () => {
                 VoucherType,
                 OrderStatus,
                 Branch_Id,
-                removeCanceled = 1
             } = req.query;
 
             const Fromdate = req.query?.Fromdate
@@ -738,7 +737,7 @@ const SaleOrder = () => {
             WHERE 
                 CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
                 AND (@retailer IS NULL OR so.Retailer_Id = @retailer)
-                ${removeCanceled == 1 ? ' AND so.Cancel_status <> 0 ' : ''}
+                AND (@cancel IS NULL OR so.Cancel_status = @cancel)
                 AND (@creater IS NULL OR so.Created_by = @creater)
                 AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
                 AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
