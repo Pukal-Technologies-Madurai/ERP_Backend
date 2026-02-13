@@ -3528,7 +3528,11 @@ TRANSPORTER_INFO AS (
 )
 SELECT 
     sdgi.*,
-     COALESCE(sda.deliveryName, '') AS Retailer_Name,
+    -- COALESCE(sda.deliveryName, '') AS Retailer_Name,
+      CASE
+  WHEN sda.deliveryName IS NOT NULL THEN sda.deliveryName
+  ELSE rm.Retailer_Name
+END AS Retailer_Name,
     COALESCE(sda.deliveryAddress, '') AS Delivery_Address,
     COALESCE(sda.cityName, '') AS City_Name,
     COALESCE(sda.stateName, '') AS State_Name,
@@ -3588,7 +3592,11 @@ SELECT
             sd.*,
             sdgi.Do_Inv_No,
             COALESCE(ti.Transporter_Name, '') AS Transporter_Name,
-              COALESCE(sda.deliveryName, '') AS Retailer_Name
+             -- COALESCE(sda.deliveryName, '') AS Retailer_Name
+              CASE
+  WHEN sda.deliveryName IS NOT NULL THEN sda.deliveryName
+  ELSE rm.Retailer_Name
+END AS Retailer_Name
         FROM DELIVERY_DETAILS AS sd
         LEFT JOIN TRANSPORTER_INFO ti ON ti.Do_Id = sdgi.Do_Id
         WHERE sd.Delivery_Order_Id = sdgi.Do_Id

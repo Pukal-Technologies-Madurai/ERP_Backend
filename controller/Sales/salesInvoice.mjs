@@ -3,9 +3,19 @@ import { Addition, checkIsNumber, createPadString, isEqualNumber, ISOString, Mul
 import { invalidInput, servError, dataFound, noData, sentData, success } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
+import uploadFile from '../../middleware/uploadMiddleware.mjs';
+import PDFDocument from 'pdfkit';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import crypto from 'crypto';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+import fsSync from 'fs';
+import { clearScreenDown } from 'readline';
 const SalesInvoice = () => {
 
     const getSalesInvoiceMobileFilter1 = async (req, res) => {
@@ -737,7 +747,7 @@ if (SalesGeneralInfo.length > 0) {
     }
 };
 
-      const getMobileReportDropdowns = async (req, res) => {
+const getMobileReportDropdowns = async (req, res) => {
     try {
         const { reportName } = req.query;
 
@@ -784,13 +794,14 @@ if (SalesGeneralInfo.length > 0) {
             });
         }
 
-   
+        // Get group filters with Level_Id
         const groupFilterQuery = `
             SELECT DISTINCT
                 gtm.Table_Id,
                 gtm.Column_Name AS groupFilterColumn,
                 tm.Table_Name,
-                tm.AliasName
+                tm.AliasName,
+                gtm.Level_Id  -- Include Level_Id to determine which group filter slot
             FROM tbl_Group_Template gtm
             LEFT JOIN tbl_Mobile_Rpt_Table_Master tm ON tm.Table_Id = gtm.Table_Id
             WHERE gtm.Mob_Rpt_Id IN (
@@ -798,13 +809,14 @@ if (SalesGeneralInfo.length > 0) {
                 FROM tbl_Mobile_Report_Type 
                 WHERE Report_Name = @reportName
             )
+            ORDER BY gtm.Level_Id  -- Order by Level_Id to maintain sequence
         `;
 
         const groupFilterResult = await new sql.Request()
             .input('reportName', reportName)
             .query(groupFilterQuery);
 
-  
+        // Regular filter promises
         const regularFilterPromises = mobileReportResult.recordset.map(async (config) => {
             try {
                 if (config.tableName && config.columnName) {
@@ -982,12 +994,22 @@ if (SalesGeneralInfo.length > 0) {
             }
         });
 
-        
+       
         const groupFilterPromises = groupFilterResult.recordset.map(async (groupConfig) => {
             try {
-           
                 const actualTableName = groupConfig.Table_Name;
                 const actualColumnName = groupConfig.groupFilterColumn;
+                const levelId = groupConfig.Level_Id || 1; 
+                
+              
+                let groupFilterType = "GROUP_FILTER"; 
+                if (levelId == 1) {
+                    groupFilterType = "GROUP_FILTER";
+                } else if (levelId == 2) {
+                    groupFilterType = "GROUP_FILTER1";
+                } else if (levelId == 3) {
+                    groupFilterType = "GROUP_FILTER2";
+                }
                 
                 if (actualTableName && actualColumnName) {
                     
@@ -1002,13 +1024,14 @@ if (SalesGeneralInfo.length > 0) {
                     
                     if (columnCheck.recordset[0].columnExists === 0) {
                         return {
-                            filterType: "GROUP_FILTER", 
+                            filterType: groupFilterType,
                             tableId: groupConfig.Table_Id,
                             columnName: actualColumnName,
                             tableName: actualTableName,
                             aliasName: groupConfig.AliasName,
-                            listTypes: "1", 
-                            FilterLevel: 3, 
+                            listTypes: "1",
+                            FilterLevel: 3,
+                            Level_Id: levelId,
                             isGroupFilter: true,
                             options: [],
                             error: `Group filter column '${actualColumnName}' not found in table '${actualTableName}'`
@@ -1074,14 +1097,15 @@ if (SalesGeneralInfo.length > 0) {
                     });
 
                     return {
-                        filterType: "GROUP_FILTER", 
+                        filterType: groupFilterType,
                         tableId: groupConfig.Table_Id,
                         columnName: actualColumnName,
                         tableName: actualTableName,
                         aliasName: groupConfig.AliasName,
                         valueColumn: valueColumn,
-                        listTypes: "1", 
+                        listTypes: "1",
                         FilterLevel: 3,
+                        Level_Id: levelId,
                         isGroupFilter: true,
                         options: uniqueOptions,
                         dataSummary: dataCheck.recordset[0]
@@ -1089,13 +1113,14 @@ if (SalesGeneralInfo.length > 0) {
 
                 } else {
                     return {
-                        filterType: "GROUP_FILTER",
+                        filterType: groupFilterType,
                         tableId: groupConfig.Table_Id,
                         columnName: groupConfig.groupFilterColumn,
                         tableName: groupConfig.Table_Name,
                         aliasName: groupConfig.AliasName,
                         listTypes: "1",
                         FilterLevel: 3,
+                        Level_Id: levelId,
                         isGroupFilter: true,
                         options: [], 
                         error: "Invalid group filter configuration"
@@ -1104,13 +1129,22 @@ if (SalesGeneralInfo.length > 0) {
 
             } catch (error) {
                 console.error(`Error fetching group filter dropdown:`, error);
+                
+                // Determine filter type based on Level_Id even in error case
+                let groupFilterType = "GROUP_FILTER";
+                const levelId = groupConfig.Level_Id || 1;
+                if (levelId === 1) groupFilterType = "GROUP_FILTER";
+                else if (levelId === 2) groupFilterType = "GROUP_FILTER1";
+                else if (levelId === 3) groupFilterType = "GROUP_FILTER2";
+                
                 return {
-                    filterType: "GROUP_FILTER",
+                    filterType: groupFilterType,
                     tableId: groupConfig.Table_Id,
                     columnName: groupConfig.groupFilterColumn,
                     tableName: groupConfig.Table_Name,
                     aliasName: groupConfig.AliasName,
                     FilterLevel: 3,
+                    Level_Id: levelId,
                     isGroupFilter: true,
                     listTypes: "1",
                     options: [],
@@ -1119,16 +1153,35 @@ if (SalesGeneralInfo.length > 0) {
             }
         });
 
-     
+        // Execute all promises
         const [regularResults, groupResults] = await Promise.all([
             Promise.all(regularFilterPromises),
             Promise.all(groupFilterPromises)
         ]);
 
-   
+        // Combine results
         const allResults = [...regularResults, ...groupResults];
 
-        const formattedResponse = allResults.map(item => ({
+        // Sort results to maintain order: regular filters first (by Type), then group filters (by Level_Id)
+        const sortedResults = allResults.sort((a, b) => {
+            // Regular filters come first
+            if (!a.isGroupFilter && b.isGroupFilter) return -1;
+            if (a.isGroupFilter && !b.isGroupFilter) return 1;
+            
+            // Both regular filters - sort by filterType
+            if (!a.isGroupFilter && !b.isGroupFilter) {
+                return (a.filterType || 0) - (b.filterType || 0);
+            }
+            
+            // Both group filters - sort by Level_Id
+            if (a.isGroupFilter && b.isGroupFilter) {
+                return (a.Level_Id || 1) - (b.Level_Id || 1);
+            }
+            
+            return 0;
+        });
+
+        const formattedResponse = sortedResults.map(item => ({
             filterType: item.filterType,
             tableId: item.tableId,
             columnName: item.columnName,
@@ -1136,6 +1189,7 @@ if (SalesGeneralInfo.length > 0) {
             aliasName: item.aliasName,
             valueColumn: item.valueColumn,
             FilterLevel: item.FilterLevel,
+            Level_Id: item.Level_Id,
             isGroupFilter: item.isGroupFilter,
             listTypes: item.listTypes,
             options: item.options,
@@ -1146,6 +1200,7 @@ if (SalesGeneralInfo.length > 0) {
         dataFound(res, formattedResponse);
 
     } catch (error) {
+        console.error('Error in getMobileReportDropdowns:', error);
         servError(error, res);
     }
 };
@@ -1932,23 +1987,226 @@ if (SalesGeneralInfo.length > 0) {
         }
     };
 
-     const getSalesOrderInvoice = async (req, res) => {
-        try {
-            const { So_Inv_No } = req.query;
+// const getSalesOrderInvoice = async (req, res) => {
+//     try {
 
+//              await uploadFile(req, res, 5, 'WhatsappPdf');
 
-            const request = new sql.Request()
-                .input('So_Inv_No', So_Inv_No)
-              
-            const result = await request.query(`
-            DECLARE @FilteredOrders TABLE (So_Id INT);
+//         const fileName = req?.file?.filename;
+//         const filePath = req?.file?.path;
 
-            INSERT INTO @FilteredOrders (So_Id)
-            SELECT so.So_Id
-            FROM tbl_Sales_Order_Gen_Info AS so
-            WHERE 1 = 1
-                ${So_Inv_No ? " AND so.So_Inv_No = @So_Inv_No " : ""}
+//         if (!fileName) {
+//             return invalidInput(res, 'Product Photo is required');
+//         }
+
+//         const { Do_Inv_No } = req.query;
+
+//         const request = new sql.Request()
+//             .input('Do_Inv_No', sql.NVarChar, Do_Inv_No); 
             
+
+//         const result = await request.query(`
+//             DECLARE @FilteredOrders TABLE (Do_Id INT);
+            
+//             -- Get Delivery Orders based on Do_Inv_No
+//             INSERT INTO @FilteredOrders (Do_Id)
+//             SELECT dgi.Do_Id
+//             FROM tbl_Sales_Delivery_Gen_Info AS dgi
+//             WHERE 1 = 1
+//                 ${Do_Inv_No ? " AND dgi.Do_Inv_No = @Do_Inv_No " : ""}
+            
+//             -- Get Sales Order General Info based on filtered delivery orders
+//             SELECT 
+//                 so.*,
+//                 lol.*,
+//                 COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+//                 COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+//                 COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+//                 COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+//                 COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+//             FROM tbl_Sales_Order_Gen_Info AS so
+//             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+//             LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+//             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+//             LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = so.Retailer_Id
+//             LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+//             LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+//             WHERE so.So_Id IN (
+//                 SELECT DISTINCT So_No 
+//                 FROM tbl_Sales_Delivery_Gen_Info 
+//                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+//             );
+
+//             -- Get Sales Order Stock Info
+//             SELECT 
+//                 si.*,
+//                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+//                 COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+//                 COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+//                 COALESCE(u.Units, 'not available') AS UOM,
+//                 COALESCE(b.Brand_Name, 'not available') AS BrandGet
+//             FROM tbl_Sales_Order_Stock_Info AS si
+//             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+//             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+//             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+//             WHERE si.Sales_Order_Id IN (
+//                 SELECT DISTINCT So_No 
+//                 FROM tbl_Sales_Delivery_Gen_Info 
+//                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+//             );
+
+//             -- Get Staff Involved
+//             SELECT 
+//                 sosi.So_Id, 
+//                 sosi.Involved_Emp_Id,
+//                 sosi.Cost_Center_Type_Id,
+//                 c.Cost_Center_Name AS EmpName,
+//                 cc.Cost_Category AS EmpType
+//             FROM tbl_Sales_Order_Staff_Info AS sosi
+//             LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+//             LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+//             WHERE sosi.So_Id IN (
+//                 SELECT DISTINCT So_No 
+//                 FROM tbl_Sales_Delivery_Gen_Info 
+//                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+//             );
+
+//             -- Get Delivery General Info (filtered by Do_Inv_No)
+//             SELECT 
+//                 dgi.*,
+//                 lol.Ledger_Name AS Retailer_Name,
+//                 bm.BranchName AS Branch_Name,
+//                 st.Status AS DeliveryStatusName,
+//                 COALESCE((
+//                     SELECT SUM(collected_amount)
+//                     FROM tbl_Sales_Receipt_Details_Info
+//                     WHERE bill_id = dgi.Do_Id
+//                 ), 0) AS receiptsTotalAmount
+//             FROM tbl_Sales_Delivery_Gen_Info AS dgi
+//             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+//             LEFT JOIN tbl_Ledger_Lol as lol ON lol.Ret_Id=rm.Retailer_Id
+//             LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+//             LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+//             WHERE dgi.Do_Id IN (SELECT Do_Id FROM @FilteredOrders);
+
+//             -- Get Delivery Stock Items (filtered by Do_Inv_No)
+//             SELECT 
+//                 oi.*,
+//                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+//                 COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+//                 COALESCE(u.Units, 'not available') AS UOM,
+//                 COALESCE(b.Brand_Name, 'not available') AS BrandGet
+//             FROM tbl_Sales_Delivery_Stock_Info AS oi
+//             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+//             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+//             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+//             WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredOrders);`
+//         );
+
+//         const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
+
+//         if (DeliveryData.length > 0) {
+//             const resData = DeliveryData.map(delivery => {
+//                 // Find related sales order
+//                 const relatedOrder = OrderData.find(order => 
+//                     isEqualNumber(order.So_Id, delivery.So_No)
+//                 ) || {};
+                
+//                 // Find order products for this sales order
+//                 const orderProducts = ProductDetails.filter(p =>
+//                     isEqualNumber(p.Sales_Order_Id, delivery.So_No)
+//                 );
+                
+//                 // Find staff involved for this sales order
+//                 const staffInvolved = StaffInvolved.filter(s =>
+//                     isEqualNumber(s.So_Id, delivery.So_No)
+//                 );
+                
+//                 // Get delivery items for this specific delivery
+//                 const deliveryItems = DeliveryItems.filter(item =>
+//                     isEqualNumber(item.Delivery_Order_Id, delivery.Do_Id)
+//                 ).map(item => ({
+//                     ...item
+//                 }));
+
+//                 // Calculate total ordered quantity from sales order
+//                 const totalOrderedQty = orderProducts.reduce(
+//                     (sum, p) => sum + toNumber(p.Bill_Qty),
+//                     0
+//                 );
+                
+//                 // Calculate total delivered quantity for this sales order across all deliveries
+//                 const allDeliveryItemsForOrder = DeliveryItems.filter(item => {
+//                     const delivery = DeliveryData.find(d => 
+//                         isEqualNumber(d.Do_Id, item.Delivery_Order_Id)
+//                     );
+//                     return delivery && isEqualNumber(delivery.So_No, delivery.So_No);
+//                 });
+                
+//                 const totalDeliveredQty = allDeliveryItemsForOrder.reduce(
+//                     (sum, p) => sum + toNumber(p.Bill_Qty),
+//                     0
+//                 );
+
+//                 const orderStatus = totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+
+//                 return {
+//                     ...delivery,
+//                     SalesOrderData: {
+//                         ...relatedOrder,
+//                         Products_List: orderProducts.map(p => ({ ...p })),
+//                         Staff_Involved_List: staffInvolved,
+//                         OrderStatus: orderStatus,
+//                         TotalOrderedQty: totalOrderedQty,
+//                         TotalDeliveredQty: totalDeliveredQty
+//                     },
+//                     DeliveryItems: deliveryItems,
+//                     OrderStatus: orderStatus
+//                 };
+//             });
+
+//             dataFound(res, resData);
+//         } else {
+//             noData(res);
+//         }
+
+//     } catch (e) {
+//         servError(e, res);
+//     }
+// };
+
+const getSalesOrderInvoice = async (req, res) => {
+    let uploadedFileName = null;
+    let uploadedFilePath = null;
+
+    try {
+        // Handle file upload first (if any)
+        if (req.file) {
+            await uploadFile(req, res, 5, 'WhatsappPdf');
+            uploadedFileName = req?.file?.filename;
+            uploadedFilePath = req?.file?.path;
+        }
+
+        const { Do_Inv_No } = req.query;
+
+        // Validate input
+        if (!Do_Inv_No) {
+            return invalidInput(res, 'Invoice number is required');
+        }
+
+        const request = new sql.Request()
+            .input('Do_Inv_No', sql.NVarChar, Do_Inv_No);
+
+        const result = await request.query(`
+            DECLARE @FilteredOrders TABLE (Do_Id INT);
+            
+            -- Get Delivery Orders based on Do_Inv_No
+            INSERT INTO @FilteredOrders (Do_Id)
+            SELECT dgi.Do_Id
+            FROM tbl_Sales_Delivery_Gen_Info AS dgi
+            WHERE dgi.Do_Inv_No = @Do_Inv_No;
+            
+            -- Get Sales Order General Info based on filtered delivery orders
             SELECT 
                 so.*,
                 lol.*,
@@ -1961,11 +2219,16 @@ if (SalesGeneralInfo.length > 0) {
             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
             LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
-            LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id=so.Retailer_Id
+            LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = so.Retailer_Id
             LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
             LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
-            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+            WHERE so.So_Id IN (
+                SELECT DISTINCT So_No 
+                FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+            );
 
+            -- Get Sales Order Stock Info
             SELECT 
                 si.*,
                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
@@ -1977,8 +2240,13 @@ if (SalesGeneralInfo.length > 0) {
             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-            WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+            WHERE si.Sales_Order_Id IN (
+                SELECT DISTINCT So_No 
+                FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+            );
 
+            -- Get Staff Involved
             SELECT 
                 sosi.So_Id, 
                 sosi.Involved_Emp_Id,
@@ -1988,11 +2256,16 @@ if (SalesGeneralInfo.length > 0) {
             FROM tbl_Sales_Order_Staff_Info AS sosi
             LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
             LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
-            WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+            WHERE sosi.So_Id IN (
+                SELECT DISTINCT So_No 
+                FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+            );
 
+            -- Get Delivery General Info (filtered by Do_Inv_No)
             SELECT 
                 dgi.*,
-                rm.Retailer_Name AS Retailer_Name,
+                lol.Ledger_Name AS Retailer_Name,
                 bm.BranchName AS Branch_Name,
                 st.Status AS DeliveryStatusName,
                 COALESCE((
@@ -2002,10 +2275,12 @@ if (SalesGeneralInfo.length > 0) {
                 ), 0) AS receiptsTotalAmount
             FROM tbl_Sales_Delivery_Gen_Info AS dgi
             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+            LEFT JOIN tbl_Ledger_Lol as lol ON lol.Ret_Id = rm.Retailer_Id
             LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
             LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
-            WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+            WHERE dgi.Do_Id IN (SELECT Do_Id FROM @FilteredOrders);
 
+            -- Get Delivery Stock Items (filtered by Do_Inv_No)
             SELECT 
                 oi.*,
                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
@@ -2016,78 +2291,1529 @@ if (SalesGeneralInfo.length > 0) {
             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-            WHERE oi.Delivery_Order_Id IN (
-                SELECT Do_Id FROM tbl_Sales_Delivery_Gen_Info 
-                WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
-            );`
+            WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredOrders);`
+        );
+
+        const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = 
+            result.recordsets.map(recordset => toArray(recordset));
+
+        if (DeliveryData.length === 0) {
+            return noData(res);
+        }
+
+        // Process and combine the data
+        const processedData = DeliveryData.map(delivery => {
+            // Find related sales order
+            const relatedOrder = OrderData.find(order => 
+                isEqualNumber(order.So_Id, delivery.So_No)
+            ) || {};
+            
+            // Find order products for this sales order
+            const orderProducts = ProductDetails.filter(p =>
+                isEqualNumber(p.Sales_Order_Id, delivery.So_No)
+            );
+            
+            // Find staff involved for this sales order
+            const staffInvolved = StaffInvolved.filter(s =>
+                isEqualNumber(s.So_Id, delivery.So_No)
+            );
+            
+            // Get delivery items for this specific delivery
+            const deliveryItems = DeliveryItems.filter(item =>
+                isEqualNumber(item.Delivery_Order_Id, delivery.Do_Id)
             );
 
-            const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
-
-            if (OrderData.length > 0) {
-                const resData = OrderData.map(order => {
-                    const orderProducts = ProductDetails.filter(p =>
-                        isEqualNumber(p.Sales_Order_Id, order.So_Id)
-                    );
-                    const deliveryList = DeliveryData.filter(d =>
-                        isEqualNumber(d.So_No, order.So_Id)
-                    );
-
-                    const totalOrderedQty = orderProducts.reduce(
-                        (sum, p) => sum + toNumber(p.Bill_Qty),
-                        0
-                    );
-                    const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-                        const deliveredItems = DeliveryItems.filter(p =>
-                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
-                        );
-                        return sum + deliveredItems.reduce((s, p) => s + toNumber(p.Bill_Qty), 0);
-                    }, 0);
-
-                    const orderStatus =
-                        totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
-
-                    const mappedDeliveries = deliveryList.map(d => {
-                        const invoiceProducts = DeliveryItems.filter(p =>
-                            isEqualNumber(p.Delivery_Order_Id, d.Do_Id)
-                        ).map(prod => ({
-                            ...prod
+            // Calculate totals
+            const totalOrderedQty = orderProducts.reduce(
+                (sum, p) => sum + toNumber(p.Bill_Qty),
+                0
+            );
             
-                        }));
+            const totalDeliveredQty = DeliveryItems.filter(item => {
+                const itemDelivery = DeliveryData.find(d => 
+                    isEqualNumber(d.Do_Id, item.Delivery_Order_Id)
+                );
+                return itemDelivery && isEqualNumber(itemDelivery.So_No, delivery.So_No);
+            }).reduce(
+                (sum, item) => sum + toNumber(item.Bill_Qty),
+                0
+            );
 
-                        return {
-                            ...d,
-                            InvoicedProducts: invoiceProducts,
-                        };
-                    });
+            const orderStatus = totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
 
-                    return {
-                        ...order,
-                        OrderStatus: orderStatus,
-                        Products_List: orderProducts.map(p => ({
-                            ...p,
-                           
-                        })),
-                        Staff_Involved_List: StaffInvolved.filter(s =>
-                            isEqualNumber(s.So_Id, order.So_Id)
-                        ),
-                        ConvertedInvoice: mappedDeliveries, 
-                    };
-                });
+            return {
+                ...delivery,
+                SalesOrderData: {
+                    ...relatedOrder,
+                    Products_List: orderProducts,
+                    Staff_Involved_List: staffInvolved,
+                    OrderStatus: orderStatus,
+                    TotalOrderedQty: totalOrderedQty,
+                    TotalDeliveredQty: totalDeliveredQty
+                },
+                DeliveryItems: deliveryItems,
+                OrderStatus: orderStatus,
+                uploadedFile: uploadedFileName ? {
+                    name: uploadedFileName,
+                    path: uploadedFilePath
+                } : null
+            };
+        });
 
-                // const filteredData = OrderStatus
-                //     ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
-                //     : resData;
+        dataFound(res, processedData);
 
-                dataFound(res, resData);
-            } else {
-                noData(res);
-            }
-
-        } catch (e) {
-            servError(e, res);
+    } catch (error) {
+        console.error('Error in getSalesOrderInvoice:', error);
+        
+        // Clean up uploaded file if error occurred
+        if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
+            fs.unlinkSync(uploadedFilePath);
         }
-    };
+        
+        servError(error, res);
+    }
+};
+
+
+// const getSalesOrderInvoiceDetailsForPdf=async(req,res)=>{
+//     try {
+//         const { invoiceId } = req.params;
+//         const { invoiceData, companyId, forceRegenerate } = req.body;
+        
+//         // Create uploads directory if it doesn't exist
+//         const uploadDir = `uploads/${companyId}/invoices/`;
+//         if (!fs.existsSync(uploadDir)) {
+//             fs.mkdirSync(uploadDir, { recursive: true });
+//         }
+        
+//         // Check if PDF already exists
+//         const pdfFileName = `invoice_${invoiceId}_${Date.now()}.pdf`;
+//         const pdfPath = path.join(uploadDir, pdfFileName);
+        
+//         // Create a new PDF document
+//         const doc = new PDFDocument({ margin: 50 });
+        
+//         // Create write stream
+//         const writeStream = fs.createWriteStream(pdfPath);
+//         doc.pipe(writeStream);
+        
+//         // Add content to PDF
+//         doc.fontSize(20).text('INVOICE', { align: 'center' });
+//         doc.moveDown();
+        
+//         doc.fontSize(12).text(`Invoice Number: ${invoiceData.Do_Inv_No}`);
+//         doc.text(`Date: ${new Date(invoiceData.Do_Date).toLocaleDateString()}`);
+//         doc.text(`Customer: ${invoiceData.retailerNameGet || invoiceData.Retailer_Name}`);
+//         doc.moveDown();
+        
+//         // Add invoice items table
+//         if (invoiceData.stockDetails && invoiceData.stockDetails.length > 0) {
+//             doc.fontSize(14).text('Items:', { underline: true });
+//             doc.moveDown(0.5);
+            
+//             invoiceData.stockDetails.forEach((item, index) => {
+//                 doc.text(`${index + 1}. ${item.Item_Name || 'Item'}: ${item.Bill_Qty || 0} x ₹${item.Item_Rate || 0} = ₹${(item.Bill_Qty || 0) * (item.Item_Rate || 0)}`);
+//             });
+//         }
+        
+//         doc.moveDown();
+//         doc.fontSize(16).text(`Total: ₹${invoiceData.Total_Invoice_value || 0}`, { align: 'right' });
+        
+//         // Add footer
+//         doc.moveDown(2);
+//         doc.fontSize(10).text('Thank you for your business!', { align: 'center' });
+        
+//         // Finalize PDF
+//         doc.end();
+        
+//         writeStream.on('finish', () => {
+//             // Generate the URL for the PDF
+//             const pdfUrl = `/uploads/${companyId}/invoices/${pdfFileName}`;
+//             const fullUrl = `${req.protocol}://${req.get('host')}${pdfUrl}`;
+            
+//             // Get file stats
+//             const stats = fs.statSync(pdfPath);
+            
+//             res.json({
+//                 success: true,
+//                 message: 'PDF generated successfully',
+//                 data: {
+//                     pdfUrl: fullUrl,
+//                     fileName: pdfFileName,
+//                     size: stats.size,
+//                     path: pdfPath
+//                 }
+//             });
+//         });
+        
+//         writeStream.on('error', (error) => {
+//             console.error('PDF generation error:', error);
+//             res.status(500).json({
+//                 success: false,
+//                 message: 'Failed to generate PDF'
+//             });
+//         });
+        
+//     } catch (error) {
+//         console.error('PDF generation error:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Failed to generate PDF'
+//         });
+//     }
+// }
+
+const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
+    try {
+         const invoiceId = req.params.invoiceId || req.body.invoiceId;
+        const { companyId, invoiceData } = req.body;
+    
+        if (!invoiceId || !companyId || !invoiceData) {
+            return invalidInput(res, 'Invoice ID, company ID, and invoice data are required');
+        }
+        
+   
+        const uploadDir = path.join(__dirname, '..', 'uploads', String(companyId), 'invoices');
+        
+        try {
+            await fs.mkdir(uploadDir, { recursive: true });
+        } catch (dirError) {
+            console.error('Error creating directory:', dirError);
+            return servError(dirError, res);
+        }
+        
+    
+        const sanitizedInvoiceId = invoiceId.replace(/[\/]/g, '_').replace(/[^a-zA-Z0-9-_]/g, '');
+        const pdfFileName = `${sanitizedInvoiceId}.pdf`;
+        const pdfPath = path.join(uploadDir, pdfFileName);
+  
+        const existingFiles = await fs.readdir(uploadDir);
+        const existingPdf = existingFiles.find(file => 
+            file === pdfFileName || file.includes(sanitizedInvoiceId)
+        );
+        
+        if (existingPdf) {
+            const existingPath = path.join(uploadDir, existingPdf);
+            const stats = await fs.stat(existingPath);
+            
+            return dataFound(res, {
+                pdfUrl: `${req.protocol}://${req.get('host')}/api/sales/downloadPdf/${encodeURIComponent(invoiceId)}`,
+                fileName: existingPdf,
+                size: stats.size,
+                path: existingPath,
+                existing: true,
+                directUrl: `${req.protocol}://${req.get('host')}/api/sales/invoice/${encodeURIComponent(invoiceId)}.pdf`
+            });
+        }
+        
+       
+        const doc = new PDFDocument({ 
+            margin: 50,
+            size: 'A4',
+            info: {
+                Title: `Invoice ${invoiceData.Do_Inv_No}`,
+                Author: 'System',
+                Subject: 'Invoice Document',
+                Keywords: 'invoice, sales, order',
+                CreationDate: new Date()
+            }
+        });
+        
+    
+        const writeStream = fsSync.createWriteStream(pdfPath);
+        doc.pipe(writeStream);
+        
+      
+        doc.fontSize(24)
+           .font('Helvetica-Bold')
+           .text('TAX INVOICE', { align: 'center' });
+        
+        doc.moveDown();
+        doc.lineCap('butt')
+           .lineWidth(2)
+           .moveTo(50, doc.y)
+           .lineTo(550, doc.y)
+           .stroke();
+        
+        doc.moveDown();
+        
+       
+        doc.fontSize(10)
+           .font('Helvetica')
+           .text('SM TRADERS', { align: 'right' })
+           .text('Address Line 1', { align: 'right' })
+           .text('Address Line 2', { align: 'right' })
+           .text('GSTIN: 33AAXFS2197L1Z5', { align: 'right' });
+        
+        doc.moveDown(2);
+        
+
+        const leftColumnX = 50;
+        const rightColumnX = 300;
+        let currentY = doc.y;
+        
+
+        doc.fontSize(11)
+           .font('Helvetica-Bold')
+           .text('BILL TO:', leftColumnX, currentY);
+        
+        doc.font('Helvetica')
+           .fontSize(10)
+           .text(invoiceData.retailerNameGet || invoiceData.Retailer_Name || 'Customer', leftColumnX, currentY + 20)
+            .text(invoiceData.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 })
+           .text(`GSTIN: ${invoiceData.Retailer_GSTIN || 'Not Available'}`, leftColumnX, currentY + 50);
+        
+      
+        doc.font('Helvetica-Bold')
+           .text('INVOICE DETAILS:', rightColumnX, currentY);
+        
+        doc.font('Helvetica')
+           .text(`Invoice No: ${invoiceData.Do_Inv_No}`, rightColumnX, currentY + 20)
+           .text(`Date: ${new Date(invoiceData.Do_Date || new Date()).toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
+           .text(`Order No: ${invoiceData.So_No || invoiceData.Do_No || 'N/A'}`, rightColumnX, currentY + 50);
+        
+        currentY += 80;
+        
+       
+        doc.moveTo(leftColumnX, currentY)
+           .lineTo(550, currentY)
+           .stroke();
+        
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .text('S.No', leftColumnX, currentY + 10)
+           .text('Description', leftColumnX + 40, currentY + 10)
+           .text('HSN/SAC', leftColumnX + 250, currentY + 10)
+           .text('Qty', leftColumnX + 320, currentY + 10)
+           .text('Rate', leftColumnX + 370, currentY + 10)
+           .text('Amount', leftColumnX + 430, currentY + 10);
+        
+        currentY += 30;
+        
+
+        let grandTotal = 0;
+        let subtotal = 0;
+        
+        if (invoiceData.stockDetails && invoiceData.stockDetails.length > 0) {
+            invoiceData.stockDetails.forEach((item, index) => {
+                const itemName = item.Item_Name || item.Product_Name || 'Item';
+                const qty = Number(item.Bill_Qty) || 0;
+                const rate = Number(item.Item_Rate) || 0;
+                const amount = qty * rate;
+                subtotal += amount;
+                
+          
+                const displayName = itemName.length > 30 ? 
+                    itemName.substring(0, 27) + '...' : itemName;
+                
+                doc.font('Helvetica')
+                   .fontSize(9)
+                   .text(`${index + 1}`, leftColumnX, currentY)
+                   .text(displayName, leftColumnX + 40, currentY)
+                   .text(item.HSN_Code || 'N/A', leftColumnX + 250, currentY)
+                   .text(qty.toFixed(2), leftColumnX + 320, currentY)
+                   .text(rate.toFixed(2), leftColumnX + 370, currentY)
+                   .text(amount.toFixed(2), leftColumnX + 430, currentY);
+                
+                currentY += 20;
+                
+         
+                if (currentY > 700) {
+                    doc.addPage();
+                    currentY = 50;
+                }
+            });
+        }
+        
+
+        doc.moveTo(leftColumnX, currentY)
+           .lineTo(550, currentY)
+           .stroke();
+        
+        currentY += 20;
+        
+
+        const totalsX = 380;
+        
+        doc.fontSize(10)
+           .font('Helvetica')
+           .text('Subtotal:', totalsX, currentY)
+           .text(subtotal.toFixed(2), totalsX + 100, currentY);
+        
+        currentY += 20;
+        
+        if (invoiceData.CSGT_Total > 0) {
+            doc.text(`CGST (${invoiceData.CSGT_Percentage || 9}%):`, totalsX, currentY)
+               .text((invoiceData.CSGT_Total || 0).toFixed(2), totalsX + 100, currentY);
+            currentY += 20;
+            grandTotal += invoiceData.CSGT_Total || 0;
+        }
+        
+        if (invoiceData.SGST_Total > 0) {
+            doc.text(`SGST (${invoiceData.SGST_Percentage || 9}%):`, totalsX, currentY)
+               .text((invoiceData.SGST_Total || 0).toFixed(2), totalsX + 100, currentY);
+            currentY += 20;
+            grandTotal += invoiceData.SGST_Total || 0;
+        }
+        
+        if (invoiceData.IGST_Total > 0) {
+            doc.text(`IGST (${invoiceData.IGST_Percentage || 18}%):`, totalsX, currentY)
+               .text((invoiceData.IGST_Total || 0).toFixed(2), totalsX + 100, currentY);
+            currentY += 20;
+            grandTotal += invoiceData.IGST_Total || 0;
+        }
+        
+        if (invoiceData.Round_off) {
+            doc.text('Round Off:', totalsX, currentY)
+               .text((invoiceData.Round_off || 0).toFixed(2), totalsX + 100, currentY);
+            currentY += 20;
+            grandTotal += invoiceData.Round_off || 0;
+        }
+        
+        grandTotal += subtotal;
+        
+
+        doc.moveTo(totalsX - 10, currentY)
+           .lineTo(totalsX + 150, currentY)
+           .stroke();
+        
+        currentY += 10;
+        
+        doc.fontSize(12)
+           .font('Helvetica-Bold')
+           .text('GRAND TOTAL:', totalsX, currentY)
+           .text(grandTotal.toFixed(2), totalsX + 100, currentY);
+        
+        currentY += 30;
+        
+     
+        doc.fontSize(8)
+           .font('Helvetica')
+           .text('Thank you for your business!', { align: 'center' })
+           .text('For any queries, contact: +91 9944888054 | email@example.com', { align: 'center' })
+           .text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
+        
+        // Add page numbers 
+           const pageCount = doc.bufferedPageRange().count;
+        // for (let i = 0; i < pageCount; i++) {
+        //     doc.switchToPage(i);
+        //     doc.fontSize(8)
+        //        .text(`Page ${i + 1} of ${pageCount}`, 50, 800, { align: 'center' });
+        // }
+        
+      
+        await new Promise((resolve, reject) => {
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+            doc.end();
+        });
+        
+
+        const stats = await fs.stat(pdfPath);
+        
+    
+return dataFound(res, {
+   
+    pdfUrl: `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${encodeURIComponent(pdfFileName.replace('.pdf', ''))}`,
+    fileName: pdfFileName,
+    size: stats.size,
+    generated: true
+});
+        
+    } catch (error) {
+        console.error('Error in getSalesOrderInvoiceDetailsForPdf:', error);
+        return servError(error, res);
+    }
+};
+
+
+
+
+// const downloadGeneratedPdf = async (req, res) => {
+//     try {
+//         const { Do_Inv_No } = req.query;
+
+//           if (!Do_Inv_No) {
+//               return invalidInput(res, 'Invoice number is required');
+//           }
+//          const decodedInvoiceNo = Buffer
+//             .from(Do_Inv_No, "base64")
+//             .toString("utf-8");
+
+     
+//        const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, '/').trim();
+        
+
+
+//          const companyId = process.env.COMPANY;
+        
+//         // const cleanInvoiceNo = formattedInvoiceNo.replace(/\//g, '_').replace(/[^a-zA-Z0-9-_]/g, '');
+//         const pdfFileName = `${formattedInvoiceNo}.pdf`;
+        
+
+//         const uploadDir = path.join(__dirname, '..', 'uploads', String(companyId), 'invoices');
+//         const filePath = path.join(uploadDir, pdfFileName);
+        
+    
+        
+      
+//         if (fsSync.existsSync(filePath)) {
+          
+            
+//             try {
+//                 const stats = fsSync.statSync(filePath);
+//                 const fileStream = fsSync.createReadStream(filePath);
+                
+//                 res.setHeader('Content-Type', 'application/pdf');
+//                 res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
+//                 res.setHeader('Content-Length', stats.size);
+//                 res.setHeader('Cache-Control', 'public, max-age=3600');
+//                 res.setHeader('Accept-Ranges', 'bytes');
+                
+//                 return fileStream.pipe(res);
+//             } catch (fileError) {
+//                 console.error('Error reading existing PDF:', fileError);
+              
+//                 try {
+//                     fsSync.unlinkSync(filePath);
+                   
+//                 } catch (unlinkError) {
+//                     console.error('Error deleting corrupted PDF:', unlinkError);
+//                 }
+//             }
+//         }
+        
+        
+//         const alternativePatterns = [
+//             `${Do_Inv_No.replace(/\//g, '_')}`,
+//             `${Do_Inv_No}`,
+//             // `${Do_Inv_No.replace(/\//g, '-')}`
+//         ];
+        
+//         for (const pattern of alternativePatterns) {
+//             const altPath = path.join(uploadDir, pattern);
+//             if (fsSync.existsSync(altPath)) {
+               
+                
+//                 try {
+//                     const stats = fsSync.statSync(altPath);
+//                     const fileStream = fsSync.createReadStream(altPath);
+                    
+//                     res.setHeader('Content-Type', 'application/pdf');
+//                     res.setHeader('Content-Disposition', `inline; filename="${pattern}"`);
+//                     res.setHeader('Content-Length', stats.size);
+//                     res.setHeader('Cache-Control', 'public, max-age=3600');
+//                     res.setHeader('Accept-Ranges', 'bytes');
+                    
+//                     return fileStream.pipe(res);
+//                 } catch (fileError) {
+//                     console.error('Error reading alternative PDF:', fileError);
+//                 }
+//             }
+//         }
+        
+  
+      
+        
+     
+//         if (!fsSync.existsSync(uploadDir)) {
+//             fsSync.mkdirSync(uploadDir, { recursive: true });
+          
+//         }
+        
+//         const deliveryOrderRequest = await new sql.Request()
+//             .input('Do_Inv_No', sql.NVarChar, formattedInvoiceNo)
+//             .query(`
+//              				SELECT sdgi.*,rm.Retailer_Name,lol.*
+//                 FROM tbl_Sales_Delivery_Gen_Info sdgi
+// 				left join tbl_Retailers_Master rm ON rm.Retailer_Id=sdgi.Retailer_Id
+// 				left join tbl_Ledger_LOL lol ON lol.Ret_Id=sdgi.Retailer_Id
+//                 WHERE sdgi.Do_Inv_No = @Do_Inv_No 
+//             `);
+     
+//         if (deliveryOrderRequest.recordset.length === 0) {
+//             return noData(res, `Invoice not found with number: ${formattedInvoiceNo}`);
+//         }
+        
+//         const deliveryOrder = deliveryOrderRequest.recordset[0];
+//         const doId = deliveryOrder.Do_Id;
+        
+   
+//         const stockRequest = await new sql.Request()
+//             .input('Delivery_Order_Id', sql.Int, doId)
+//             .input('CompanyId', sql.Int, companyId)
+//             .query(`
+//                     SELECT sdsi.*,pm.Product_Name
+//                 FROM tbl_Sales_Delivery_Stock_Info sdsi
+// 				left join tbl_Product_Master pm on pm.Product_Id=sdsi.Item_Id
+//                 WHERE sdsi.Delivery_Order_Id = @Delivery_Order_Id 
+//                 ORDER BY sdsi.Delivery_Order_Id ASC
+//             `);
+        
+//         const stockDetails = stockRequest.recordset || [];
+       
+        
+        
+//         const companyRequest = await new sql.Request()
+//             .input('CompanyId', sql.Int, companyId)
+//             .query(`
+//                 SELECT *
+//                 FROM tbl_Company_Master 
+//                 WHERE Company_Id = @CompanyId
+//             `);
+        
+//         const companyDetails = companyRequest.recordset[0] || {};
+        
+        
+//         if (deliveryOrder.Retailer_Id) {
+//             const retailerRequest = await new sql.Request()
+//                 .input('Retailer_Id', sql.Int, deliveryOrder.Retailer_Id)
+//                 .query(`
+//                     SELECT *
+//                     FROM tbl_Retailers_Master 
+//                     WHERE Retailer_Id = @Retailer_Id
+//                 `);
+            
+//             if (retailerRequest.recordset.length > 0) {
+//                 const retailer = retailerRequest.recordset[0];
+//                 deliveryOrder.Retailer_Name = deliveryOrder.Retailer_Name || retailer.Retailer_Name;
+//                 deliveryOrder.Retailer_Address = deliveryOrder.Retailer_Address || retailer.Retailer_Address;
+//                 deliveryOrder.Retailer_GSTIN = deliveryOrder.Retailer_GSTIN || retailer.GSTIN;
+//                 deliveryOrder.Retailer_Phone = deliveryOrder.Retailer_Phone || retailer.Phone || retailer.Mobile;
+//             }
+//         }
+        
+  
+//         const doc = new PDFDocument({
+//             margin: 50,
+//             size: 'A4',
+//             bufferPages: true,
+//             autoFirstPage: true,
+//             info: {
+//                 Title: `Invoice ${Do_Inv_No}`,
+//                 Author: companyDetails.Company_Name,
+//                 Subject: 'Tax Invoice',
+//                 Keywords: 'invoice, sales, delivery',
+//                 CreationDate: new Date()
+//             }
+//         });
+        
+
+//         const writeStream = fsSync.createWriteStream(filePath);
+        
+      
+//         writeStream.on('error', (err) => {
+//             console.error('Write stream error:', err);
+//         });
+        
+//         doc.pipe(writeStream);
+    
+//         if (companyDetails.Logo && fsSync.existsSync(companyDetails.Logo)) {
+//             try {
+//                 doc.image(companyDetails.Logo, 50, 45, { width: 80 });
+//             } catch (logoError) {
+//                 console.error('Error loading logo:', logoError);
+//             }
+//         }
+  
+//         doc.fontSize(24)
+//            .font('Helvetica-Bold')
+//            .text(companyDetails.Company_Name || 'SM TRADERS', 150, 50, { align: 'center' });
+        
+//         doc.fontSize(10)
+//            .font('Helvetica')
+//            .text(companyDetails.Address , { align: 'center' })
+//            .text(`Phone: ${companyDetails.Phone} | Email: ${companyDetails.Email}`, { align: 'center' })
+//            .text(`GSTIN: ${companyDetails.GSTIN}`, { align: 'center' });
+        
+//         doc.moveDown();
+//         doc.lineCap('butt')
+//            .lineWidth(2)
+//            .moveTo(50, doc.y)
+//            .lineTo(550, doc.y)
+//            .stroke();
+        
+//         doc.moveDown();
+        
+//         doc.fontSize(20)
+//            .font('Helvetica-Bold')
+//            .text('TAX INVOICE', { align: 'center' });
+        
+//         doc.moveDown(2);
+        
+      
+//         const leftColumnX = 50;
+//         const rightColumnX = 300;
+//         let currentY = doc.y;
+        
+   
+//         doc.fontSize(11)
+//            .font('Helvetica-Bold')
+//            .text('BILL TO:', leftColumnX, currentY);
+        
+//         doc.font('Helvetica')
+//            .fontSize(10)
+//            .text(deliveryOrder.Retailer_Name || 'Customer', leftColumnX, currentY + 20)
+//            .text(deliveryOrder.Retailer_Address || 'Address not available', leftColumnX, currentY + 35, { width: 230 })
+//            .text(`GSTIN: ${deliveryOrder.Retailer_GSTIN || 'Not Available'}`, leftColumnX, currentY + 70)
+//            .text(`Phone: ${deliveryOrder.Retailer_Phone || deliveryOrder.Retailer_Mobile || 'N/A'}`, leftColumnX, currentY + 85);
+    
+//         doc.font('Helvetica-Bold')
+//            .text('INVOICE DETAILS:', rightColumnX, currentY);
+        
+//         doc.font('Helvetica')
+//            .text(`Invoice No: ${deliveryOrder.Do_Inv_No}`, rightColumnX, currentY + 20)
+//            .text(`Date: ${new Date(deliveryOrder.Do_Date || new Date()).toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
+//            .text(`Delivery Order No: ${deliveryOrder.Do_No || 'N/A'}`, rightColumnX, currentY + 50)
+//            .text(`Sales Order No: ${deliveryOrder.So_No || 'N/A'}`, rightColumnX, currentY + 65)
+//            .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 80)
+//            .text(`Transport: ${deliveryOrder.Transporter_Name || 'N/A'}`, rightColumnX, currentY + 95)
+//            .text(`Vehicle No: ${deliveryOrder.Vehicle_No || 'N/A'}`, rightColumnX, currentY + 110);
+        
+//         currentY += 140;
+
+//         doc.moveTo(leftColumnX, currentY)
+//            .lineTo(550, currentY)
+//            .stroke();
+        
+//         doc.fontSize(9)
+//            .font('Helvetica-Bold')
+//            .text('S.No', leftColumnX, currentY + 10)
+//            .text('Description', leftColumnX + 35, currentY + 10)
+//            .text('HSN/SAC', leftColumnX + 180, currentY + 10)
+//            .text('Qty', leftColumnX + 250, currentY + 10)
+//            .text('Unit', leftColumnX + 290, currentY + 10)
+//            .text('Rate', leftColumnX + 330, currentY + 10)
+//            .text('Disc%', leftColumnX + 380, currentY + 10)
+//            .text('Tax%', leftColumnX + 420, currentY + 10)
+//            .text('Amount', leftColumnX + 460, currentY + 10);
+        
+//         currentY += 30;
+        
+   
+//         let subtotal = 0;
+//         let totalCgst = 0;
+//         let totalSgst = 0;
+//         let totalIgst = 0;
+        
+//         if (stockDetails && stockDetails.length > 0) {
+//             stockDetails.forEach((item, index) => {
+//                 const itemName = item.Item_Name || item.Product_Name || 'Item';
+//                 const qty = Number(item.Bill_Qty) || 0;
+//                 const rate = Number(item.Item_Rate) || 0;
+//                 const discount = Number(item.Discount_per) || 0;
+//                 const taxRate = Number(item.Gst_percentage) || 0;
+//                 const unit = item.Unit || 'Pcs';
+//                 const ProductName=item.Product_Name || '-'
+              
+//                 let taxableValue = qty * rate;
+                
+              
+//                 if (discount > 0) {
+//                     taxableValue = taxableValue - (taxableValue * discount / 100);
+//                 }
+                
+//                 subtotal += taxableValue;
+                
+             
+//                 let cgst = 0, sgst = 0, igst = 0;
+                
+//                 if (taxRate > 0) {
+//                     if (deliveryOrder.Place_Of_Supply === companyDetails.State) {
+//                         cgst = taxableValue * (taxRate / 2) / 100;
+//                         sgst = taxableValue * (taxRate / 2) / 100;
+//                         totalCgst += cgst;
+//                         totalSgst += sgst;
+//                     } else {
+//                         igst = taxableValue * taxRate / 100;
+//                         totalIgst += igst;
+//                     }
+//                 }
+                
+//                 const totalAmount = taxableValue + cgst + sgst + igst;
+                
+              
+//                 const displayName = itemName.length > 20 ? 
+//                     itemName.substring(0, 17) + '...' : itemName;
+                
+//                 doc.font('Helvetica')
+//                    .fontSize(8)
+//                    .text(`${index + 1}`, leftColumnX, currentY)
+//                    .text(ProductName, leftColumnX + 35, currentY, { width: 140 })
+//                    .text(item.HSN_Code || 'N/A', leftColumnX + 180, currentY)
+//                    .text(qty.toFixed(2), leftColumnX + 250, currentY)
+//                    .text(unit, leftColumnX + 290, currentY)
+//                    .text(`₹${rate.toFixed(2)}`, leftColumnX + 330, currentY)
+//                    .text(`${discount.toFixed(2)}%`, leftColumnX + 380, currentY)
+//                    .text(`${taxRate.toFixed(2)}%`, leftColumnX + 420, currentY)
+//                    .text(`₹${totalAmount.toFixed(2)}`, leftColumnX + 460, currentY);
+                
+//                 currentY += 20;
+                
+               
+//                 if (currentY > 700) {
+//                     doc.addPage();
+//                     currentY = 50;
+                    
+                  
+//                     doc.moveTo(leftColumnX, currentY)
+//                        .lineTo(550, currentY)
+//                        .stroke();
+                    
+//                     doc.fontSize(9)
+//                        .font('Helvetica-Bold')
+//                        .text('S.No', leftColumnX, currentY + 10)
+//                        .text('Description', leftColumnX + 35, currentY + 10)
+//                        .text('HSN/SAC', leftColumnX + 180, currentY + 10)
+//                        .text('Qty', leftColumnX + 250, currentY + 10)
+//                        .text('Unit', leftColumnX + 290, currentY + 10)
+//                        .text('Rate', leftColumnX + 330, currentY + 10)
+//                        .text('Disc%', leftColumnX + 380, currentY + 10)
+//                        .text('Tax%', leftColumnX + 420, currentY + 10)
+//                        .text('Amount', leftColumnX + 460, currentY + 10);
+                    
+//                     currentY += 30;
+//                 }
+//             });
+//         }
+        
+//         // Draw line before totals
+//         doc.moveTo(leftColumnX, currentY)
+//            .lineTo(550, currentY)
+//            .stroke();
+        
+//         currentY += 20;
+        
+//         // Calculate grand total
+//         const roundOff = Number(deliveryOrder.Round_off) || 0;
+//         const grandTotal = subtotal + totalCgst + totalSgst + totalIgst + roundOff;
+        
+//         // Totals Section
+//         const totalsX = 380;
+//         const totalsValueX = 480;
+        
+//         doc.fontSize(9)
+//            .font('Helvetica')
+//            .text('Taxable Value:', totalsX, currentY)
+//            .text(`₹${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+        
+//         currentY += 18;
+        
+//         if (totalCgst > 0) {
+//             const cgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
+//             doc.text(`CGST @ ${cgstRate.toFixed(2)}%:`, totalsX, currentY)
+//                .text(`₹${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+//             currentY += 18;
+//         }
+        
+//         if (totalSgst > 0) {
+//             const sgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
+//             doc.text(`SGST @ ${sgstRate.toFixed(2)}%:`, totalsX, currentY)
+//                .text(`₹${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+//             currentY += 18;
+//         }
+        
+//         if (totalIgst > 0) {
+//             const igstRate = stockDetails[0]?.Gst_percentage || 18;
+//             doc.text(`IGST @ ${igstRate.toFixed(2)}%:`, totalsX, currentY)
+//                .text(`₹${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+//             currentY += 18;
+//         }
+        
+//         if (roundOff !== 0) {
+//             doc.text('Round Off:', totalsX, currentY)
+//                .text(`₹${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+//             currentY += 18;
+//         }
+        
+//         // Draw line before grand total
+//         doc.moveTo(totalsX - 10, currentY)
+//            .lineTo(totalsValueX + 70, currentY)
+//            .stroke();
+        
+//         currentY += 10;
+        
+//         doc.fontSize(11)
+//            .font('Helvetica-Bold')
+//            .text('GRAND TOTAL:', totalsX, currentY)
+//            .text(`₹${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+        
+//         currentY += 30;
+        
+//         // Amount in words
+//         doc.fontSize(9)
+//            .font('Helvetica')
+//            .text(`Amount in words: Rupees ${grandTotal.toFixed(2)} only`, 50, currentY, { width: 500 });
+        
+//         currentY += 40;
+        
+//         // Bank Details
+//         doc.fontSize(9)
+//            .font('Helvetica-Bold')
+//            .text('Bank Details:', 50, currentY)
+//            .font('Helvetica')
+//            .text(`Bank: ${deliveryOrder.Bank_Name || companyDetails.Bank_Name}`, 50, currentY + 15)
+//            .text(`A/C No: ${deliveryOrder.Account_No || companyDetails.Account_No }`, 50, currentY + 30)
+//            .text(`IFSC: ${deliveryOrder.IFSC_Code || companyDetails.IFSC_Code}`, 50, currentY + 45);
+        
+//         // Terms and Conditions
+//         doc.fontSize(9)
+//            .font('Helvetica-Bold')
+//            .text('Terms & Conditions:', 300, currentY)
+//            .font('Helvetica')
+//            .fontSize(8)
+//            .text(deliveryOrder.Terms_Conditions || '1. Goods once sold will not be taken back.', 300, currentY + 15, { width: 250 })
+//            .text('2. This is a computer generated invoice.', 300, currentY + 30, { width: 250 })
+//            .text('3. Subject to local jurisdiction.', 300, currentY + 45, { width: 250 });
+        
+//         // Footer
+//         const footerY = 750;
+//         doc.fontSize(8)
+//            .font('Helvetica')
+//            .text('Thank you for your business!', 50, footerY, { align: 'center', width: 500 })
+//            .text(`For queries contact: ${companyDetails.Phone} | ${companyDetails.Email }`, 50, footerY + 15, { align: 'center', width: 500 });
+        
+//         // ============ END PDF GENERATION ============
+        
+   
+//         const range = doc.bufferedPageRange();
+//         const totalPages = range.count;
+        
+    
+        
+//         for (let i = 0; i < totalPages; i++) {
+//             doc.switchToPage(i);
+//             doc.fontSize(8)
+//                .font('Helvetica')
+//                .text(`Page ${i + 1} of ${totalPages}`, 50, 800, { align: 'center', width: 500 });
+//         }
+        
+//         // Finalize PDF
+//         doc.end();
+        
+    
+//         await new Promise((resolve, reject) => {
+//             writeStream.on('finish', () => {
+     
+//                 resolve();
+//             });
+//             writeStream.on('error', (err) => {
+//                 console.error('PDF write stream error:', err);
+//                 reject(err);
+//             });
+//         });
+        
+      
+        
+    
+//         if (!fsSync.existsSync(filePath)) {
+//             throw new Error('PDF file was not created');
+//         }
+        
+//         const fileStats = fsSync.statSync(filePath);
+//         if (fileStats.size === 0) {
+//             throw new Error('PDF file is empty');
+//         }
+        
+       
+        
+//         const fileStream = fsSync.createReadStream(filePath);
+        
+//         res.setHeader('Content-Type', 'application/pdf');
+//         res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
+//         res.setHeader('Content-Length', fileStats.size);
+//         res.setHeader('Cache-Control', 'no-cache'); 
+//         res.setHeader('Accept-Ranges', 'bytes');
+//         res.setHeader('X-Generated', 'true');
+        
+//         fileStream.on('error', (err) => {
+//             console.error('Error streaming PDF:', err);
+//             if (!res.headersSent) {
+//                 res.status(500).send('Error streaming PDF');
+//             }
+//         });
+        
+//         fileStream.pipe(res);
+        
+//     } catch (error) {
+//         console.error('Error in downloadGeneratedPdf:', error);
+//         console.error('Error stack:', error.stack);
+        
+//         if (!res.headersSent) {
+//             return servError(error, res);
+//         }
+//     }
+// };
+
+const downloadGeneratedPdf = async (req, res) => {
+    try {
+        const { Do_Inv_No } = req.query;
+
+        if (!Do_Inv_No) {
+            return invalidInput(res, 'Invoice number is required');
+        }
+        
+        
+        const decodedInvoiceNo = Buffer
+            .from(Do_Inv_No, "base64")
+            .toString("utf-8");
+
+        const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, '/').trim();
+        const companyId = process.env.COMPANY;
+        
+        
+        const safeFileName = formattedInvoiceNo.replace(/\//g, '_');
+        const pdfFileName = `${safeFileName}.pdf`;
+        
+        const uploadDir = path.join(__dirname, '..', 'uploads', String(companyId), 'invoices');
+        const filePath = path.join(uploadDir, pdfFileName);
+        
+
+        if (fsSync.existsSync(filePath)) {
+            try {
+                const stats = fsSync.statSync(filePath);
+                const fileStream = fsSync.createReadStream(filePath);
+               
+                res.setHeader('Content-Type', 'application/pdf');
+res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
+res.setHeader('Content-Length', stats.size);
+res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+res.setHeader('Pragma', 'no-cache');
+res.setHeader('Expires', '0');
+res.setHeader('X-Content-Type-Options', 'nosniff');
+res.setHeader('Access-Control-Allow-Origin', '*'); // If CORS is needed
+                return fileStream.pipe(res);
+            } catch (fileError) {
+                console.error('Error reading existing PDF:', fileError);
+                try {
+                    fsSync.unlinkSync(filePath);
+                } catch (unlinkError) {
+                    console.error('Error deleting corrupted PDF:', unlinkError);
+                }
+            }
+        }
+        
+     
+        const alternativePatterns = [
+            `${Do_Inv_No.replace(/\//g, '_')}`,
+            `${Do_Inv_No}`,
+        ];
+        
+        for (const pattern of alternativePatterns) {
+            const safePattern = pattern.replace(/\//g, '_');
+            const altPath = path.join(uploadDir, safePattern.endsWith('.pdf') ? safePattern : `${safePattern}.pdf`);
+            
+            if (fsSync.existsSync(altPath)) {
+                try {
+                    const stats = fsSync.statSync(altPath);
+                    const fileStream = fsSync.createReadStream(altPath);
+                    
+                    res.setHeader('Content-Type', 'application/pdf');
+                    res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
+                    res.setHeader('Content-Length', stats.size);
+                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    res.setHeader('Expires', '0');
+                    res.setHeader('X-Content-Type-Options', 'nosniff');
+                    res.setHeader('Access-Control-Allow-Origin', '*'); // If CORS is needed
+                    
+                    return fileStream.pipe(res);
+                } catch (fileError) {
+                    console.error('Error reading alternative PDF:', fileError);
+                }
+            }
+        }
+        
+  
+        if (!fsSync.existsSync(uploadDir)) {
+            fsSync.mkdirSync(uploadDir, { recursive: true });
+        }
+        
+    
+        const deliveryOrderRequest = await new sql.Request()
+            .input('Do_Inv_No', sql.NVarChar, formattedInvoiceNo)
+            .query(`
+                SELECT sdgi.*, rm.Retailer_Name, lol.*
+                FROM tbl_Sales_Delivery_Gen_Info sdgi
+                LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = sdgi.Retailer_Id
+                WHERE sdgi.Do_Inv_No = @Do_Inv_No 
+            `);
+     
+        if (deliveryOrderRequest.recordset.length === 0) {
+            return noData(res, `Invoice not found with number: ${formattedInvoiceNo}`);
+        }
+        
+        const deliveryOrder = deliveryOrderRequest.recordset[0];
+        const doId = deliveryOrder.Do_Id;
+        
+
+        const stockRequest = await new sql.Request()
+            .input('Delivery_Order_Id', sql.Int, doId)
+            .input('CompanyId', sql.Int, companyId)
+            .query(`
+                SELECT sdsi.*, pm.Product_Name
+                FROM tbl_Sales_Delivery_Stock_Info sdsi
+                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = sdsi.Item_Id
+                WHERE sdsi.Delivery_Order_Id = @Delivery_Order_Id 
+                ORDER BY sdsi.Delivery_Order_Id ASC
+            `);
+        
+        const stockDetails = stockRequest.recordset || [];
+        
+      
+        const companyRequest = await new sql.Request()
+            .input('CompanyId', sql.Int, companyId)
+            .query(`
+                SELECT *
+                FROM tbl_Company_Master 
+                WHERE Company_Id = @CompanyId
+            `);
+        
+        const companyDetails = companyRequest.recordset[0] || {};
+        
+ 
+        if (deliveryOrder.Retailer_Id) {
+            const retailerRequest = await new sql.Request()
+                .input('Retailer_Id', sql.Int, deliveryOrder.Retailer_Id)
+                .query(`
+                    SELECT *
+                    FROM tbl_Retailers_Master 
+                    WHERE Retailer_Id = @Retailer_Id
+                `);
+            
+            if (retailerRequest.recordset.length > 0) {
+                const retailer = retailerRequest.recordset[0];
+                deliveryOrder.Retailer_Name = deliveryOrder.Retailer_Name || retailer.Retailer_Name;
+                deliveryOrder.Retailer_Address = deliveryOrder.Retailer_Address || retailer.Retailer_Address;
+                deliveryOrder.Retailer_GSTIN = deliveryOrder.Retailer_GSTIN || retailer.GSTIN;
+                deliveryOrder.Retailer_Phone = deliveryOrder.Retailer_Phone || retailer.Phone || retailer.Mobile;
+            }
+        }
+        
+ 
+const doc = new PDFDocument({
+    margin: 50,
+    size: 'A4',
+    bufferPages: true,
+    autoFirstPage: true,
+    info: {
+        Title: `Invoice ${formattedInvoiceNo}`,
+        Author: companyDetails.Company_Name,
+        Subject: 'Tax Invoice',
+        Keywords: 'invoice, sales, delivery',
+        CreationDate: new Date()
+    }
+});
+
+const possibleTamilFonts = [
+    path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
+    path.join(__dirname, '..', 'fonts', 'latha.ttf'),
+    path.join(__dirname, '..', 'fonts', 'bamini.ttf'),
+    path.join(__dirname, '..', 'fonts', 'NotoSansTamilUI-Regular.ttf'),
+    'C:/Windows/Fonts/latha.ttf',
+    'C:/Windows/Fonts/bamini.ttf',
+    'C:/Windows/Fonts/NotoSansTamil-Regular.ttf',
+    'C:/Windows/Fonts/Nirmala.ttf', 
+    'C:/Windows/Fonts/NirmalaB.ttf',
+    'C:/Windows/Fonts/kartika.ttf'
+];
+
+let tamilFontRegistered = false;
+let tamilFontPath = 'Helvetica';
+
+for (const fontPath of possibleTamilFonts) {
+    try {
+        if (fsSync.existsSync(fontPath)) {
+            doc.registerFont('Tamil', fontPath);
+            tamilFontRegistered = true;
+            tamilFontPath = fontPath;
+          
+            break;
+        }
+    } catch (error) {
+        console.error(`Failed to register font from ${fontPath}:`, error);
+    }
+}
+
+if (!tamilFontRegistered) {
+    console.warn('No Tamil font found, using Helvetica as fallback');
+    doc.registerFont('Tamil', 'Helvetica');
+}
+
+const possibleTamilBoldFonts = [
+    path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Bold.ttf'),
+    path.join(__dirname, '..', 'fonts', 'lathab.ttf'),
+    'C:/Windows/Fonts/lathab.ttf',
+    'C:/Windows/Fonts/NirmalaB.ttf',
+    'C:/Windows/Fonts/kartikab.ttf'
+];
+
+let tamilBoldFontRegistered = false;
+for (const fontPath of possibleTamilBoldFonts) {
+    try {
+        if (fsSync.existsSync(fontPath)) {
+            doc.registerFont('Tamil-Bold', fontPath);
+            tamilBoldFontRegistered = true;
+          
+            break;
+        }
+    } catch (error) {
+        console.error(`Failed to register bold font from ${fontPath}:`, error);
+    }
+}
+
+if (!tamilBoldFontRegistered) {
+    doc.registerFont('Tamil-Bold', tamilFontRegistered ? 'Tamil' : 'Helvetica-Bold');
+}
+
+const writeStream = fsSync.createWriteStream(filePath);
+
+writeStream.on('error', (err) => {
+    console.error('Write stream error:', err);
+});
+
+doc.pipe(writeStream);
+
+
+if (companyDetails.Logo && fsSync.existsSync(companyDetails.Logo)) {
+    try {
+        doc.image(companyDetails.Logo, 50, 45, { width: 80 });
+    } catch (logoError) {
+        console.error('Error loading logo:', logoError);
+    }
+}
+
+
+doc.fontSize(24)
+   .font('Helvetica-Bold')
+   .text(companyDetails.Company_Name || 'SM TRADERS', 150, 50, { align: 'center' });
+
+doc.fontSize(10)
+   .font('Helvetica')
+   .text(companyDetails.Address || '', { align: 'center' })
+   .text(`Phone: ${companyDetails.Phone || ''} | Email: ${companyDetails.Email || ''}`, { align: 'center' })
+   .text(`GSTIN: ${companyDetails.GSTIN || ''}`, { align: 'center' });
+
+doc.moveDown();
+doc.lineCap('butt')
+   .lineWidth(2)
+   .moveTo(50, doc.y)
+   .lineTo(550, doc.y)
+   .stroke();
+
+doc.moveDown();
+
+doc.fontSize(20)
+   .font('Helvetica-Bold')
+   .text('TAX INVOICE', { align: 'center' });
+
+doc.moveDown(2);
+
+const leftColumnX = 50;
+const rightColumnX = 300;
+let currentY = doc.y;
+
+
+doc.fontSize(11)
+   .font('Helvetica-Bold')
+   .text('BILL TO:', leftColumnX, currentY);
+
+
+doc.font('Tamil') 
+   .fontSize(10)
+   .text(deliveryOrder.Retailer_Name || 'Customer', leftColumnX, currentY + 20);
+
+doc.font('Tamil')
+   .text(deliveryOrder.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 });
+
+// GSTIN and Phone are usually English/Numbers - can use Helvetica or Tamil font
+doc.font('Helvetica') // Numbers display better with Helvetica
+   .text(`GSTIN: ${deliveryOrder.GST_No || 'Not Available'}`, leftColumnX, currentY + 70);
+
+doc.font('Helvetica')
+   .text(`Phone: ${deliveryOrder.Party_Mobile_1 || deliveryOrder.Retailer_Mobile || 'N/A'}`, leftColumnX, currentY + 85);
+
+// ============ INVOICE DETAILS SECTION - ENGLISH ============
+doc.font('Helvetica-Bold')
+   .text('INVOICE DETAILS:', rightColumnX, currentY);
+
+doc.font('Helvetica')
+   .text(`Invoice No: ${deliveryOrder.Do_Inv_No}`, rightColumnX, currentY + 20)
+   .text(`Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
+   .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 80);
+
+currentY += 140;
+
+// Table Header (English - use Helvetica)
+doc.moveTo(leftColumnX, currentY)
+   .lineTo(550, currentY)
+   .stroke();
+
+doc.fontSize(9)
+   .font('Helvetica-Bold')
+   .text('S.No', leftColumnX, currentY + 10)
+   .text('Description', leftColumnX + 35, currentY + 10)
+   .text('HSN/SAC', leftColumnX + 180, currentY + 10)
+   .text('Qty', leftColumnX + 250, currentY + 10)
+   .text('Unit', leftColumnX + 290, currentY + 10)
+   .text('Rate', leftColumnX + 330, currentY + 10)
+   .text('Amount', leftColumnX + 460, currentY + 10);
+
+currentY += 30;
+
+// Stock Items
+let subtotal = 0;
+let totalCgst = 0;
+let totalSgst = 0;
+let totalIgst = 0;
+
+if (stockDetails && stockDetails.length > 0) {
+    stockDetails.forEach((item, index) => {
+        const qty = Number(item.Bill_Qty) || 0;
+        const rate = Number(item.Item_Rate) || 0;
+        const discount = Number(item.Discount_per) || 0;
+        const taxRate = Number(item.Gst_percentage) || 0;
+        const unit = item.Unit || 'Pcs';
+        const productName = item.Product_Name || item.Item_Name || 'Item';
+        
+        let taxableValue = qty * rate;
+        
+        if (discount > 0) {
+            taxableValue = taxableValue - (taxableValue * discount / 100);
+        }
+        
+        subtotal += taxableValue;
+        
+        let cgst = 0, sgst = 0, igst = 0;
+        
+        if (taxRate > 0) {
+            if (deliveryOrder.Place_Of_Supply === companyDetails.State) {
+                cgst = taxableValue * (taxRate / 2) / 100;
+                sgst = taxableValue * (taxRate / 2) / 100;
+                totalCgst += cgst;
+                totalSgst += sgst;
+            } else {
+                igst = taxableValue * taxRate / 100;
+                totalIgst += igst;
+            }
+        }
+        
+        const totalAmount = taxableValue + cgst + sgst + igst;
+    
+        doc.font('Helvetica')
+           .fontSize(8)
+           .text(`${index + 1}`, leftColumnX, currentY);
+        
+       
+        doc.font('Tamil')
+           .text(productName, leftColumnX + 35, currentY, { width: 140 });
+        
+      
+        doc.font('Tamil')
+           .text(item.HSN_Code || 'N/A', leftColumnX + 180, currentY)
+           .text(qty.toFixed(2), leftColumnX + 250, currentY)
+           .text(unit, leftColumnX + 290, currentY)
+           .text(`₹${rate.toFixed(2)}`, leftColumnX + 330, currentY)
+           .text(`${discount.toFixed(2)}%`, leftColumnX + 380, currentY)
+           .text(`${taxRate.toFixed(2)}%`, leftColumnX + 420, currentY)
+           .text(`₹${totalAmount.toFixed(2)}`, leftColumnX + 460, currentY);
+        
+        currentY += 20;
+        
+        if (currentY > 700) {
+            doc.addPage();
+            currentY = 50;
+            
+            doc.moveTo(leftColumnX, currentY)
+               .lineTo(550, currentY)
+               .stroke();
+            
+            doc.fontSize(9)
+               .font('Helvetica-Bold')
+               .text('S.No', leftColumnX, currentY + 10)
+               .text('Description', leftColumnX + 35, currentY + 10)
+               .text('HSN/SAC', leftColumnX + 180, currentY + 10)
+               .text('Qty', leftColumnX + 250, currentY + 10)
+               .text('Unit', leftColumnX + 290, currentY + 10)
+               .text('Rate', leftColumnX + 330, currentY + 10)
+               .text('Disc%', leftColumnX + 380, currentY + 10)
+               .text('Tax%', leftColumnX + 420, currentY + 10)
+               .text('Amount', leftColumnX + 460, currentY + 10);
+            
+            currentY += 30;
+        }
+    });
+}
+
+// Draw line before totals
+doc.moveTo(leftColumnX, currentY)
+   .lineTo(550, currentY)
+   .stroke();
+
+currentY += 20;
+
+// Calculate grand total
+const roundOff = Number(deliveryOrder.Round_off) || 0;
+const grandTotal = subtotal + totalCgst + totalSgst + totalIgst + roundOff;
+
+// Totals Section (English - Helvetica)
+const totalsX = 380;
+const totalsValueX = 480;
+
+doc.fontSize(9)
+   .font('Helvetica')
+   .text('Taxable Value:', totalsX, currentY)
+   .text(`₹${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+
+currentY += 18;
+
+if (totalCgst > 0) {
+    const cgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
+    doc.text(`CGST @ ${cgstRate.toFixed(2)}%:`, totalsX, currentY)
+       .text(`₹${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+    currentY += 18;
+}
+
+if (totalSgst > 0) {
+    const sgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
+    doc.text(`SGST @ ${sgstRate.toFixed(2)}%:`, totalsX, currentY)
+       .text(`₹${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+    currentY += 18;
+}
+
+if (totalIgst > 0) {
+    const igstRate = stockDetails[0]?.Gst_percentage || 18;
+    doc.text(`IGST @ ${igstRate.toFixed(2)}%:`, totalsX, currentY)
+       .text(`₹${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+    currentY += 18;
+}
+
+if (roundOff !== 0) {
+    doc.text('Round Off:', totalsX, currentY)
+       .text(`₹${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+    currentY += 18;
+}
+
+// Draw line before grand total
+doc.moveTo(totalsX - 10, currentY)
+   .lineTo(totalsValueX + 70, currentY)
+   .stroke();
+
+currentY += 10;
+
+doc.fontSize(11)
+   .font('Helvetica-Bold')
+   .text('GRAND TOTAL:', totalsX, currentY)
+   .text(`₹${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+
+currentY += 30;
+
+// Amount in words (English - Helvetica)
+doc.fontSize(9)
+   .font('Helvetica')
+   .text(`Amount in words: Rupees ${grandTotal.toFixed(2)} only`, 50, currentY, { width: 500 });
+
+currentY += 40;
+
+// ============ BANK DETAILS - TAMIL SUPPORT ============
+doc.fontSize(9)
+   .font('Helvetica-Bold')
+   .text('Bank Details:', 50, currentY);
+
+// Bank fields might contain Tamil text
+doc.font('Tamil')
+   .fontSize(9)
+   .text(`Bank: ${deliveryOrder.Bank_Name || companyDetails.Bank_Name || ''}`, 50, currentY + 15);
+
+doc.font('Tamil')
+   .text(`A/C No: ${deliveryOrder.Account_No || companyDetails.Account_No || ''}`, 50, currentY + 30);
+
+doc.font('Tamil')
+   .text(`IFSC: ${deliveryOrder.IFSC_Code || companyDetails.IFSC_Code || ''}`, 50, currentY + 45);
+
+// ============ TERMS AND CONDITIONS - TAMIL SUPPORT ============
+doc.fontSize(9)
+   .font('Helvetica-Bold')
+   .text('Terms & Conditions:', 300, currentY);
+
+// Terms might contain Tamil text
+doc.font('Tamil')
+   .fontSize(8)
+   .text(deliveryOrder.Terms_Conditions || '1. Goods once sold will not be taken back.', 300, currentY + 15, { width: 250 })
+   .text('2. This is a computer generated invoice.', 300, currentY + 30, { width: 250 })
+   .text('3. Subject to local jurisdiction.', 300, currentY + 45, { width: 250 });
+
+// Footer (English - Helvetica)
+const footerY = 750;
+doc.fontSize(8)
+   .font('Helvetica')
+   .text('Thank you for your business!', 50, footerY, { align: 'center', width: 500 })
+   .text(`For queries contact: ${companyDetails.Phone || ''} | ${companyDetails.Email || ''}`, 50, footerY + 15, { align: 'center', width: 500 });
+
+// Page Numbers (English - Helvetica)
+const range = doc.bufferedPageRange();
+const totalPages = range.count;
+
+for (let i = 0; i < totalPages; i++) {
+    doc.switchToPage(i);
+    doc.fontSize(8)
+       .font('Helvetica')
+       .text(`Page ${i + 1} of ${totalPages}`, 50, 800, { align: 'center', width: 500 });
+}
+
+// Finalize PDF
+doc.end();
+
+// Wait for PDF to be written
+await new Promise((resolve, reject) => {
+    writeStream.on('finish', () => {
+        resolve();
+    });
+    writeStream.on('error', (err) => {
+        console.error('PDF write stream error:', err);
+        reject(err);
+    });
+});
+
+// Verify file was created
+if (!fsSync.existsSync(filePath)) {
+    throw new Error('PDF file was not created');
+}
+
+const fileStats = fsSync.statSync(filePath);
+if (fileStats.size === 0) {
+    throw new Error('PDF file is empty');
+}
+
+// Stream the PDF to client
+const fileStream = fsSync.createReadStream(filePath);
+
+res.setHeader('Content-Type', 'application/pdf');
+res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
+res.setHeader('Content-Length', fileStats.size);
+res.setHeader('Cache-Control', 'no-cache');
+res.setHeader('Accept-Ranges', 'bytes');
+res.setHeader('X-Generated', 'true');
+
+fileStream.on('error', (err) => {
+    console.error('Error streaming PDF:', err);
+    if (!res.headersSent) {
+        res.status(500).send('Error streaming PDF');
+    }
+});
+
+fileStream.pipe(res);
+        
+    } catch (error) {
+        console.error('Error in downloadGeneratedPdf:', error);
+        console.error('Error stack:', error.stack);
+        
+        if (!res.headersSent) {
+            return servError(error, res);
+        }
+    }
+};
     return {
         getSalesInvoiceMobileFilter1,
         getSalesInvoiceMobileFilter2,
@@ -2095,7 +3821,9 @@ if (SalesGeneralInfo.length > 0) {
         createSalesTransaction,
         getSaleOrderWithDeliveries,
         getMobileReportDropdowns,
-        getSalesOrderInvoice
+        getSalesOrderInvoice,
+        getSalesOrderInvoiceDetailsForPdf,
+        downloadGeneratedPdf
     }
 }
 
