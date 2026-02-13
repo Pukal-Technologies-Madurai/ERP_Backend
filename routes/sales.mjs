@@ -57,6 +57,12 @@ SalesRouter.post('/salesOrderSalesInvoice', salesInvoice.createSalesTransaction)
 SalesRouter.get('/salesInvoice/Details', salesInvoice.getSaleOrderWithDeliveries)
 SalesRouter.get('/invoicesNumber',salesInvoice.getSalesOrderInvoice)
 
+
+
+SalesRouter.post('/generatePdf',salesInvoice.getSalesOrderInvoiceDetailsForPdf)
+SalesRouter.get('/downloadPdf',salesInvoice.downloadGeneratedPdf)
+
+
 // sales LR Report routes
 SalesRouter.get('/salesInvoice/lrReport', getSalesInvoiceForAssignCostCenter);
 SalesRouter.post('/salesInvoice/lrReport', postAssignCostCenterToSalesInvoice);
