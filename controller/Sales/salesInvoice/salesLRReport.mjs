@@ -30,6 +30,8 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                     vt.Voucher_Type AS voucherTypeGet,
                     gen.Do_Date,
                     gen.Retailer_Id,
+                    s.Status AS Delivery_Status, 
+                    s.Status_Id AS Delivery_Status_Id,
                     CASE  
                         WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
                         ELSE r.Retailer_Name
@@ -47,6 +49,7 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
+                LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
                 WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY Do_Id;
             -- involved staffs
@@ -411,6 +414,7 @@ export const invoiceCopyPrintOut = async (req, res) => {
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
                         LEFT JOIN tbl_Pack_Master AS pm ON pm.Pack_Id = p.Pack_Id
                 		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
+                          ORDER BY sdsi.S_No ASC  
                 		FOR JSON PATH
                 	), '[]') AS productDetails,
                 	COALESCE((
@@ -493,6 +497,7 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
 						LEFT JOIN tbl_Pack_Master As pm ON pm.Pack_Id=p.Pack_Id
                 		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
+                        ORDER BY sdsi.S_No ASC
                 		FOR JSON PATH
                 	), '[]') AS productDetails,
                 	COALESCE((
@@ -539,11 +544,11 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
 
 export const PendingSalesInvoice=async(req,res)=>{
      try {
-        // const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
+         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
         // const status = req.query.staffStatus ? req.query.staffStatus : 0;
 
         const getSalesInvoice = new sql.Request()
-            // .input('reqDate', sql.Date, reqDate)
+          .input('reqDate', sql.Date, reqDate)
             // .input('status', sql.Int, toNumber(status))
             .query(`
             -- filtered invoices ids temp table
@@ -552,9 +557,9 @@ export const PendingSalesInvoice=async(req,res)=>{
                 INSERT INTO @FilteredInvoice (Do_Id)
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
-             --   WHERE 
-                    -- FIX: Convert both sides to DATE for comparison
-                    --CONVERT(DATE, Do_Date) = @reqDate
+              WHERE 
+                   
+                   CONVERT(DATE, Do_Date) >= @reqDate
                
                 SELECT 
                     gen.Do_Id,
@@ -563,6 +568,8 @@ export const PendingSalesInvoice=async(req,res)=>{
                     vt.Voucher_Type AS voucherTypeGet,
                     gen.Do_Date,
                     gen.Retailer_Id,
+                       s.Status AS Delivery_Status, 
+                    s.Status_Id AS Delivery_Status_Id,
                     CASE  
                         WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
                         ELSE r.Retailer_Name
@@ -573,7 +580,7 @@ export const PendingSalesInvoice=async(req,res)=>{
                     gen.Cancel_status,
                     gen.Created_by,
                     gen.Created_on,
-                    gen.Delivery_Status,
+                 -- gen.Delivery_Status,
                     ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
                     CONVERT(DATETIME, gen.Created_on) AS createdOn,
                     gen.Narration
@@ -581,7 +588,8 @@ export const PendingSalesInvoice=async(req,res)=>{
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
-               WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice) and gen.Delivery_Status IN (5,6)
+                LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
+               WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice) and gen.Delivery_Status IN (5,6,1,2)
                 ORDER BY Do_Id;
             -- involved staffs
                 SELECT 
@@ -733,6 +741,7 @@ export const deliverySlipPrintOut = async (req, res) => {
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
 						LEFT JOIN tbl_Pack_Master As pm ON pm.Pack_Id=p.Pack_Id
                 		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
+                        ORDER BY sdsi.S_No ASC  
                 		FOR JSON PATH
                 	), '[]') AS productDetails,
                 	COALESCE((

@@ -548,7 +548,7 @@ const getStorageStockItemWiseMobile = async (req, res) => {
         if (groupFilter2.length > 0) activeGroupFilters[2] = groupFilter2;
         if (groupFilter3.length > 0) activeGroupFilters[3] = groupFilter3;
 
-        console.log('Active Group Filters:', Object.keys(activeGroupFilters).length);
+     
 
         
         const mobileFilters = await new sql.Request().query(`
@@ -599,11 +599,7 @@ const getStorageStockItemWiseMobile = async (req, res) => {
         // Sort group filters by Level_Id (1,2,3)
         groupFilters.sort((a, b) => a.Level_Id - b.Level_Id);
 
-        console.log('Group Filters found:', groupFilters.map(gf => ({
-            level: gf.Level_Id,
-            column: gf.ColumnName,
-            table: gf.TableName
-        })));
+      
 
         const formatDate = (date) => {
             const d = new Date(date);
@@ -644,7 +640,7 @@ const getStorageStockItemWiseMobile = async (req, res) => {
             }
         });
 
-        console.log('Group Filter Columns:', groupFilterColumns);
+    
 
         // Format regular filter values
         const filter1Value = formatFilterValues(filter1);
@@ -662,22 +658,21 @@ const getStorageStockItemWiseMobile = async (req, res) => {
             '${escapeColumnName(filter3Column)}',
             '${filter3Value}'`;
 
-        console.log('Executing SQL:', sqlString); 
+       
 
         const result = await new sql.Request().query(sqlString);
         
         // Start with all results from stored procedure
         let filteredData = result.recordset;
         
-        console.log(`Initial records from SP: ${filteredData.length}`);
-
+   
         // ============ DYNAMICALLY APPLY ACTIVE GROUP FILTERS ============
         
         // Apply group filters based on Level_Id (1,2,3)
         const activeLevels = Object.keys(activeGroupFilters).map(Number).sort();
         
         if (activeLevels.length > 0) {
-            console.log(`Applying ${activeLevels.length} group filter(s): Levels ${activeLevels.join(', ')}`);
+
             
             for (const levelId of activeLevels) {
                 const filterValues = activeGroupFilters[levelId];
@@ -694,7 +689,7 @@ const getStorageStockItemWiseMobile = async (req, res) => {
                         return filterValues.some(fv => String(fv).trim() === stringValue);
                     });
                     
-                    console.log(`Group Filter Level ${levelId} (${columnName}): ${beforeCount} -> ${filteredData.length} records`);
+                  
                 } else if (!columnName) {
                     console.log(`Skipping Group Filter Level ${levelId} - Column not found in template`);
                 } else {
@@ -719,7 +714,7 @@ const getStorageStockItemWiseMobile = async (req, res) => {
                 isEqualNumber(row?.Bal_Qty, 0)
             )
         );
-        console.log(`Zero quantity filter: ${beforeZeroFilter} -> ${filteredData.length} records`);
+   
 
         sentData(res, filteredData);
         
@@ -753,7 +748,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
         if (groupFilter2.length > 0) activeGroupFilters[2] = groupFilter2;
         if (groupFilter3.length > 0) activeGroupFilters[3] = groupFilter3;
 
-        console.log('Active Group Filters:', Object.keys(activeGroupFilters).length);
+      
 
         // Fetch mobile filters with group filters
         const mobileFilters = await new sql.Request().query(`
@@ -804,11 +799,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
         // Sort group filters by Level_Id (1,2,3)
         groupFilters.sort((a, b) => a.Level_Id - b.Level_Id);
 
-        console.log('Group Filters found:', groupFilters.map(gf => ({
-            level: gf.Level_Id,
-            column: gf.ColumnName,
-            table: gf.TableName
-        })));
+     
 
         const formatDate = (date) => {
             const d = new Date(date);
@@ -850,7 +841,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
             }
         });
 
-        console.log('Group Filter Columns:', groupFilterColumns);
+      
 
         // Format regular filter values
         const filter1Value = filter1.length > 0 ? formatFilterValues(filter1) : '';
@@ -869,14 +860,14 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
             '${escapeColumnName(filter3Column)}',
             '${filter3Value}'`;
 
-        console.log('Executing SQL:', sqlString);
+   
 
         const result = await new sql.Request().query(sqlString);
         
         // Start with all results from stored procedure
         let filteredData = result.recordset;
         
-        console.log(`Initial records from SP: ${filteredData.length}`);
+    
 
         // ============ DYNAMICALLY APPLY ACTIVE GROUP FILTERS ============
         
@@ -884,7 +875,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
         const activeLevels = Object.keys(activeGroupFilters).map(Number).sort();
         
         if (activeLevels.length > 0) {
-            console.log(`Applying ${activeLevels.length} group filter(s): Levels ${activeLevels.join(', ')}`);
+        
             
             for (const levelId of activeLevels) {
                 const filterValues = activeGroupFilters[levelId];
@@ -926,7 +917,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
                 isEqualNumber(row?.Act_Bal_Qty, 0)
             )
         );
-        console.log(`Zero quantity filter: ${beforeZeroFilter} -> ${filteredData.length} records`);
+    
 
         sentData(res, filteredData);
         
@@ -1155,3 +1146,5 @@ export default {
     itemGroupWiseClosingDetailsMobile,
     // getStockMobileReportDropdowns
 }
+
+
