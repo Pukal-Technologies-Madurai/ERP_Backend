@@ -2526,7 +2526,7 @@ const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
       
         doc.fontSize(24)
            .font('Helvetica-Bold')
-           .text('TAX INVOICE', { align: 'center' });
+           .text('SALES INVOICE', { align: 'center' });
         
         doc.moveDown();
         doc.lineCap('butt')
@@ -2543,7 +2543,7 @@ const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
            .text('SM TRADERS', { align: 'right' })
            .text('Address Line 1', { align: 'right' })
            .text('Address Line 2', { align: 'right' })
-           .text('GSTIN: 33AAXFS2197L1Z5', { align: 'right' });
+           .text('GSTIN:', { align: 'right' });
         
         doc.moveDown(2);
         
@@ -2561,7 +2561,7 @@ const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
            .fontSize(10)
            .text(invoiceData.retailerNameGet || invoiceData.Retailer_Name || 'Customer', leftColumnX, currentY + 20)
             .text(invoiceData.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 })
-           .text(`GSTIN: ${invoiceData.Retailer_GSTIN || 'Not Available'}`, leftColumnX, currentY + 50);
+           .text(`GSTIN: ${invoiceData.GST_No || '-'}`, leftColumnX, currentY + 50);
         
       
         doc.font('Helvetica-Bold')
@@ -2582,7 +2582,7 @@ const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
         doc.fontSize(10)
            .font('Helvetica-Bold')
            .text('S.No', leftColumnX, currentY + 10)
-           .text('Description', leftColumnX + 40, currentY + 10)
+           .text('Product', leftColumnX + 40, currentY + 10)
            .text('HSN/SAC', leftColumnX + 250, currentY + 10)
            .text('Qty', leftColumnX + 320, currentY + 10)
            .text('Rate', leftColumnX + 370, currentY + 10)
@@ -2610,7 +2610,7 @@ const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
                    .fontSize(9)
                    .text(`${index + 1}`, leftColumnX, currentY)
                    .text(displayName, leftColumnX + 40, currentY)
-                   .text(item.HSN_Code || 'N/A', leftColumnX + 250, currentY)
+                   .text(item.HSN_Code || '-', leftColumnX + 250, currentY)
                    .text(qty.toFixed(2), leftColumnX + 320, currentY)
                    .text(rate.toFixed(2), leftColumnX + 370, currentY)
                    .text(amount.toFixed(2), leftColumnX + 430, currentY);
@@ -2728,1087 +2728,460 @@ return dataFound(res, {
 
 
 
-
-// const downloadGeneratedPdf = async (req, res) => {
-//     try {
-//         const { Do_Inv_No } = req.query;
-
-//           if (!Do_Inv_No) {
-//               return invalidInput(res, 'Invoice number is required');
-//           }
-//          const decodedInvoiceNo = Buffer
-//             .from(Do_Inv_No, "base64")
-//             .toString("utf-8");
-
-     
-//        const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, '/').trim();
-        
-
-
-//          const companyId = process.env.COMPANY;
-        
-//         // const cleanInvoiceNo = formattedInvoiceNo.replace(/\//g, '_').replace(/[^a-zA-Z0-9-_]/g, '');
-//         const pdfFileName = `${formattedInvoiceNo}.pdf`;
-        
-
-//         const uploadDir = path.join(__dirname, '..', 'uploads', String(companyId), 'invoices');
-//         const filePath = path.join(uploadDir, pdfFileName);
-        
-    
-        
-      
-//         if (fsSync.existsSync(filePath)) {
-          
-            
-//             try {
-//                 const stats = fsSync.statSync(filePath);
-//                 const fileStream = fsSync.createReadStream(filePath);
-                
-//                 res.setHeader('Content-Type', 'application/pdf');
-//                 res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
-//                 res.setHeader('Content-Length', stats.size);
-//                 res.setHeader('Cache-Control', 'public, max-age=3600');
-//                 res.setHeader('Accept-Ranges', 'bytes');
-                
-//                 return fileStream.pipe(res);
-//             } catch (fileError) {
-//                 console.error('Error reading existing PDF:', fileError);
-              
-//                 try {
-//                     fsSync.unlinkSync(filePath);
-                   
-//                 } catch (unlinkError) {
-//                     console.error('Error deleting corrupted PDF:', unlinkError);
-//                 }
-//             }
-//         }
-        
-        
-//         const alternativePatterns = [
-//             `${Do_Inv_No.replace(/\//g, '_')}`,
-//             `${Do_Inv_No}`,
-//             // `${Do_Inv_No.replace(/\//g, '-')}`
-//         ];
-        
-//         for (const pattern of alternativePatterns) {
-//             const altPath = path.join(uploadDir, pattern);
-//             if (fsSync.existsSync(altPath)) {
-               
-                
-//                 try {
-//                     const stats = fsSync.statSync(altPath);
-//                     const fileStream = fsSync.createReadStream(altPath);
-                    
-//                     res.setHeader('Content-Type', 'application/pdf');
-//                     res.setHeader('Content-Disposition', `inline; filename="${pattern}"`);
-//                     res.setHeader('Content-Length', stats.size);
-//                     res.setHeader('Cache-Control', 'public, max-age=3600');
-//                     res.setHeader('Accept-Ranges', 'bytes');
-                    
-//                     return fileStream.pipe(res);
-//                 } catch (fileError) {
-//                     console.error('Error reading alternative PDF:', fileError);
-//                 }
-//             }
-//         }
-        
-  
-      
-        
-     
-//         if (!fsSync.existsSync(uploadDir)) {
-//             fsSync.mkdirSync(uploadDir, { recursive: true });
-          
-//         }
-        
-//         const deliveryOrderRequest = await new sql.Request()
-//             .input('Do_Inv_No', sql.NVarChar, formattedInvoiceNo)
-//             .query(`
-//              				SELECT sdgi.*,rm.Retailer_Name,lol.*
-//                 FROM tbl_Sales_Delivery_Gen_Info sdgi
-// 				left join tbl_Retailers_Master rm ON rm.Retailer_Id=sdgi.Retailer_Id
-// 				left join tbl_Ledger_LOL lol ON lol.Ret_Id=sdgi.Retailer_Id
-//                 WHERE sdgi.Do_Inv_No = @Do_Inv_No 
-//             `);
-     
-//         if (deliveryOrderRequest.recordset.length === 0) {
-//             return noData(res, `Invoice not found with number: ${formattedInvoiceNo}`);
-//         }
-        
-//         const deliveryOrder = deliveryOrderRequest.recordset[0];
-//         const doId = deliveryOrder.Do_Id;
-        
-   
-//         const stockRequest = await new sql.Request()
-//             .input('Delivery_Order_Id', sql.Int, doId)
-//             .input('CompanyId', sql.Int, companyId)
-//             .query(`
-//                     SELECT sdsi.*,pm.Product_Name
-//                 FROM tbl_Sales_Delivery_Stock_Info sdsi
-// 				left join tbl_Product_Master pm on pm.Product_Id=sdsi.Item_Id
-//                 WHERE sdsi.Delivery_Order_Id = @Delivery_Order_Id 
-//                 ORDER BY sdsi.Delivery_Order_Id ASC
-//             `);
-        
-//         const stockDetails = stockRequest.recordset || [];
-       
-        
-        
-//         const companyRequest = await new sql.Request()
-//             .input('CompanyId', sql.Int, companyId)
-//             .query(`
-//                 SELECT *
-//                 FROM tbl_Company_Master 
-//                 WHERE Company_Id = @CompanyId
-//             `);
-        
-//         const companyDetails = companyRequest.recordset[0] || {};
-        
-        
-//         if (deliveryOrder.Retailer_Id) {
-//             const retailerRequest = await new sql.Request()
-//                 .input('Retailer_Id', sql.Int, deliveryOrder.Retailer_Id)
-//                 .query(`
-//                     SELECT *
-//                     FROM tbl_Retailers_Master 
-//                     WHERE Retailer_Id = @Retailer_Id
-//                 `);
-            
-//             if (retailerRequest.recordset.length > 0) {
-//                 const retailer = retailerRequest.recordset[0];
-//                 deliveryOrder.Retailer_Name = deliveryOrder.Retailer_Name || retailer.Retailer_Name;
-//                 deliveryOrder.Retailer_Address = deliveryOrder.Retailer_Address || retailer.Retailer_Address;
-//                 deliveryOrder.Retailer_GSTIN = deliveryOrder.Retailer_GSTIN || retailer.GSTIN;
-//                 deliveryOrder.Retailer_Phone = deliveryOrder.Retailer_Phone || retailer.Phone || retailer.Mobile;
-//             }
-//         }
-        
-  
-//         const doc = new PDFDocument({
-//             margin: 50,
-//             size: 'A4',
-//             bufferPages: true,
-//             autoFirstPage: true,
-//             info: {
-//                 Title: `Invoice ${Do_Inv_No}`,
-//                 Author: companyDetails.Company_Name,
-//                 Subject: 'Tax Invoice',
-//                 Keywords: 'invoice, sales, delivery',
-//                 CreationDate: new Date()
-//             }
-//         });
-        
-
-//         const writeStream = fsSync.createWriteStream(filePath);
-        
-      
-//         writeStream.on('error', (err) => {
-//             console.error('Write stream error:', err);
-//         });
-        
-//         doc.pipe(writeStream);
-    
-//         if (companyDetails.Logo && fsSync.existsSync(companyDetails.Logo)) {
-//             try {
-//                 doc.image(companyDetails.Logo, 50, 45, { width: 80 });
-//             } catch (logoError) {
-//                 console.error('Error loading logo:', logoError);
-//             }
-//         }
-  
-//         doc.fontSize(24)
-//            .font('Helvetica-Bold')
-//            .text(companyDetails.Company_Name || 'SM TRADERS', 150, 50, { align: 'center' });
-        
-//         doc.fontSize(10)
-//            .font('Helvetica')
-//            .text(companyDetails.Address , { align: 'center' })
-//            .text(`Phone: ${companyDetails.Phone} | Email: ${companyDetails.Email}`, { align: 'center' })
-//            .text(`GSTIN: ${companyDetails.GSTIN}`, { align: 'center' });
-        
-//         doc.moveDown();
-//         doc.lineCap('butt')
-//            .lineWidth(2)
-//            .moveTo(50, doc.y)
-//            .lineTo(550, doc.y)
-//            .stroke();
-        
-//         doc.moveDown();
-        
-//         doc.fontSize(20)
-//            .font('Helvetica-Bold')
-//            .text('TAX INVOICE', { align: 'center' });
-        
-//         doc.moveDown(2);
-        
-      
-//         const leftColumnX = 50;
-//         const rightColumnX = 300;
-//         let currentY = doc.y;
-        
-   
-//         doc.fontSize(11)
-//            .font('Helvetica-Bold')
-//            .text('BILL TO:', leftColumnX, currentY);
-        
-//         doc.font('Helvetica')
-//            .fontSize(10)
-//            .text(deliveryOrder.Retailer_Name || 'Customer', leftColumnX, currentY + 20)
-//            .text(deliveryOrder.Retailer_Address || 'Address not available', leftColumnX, currentY + 35, { width: 230 })
-//            .text(`GSTIN: ${deliveryOrder.Retailer_GSTIN || 'Not Available'}`, leftColumnX, currentY + 70)
-//            .text(`Phone: ${deliveryOrder.Retailer_Phone || deliveryOrder.Retailer_Mobile || 'N/A'}`, leftColumnX, currentY + 85);
-    
-//         doc.font('Helvetica-Bold')
-//            .text('INVOICE DETAILS:', rightColumnX, currentY);
-        
-//         doc.font('Helvetica')
-//            .text(`Invoice No: ${deliveryOrder.Do_Inv_No}`, rightColumnX, currentY + 20)
-//            .text(`Date: ${new Date(deliveryOrder.Do_Date || new Date()).toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
-//            .text(`Delivery Order No: ${deliveryOrder.Do_No || 'N/A'}`, rightColumnX, currentY + 50)
-//            .text(`Sales Order No: ${deliveryOrder.So_No || 'N/A'}`, rightColumnX, currentY + 65)
-//            .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 80)
-//            .text(`Transport: ${deliveryOrder.Transporter_Name || 'N/A'}`, rightColumnX, currentY + 95)
-//            .text(`Vehicle No: ${deliveryOrder.Vehicle_No || 'N/A'}`, rightColumnX, currentY + 110);
-        
-//         currentY += 140;
-
-//         doc.moveTo(leftColumnX, currentY)
-//            .lineTo(550, currentY)
-//            .stroke();
-        
-//         doc.fontSize(9)
-//            .font('Helvetica-Bold')
-//            .text('S.No', leftColumnX, currentY + 10)
-//            .text('Description', leftColumnX + 35, currentY + 10)
-//            .text('HSN/SAC', leftColumnX + 180, currentY + 10)
-//            .text('Qty', leftColumnX + 250, currentY + 10)
-//            .text('Unit', leftColumnX + 290, currentY + 10)
-//            .text('Rate', leftColumnX + 330, currentY + 10)
-//            .text('Disc%', leftColumnX + 380, currentY + 10)
-//            .text('Tax%', leftColumnX + 420, currentY + 10)
-//            .text('Amount', leftColumnX + 460, currentY + 10);
-        
-//         currentY += 30;
-        
-   
-//         let subtotal = 0;
-//         let totalCgst = 0;
-//         let totalSgst = 0;
-//         let totalIgst = 0;
-        
-//         if (stockDetails && stockDetails.length > 0) {
-//             stockDetails.forEach((item, index) => {
-//                 const itemName = item.Item_Name || item.Product_Name || 'Item';
-//                 const qty = Number(item.Bill_Qty) || 0;
-//                 const rate = Number(item.Item_Rate) || 0;
-//                 const discount = Number(item.Discount_per) || 0;
-//                 const taxRate = Number(item.Gst_percentage) || 0;
-//                 const unit = item.Unit || 'Pcs';
-//                 const ProductName=item.Product_Name || '-'
-              
-//                 let taxableValue = qty * rate;
-                
-              
-//                 if (discount > 0) {
-//                     taxableValue = taxableValue - (taxableValue * discount / 100);
-//                 }
-                
-//                 subtotal += taxableValue;
-                
-             
-//                 let cgst = 0, sgst = 0, igst = 0;
-                
-//                 if (taxRate > 0) {
-//                     if (deliveryOrder.Place_Of_Supply === companyDetails.State) {
-//                         cgst = taxableValue * (taxRate / 2) / 100;
-//                         sgst = taxableValue * (taxRate / 2) / 100;
-//                         totalCgst += cgst;
-//                         totalSgst += sgst;
-//                     } else {
-//                         igst = taxableValue * taxRate / 100;
-//                         totalIgst += igst;
-//                     }
-//                 }
-                
-//                 const totalAmount = taxableValue + cgst + sgst + igst;
-                
-              
-//                 const displayName = itemName.length > 20 ? 
-//                     itemName.substring(0, 17) + '...' : itemName;
-                
-//                 doc.font('Helvetica')
-//                    .fontSize(8)
-//                    .text(`${index + 1}`, leftColumnX, currentY)
-//                    .text(ProductName, leftColumnX + 35, currentY, { width: 140 })
-//                    .text(item.HSN_Code || 'N/A', leftColumnX + 180, currentY)
-//                    .text(qty.toFixed(2), leftColumnX + 250, currentY)
-//                    .text(unit, leftColumnX + 290, currentY)
-//                    .text(`₹${rate.toFixed(2)}`, leftColumnX + 330, currentY)
-//                    .text(`${discount.toFixed(2)}%`, leftColumnX + 380, currentY)
-//                    .text(`${taxRate.toFixed(2)}%`, leftColumnX + 420, currentY)
-//                    .text(`₹${totalAmount.toFixed(2)}`, leftColumnX + 460, currentY);
-                
-//                 currentY += 20;
-                
-               
-//                 if (currentY > 700) {
-//                     doc.addPage();
-//                     currentY = 50;
-                    
-                  
-//                     doc.moveTo(leftColumnX, currentY)
-//                        .lineTo(550, currentY)
-//                        .stroke();
-                    
-//                     doc.fontSize(9)
-//                        .font('Helvetica-Bold')
-//                        .text('S.No', leftColumnX, currentY + 10)
-//                        .text('Description', leftColumnX + 35, currentY + 10)
-//                        .text('HSN/SAC', leftColumnX + 180, currentY + 10)
-//                        .text('Qty', leftColumnX + 250, currentY + 10)
-//                        .text('Unit', leftColumnX + 290, currentY + 10)
-//                        .text('Rate', leftColumnX + 330, currentY + 10)
-//                        .text('Disc%', leftColumnX + 380, currentY + 10)
-//                        .text('Tax%', leftColumnX + 420, currentY + 10)
-//                        .text('Amount', leftColumnX + 460, currentY + 10);
-                    
-//                     currentY += 30;
-//                 }
-//             });
-//         }
-        
-//         // Draw line before totals
-//         doc.moveTo(leftColumnX, currentY)
-//            .lineTo(550, currentY)
-//            .stroke();
-        
-//         currentY += 20;
-        
-//         // Calculate grand total
-//         const roundOff = Number(deliveryOrder.Round_off) || 0;
-//         const grandTotal = subtotal + totalCgst + totalSgst + totalIgst + roundOff;
-        
-//         // Totals Section
-//         const totalsX = 380;
-//         const totalsValueX = 480;
-        
-//         doc.fontSize(9)
-//            .font('Helvetica')
-//            .text('Taxable Value:', totalsX, currentY)
-//            .text(`₹${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-        
-//         currentY += 18;
-        
-//         if (totalCgst > 0) {
-//             const cgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
-//             doc.text(`CGST @ ${cgstRate.toFixed(2)}%:`, totalsX, currentY)
-//                .text(`₹${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-//             currentY += 18;
-//         }
-        
-//         if (totalSgst > 0) {
-//             const sgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
-//             doc.text(`SGST @ ${sgstRate.toFixed(2)}%:`, totalsX, currentY)
-//                .text(`₹${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-//             currentY += 18;
-//         }
-        
-//         if (totalIgst > 0) {
-//             const igstRate = stockDetails[0]?.Gst_percentage || 18;
-//             doc.text(`IGST @ ${igstRate.toFixed(2)}%:`, totalsX, currentY)
-//                .text(`₹${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-//             currentY += 18;
-//         }
-        
-//         if (roundOff !== 0) {
-//             doc.text('Round Off:', totalsX, currentY)
-//                .text(`₹${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-//             currentY += 18;
-//         }
-        
-//         // Draw line before grand total
-//         doc.moveTo(totalsX - 10, currentY)
-//            .lineTo(totalsValueX + 70, currentY)
-//            .stroke();
-        
-//         currentY += 10;
-        
-//         doc.fontSize(11)
-//            .font('Helvetica-Bold')
-//            .text('GRAND TOTAL:', totalsX, currentY)
-//            .text(`₹${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-        
-//         currentY += 30;
-        
-//         // Amount in words
-//         doc.fontSize(9)
-//            .font('Helvetica')
-//            .text(`Amount in words: Rupees ${grandTotal.toFixed(2)} only`, 50, currentY, { width: 500 });
-        
-//         currentY += 40;
-        
-//         // Bank Details
-//         doc.fontSize(9)
-//            .font('Helvetica-Bold')
-//            .text('Bank Details:', 50, currentY)
-//            .font('Helvetica')
-//            .text(`Bank: ${deliveryOrder.Bank_Name || companyDetails.Bank_Name}`, 50, currentY + 15)
-//            .text(`A/C No: ${deliveryOrder.Account_No || companyDetails.Account_No }`, 50, currentY + 30)
-//            .text(`IFSC: ${deliveryOrder.IFSC_Code || companyDetails.IFSC_Code}`, 50, currentY + 45);
-        
-//         // Terms and Conditions
-//         doc.fontSize(9)
-//            .font('Helvetica-Bold')
-//            .text('Terms & Conditions:', 300, currentY)
-//            .font('Helvetica')
-//            .fontSize(8)
-//            .text(deliveryOrder.Terms_Conditions || '1. Goods once sold will not be taken back.', 300, currentY + 15, { width: 250 })
-//            .text('2. This is a computer generated invoice.', 300, currentY + 30, { width: 250 })
-//            .text('3. Subject to local jurisdiction.', 300, currentY + 45, { width: 250 });
-        
-//         // Footer
-//         const footerY = 750;
-//         doc.fontSize(8)
-//            .font('Helvetica')
-//            .text('Thank you for your business!', 50, footerY, { align: 'center', width: 500 })
-//            .text(`For queries contact: ${companyDetails.Phone} | ${companyDetails.Email }`, 50, footerY + 15, { align: 'center', width: 500 });
-        
-//         // ============ END PDF GENERATION ============
-        
-   
-//         const range = doc.bufferedPageRange();
-//         const totalPages = range.count;
-        
-    
-        
-//         for (let i = 0; i < totalPages; i++) {
-//             doc.switchToPage(i);
-//             doc.fontSize(8)
-//                .font('Helvetica')
-//                .text(`Page ${i + 1} of ${totalPages}`, 50, 800, { align: 'center', width: 500 });
-//         }
-        
-//         // Finalize PDF
-//         doc.end();
-        
-    
-//         await new Promise((resolve, reject) => {
-//             writeStream.on('finish', () => {
-     
-//                 resolve();
-//             });
-//             writeStream.on('error', (err) => {
-//                 console.error('PDF write stream error:', err);
-//                 reject(err);
-//             });
-//         });
-        
-      
-        
-    
-//         if (!fsSync.existsSync(filePath)) {
-//             throw new Error('PDF file was not created');
-//         }
-        
-//         const fileStats = fsSync.statSync(filePath);
-//         if (fileStats.size === 0) {
-//             throw new Error('PDF file is empty');
-//         }
-        
-       
-        
-//         const fileStream = fsSync.createReadStream(filePath);
-        
-//         res.setHeader('Content-Type', 'application/pdf');
-//         res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
-//         res.setHeader('Content-Length', fileStats.size);
-//         res.setHeader('Cache-Control', 'no-cache'); 
-//         res.setHeader('Accept-Ranges', 'bytes');
-//         res.setHeader('X-Generated', 'true');
-        
-//         fileStream.on('error', (err) => {
-//             console.error('Error streaming PDF:', err);
-//             if (!res.headersSent) {
-//                 res.status(500).send('Error streaming PDF');
-//             }
-//         });
-        
-//         fileStream.pipe(res);
-        
-//     } catch (error) {
-//         console.error('Error in downloadGeneratedPdf:', error);
-//         console.error('Error stack:', error.stack);
-        
-//         if (!res.headersSent) {
-//             return servError(error, res);
-//         }
-//     }
-// };
-
 const downloadGeneratedPdf = async (req, res) => {
     try {
-        const { Do_Inv_No } = req.query;
+        const { Do_Inv_No, download } = req.query;
 
         if (!Do_Inv_No) {
-            return invalidInput(res, 'Invoice number is required');
+            return invalidInput(res, "Invoice number is required");
         }
-        
-        
+
+        const shouldDownload = download === "true";
+
         const decodedInvoiceNo = Buffer
             .from(Do_Inv_No, "base64")
             .toString("utf-8");
 
-        const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, '/').trim();
+        const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, "/").trim();
         const companyId = process.env.COMPANY;
-        
-        
-        const safeFileName = formattedInvoiceNo.replace(/\//g, '_');
-        const pdfFileName = `${safeFileName}.pdf`;
-        
-        const uploadDir = path.join(__dirname, '..', 'uploads', String(companyId), 'invoices');
-        const filePath = path.join(uploadDir, pdfFileName);
-        
 
-        if (fsSync.existsSync(filePath)) {
-            try {
-                const stats = fsSync.statSync(filePath);
-                const fileStream = fsSync.createReadStream(filePath);
-               
-                res.setHeader('Content-Type', 'application/pdf');
-res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
-res.setHeader('Content-Length', stats.size);
-res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-res.setHeader('Pragma', 'no-cache');
-res.setHeader('Expires', '0');
-res.setHeader('X-Content-Type-Options', 'nosniff');
-res.setHeader('Access-Control-Allow-Origin', '*'); // If CORS is needed
-                return fileStream.pipe(res);
-            } catch (fileError) {
-                console.error('Error reading existing PDF:', fileError);
-                try {
-                    fsSync.unlinkSync(filePath);
-                } catch (unlinkError) {
-                    console.error('Error deleting corrupted PDF:', unlinkError);
-                }
-            }
+        const safeFileName = formattedInvoiceNo.replace(/\//g, "_");
+        const pdfFileName = `${safeFileName}.pdf`;
+
+        const uploadDir = path.join(__dirname, "..", "uploads", String(companyId), "invoices");
+        const filePath = path.join(uploadDir, pdfFileName);
+
+
+
+
+        
+        if (shouldDownload && fsSync.existsSync(filePath)) {
+            const stats = fsSync.statSync(filePath);
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader("Content-Disposition", `attachment; filename="${pdfFileName}"`);
+            res.setHeader("Content-Length", stats.size);
+            return fsSync.createReadStream(filePath).pipe(res);
         }
-        
-     
-        const alternativePatterns = [
-            `${Do_Inv_No.replace(/\//g, '_')}`,
-            `${Do_Inv_No}`,
-        ];
-        
-        for (const pattern of alternativePatterns) {
-            const safePattern = pattern.replace(/\//g, '_');
-            const altPath = path.join(uploadDir, safePattern.endsWith('.pdf') ? safePattern : `${safePattern}.pdf`);
-            
-            if (fsSync.existsSync(altPath)) {
-                try {
-                    const stats = fsSync.statSync(altPath);
-                    const fileStream = fsSync.createReadStream(altPath);
-                    
-                    res.setHeader('Content-Type', 'application/pdf');
-                    res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
-                    res.setHeader('Content-Length', stats.size);
-                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-                    res.setHeader('Pragma', 'no-cache');
-                    res.setHeader('Expires', '0');
-                    res.setHeader('X-Content-Type-Options', 'nosniff');
-                    res.setHeader('Access-Control-Allow-Origin', '*'); // If CORS is needed
-                    
-                    return fileStream.pipe(res);
-                } catch (fileError) {
-                    console.error('Error reading alternative PDF:', fileError);
-                }
-            }
-        }
-        
-  
+
         if (!fsSync.existsSync(uploadDir)) {
             fsSync.mkdirSync(uploadDir, { recursive: true });
         }
-        
-    
-        const deliveryOrderRequest = await new sql.Request()
-            .input('Do_Inv_No', sql.NVarChar, formattedInvoiceNo)
-            .query(`
-                SELECT sdgi.*, rm.Retailer_Name, lol.*
-                FROM tbl_Sales_Delivery_Gen_Info sdgi
-                LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
-                LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = sdgi.Retailer_Id
-                WHERE sdgi.Do_Inv_No = @Do_Inv_No 
-            `);
-     
-        if (deliveryOrderRequest.recordset.length === 0) {
-            return noData(res, `Invoice not found with number: ${formattedInvoiceNo}`);
-        }
-        
-        const deliveryOrder = deliveryOrderRequest.recordset[0];
-        const doId = deliveryOrder.Do_Id;
+
         
 
-        const stockRequest = await new sql.Request()
-            .input('Delivery_Order_Id', sql.Int, doId)
-            .input('CompanyId', sql.Int, companyId)
+        const deliveryOrderRequest = await new sql.Request()
+            .input("Do_Inv_No", sql.NVarChar, formattedInvoiceNo)
             .query(`
-                SELECT sdsi.*, pm.Product_Name
-                FROM tbl_Sales_Delivery_Stock_Info sdsi
-                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = sdsi.Item_Id
-                WHERE sdsi.Delivery_Order_Id = @Delivery_Order_Id 
-                ORDER BY sdsi.Delivery_Order_Id ASC
+              	SELECT sdgi.*,rm.Retailer_Name,lol.*
+                 FROM tbl_Sales_Delivery_Gen_Info sdgi
+ 				left join tbl_Retailers_Master rm ON rm.Retailer_Id=sdgi.Retailer_Id
+				left join tbl_Ledger_LOL lol ON lol.Ret_Id=sdgi.Retailer_Id
+                WHERE sdgi.Do_Inv_No = @Do_Inv_No 
             `);
-        
+
+        if (deliveryOrderRequest.recordset.length === 0) {
+            return noData(res, `Invoice not found: ${formattedInvoiceNo}`);
+        }
+
+        const deliveryOrder = deliveryOrderRequest.recordset[0];
+
+        const stockRequest = await new sql.Request()
+            .input("Delivery_Order_Id", sql.Int, deliveryOrder.Do_Id)
+            .query(`
+                SELECT sdsi.*, pm.Product_Name, u.Units
+                FROM tbl_Sales_Delivery_Stock_Info sdsi
+                LEFT JOIN tbl_Product_Master pm 
+                ON pm.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_UOM u ON u.Unit_Id=sdsi.Unit_Id
+                WHERE sdsi.Delivery_Order_Id = @Delivery_Order_Id
+            `);
+
         const stockDetails = stockRequest.recordset || [];
-        
-      
+
         const companyRequest = await new sql.Request()
-            .input('CompanyId', sql.Int, companyId)
+            .input("CompanyId", sql.Int, companyId)
             .query(`
                 SELECT *
                 FROM tbl_Company_Master 
                 WHERE Company_Id = @CompanyId
             `);
-        
+
         const companyDetails = companyRequest.recordset[0] || {};
-        
- 
-        if (deliveryOrder.Retailer_Id) {
-            const retailerRequest = await new sql.Request()
-                .input('Retailer_Id', sql.Int, deliveryOrder.Retailer_Id)
-                .query(`
-                    SELECT *
-                    FROM tbl_Retailers_Master 
-                    WHERE Retailer_Id = @Retailer_Id
-                `);
-            
-            if (retailerRequest.recordset.length > 0) {
-                const retailer = retailerRequest.recordset[0];
-                deliveryOrder.Retailer_Name = deliveryOrder.Retailer_Name || retailer.Retailer_Name;
-                deliveryOrder.Retailer_Address = deliveryOrder.Retailer_Address || retailer.Retailer_Address;
-                deliveryOrder.Retailer_GSTIN = deliveryOrder.Retailer_GSTIN || retailer.GSTIN;
-                deliveryOrder.Retailer_Phone = deliveryOrder.Retailer_Phone || retailer.Phone || retailer.Mobile;
-            }
-        }
-        
- 
-const doc = new PDFDocument({
-    margin: 50,
-    size: 'A4',
-    bufferPages: true,
-    autoFirstPage: true,
-    info: {
-        Title: `Invoice ${formattedInvoiceNo}`,
-        Author: companyDetails.Company_Name,
-        Subject: 'Tax Invoice',
-        Keywords: 'invoice, sales, delivery',
-        CreationDate: new Date()
-    }
-});
 
-const possibleTamilFonts = [
-    path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
-    path.join(__dirname, '..', 'fonts', 'latha.ttf'),
-    path.join(__dirname, '..', 'fonts', 'bamini.ttf'),
-    path.join(__dirname, '..', 'fonts', 'NotoSansTamilUI-Regular.ttf'),
-    'C:/Windows/Fonts/latha.ttf',
-    'C:/Windows/Fonts/bamini.ttf',
-    'C:/Windows/Fonts/NotoSansTamil-Regular.ttf',
-    'C:/Windows/Fonts/Nirmala.ttf', 
-    'C:/Windows/Fonts/NirmalaB.ttf',
-    'C:/Windows/Fonts/kartika.ttf'
-];
-
-let tamilFontRegistered = false;
-let tamilFontPath = 'Helvetica';
-
-for (const fontPath of possibleTamilFonts) {
-    try {
-        if (fsSync.existsSync(fontPath)) {
-            doc.registerFont('Tamil', fontPath);
-            tamilFontRegistered = true;
-            tamilFontPath = fontPath;
-          
-            break;
-        }
-    } catch (error) {
-        console.error(`Failed to register font from ${fontPath}:`, error);
-    }
-}
-
-if (!tamilFontRegistered) {
-    console.warn('No Tamil font found, using Helvetica as fallback');
-    doc.registerFont('Tamil', 'Helvetica');
-}
-
-const possibleTamilBoldFonts = [
-    path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Bold.ttf'),
-    path.join(__dirname, '..', 'fonts', 'lathab.ttf'),
-    'C:/Windows/Fonts/lathab.ttf',
-    'C:/Windows/Fonts/NirmalaB.ttf',
-    'C:/Windows/Fonts/kartikab.ttf'
-];
-
-let tamilBoldFontRegistered = false;
-for (const fontPath of possibleTamilBoldFonts) {
-    try {
-        if (fsSync.existsSync(fontPath)) {
-            doc.registerFont('Tamil-Bold', fontPath);
-            tamilBoldFontRegistered = true;
-          
-            break;
-        }
-    } catch (error) {
-        console.error(`Failed to register bold font from ${fontPath}:`, error);
-    }
-}
-
-if (!tamilBoldFontRegistered) {
-    doc.registerFont('Tamil-Bold', tamilFontRegistered ? 'Tamil' : 'Helvetica-Bold');
-}
-
-const writeStream = fsSync.createWriteStream(filePath);
-
-writeStream.on('error', (err) => {
-    console.error('Write stream error:', err);
-});
-
-doc.pipe(writeStream);
-
-
-if (companyDetails.Logo && fsSync.existsSync(companyDetails.Logo)) {
-    try {
-        doc.image(companyDetails.Logo, 50, 45, { width: 80 });
-    } catch (logoError) {
-        console.error('Error loading logo:', logoError);
-    }
-}
-
-
-doc.fontSize(24)
-   .font('Helvetica-Bold')
-   .text(companyDetails.Company_Name || 'SM TRADERS', 150, 50, { align: 'center' });
-
-doc.fontSize(10)
-   .font('Helvetica')
-   .text(companyDetails.Address || '', { align: 'center' })
-   .text(`Phone: ${companyDetails.Phone || ''} | Email: ${companyDetails.Email || ''}`, { align: 'center' })
-   .text(`GSTIN: ${companyDetails.GSTIN || ''}`, { align: 'center' });
-
-doc.moveDown();
-doc.lineCap('butt')
-   .lineWidth(2)
-   .moveTo(50, doc.y)
-   .lineTo(550, doc.y)
-   .stroke();
-
-doc.moveDown();
-
-doc.fontSize(20)
-   .font('Helvetica-Bold')
-   .text('TAX INVOICE', { align: 'center' });
-
-doc.moveDown(2);
-
-const leftColumnX = 50;
-const rightColumnX = 300;
-let currentY = doc.y;
-
-
-doc.fontSize(11)
-   .font('Helvetica-Bold')
-   .text('BILL TO:', leftColumnX, currentY);
-
-
-doc.font('Tamil') 
-   .fontSize(10)
-   .text(deliveryOrder.Retailer_Name || 'Customer', leftColumnX, currentY + 20);
-
-doc.font('Tamil')
-   .text(deliveryOrder.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 });
-
-// GSTIN and Phone are usually English/Numbers - can use Helvetica or Tamil font
-doc.font('Helvetica') // Numbers display better with Helvetica
-   .text(`GSTIN: ${deliveryOrder.GST_No || 'Not Available'}`, leftColumnX, currentY + 70);
-
-doc.font('Helvetica')
-   .text(`Phone: ${deliveryOrder.Party_Mobile_1 || deliveryOrder.Retailer_Mobile || 'N/A'}`, leftColumnX, currentY + 85);
-
-// ============ INVOICE DETAILS SECTION - ENGLISH ============
-doc.font('Helvetica-Bold')
-   .text('INVOICE DETAILS:', rightColumnX, currentY);
-
-doc.font('Helvetica')
-   .text(`Invoice No: ${deliveryOrder.Do_Inv_No}`, rightColumnX, currentY + 20)
-   .text(`Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
-   .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 80);
-
-currentY += 140;
-
-// Table Header (English - use Helvetica)
-doc.moveTo(leftColumnX, currentY)
-   .lineTo(550, currentY)
-   .stroke();
-
-doc.fontSize(9)
-   .font('Helvetica-Bold')
-   .text('S.No', leftColumnX, currentY + 10)
-   .text('Description', leftColumnX + 35, currentY + 10)
-   .text('HSN/SAC', leftColumnX + 180, currentY + 10)
-   .text('Qty', leftColumnX + 250, currentY + 10)
-   .text('Unit', leftColumnX + 290, currentY + 10)
-   .text('Rate', leftColumnX + 330, currentY + 10)
-   .text('Amount', leftColumnX + 460, currentY + 10);
-
-currentY += 30;
-
-// Stock Items
-let subtotal = 0;
-let totalCgst = 0;
-let totalSgst = 0;
-let totalIgst = 0;
-
-if (stockDetails && stockDetails.length > 0) {
-    stockDetails.forEach((item, index) => {
-        const qty = Number(item.Bill_Qty) || 0;
-        const rate = Number(item.Item_Rate) || 0;
-        const discount = Number(item.Discount_per) || 0;
-        const taxRate = Number(item.Gst_percentage) || 0;
-        const unit = item.Unit || 'Pcs';
-        const productName = item.Product_Name || item.Item_Name || 'Item';
-        
-        let taxableValue = qty * rate;
-        
-        if (discount > 0) {
-            taxableValue = taxableValue - (taxableValue * discount / 100);
-        }
-        
-        subtotal += taxableValue;
-        
-        let cgst = 0, sgst = 0, igst = 0;
-        
-        if (taxRate > 0) {
-            if (deliveryOrder.Place_Of_Supply === companyDetails.State) {
-                cgst = taxableValue * (taxRate / 2) / 100;
-                sgst = taxableValue * (taxRate / 2) / 100;
-                totalCgst += cgst;
-                totalSgst += sgst;
-            } else {
-                igst = taxableValue * taxRate / 100;
-                totalIgst += igst;
-            }
-        }
-        
-        const totalAmount = taxableValue + cgst + sgst + igst;
-    
-        doc.font('Helvetica')
-           .fontSize(8)
-           .text(`${index + 1}`, leftColumnX, currentY);
-        
-       
-        doc.font('Tamil')
-           .text(productName, leftColumnX + 35, currentY, { width: 140 });
-        
       
-        doc.font('Tamil')
-           .text(item.HSN_Code || 'N/A', leftColumnX + 180, currentY)
-           .text(qty.toFixed(2), leftColumnX + 250, currentY)
-           .text(unit, leftColumnX + 290, currentY)
-           .text(`₹${rate.toFixed(2)}`, leftColumnX + 330, currentY)
-           .text(`${discount.toFixed(2)}%`, leftColumnX + 380, currentY)
-           .text(`${taxRate.toFixed(2)}%`, leftColumnX + 420, currentY)
-           .text(`₹${totalAmount.toFixed(2)}`, leftColumnX + 460, currentY);
-        
-        currentY += 20;
-        
-        if (currentY > 700) {
-            doc.addPage();
-            currentY = 50;
-            
-            doc.moveTo(leftColumnX, currentY)
-               .lineTo(550, currentY)
-               .stroke();
-            
-            doc.fontSize(9)
-               .font('Helvetica-Bold')
-               .text('S.No', leftColumnX, currentY + 10)
-               .text('Description', leftColumnX + 35, currentY + 10)
-               .text('HSN/SAC', leftColumnX + 180, currentY + 10)
-               .text('Qty', leftColumnX + 250, currentY + 10)
-               .text('Unit', leftColumnX + 290, currentY + 10)
-               .text('Rate', leftColumnX + 330, currentY + 10)
-               .text('Disc%', leftColumnX + 380, currentY + 10)
-               .text('Tax%', leftColumnX + 420, currentY + 10)
-               .text('Amount', leftColumnX + 460, currentY + 10);
-            
-            currentY += 30;
+
+        const doc = new PDFDocument({
+            margin: 50,
+            size: 'A4',
+            bufferPages: true,
+            autoFirstPage: true,
+            info: {
+                Title: `Invoice ${formattedInvoiceNo}`,
+                Author: companyDetails.Company_Name,
+                Subject: 'Sales Invoice',
+                Keywords: 'invoice, sales, delivery',
+                CreationDate: new Date()
+            }
+        });
+
+      
+        const possibleTamilFonts = [
+            path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
+            path.join(__dirname, '..', 'fonts', 'latha.ttf'),
+            path.join(__dirname, '..', 'fonts', 'bamini.ttf'),
+            path.join(__dirname, '..', 'fonts', 'NotoSansTamilUI-Regular.ttf'),
+            'C:/Windows/Fonts/latha.ttf',
+            'C:/Windows/Fonts/bamini.ttf',
+            'C:/Windows/Fonts/NotoSansTamil-Regular.ttf',
+            'C:/Windows/Fonts/Nirmala.ttf',
+            'C:/Windows/Fonts/NirmalaB.ttf',
+            'C:/Windows/Fonts/kartika.ttf'
+        ];
+
+        let tamilFontRegistered = false;
+        let tamilFontPath = 'Helvetica';
+
+        for (const fontPath of possibleTamilFonts) {
+            try {
+                if (fsSync.existsSync(fontPath)) {
+                    doc.registerFont('Tamil', fontPath);
+                    tamilFontRegistered = true;
+                    tamilFontPath = fontPath;
+                    break;
+                }
+            } catch (error) {
+                console.error(`Failed to register font from ${fontPath}:`, error);
+            }
         }
-    });
-}
 
-// Draw line before totals
-doc.moveTo(leftColumnX, currentY)
-   .lineTo(550, currentY)
-   .stroke();
+        if (!tamilFontRegistered) {
+            console.warn('No Tamil font found, using Helvetica as fallback');
+            doc.registerFont('Tamil', 'Helvetica');
+        }
 
-currentY += 20;
+        const possibleTamilBoldFonts = [
+            path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Bold.ttf'),
+            path.join(__dirname, '..', 'fonts', 'lathab.ttf'),
+            'C:/Windows/Fonts/lathab.ttf',
+            'C:/Windows/Fonts/NirmalaB.ttf',
+            'C:/Windows/Fonts/kartikab.ttf'
+        ];
 
-// Calculate grand total
-const roundOff = Number(deliveryOrder.Round_off) || 0;
-const grandTotal = subtotal + totalCgst + totalSgst + totalIgst + roundOff;
+        let tamilBoldFontRegistered = false;
+        for (const fontPath of possibleTamilBoldFonts) {
+            try {
+                if (fsSync.existsSync(fontPath)) {
+                    doc.registerFont('Tamil-Bold', fontPath);
+                    tamilBoldFontRegistered = true;
+                    break;
+                }
+            } catch (error) {
+                console.error(`Failed to register bold font from ${fontPath}:`, error);
+            }
+        }
 
-// Totals Section (English - Helvetica)
-const totalsX = 380;
-const totalsValueX = 480;
+        if (!tamilBoldFontRegistered) {
+            doc.registerFont('Tamil-Bold', tamilFontRegistered ? 'Tamil' : 'Helvetica-Bold');
+        }
 
-doc.fontSize(9)
-   .font('Helvetica')
-   .text('Taxable Value:', totalsX, currentY)
-   .text(`₹${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-
-currentY += 18;
-
-if (totalCgst > 0) {
-    const cgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
-    doc.text(`CGST @ ${cgstRate.toFixed(2)}%:`, totalsX, currentY)
-       .text(`₹${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-    currentY += 18;
-}
-
-if (totalSgst > 0) {
-    const sgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
-    doc.text(`SGST @ ${sgstRate.toFixed(2)}%:`, totalsX, currentY)
-       .text(`₹${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-    currentY += 18;
-}
-
-if (totalIgst > 0) {
-    const igstRate = stockDetails[0]?.Gst_percentage || 18;
-    doc.text(`IGST @ ${igstRate.toFixed(2)}%:`, totalsX, currentY)
-       .text(`₹${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-    currentY += 18;
-}
-
-if (roundOff !== 0) {
-    doc.text('Round Off:', totalsX, currentY)
-       .text(`₹${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-    currentY += 18;
-}
-
-// Draw line before grand total
-doc.moveTo(totalsX - 10, currentY)
-   .lineTo(totalsValueX + 70, currentY)
-   .stroke();
-
-currentY += 10;
-
-doc.fontSize(11)
-   .font('Helvetica-Bold')
-   .text('GRAND TOTAL:', totalsX, currentY)
-   .text(`₹${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-
-currentY += 30;
-
-// Amount in words (English - Helvetica)
-doc.fontSize(9)
-   .font('Helvetica')
-   .text(`Amount in words: Rupees ${grandTotal.toFixed(2)} only`, 50, currentY, { width: 500 });
-
-currentY += 40;
-
-// ============ BANK DETAILS - TAMIL SUPPORT ============
-doc.fontSize(9)
-   .font('Helvetica-Bold')
-   .text('Bank Details:', 50, currentY);
-
-// Bank fields might contain Tamil text
-doc.font('Tamil')
-   .fontSize(9)
-   .text(`Bank: ${deliveryOrder.Bank_Name || companyDetails.Bank_Name || ''}`, 50, currentY + 15);
-
-doc.font('Tamil')
-   .text(`A/C No: ${deliveryOrder.Account_No || companyDetails.Account_No || ''}`, 50, currentY + 30);
-
-doc.font('Tamil')
-   .text(`IFSC: ${deliveryOrder.IFSC_Code || companyDetails.IFSC_Code || ''}`, 50, currentY + 45);
-
-// ============ TERMS AND CONDITIONS - TAMIL SUPPORT ============
-doc.fontSize(9)
-   .font('Helvetica-Bold')
-   .text('Terms & Conditions:', 300, currentY);
-
-// Terms might contain Tamil text
-doc.font('Tamil')
-   .fontSize(8)
-   .text(deliveryOrder.Terms_Conditions || '1. Goods once sold will not be taken back.', 300, currentY + 15, { width: 250 })
-   .text('2. This is a computer generated invoice.', 300, currentY + 30, { width: 250 })
-   .text('3. Subject to local jurisdiction.', 300, currentY + 45, { width: 250 });
-
-// Footer (English - Helvetica)
-const footerY = 750;
-doc.fontSize(8)
-   .font('Helvetica')
-   .text('Thank you for your business!', 50, footerY, { align: 'center', width: 500 })
-   .text(`For queries contact: ${companyDetails.Phone || ''} | ${companyDetails.Email || ''}`, 50, footerY + 15, { align: 'center', width: 500 });
-
-// Page Numbers (English - Helvetica)
-const range = doc.bufferedPageRange();
-const totalPages = range.count;
-
-for (let i = 0; i < totalPages; i++) {
-    doc.switchToPage(i);
-    doc.fontSize(8)
-       .font('Helvetica')
-       .text(`Page ${i + 1} of ${totalPages}`, 50, 800, { align: 'center', width: 500 });
-}
-
-// Finalize PDF
-doc.end();
-
-// Wait for PDF to be written
-await new Promise((resolve, reject) => {
-    writeStream.on('finish', () => {
-        resolve();
-    });
-    writeStream.on('error', (err) => {
-        console.error('PDF write stream error:', err);
-        reject(err);
-    });
-});
-
-// Verify file was created
-if (!fsSync.existsSync(filePath)) {
-    throw new Error('PDF file was not created');
-}
-
-const fileStats = fsSync.statSync(filePath);
-if (fileStats.size === 0) {
-    throw new Error('PDF file is empty');
-}
-
-// Stream the PDF to client
-const fileStream = fsSync.createReadStream(filePath);
-
-res.setHeader('Content-Type', 'application/pdf');
-res.setHeader('Content-Disposition', `inline; filename="${pdfFileName}"`);
-res.setHeader('Content-Length', fileStats.size);
-res.setHeader('Cache-Control', 'no-cache');
-res.setHeader('Accept-Ranges', 'bytes');
-res.setHeader('X-Generated', 'true');
-
-fileStream.on('error', (err) => {
-    console.error('Error streaming PDF:', err);
-    if (!res.headersSent) {
-        res.status(500).send('Error streaming PDF');
-    }
-});
-
-fileStream.pipe(res);
         
+        if (!shouldDownload) {
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader("Content-Disposition", `inline; filename="${pdfFileName}"`);
+            doc.pipe(res);
+        } else {
+            const writeStream = fsSync.createWriteStream(filePath);
+            writeStream.on('error', (err) => {
+                console.error('Write stream error:', err);
+            });
+            doc.pipe(writeStream);
+        }
+
+
+        // Company Header
+        doc.fontSize(24)
+           .font('Helvetica-Bold')
+           .text(companyDetails.Company_Name || '', { align: 'center' });
+
+        doc.fontSize(10)
+           .font('Helvetica')
+           .text(companyDetails.Company_Address || '', { align: 'center' })
+           .text(`Phone: ${companyDetails.Telephone_Number || ''}`, { align: 'center' })
+           .text(`GSTIN: ${companyDetails.VAT_TIN_Number || ''}`, { align: 'center' });
+
+        doc.moveDown();
+        doc.lineCap('butt')
+           .lineWidth(2)
+           .moveTo(50, doc.y)
+           .lineTo(550, doc.y)
+           .stroke();
+
+        doc.moveDown();
+
+        // Invoice Title
+        doc.fontSize(20)
+           .font('Helvetica-Bold')
+           .text('SALES INVOICE', { align: 'center' });
+
+        doc.moveDown(2);
+
+        const leftColumnX = 50;
+        const rightColumnX = 300;
+        let currentY = doc.y;
+
+        // Bill To Section
+        doc.fontSize(11)
+           .font('Helvetica-Bold')
+           .text('BILL TO:', leftColumnX, currentY);
+
+        doc.font('Tamil')
+           .fontSize(10)
+           .text(deliveryOrder.Retailer_Name || 'Customer', leftColumnX, currentY + 20);
+
+        doc.font('Tamil')
+           .text(deliveryOrder.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 });
+
+        doc.font('Helvetica')
+           .text(`GSTIN: ${deliveryOrder.GST_No || 'Not Available'}`, leftColumnX, currentY + 70);
+
+        doc.font('Helvetica')
+           .text(`Phone: ${deliveryOrder.Retailer_Mobile || 'N/A'}`, leftColumnX, currentY + 85);
+
+        // Invoice Details Section
+        doc.font('Helvetica-Bold')
+           .text('INVOICE DETAILS:', rightColumnX, currentY);
+
+        doc.font('Helvetica')
+           .text(`Invoice No: ${deliveryOrder.Do_Inv_No}`, rightColumnX, currentY + 20)
+           .text(`Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
+           .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 50)
+
+        currentY += 120;
+
+        // Table Header
+        doc.moveTo(leftColumnX, currentY)
+           .lineTo(550, currentY)
+           .stroke();
+
+        doc.fontSize(9)
+           .font('Helvetica-Bold')
+           .text('S.No', leftColumnX, currentY + 10)
+           .text('Item', leftColumnX + 35, currentY + 10)
+           .text('HSN/SAC', leftColumnX + 180, currentY + 10)
+           .text('Qty', leftColumnX + 250, currentY + 10)
+           .text('Units', leftColumnX + 290, currentY + 10)
+           .text('Rate', leftColumnX + 330, currentY + 10)
+           .text('Amount', leftColumnX + 420, currentY + 10);
+
+        currentY += 30;
+
+        // Table Content
+        let subtotal = 0;
+        let totalCgst = 0;
+        let totalSgst = 0;
+        let totalIgst = 0;
+
+        if (stockDetails && stockDetails.length > 0) {
+            stockDetails.forEach((item, index) => {
+                const qty = Number(item.Bill_Qty) || 0;
+                const rate = Number(item.Item_Rate) || 0;
+                const discount = Number(item.Discount_per) || 0;
+                const taxRate = Number(item.Gst_percentage) || 0;
+                const unit = item.Units || 'Pcs';
+                const productName = item.Product_Name || '-';
+          
+                let taxableValue = qty * rate;
+                
+                if (discount > 0) {
+                    taxableValue = taxableValue - (taxableValue * discount / 100);
+                }
+                
+                subtotal += taxableValue;
+                
+                let cgst = 0, sgst = 0, igst = 0;
+                
+                if (taxRate > 0) {
+                    if (deliveryOrder.Place_Of_Supply === companyDetails.State) {
+                        cgst = taxableValue * (taxRate / 2) / 100;
+                        sgst = taxableValue * (taxRate / 2) / 100;
+                        totalCgst += cgst;
+                        totalSgst += sgst;
+                    } else {
+                        igst = taxableValue * taxRate / 100;
+                        totalIgst += igst;
+                    }
+                }
+                
+                const totalAmount = taxableValue + cgst + sgst + igst;
+            
+                doc.font('Helvetica')
+                   .fontSize(8)
+                   .text(`${index + 1}`, leftColumnX, currentY);
+                
+                doc.font('Tamil')
+                   .text(productName, leftColumnX + 35, currentY, { width: 140 });
+                
+                doc.font('Helvetica')
+                    .text(item.HSN_Code, leftColumnX + 180, currentY)  
+                   .text(qty.toFixed(2), leftColumnX + 250, currentY)
+                   .text(unit, leftColumnX + 290, currentY)
+                   .text(`₹${rate.toFixed(2)}`, leftColumnX + 330, currentY)
+                   .text(`₹${totalAmount.toFixed(2)}`, leftColumnX + 420, currentY);
+                
+                currentY += 20;
+                
+                // Add new page if needed
+                if (currentY > 680) {
+                    doc.addPage();
+                    currentY = 50;
+                    
+                    doc.moveTo(leftColumnX, currentY)
+                       .lineTo(550, currentY)
+                       .stroke();
+                    
+                    doc.fontSize(9)
+                       .font('Helvetica-Bold')
+                       .text('S.No', leftColumnX, currentY + 10)
+                       .text('Item', leftColumnX + 35, currentY + 10)
+                       .text('HSN/SAC', leftColumnX + 180, currentY + 10)
+                       .text('Qty', leftColumnX + 250, currentY + 10)
+                       .text('Unit', leftColumnX + 290, currentY + 10)
+                       .text('Rate', leftColumnX + 330, currentY + 10)
+                       .text('Amount', leftColumnX + 420, currentY + 10);
+                    
+                    currentY += 30;
+                }
+            });
+        }
+
+        // Table Footer Line
+        doc.moveTo(leftColumnX, currentY)
+           .lineTo(550, currentY)
+           .stroke();
+
+        currentY += 20;
+
+        // Calculate Totals
+        const roundOff = Number(deliveryOrder.Round_off) || 0;
+        const grandTotal = subtotal + totalCgst + totalSgst + totalIgst + roundOff;
+
+        // Totals Section
+        const totalsX = 380;
+        const totalsValueX = 480;
+
+        doc.fontSize(9)
+           .font('Helvetica')
+           .text('Taxable Value:', totalsX, currentY)
+           .text(`₹${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+
+        currentY += 18;
+
+        if (totalCgst > 0) {
+            const cgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
+            doc.text(`CGST @ ${cgstRate.toFixed(2)}%:`, totalsX, currentY)
+               .text(`₹${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+            currentY += 18;
+        }
+
+        if (totalSgst > 0) {
+            const sgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
+            doc.text(`SGST @ ${sgstRate.toFixed(2)}%:`, totalsX, currentY)
+               .text(`₹${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+            currentY += 18;
+        }
+
+        if (totalIgst > 0) {
+            const igstRate = stockDetails[0]?.Gst_percentage || 18;
+            doc.text(`IGST @ ${igstRate.toFixed(2)}%:`, totalsX, currentY)
+               .text(`₹${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+            currentY += 18;
+        }
+
+        if (roundOff !== 0) {
+            doc.text('Round Off:', totalsX, currentY)
+               .text(`₹${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+            currentY += 18;
+        }
+
+        // Grand Total Line
+        doc.moveTo(totalsX - 10, currentY)
+           .lineTo(totalsValueX + 70, currentY)
+           .stroke();
+
+        currentY += 10;
+
+        doc.fontSize(11)
+           .font('Helvetica-Bold')
+           .text('GRAND TOTAL:', totalsX, currentY)
+           .text(`₹${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+
+        currentY += 25;
+
+
+
+ 
+
+        if (!shouldDownload) {
+            const buttonY = currentY + 100;
+            const buttonX = 200;
+            const buttonWidth = 200;
+            const buttonHeight = 30;
+
+      
+            doc.save();
+            doc.roundedRect(buttonX, buttonY, buttonWidth, buttonHeight, 5)
+               .fillAndStroke('#007bff', '#0056b3');
+            doc.restore();
+
+         
+            doc.fillColor('#ffffff')
+               .fontSize(11)
+               .font('Helvetica-Bold')
+               .text('⬇ DOWNLOAD INVOICE', buttonX + 20, buttonY + 9, {
+                   width: buttonWidth - 20,
+                   align: 'center'
+               });
+
+           
+            doc.fillColor('#000000');
+
+ 
+            const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${Do_Inv_No}&download=true`;
+            doc.link(buttonX, buttonY, buttonWidth, buttonHeight, downloadUrl);
+
+            // Helper text
+            doc.fontSize(7)
+               .font('Helvetica')
+               .fillColor('#666666')
+               .text('Click the button above to download this invoice', 50, buttonY + 38, {
+                   width: 500,
+                   align: 'center'
+               });
+
+            doc.fillColor('#000000');
+        }
+
+    
+        doc.end();
+
+      
+
+        if (shouldDownload) {
+            await new Promise((resolve) => {
+                doc.on('end', resolve);
+            });
+
+            const stats = fsSync.statSync(filePath);
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
+            res.setHeader('Content-Length', stats.size);
+
+            fsSync.createReadStream(filePath).pipe(res);
+        }
+
     } catch (error) {
-        console.error('Error in downloadGeneratedPdf:', error);
-        console.error('Error stack:', error.stack);
-        
+        console.error('PDF Generation Error:', error);
         if (!res.headersSent) {
             return servError(error, res);
         }
