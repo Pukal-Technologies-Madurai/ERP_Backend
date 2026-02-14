@@ -31,6 +31,8 @@ inventoryRouter.post('/tripSheet', tripmaster.createTripDetails);
 inventoryRouter.put('/tripSheet', tripmaster.updateTripDetails);
 
 inventoryRouter.get('/tripSheet/arrivalEntry', arrivalMaster.getArrivalEntry);
+inventoryRouter.get('/tripSheet/arrivalEntry/filters', arrivalMaster.getArrivalFilters);
+inventoryRouter.post('/tripSheet/arrivalEntry/bulk', arrivalMaster.addBulkArrivalEntry);
 inventoryRouter.post('/tripSheet/arrivalEntry', arrivalMaster.addArrivalEntry);
 inventoryRouter.put('/tripSheet/arrivalEntry', arrivalMaster.editArrivalEntry);
 // inventoryRouter.put('/tripSheet/arrivalList', tripmaster.addArrivalDetails);

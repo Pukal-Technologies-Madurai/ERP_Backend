@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { servError, sentData, noData, dataFound, invalidInput } from '../../res.mjs'
-import { Addition, Division, groupData, isEqualNumber, ISOString, isValidNumber, Multiplication, toArray } from '../../helper_functions.mjs';
+import { Addition, Division, groupData, isEqualNumber, ISOString, isValidNumber, Multiplication, toArray, toNumber } from '../../helper_functions.mjs';
 
 
 const getStorageStockItemWise = async (req, res) => {
@@ -102,11 +102,12 @@ const getStorageStockGodownWise = async (req, res) => {
         const
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+        const Godown_Id = toNumber(req.query.Godown_Id)
 
         const request = new sql.Request()
             .input('Fromdate', Fromdate)
             .input('Todate', Todate)
-            .input('Godown_Id', 0)
+            .input('Godown_Id', Godown_Id)
             .input('Item_Id', 0)
             .execute('Stock_Summarry_Search_Godown_New');
 
