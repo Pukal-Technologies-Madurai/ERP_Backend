@@ -72,40 +72,32 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 SELECT Cost_Category_Id, Cost_Category
                 FROM tbl_ERP_Cost_Category
                 ORDER BY Cost_Category;
-                
-           SELECT 
-    sdsi.Do_Date,
-    sdsi.Delivery_Order_Id,
-
-    COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
-    COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
-
-    -- Calculated Alt_Act_Qty (SAFE)
-    CASE 
-        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-        THEN 0
-        ELSE CONVERT(
-               DECIMAL(18,2),
-               COALESCE(sdsi.Bill_Qty, 0) 
-               / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-             )
-    END AS Alt_Act_Qty,
-
-    -- Unit value (numeric)
-    TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
-
-    COALESCE(p.Product_Rate, 0) AS itemRate,
-    COALESCE(sdsi.Item_Rate, 0) AS billedRate
-
-FROM tbl_Sales_Delivery_Stock_Info sdsi
-LEFT JOIN tbl_Product_Master AS p
-    ON p.Product_Id = sdsi.Item_Id
-LEFT JOIN tbl_Pack_Master AS pck
-    ON pck.Pack_Id = p.Pack_Id
-WHERE sdsi.Delivery_Order_Id IN (
-    SELECT Do_Id FROM @FilteredInvoice)`
-);
+            -- Stock Details
+                SELECT 
+                    sdsi.Do_Date,
+                    sdsi.Delivery_Order_Id,
+                    COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
+                    COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
+                    -- Calculated Alt_Act_Qty (SAFE)
+                    CASE 
+                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                        THEN 0
+                        ELSE CONVERT(
+                            DECIMAL(18,2),
+                            OALESCE(sdsi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                        )
+                    END AS Alt_Act_Qty,
+                    -- Unit value (numeric)
+                    TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
+                    COALESCE(p.Product_Rate, 0) AS itemRate,
+                    COALESCE(sdsi.Item_Rate, 0) AS billedRate
+                FROM tbl_Sales_Delivery_Stock_Info sdsi
+                LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+                ORDER BY sdsi.S_No`
+            );
 
         const result = await getSalesInvoice;
 
@@ -117,7 +109,6 @@ WHERE sdsi.Delivery_Order_Id IN (
             Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
             quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
         }));
-
 
         const invoicesWithStaffs = invoices.map(invoice => {
             const involvedStaffs = staffs.filter(stf =>
@@ -328,14 +319,15 @@ export const katchathCopyPrintOut = async (req, res) => {
 							sdsi.Act_Qty,
 							pm.Pack,
 							 CASE 
-        WHEN COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
-        THEN 0 
-        ELSE CONVERT(DECIMAL(18,2), COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0))
-    END AS quantity
+                                WHEN COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
+                                THEN 0 
+                                ELSE CONVERT(DECIMAL(18,2), COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0))
+                            END AS quantity
                 		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
 						LEFT JOIN tbl_Pack_Master as pm ON pm.Pack_Id=p.Pack_Id
                 		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
+                        ORDER BY sdsi.S_No
                 		FOR JSON PATH
                 	), '[]') AS productDetails,
                 	COALESCE((
@@ -414,7 +406,7 @@ export const invoiceCopyPrintOut = async (req, res) => {
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
                         LEFT JOIN tbl_Pack_Master AS pm ON pm.Pack_Id = p.Pack_Id
                 		WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id
-                          ORDER BY sdsi.S_No ASC  
+                        ORDER BY sdsi.S_No ASC  
                 		FOR JSON PATH
                 	), '[]') AS productDetails,
                 	COALESCE((
@@ -542,13 +534,13 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
 }
 
 
-export const PendingSalesInvoice=async(req,res)=>{
-     try {
-         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
+export const PendingSalesInvoice = async (req, res) => {
+    try {
+        const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
         // const status = req.query.staffStatus ? req.query.staffStatus : 0;
 
         const getSalesInvoice = new sql.Request()
-          .input('reqDate', sql.Date, reqDate)
+            .input('reqDate', sql.Date, reqDate)
             // .input('status', sql.Int, toNumber(status))
             .query(`
             -- filtered invoices ids temp table
@@ -557,10 +549,8 @@ export const PendingSalesInvoice=async(req,res)=>{
                 INSERT INTO @FilteredInvoice (Do_Id)
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
-              WHERE 
-                   
-                   CONVERT(DATE, Do_Date) >= @reqDate
-               
+                WHERE CONVERT(DATE, Do_Date) >= @reqDate
+            -- get data from temp table
                 SELECT 
                     gen.Do_Id,
                     gen.Do_Inv_No,
@@ -568,7 +558,7 @@ export const PendingSalesInvoice=async(req,res)=>{
                     vt.Voucher_Type AS voucherTypeGet,
                     gen.Do_Date,
                     gen.Retailer_Id,
-                       s.Status AS Delivery_Status, 
+                    s.Status AS Delivery_Status, 
                     s.Status_Id AS Delivery_Status_Id,
                     CASE  
                         WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
@@ -589,7 +579,7 @@ export const PendingSalesInvoice=async(req,res)=>{
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
                 LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
-               WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice) and gen.Delivery_Status IN (5,6,1,2)
+                WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice) and gen.Delivery_Status IN (5,6,1,2)
                 ORDER BY Do_Id;
             -- involved staffs
                 SELECT 
@@ -611,40 +601,32 @@ export const PendingSalesInvoice=async(req,res)=>{
                 SELECT Cost_Category_Id, Cost_Category
                 FROM tbl_ERP_Cost_Category
                 ORDER BY Cost_Category;
-                
-           SELECT 
-    sdsi.Do_Date,
-    sdsi.Delivery_Order_Id,
-
-    COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
-    COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
-
-    -- Calculated Alt_Act_Qty (SAFE)
-    CASE 
-        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-        THEN 0
-        ELSE CONVERT(
-               DECIMAL(18,2),
-               COALESCE(sdsi.Bill_Qty, 0) 
-               / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-             )
-    END AS Alt_Act_Qty,
-
-    -- Unit value (numeric)
-    TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
-
-    COALESCE(p.Product_Rate, 0) AS itemRate,
-    COALESCE(sdsi.Item_Rate, 0) AS billedRate
-
-FROM tbl_Sales_Delivery_Stock_Info sdsi
-LEFT JOIN tbl_Product_Master AS p
-    ON p.Product_Id = sdsi.Item_Id
-LEFT JOIN tbl_Pack_Master AS pck
-    ON pck.Pack_Id = p.Pack_Id
-WHERE sdsi.Delivery_Order_Id IN (
-    SELECT Do_Id FROM @FilteredInvoice)`
-);
+                SELECT 
+                    sdsi.Do_Date,
+                    sdsi.Delivery_Order_Id,
+                    COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
+                    COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
+                    -- Calculated Alt_Act_Qty (SAFE)
+                    CASE 
+                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                            OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                        THEN 0
+                        ELSE CONVERT(
+                            DECIMAL(18,2),
+                            COALESCE(sdsi.Bill_Qty, 0) 
+                            / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                        )
+                    END AS Alt_Act_Qty,
+            -- Unit value (numeric)
+                TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
+                COALESCE(p.Product_Rate, 0) AS itemRate,
+                COALESCE(sdsi.Item_Rate, 0) AS billedRate
+            FROM tbl_Sales_Delivery_Stock_Info sdsi
+            LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+            LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+            WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+            ORDER BY sdsi.S_No`
+            );
 
         const result = await getSalesInvoice;
 
@@ -721,7 +703,7 @@ export const deliverySlipPrintOut = async (req, res) => {
                 	sda.cityName mailingCity,
                 	sda.phoneNumber mailingNumber,
                 	COALESCE((
-                	SELECT 
+                	    SELECT 
 					     	p.Product_Rate,
                             p.Short_Name,
                             sdsi.Item_Rate,
@@ -731,12 +713,12 @@ export const deliverySlipPrintOut = async (req, res) => {
                 			sdsi.Alt_Act_Qty,
                             sdsi.Bill_Qty,
                             sdsi.Act_Qty,
-						pm.Pack,
+						    pm.Pack,
                         	 CASE 
-        WHEN COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
-        THEN 0 
-        ELSE CONVERT(DECIMAL(18,2), COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0))
-    END AS quantity
+                                WHEN COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0) IS NULL
+                                THEN 0 
+                                ELSE CONVERT(DECIMAL(18,2), COALESCE(sdsi.Act_Qty, 0) / NULLIF(COALESCE(TRY_CAST(pm.Pack AS DECIMAL(18,2)), 0), 0))
+                            END AS quantity
                 		FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 		LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
 						LEFT JOIN tbl_Pack_Master As pm ON pm.Pack_Id=p.Pack_Id
@@ -792,21 +774,18 @@ export const salesInvoicePaper = async (req, res) => {
                 	COALESCE(r.Retailer_Name, '-') AS retailerGet,
                 	sdgi.Do_Inv_No voucherNumber,
                     sdgi.Created_on,
-                     COALESCE(tm.Trip_No, '') AS tripNumber,
-                   COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
-                   COALESCE(tm.Trip_Date, '') AS tripDate
+                    COALESCE(tm.Trip_No, '') AS tripNumber,
+                    COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
+                    COALESCE(tm.Trip_Date, '') AS tripDate
                 FROM tbl_Sales_Delivery_Gen_Info AS sdgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
-                 LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
-               
+                LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
                 LEFT JOIN tbl_Trip_mASTER AS tm ON tm.Trip_Id = td.Trip_Id
                 WHERE 
                     sdgi.Do_Date = @reqDate 
                     AND sdgi.Cancel_status <> 0
                 ORDER BY v.Voucher_Type, sdgi.Created_on
-
-
             -- SALES STOCK INFO
                 SELECT
                 	sdgi.Do_Id AS invId,
@@ -818,17 +797,17 @@ export const salesInvoicePaper = async (req, res) => {
                 	COALESCE(pck.Pack, '0') AS unitValue,
                 	COALESCE(p.Product_Rate, 0) AS itemRate,
                 	COALESCE(sdsi.Item_Rate, 0) AS billedRate
-                   --   COALESCE(tm.Trip_No, '') AS tripNumber,
-                    --COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
-                  --  COALESCE(tm.Trip_Date, '') AS tripDate
+                --  COALESCE(tm.Trip_No, '') AS tripNumber,
+                --  COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
+                --  COALESCE(tm.Trip_Date, '') AS tripDate
                 FROM tbl_Sales_Delivery_Stock_Info AS sdsi
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
                 LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
                 JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON sdgi.Do_Id = sdsi.Delivery_Order_Id
-             --    LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
-               
-             --   LEFT JOIN tbl_Trip_mASTER AS tm ON tm.Trip_Id = td.Trip_Id
-                WHERE sdgi.Do_Date = @reqDate AND sdgi.Cancel_status <> 0;
+             -- LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
+             -- LEFT JOIN tbl_Trip_mASTER AS tm ON tm.Trip_Id = td.Trip_Id
+                WHERE sdgi.Do_Date = @reqDate AND sdgi.Cancel_status <> 0
+                ORDER BY sdsi.S_No ASC;
             -- SALES STAFF DETAILS
                 SELECT 
                 	sdgi.Do_Id AS invId,
