@@ -252,6 +252,7 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
         servError(e, res);
     }
 }
+
 export const multipleSalesInvoiceStaffDelete = async (req, res) => {
     const transaction = new sql.Transaction();
     try {
@@ -474,7 +475,7 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
                 	sda.cityName mailingCity,
                 	sda.phoneNumber mailingNumber,
                 	COALESCE((
-                	SELECT 
+                	    SELECT 
 					     	p.Product_Rate,
                             p.Short_Name,
                             sdsi.Item_Rate,
@@ -532,7 +533,6 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
         }
     }
 }
-
 
 export const PendingSalesInvoice = async (req, res) => {
     try {
@@ -709,23 +709,6 @@ export const PendingSalesInvoice = async (req, res) => {
         servError(e, res);
     }
 };
-
-
-// export const deliverySlipPrintOut = async (req, res) => {
-//     try {
-//         const { Do_Id } = req.query;
-
-//         if (!checkIsNumber(Do_Id)) return invalidInput(res, 'Do_Id is required');
-
-//         const salesDetails = await getSalesInvoiceDetails(Do_Id);
-
-//         if (!salesDetails.success) return failed(res);
-
-//         sentData(res, salesDetails);
-//     } catch (e) {
-//         servError(e, res);
-//     }
-// }
 
 export const deliverySlipPrintOut = async (req, res) => {
     try {
