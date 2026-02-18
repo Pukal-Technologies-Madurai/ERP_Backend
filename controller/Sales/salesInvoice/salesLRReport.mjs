@@ -537,20 +537,12 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
 export const PendingSalesInvoice = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-        // const status = req.query.staffStatus ? req.query.staffStatus : 0;
-
-        const getSalesInvoice = new sql.Request()
-            .input('reqDate', sql.Date, reqDate)
-            // .input('status', sql.Int, toNumber(status))
-            .query(`
-            -- filtered invoices ids temp table
-                DECLARE @FilteredInvoice TABLE (Do_Id BIGINT);
-            -- inserting data to temp table
-                INSERT INTO @FilteredInvoice (Do_Id)
-                SELECT Do_Id
-                FROM tbl_Sales_Delivery_Gen_Info
-                WHERE CONVERT(DATE, Do_Date) >= @reqDate
-            -- get data from temp table
+        const request = new sql.Request();
+        request.input('reqDate', sql.Date, reqDate);
+        
+        const [invoicesResult, staffResult, stockResult, costTypesResult, uniqueStaffResult] = await Promise.all([
+         
+            request.query(`
                 SELECT 
                     gen.Do_Id,
                     gen.Do_Inv_No,
@@ -570,101 +562,154 @@ export const PendingSalesInvoice = async (req, res) => {
                     gen.Cancel_status,
                     gen.Created_by,
                     gen.Created_on,
-                 -- gen.Delivery_Status,
                     ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
                     CONVERT(DATETIME, gen.Created_on) AS createdOn,
                     gen.Narration
-                FROM tbl_Sales_Delivery_Gen_Info AS gen
-                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
-                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
-                LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
-                LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
-                WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice) and gen.Delivery_Status IN (5,6,1,2)
-                ORDER BY Do_Id;
-            -- involved staffs
+                FROM tbl_Sales_Delivery_Gen_Info AS gen WITH (NOLOCK)
+                LEFT JOIN tbl_Voucher_Type AS vt WITH (NOLOCK) ON vt.Vocher_Type_Id = gen.Voucher_Type
+                LEFT JOIN tbl_Retailers_Master AS r WITH (NOLOCK) ON r.Retailer_Id = gen.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS b WITH (NOLOCK) ON b.BranchId = gen.Branch_Id
+                LEFT JOIN tbl_Status AS s WITH (NOLOCK) ON s.Status_Id = gen.Delivery_Status
+                WHERE 
+                    gen.Do_Date >= @reqDate
+                    AND gen.Delivery_Status IN (1,2,5,6)
+                ORDER BY gen.Do_Id;
+            `),
+            
+   
+            request.query(`
                 SELECT 
                     stf.*,
                     e.Cost_Center_Name AS Emp_Name,
                     cc.Cost_Category AS Involved_Emp_Type
-                FROM tbl_Sales_Delivery_Staff_Info AS stf
-                LEFT JOIN tbl_ERP_Cost_Center AS e
+                FROM tbl_Sales_Delivery_Staff_Info stf WITH (NOLOCK)
+                INNER JOIN tbl_Sales_Delivery_Gen_Info gen WITH (NOLOCK) 
+                    ON gen.Do_Id = stf.Do_Id 
+                    AND gen.Do_Date >= @reqDate
+                    AND gen.Delivery_Status IN (1,2,5,6)
+                LEFT JOIN tbl_ERP_Cost_Center e WITH (NOLOCK) 
                     ON e.Cost_Center_Id = stf.Emp_Id
-                LEFT JOIN tbl_ERP_Cost_Category AS cc
+                LEFT JOIN tbl_ERP_Cost_Category cc WITH (NOLOCK) 
                     ON cc.Cost_Category_Id = stf.Emp_Type_Id
-                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
                 ORDER BY stf.Do_Id;
-            -- Unique Cost Category IDs
-                SELECT DISTINCT Emp_Type_Id
-                FROM tbl_Sales_Delivery_Staff_Info
-                WHERE Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
-            -- Cost Types
-                SELECT Cost_Category_Id, Cost_Category
-                FROM tbl_ERP_Cost_Category
-                ORDER BY Cost_Category;
+            `),
+            
+ 
+            request.query(`
                 SELECT 
                     sdsi.Do_Date,
                     sdsi.Delivery_Order_Id,
-                    COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
-                    COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
-                    -- Calculated Alt_Act_Qty (SAFE)
-                    CASE 
-                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-                            OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-                        THEN 0
-                        ELSE CONVERT(
-                            DECIMAL(18,2),
-                            COALESCE(sdsi.Bill_Qty, 0) 
-                            / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-                        )
-                    END AS Alt_Act_Qty,
-            -- Unit value (numeric)
-                TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
-                COALESCE(p.Product_Rate, 0) AS itemRate,
-                COALESCE(sdsi.Item_Rate, 0) AS billedRate
-            FROM tbl_Sales_Delivery_Stock_Info sdsi
-            LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
-            LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
-            WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
-            ORDER BY sdsi.S_No`
-            );
+                    ISNULL(sdsi.Bill_Qty, 0) AS Bill_Qty,
+                    ISNULL(sdsi.Act_Qty, 0) AS Act_Qty,
+                    pck.Pack AS unitValue,
+                    ISNULL(p.Product_Rate, 0) AS itemRate,
+                    ISNULL(sdsi.Item_Rate, 0) AS billedRate
+                FROM tbl_Sales_Delivery_Stock_Info sdsi WITH (NOLOCK)
+                INNER JOIN tbl_Sales_Delivery_Gen_Info gen WITH (NOLOCK) 
+                    ON gen.Do_Id = sdsi.Delivery_Order_Id 
+                    AND gen.Do_Date >= @reqDate
+                    AND gen.Delivery_Status IN (1,2,5,6)
+                LEFT JOIN tbl_Product_Master p WITH (NOLOCK) 
+                    ON p.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_Pack_Master pck WITH (NOLOCK) 
+                    ON pck.Pack_Id = p.Pack_Id
+                ORDER BY sdsi.S_No;
+            `),
+            
 
-        const result = await getSalesInvoice;
+            request.query(`
+                SELECT Cost_Category_Id, Cost_Category
+                FROM tbl_ERP_Cost_Category WITH (NOLOCK)
+                ORDER BY Cost_Category;
+            `),
+            
+  
+            request.query(`
+                SELECT DISTINCT stf.Emp_Type_Id
+                FROM tbl_Sales_Delivery_Staff_Info stf WITH (NOLOCK)
+                INNER JOIN tbl_Sales_Delivery_Gen_Info gen WITH (NOLOCK) 
+                    ON gen.Do_Id = stf.Do_Id 
+                    AND gen.Do_Date >= @reqDate
+                    AND gen.Delivery_Status IN (1,2,5,6)
+                WHERE stf.Emp_Type_Id IS NOT NULL;
+            `)
+        ]);
 
-        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [], stockDetails = []] = result.recordsets;
+ 
+        const invoices = invoicesResult.recordset;
+        const staffs = staffResult.recordset;
+        const stockDetails = stockResult.recordset;
+        const costTypes = costTypesResult.recordset;
+        const uniqueStaffs = uniqueStaffResult.recordset;
 
-        const calculatedStockDetails = stockDetails.map(stock => ({
-            ...stock,
+  
+        const Division = (a, b) => {
+            if (!b || b === 0) return 0;
+            return Number(((a || 0) / b).toFixed(2));
+        };
 
+        const Subtraction = (a, b) => {
+            return Number(((a || 0) - (b || 0)).toFixed(2));
+        };
+
+   
+        const processedStockDetails = stockDetails.map(stock => ({
+            Do_Date: stock.Do_Date,
+            Delivery_Order_Id: stock.Delivery_Order_Id,
+            Bill_Qty: stock.Bill_Qty,
+            Act_Qty: stock.Act_Qty,
+            unitValue: stock.unitValue,
+            itemRate: stock.itemRate,
+            billedRate: stock.billedRate,
             Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
-            quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
+            quantityDifference: Subtraction(stock.Bill_Qty, stock.Act_Qty)
         }));
 
-
-        const invoicesWithStaffs = invoices.map(invoice => {
-            const involvedStaffs = staffs.filter(stf =>
-                isEqualNumber(stf.Do_Id, invoice.Do_Id)
-            );
-
-            const invoiceStockDetails = calculatedStockDetails.filter(stk =>
-                isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
-            );
-
-            return {
-                ...invoice,
-                involvedStaffs,
-                stockDetails: invoiceStockDetails
-            };
+   
+        const staffMap = new Map();
+        staffs.forEach(staff => {
+            const doId = staff.Do_Id;
+            if (!staffMap.has(doId)) {
+                staffMap.set(doId, []);
+            }
+            staffMap.get(doId).push(staff);
         });
 
-        sentData(res, invoicesWithStaffs, {
-            costTypes: toArray(costTypes),
-            uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
+        const stockMap = new Map();
+        processedStockDetails.forEach(stock => {
+            const doId = stock.Delivery_Order_Id;
+            if (!stockMap.has(doId)) {
+                stockMap.set(doId, []);
+            }
+            stockMap.get(doId).push(stock);
+        });
+
+        const invoicesWithDetails = invoices.map(invoice => ({
+            ...invoice,
+            involvedStaffs: staffMap.get(invoice.Do_Id) || [],
+            stockDetails: stockMap.get(invoice.Do_Id) || []
+        }));
+
+       
+        const responseData = {
+            data: invoicesWithDetails,
+            options: {
+                costTypes: costTypes,
+                uniqeInvolvedStaffs: uniqueStaffs.map(item => item.Emp_Type_Id)
+            }
+        };
+
+      
+        sentData(res, invoicesWithDetails, {
+            costTypes: costTypes,
+            uniqeInvolvedStaffs: uniqueStaffs.map(i => i.Emp_Type_Id)
         });
 
     } catch (e) {
         servError(e, res);
     }
-}
+};
+
 
 // export const deliverySlipPrintOut = async (req, res) => {
 //     try {
