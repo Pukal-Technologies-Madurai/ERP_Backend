@@ -2463,6 +2463,8 @@ const getSalesOrderInvoice = async (req, res) => {
 //     }
 // }
 
+
+
 const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
     try {
          const invoiceId = req.params.invoiceId || req.body.invoiceId;
@@ -2737,11 +2739,7 @@ const downloadGeneratedPdf = async (req, res) => {
         }
 
         const shouldDownload = download === "true";
-
-        const decodedInvoiceNo = Buffer
-            .from(Do_Inv_No, "base64")
-            .toString("utf-8");
-
+        const decodedInvoiceNo = Buffer.from(Do_Inv_No, "base64").toString("utf-8");
         const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, "/").trim();
         const companyId = process.env.COMPANY;
 
@@ -2752,30 +2750,18 @@ const downloadGeneratedPdf = async (req, res) => {
         const filePath = path.join(uploadDir, pdfFileName);
 
 
-
-
-        
-        if (shouldDownload && fsSync.existsSync(filePath)) {
-            const stats = fsSync.statSync(filePath);
-            res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `attachment; filename="${pdfFileName}"`);
-            res.setHeader("Content-Length", stats.size);
-            return fsSync.createReadStream(filePath).pipe(res);
-        }
-
         if (!fsSync.existsSync(uploadDir)) {
             fsSync.mkdirSync(uploadDir, { recursive: true });
         }
 
-        
-
+       
         const deliveryOrderRequest = await new sql.Request()
             .input("Do_Inv_No", sql.NVarChar, formattedInvoiceNo)
             .query(`
-              	SELECT sdgi.*,rm.Retailer_Name,lol.*
-                 FROM tbl_Sales_Delivery_Gen_Info sdgi
- 				left join tbl_Retailers_Master rm ON rm.Retailer_Id=sdgi.Retailer_Id
-				left join tbl_Ledger_LOL lol ON lol.Ret_Id=sdgi.Retailer_Id
+                SELECT sdgi.*, rm.Retailer_Name, lol.*
+                FROM tbl_Sales_Delivery_Gen_Info sdgi
+                LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = sdgi.Retailer_Id
                 WHERE sdgi.Do_Inv_No = @Do_Inv_No 
             `);
 
@@ -2785,18 +2771,19 @@ const downloadGeneratedPdf = async (req, res) => {
 
         const deliveryOrder = deliveryOrderRequest.recordset[0];
 
+    
         const stockRequest = await new sql.Request()
             .input("Delivery_Order_Id", sql.Int, deliveryOrder.Do_Id)
             .query(`
                 SELECT sdsi.*, pm.Product_Name, u.Units
                 FROM tbl_Sales_Delivery_Stock_Info sdsi
-                LEFT JOIN tbl_Product_Master pm 
-                ON pm.Product_Id = sdsi.Item_Id
-                LEFT JOIN tbl_UOM u ON u.Unit_Id=sdsi.Unit_Id
+                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = sdsi.Item_Id
+                LEFT JOIN tbl_UOM u ON u.Unit_Id = sdsi.Unit_Id
                 WHERE sdsi.Delivery_Order_Id = @Delivery_Order_Id
             `);
 
         const stockDetails = stockRequest.recordset || [];
+
 
         const companyRequest = await new sql.Request()
             .input("CompanyId", sql.Int, companyId)
@@ -2808,8 +2795,7 @@ const downloadGeneratedPdf = async (req, res) => {
 
         const companyDetails = companyRequest.recordset[0] || {};
 
-      
-
+        
         const doc = new PDFDocument({
             margin: 50,
             size: 'A4',
@@ -2824,7 +2810,7 @@ const downloadGeneratedPdf = async (req, res) => {
             }
         });
 
-      
+        // Font registration
         const possibleTamilFonts = [
             path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
             path.join(__dirname, '..', 'fonts', 'latha.ttf'),
@@ -2884,21 +2870,31 @@ const downloadGeneratedPdf = async (req, res) => {
             doc.registerFont('Tamil-Bold', tamilFontRegistered ? 'Tamil' : 'Helvetica-Bold');
         }
 
-        
+ 
         if (!shouldDownload) {
+           
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader("Content-Disposition", `inline; filename="${pdfFileName}"`);
             doc.pipe(res);
         } else {
-            const writeStream = fsSync.createWriteStream(filePath);
-            writeStream.on('error', (err) => {
-                console.error('Write stream error:', err);
+            
+            const writePromise = new Promise((resolve, reject) => {
+                const writeStream = fsSync.createWriteStream(filePath);
+                
+                writeStream.on('error', (err) => {
+                    console.error('Write stream error:', err);
+                    reject(err);
+                });
+                
+                writeStream.on('finish', () => {
+                    console.log('File written successfully:', filePath);
+                    resolve();
+                });
+                
+                doc.pipe(writeStream);
             });
-            doc.pipe(writeStream);
         }
 
-
-        // Company Header
         doc.fontSize(24)
            .font('Helvetica-Bold')
            .text(companyDetails.Company_Name || '', { align: 'center' });
@@ -2918,7 +2914,6 @@ const downloadGeneratedPdf = async (req, res) => {
 
         doc.moveDown();
 
-        // Invoice Title
         doc.fontSize(20)
            .font('Helvetica-Bold')
            .text('SALES INVOICE', { align: 'center' });
@@ -2929,7 +2924,6 @@ const downloadGeneratedPdf = async (req, res) => {
         const rightColumnX = 300;
         let currentY = doc.y;
 
-        // Bill To Section
         doc.fontSize(11)
            .font('Helvetica-Bold')
            .text('BILL TO:', leftColumnX, currentY);
@@ -2947,18 +2941,16 @@ const downloadGeneratedPdf = async (req, res) => {
         doc.font('Helvetica')
            .text(`Phone: ${deliveryOrder.Retailer_Mobile || 'N/A'}`, leftColumnX, currentY + 85);
 
-        // Invoice Details Section
         doc.font('Helvetica-Bold')
            .text('INVOICE DETAILS:', rightColumnX, currentY);
 
         doc.font('Helvetica')
            .text(`Invoice No: ${deliveryOrder.Do_Inv_No}`, rightColumnX, currentY + 20)
            .text(`Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
-           .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 50)
+           .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 50);
 
         currentY += 120;
 
-        // Table Header
         doc.moveTo(leftColumnX, currentY)
            .lineTo(550, currentY)
            .stroke();
@@ -2975,7 +2967,6 @@ const downloadGeneratedPdf = async (req, res) => {
 
         currentY += 30;
 
-        // Table Content
         let subtotal = 0;
         let totalCgst = 0;
         let totalSgst = 0;
@@ -3022,16 +3013,15 @@ const downloadGeneratedPdf = async (req, res) => {
                    .text(productName, leftColumnX + 35, currentY, { width: 140 });
                 
                 doc.font('Helvetica')
-                    .text(item.HSN_Code, leftColumnX + 180, currentY)  
+                   .text(item.HSN_Code || '-', leftColumnX + 180, currentY)  
                    .text(qty.toFixed(2), leftColumnX + 250, currentY)
                    .text(unit, leftColumnX + 290, currentY)
-                   .text(`₹${rate.toFixed(2)}`, leftColumnX + 330, currentY)
-                   .text(`₹${totalAmount.toFixed(2)}`, leftColumnX + 420, currentY);
+                   .text(`${rate.toFixed(2)}`, leftColumnX + 330, currentY)
+                   .text(`${totalAmount.toFixed(2)}`, leftColumnX + 420, currentY);
                 
                 currentY += 20;
                 
-                // Add new page if needed
-                if (currentY > 680) {
+                if (currentY > 750) {
                     doc.addPage();
                     currentY = 50;
                     
@@ -3054,56 +3044,53 @@ const downloadGeneratedPdf = async (req, res) => {
             });
         }
 
-        // Table Footer Line
         doc.moveTo(leftColumnX, currentY)
            .lineTo(550, currentY)
            .stroke();
 
         currentY += 20;
 
-        // Calculate Totals
         const roundOff = Number(deliveryOrder.Round_off) || 0;
         const grandTotal = subtotal + totalCgst + totalSgst + totalIgst + roundOff;
 
-        // Totals Section
         const totalsX = 380;
         const totalsValueX = 480;
 
         doc.fontSize(9)
            .font('Helvetica')
            .text('Taxable Value:', totalsX, currentY)
-           .text(`₹${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+           .text(`${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
 
         currentY += 18;
 
         if (totalCgst > 0) {
             const cgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
             doc.text(`CGST @ ${cgstRate.toFixed(2)}%:`, totalsX, currentY)
-               .text(`₹${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+               .text(`${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
             currentY += 18;
         }
 
         if (totalSgst > 0) {
             const sgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
             doc.text(`SGST @ ${sgstRate.toFixed(2)}%:`, totalsX, currentY)
-               .text(`₹${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+               .text(`${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
             currentY += 18;
         }
 
         if (totalIgst > 0) {
             const igstRate = stockDetails[0]?.Gst_percentage || 18;
             doc.text(`IGST @ ${igstRate.toFixed(2)}%:`, totalsX, currentY)
-               .text(`₹${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+               .text(`${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
             currentY += 18;
         }
 
         if (roundOff !== 0) {
             doc.text('Round Off:', totalsX, currentY)
-               .text(`₹${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+               .text(`${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
             currentY += 18;
         }
 
-        // Grand Total Line
+    
         doc.moveTo(totalsX - 10, currentY)
            .lineTo(totalsValueX + 70, currentY)
            .stroke();
@@ -3113,27 +3100,23 @@ const downloadGeneratedPdf = async (req, res) => {
         doc.fontSize(11)
            .font('Helvetica-Bold')
            .text('GRAND TOTAL:', totalsX, currentY)
-           .text(`₹${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+           .text(`${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
 
         currentY += 25;
 
-
-
- 
-
+      
         if (!shouldDownload) {
             const buttonY = currentY + 100;
             const buttonX = 200;
             const buttonWidth = 200;
             const buttonHeight = 30;
 
-      
+            
             doc.save();
             doc.roundedRect(buttonX, buttonY, buttonWidth, buttonHeight, 5)
                .fillAndStroke('#007bff', '#0056b3');
             doc.restore();
 
-         
             doc.fillColor('#ffffff')
                .fontSize(11)
                .font('Helvetica-Bold')
@@ -3142,14 +3125,12 @@ const downloadGeneratedPdf = async (req, res) => {
                    align: 'center'
                });
 
-           
+    
             doc.fillColor('#000000');
-
- 
+            
             const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${Do_Inv_No}&download=true`;
             doc.link(buttonX, buttonY, buttonWidth, buttonHeight, downloadUrl);
 
-            // Helper text
             doc.fontSize(7)
                .font('Helvetica')
                .fillColor('#666666')
@@ -3161,23 +3142,59 @@ const downloadGeneratedPdf = async (req, res) => {
             doc.fillColor('#000000');
         }
 
-    
+
         doc.end();
 
-      
-
+    
         if (shouldDownload) {
-            await new Promise((resolve) => {
-                doc.on('end', resolve);
+          
+            await new Promise((resolve, reject) => {
+                const checkFileInterval = setInterval(() => {
+                    if (fsSync.existsSync(filePath)) {
+                        const stats = fsSync.statSync(filePath);
+                        if (stats.size > 0) {
+                            clearInterval(checkFileInterval);
+                            resolve();
+                        }
+                    }
+                }, 100);
+
+               
+                setTimeout(() => {
+                    clearInterval(checkFileInterval);
+                    reject(new Error('Timeout waiting for PDF generation'));
+                }, 10000);
             });
 
-            const stats = fsSync.statSync(filePath);
-
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
-            res.setHeader('Content-Length', stats.size);
-
-            fsSync.createReadStream(filePath).pipe(res);
+        
+            if (fsSync.existsSync(filePath)) {
+                const stats = fsSync.statSync(filePath);
+                
+                if (stats.size === 0) {
+                    console.error('Generated PDF file is empty');
+                    return servError(new Error('Generated PDF is empty'), res);
+                }
+                
+      
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
+                res.setHeader('Content-Length', stats.size);
+                
+             
+                const readStream = fsSync.createReadStream(filePath);
+                
+                readStream.on('error', (err) => {
+                    console.error('Error reading file:', err);
+                    if (!res.headersSent) {
+                        return servError(err, res);
+                    }
+                });
+                
+                readStream.pipe(res);
+            } else {
+                console.error('File not found after generation:', filePath);
+                return servError(new Error('File not found after generation'), res);
+            }
         }
 
     } catch (error) {
