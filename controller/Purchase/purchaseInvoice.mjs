@@ -106,8 +106,6 @@ const PurchaseOrder = () => {
             QualityCondition = '', PaymentDays = 0, Expence_Array = []
         } = req.body;
 
-        console.log(Expence_Array, "Expence_Array")
-
         const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();
         const Po_Entry_Date = req?.body?.Po_Entry_Date ? ISOString(req?.body?.Po_Entry_Date) : ISOString();
         const isInclusive = isEqualNumber(GST_Inclusive, 1);
