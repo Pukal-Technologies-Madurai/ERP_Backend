@@ -2729,7 +2729,6 @@ return dataFound(res, {
 };
 
 
-
 const downloadGeneratedPdf = async (req, res) => {
     try {
         const { Do_Inv_No, download } = req.query;
@@ -2749,19 +2748,33 @@ const downloadGeneratedPdf = async (req, res) => {
         const uploadDir = path.join(__dirname, "..", "uploads", String(companyId), "invoices");
         const filePath = path.join(uploadDir, pdfFileName);
 
-
         if (!fsSync.existsSync(uploadDir)) {
             fsSync.mkdirSync(uploadDir, { recursive: true });
         }
 
-       
+        // Fetch delivery order details with all necessary joins
         const deliveryOrderRequest = await new sql.Request()
             .input("Do_Inv_No", sql.NVarChar, formattedInvoiceNo)
             .query(`
-                SELECT sdgi.*, rm.Retailer_Name, lol.*
+                SELECT 
+                    sdgi.*,
+                    rm.Retailer_Name,
+                    rm.Reatailer_Address as Party_Mailing_Address,
+                    rm.Reatailer_City,
+                    rm.PinCode,
+                    rm.Gstno as GST_No,
+                    rm.Mobile_No as Retailer_Mobile,
+                    cm.Company_Name,
+                    cm.Company_Address,
+                    cm.Pincode,
+                    cm.Gst_Number,
+                    cm.VAT_TIN_Number,
+                    cm.Telephone_Number,
+                    cm.Region,
+                    cm.State as Company_State
                 FROM tbl_Sales_Delivery_Gen_Info sdgi
                 LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sdgi.Retailer_Id
-                LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = sdgi.Retailer_Id
+                CROSS JOIN tbl_Company_Master cm
                 WHERE sdgi.Do_Inv_No = @Do_Inv_No 
             `);
 
@@ -2771,11 +2784,14 @@ const downloadGeneratedPdf = async (req, res) => {
 
         const deliveryOrder = deliveryOrderRequest.recordset[0];
 
-    
+      
         const stockRequest = await new sql.Request()
             .input("Delivery_Order_Id", sql.Int, deliveryOrder.Do_Id)
             .query(`
-                SELECT sdsi.*, pm.Product_Name, u.Units
+                SELECT 
+                    sdsi.*,
+                    pm.Product_Name,
+                    u.Units
                 FROM tbl_Sales_Delivery_Stock_Info sdsi
                 LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = sdsi.Item_Id
                 LEFT JOIN tbl_UOM u ON u.Unit_Id = sdsi.Unit_Id
@@ -2784,55 +2800,26 @@ const downloadGeneratedPdf = async (req, res) => {
 
         const stockDetails = stockRequest.recordset || [];
 
-
-        const companyRequest = await new sql.Request()
-            .input("CompanyId", sql.Int, companyId)
-            .query(`
-                SELECT *
-                FROM tbl_Company_Master 
-                WHERE Company_Id = @CompanyId
-            `);
-
-        const companyDetails = companyRequest.recordset[0] || {};
-
-        
+    
         const doc = new PDFDocument({
             margin: 50,
             size: 'A4',
-            bufferPages: true,
-            autoFirstPage: true,
-            info: {
-                Title: `Invoice ${formattedInvoiceNo}`,
-                Author: companyDetails.Company_Name,
-                Subject: 'Sales Invoice',
-                Keywords: 'invoice, sales, delivery',
-                CreationDate: new Date()
-            }
+            bufferPages: true
         });
 
-        // Font registration
         const possibleTamilFonts = [
             path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
             path.join(__dirname, '..', 'fonts', 'latha.ttf'),
-            path.join(__dirname, '..', 'fonts', 'bamini.ttf'),
-            path.join(__dirname, '..', 'fonts', 'NotoSansTamilUI-Regular.ttf'),
             'C:/Windows/Fonts/latha.ttf',
-            'C:/Windows/Fonts/bamini.ttf',
-            'C:/Windows/Fonts/NotoSansTamil-Regular.ttf',
-            'C:/Windows/Fonts/Nirmala.ttf',
-            'C:/Windows/Fonts/NirmalaB.ttf',
-            'C:/Windows/Fonts/kartika.ttf'
+            'C:/Windows/Fonts/Nirmala.ttf'
         ];
 
         let tamilFontRegistered = false;
-        let tamilFontPath = 'Helvetica';
-
         for (const fontPath of possibleTamilFonts) {
             try {
                 if (fsSync.existsSync(fontPath)) {
                     doc.registerFont('Tamil', fontPath);
                     tamilFontRegistered = true;
-                    tamilFontPath = fontPath;
                     break;
                 }
             } catch (error) {
@@ -2841,115 +2828,260 @@ const downloadGeneratedPdf = async (req, res) => {
         }
 
         if (!tamilFontRegistered) {
-            console.warn('No Tamil font found, using Helvetica as fallback');
             doc.registerFont('Tamil', 'Helvetica');
         }
 
-        const possibleTamilBoldFonts = [
-            path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Bold.ttf'),
-            path.join(__dirname, '..', 'fonts', 'lathab.ttf'),
-            'C:/Windows/Fonts/lathab.ttf',
-            'C:/Windows/Fonts/NirmalaB.ttf',
-            'C:/Windows/Fonts/kartikab.ttf'
-        ];
-
-        let tamilBoldFontRegistered = false;
-        for (const fontPath of possibleTamilBoldFonts) {
-            try {
-                if (fsSync.existsSync(fontPath)) {
-                    doc.registerFont('Tamil-Bold', fontPath);
-                    tamilBoldFontRegistered = true;
-                    break;
-                }
-            } catch (error) {
-                console.error(`Failed to register bold font from ${fontPath}:`, error);
-            }
-        }
-
-        if (!tamilBoldFontRegistered) {
-            doc.registerFont('Tamil-Bold', tamilFontRegistered ? 'Tamil' : 'Helvetica-Bold');
-        }
-
- 
+        
         if (!shouldDownload) {
-           
             res.setHeader("Content-Type", "application/pdf");
             res.setHeader("Content-Disposition", `inline; filename="${pdfFileName}"`);
             doc.pipe(res);
         } else {
-            
-            const writePromise = new Promise((resolve, reject) => {
-                const writeStream = fsSync.createWriteStream(filePath);
-                
-                writeStream.on('error', (err) => {
-                    console.error('Write stream error:', err);
-                    reject(err);
-                });
-                
-                writeStream.on('finish', () => {
-                    console.log('File written successfully:', filePath);
-                    resolve();
-                });
-                
-                doc.pipe(writeStream);
-            });
+            const writeStream = fsSync.createWriteStream(filePath);
+            doc.pipe(writeStream);
         }
 
-        doc.fontSize(24)
-           .font('Helvetica-Bold')
-           .text(companyDetails.Company_Name || '', { align: 'center' });
+    
+        const NumberFormat = (num) => {
+            if (num === undefined || num === null) return '0.00';
+            return Number(num).toFixed(2);
+        };
 
-        doc.fontSize(10)
-           .font('Helvetica')
-           .text(companyDetails.Company_Address || '', { align: 'center' })
-           .text(`Phone: ${companyDetails.Telephone_Number || ''}`, { align: 'center' })
-           .text(`GSTIN: ${companyDetails.VAT_TIN_Number || ''}`, { align: 'center' });
+        const RoundNumber = (num) => {
+            return Math.round(num * 100) / 100;
+        };
 
-        doc.moveDown();
-        doc.lineCap('butt')
-           .lineWidth(2)
-           .moveTo(50, doc.y)
-           .lineTo(550, doc.y)
-           .stroke();
+        const Addition = (a, b) => {
+            return (Number(a) || 0) + (Number(b) || 0);
+        };
 
-        doc.moveDown();
+        const Subraction = (a, b) => {
+            return (Number(a) || 0) - (Number(b) || 0);
+        };
 
-        doc.fontSize(20)
+        const Multiplication = (a, b) => {
+            return (Number(a) || 0) * (Number(b) || 0);
+        };
+
+        const isEqualNumber = (a, b) => {
+            return Number(a) === Number(b);
+        };
+
+        const isGraterNumber = (a, b) => {
+            return Number(a) > Number(b);
+        };
+
+        const LocalDate = (date) => {
+            if (!date) return '';
+            const d = new Date(date);
+            return d.toLocaleDateString('en-GB');
+        };
+
+        const taxCalc = (method = 1, amount = 0, percentage = 0) => {
+            switch (method) {
+                case 0: 
+                    return RoundNumber(amount * (percentage / 100));
+                case 1: 
+                    return RoundNumber(amount - (amount * (100 / (100 + percentage))));
+                case 2: 
+                    return 0;
+                default:
+                    return 0;
+            }
+        };
+
+        const isExclusiveBill = isEqualNumber(deliveryOrder.GST_Inclusive, 0);
+        const isInclusive = isEqualNumber(deliveryOrder.GST_Inclusive, 1);
+        const isNotTaxableBill = isEqualNumber(deliveryOrder.GST_Inclusive, 2);
+        const IS_IGST = isEqualNumber(deliveryOrder.IS_IGST, 1);
+
+        const includedProducts = stockDetails.filter(item => isGraterNumber(item?.Bill_Qty, 0));
+
+        let totalValueBeforeTax = { TotalValue: 0, TotalTax: 0 };
+
+        includedProducts.forEach(item => {
+            const itemRate = RoundNumber(item?.Item_Rate);
+            const billQty = parseInt(item?.Bill_Qty) || 0;
+
+            if (isNotTaxableBill) {
+                totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, itemRate));
+                return;
+            }
+
+            const gstPercentage = IS_IGST ? (item?.Igst || 0) : Addition(item?.Sgst || 0, item?.Cgst || 0);
+
+            if (isInclusive) {
+                const itemTax = taxCalc(1, itemRate, gstPercentage);
+                const basePrice = Subraction(itemRate, itemTax);
+                totalValueBeforeTax.TotalTax = Addition(totalValueBeforeTax.TotalTax, Multiplication(billQty, itemTax));
+                totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, basePrice));
+            }
+            if (isExclusiveBill) {
+                const itemTax = taxCalc(0, itemRate, gstPercentage);
+                totalValueBeforeTax.TotalTax = Addition(totalValueBeforeTax.TotalTax, Multiplication(billQty, itemTax));
+                totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, itemRate));
+            }
+        });
+
+        const TaxData = includedProducts.reduce((data, item) => {
+            const HSNindex = data.findIndex(obj => obj.hsnCode == item.HSN_Code);
+
+            const {
+                Taxable_Amount, Cgst_Amo, Sgst_Amo, Igst_Amo, HSN_Code,
+                Cgst, Sgst, Igst,
+            } = item;
+
+            if (HSNindex !== -1) {
+                const prev = data[HSNindex];
+                const newValue = {
+                    ...prev,
+                    taxableValue: prev.taxableValue + Number(Taxable_Amount || 0),
+                    cgst: Addition(prev.cgst, Cgst_Amo),
+                    sgst: Addition(prev.sgst, Sgst_Amo),
+                    igst: Addition(prev.igst, Igst_Amo),
+                    totalTax: prev.totalTax + Number(IS_IGST ? (Igst_Amo || 0) : Addition(Cgst_Amo || 0, Sgst_Amo || 0)),
+                };
+
+                data[HSNindex] = newValue;
+                return data;
+            }
+
+            const newEntry = {
+                hsnCode: HSN_Code,
+                taxableValue: Number(Taxable_Amount || 0),
+                cgst: Number(Cgst_Amo || 0),
+                cgstPercentage: Number(Cgst || 0),
+                sgst: Number(Sgst_Amo || 0),
+                sgstPercentage: Number(Sgst || 0),
+                igst: Number(Igst_Amo || 0),
+                igstPercentage: Number(Igst || 0),
+                totalTax: IS_IGST ? Number(Igst_Amo || 0) : Addition(Cgst_Amo || 0, Sgst_Amo || 0),
+            };
+
+            return [...data, newEntry];
+        }, []);
+
+        const PAGE_HEIGHT = 842; 
+        const PAGE_BOTTOM_MARGIN = 50;
+        const FOOTER_SPACE = 80; 
+        
+
+        const checkPageBreak = (currentY, additionalSpace = 20) => {
+            if (currentY + additionalSpace > PAGE_HEIGHT - PAGE_BOTTOM_MARGIN - FOOTER_SPACE) {
+                doc.addPage();
+                return 50; 
+            }
+            return currentY;
+        };
+
+
+        doc.fontSize(16)
            .font('Helvetica-Bold')
            .text('SALES INVOICE', { align: 'center' });
 
-        doc.moveDown(2);
+        doc.moveDown(1);
 
         const leftColumnX = 50;
-        const rightColumnX = 300;
+        const rightColumnX = 250;
         let currentY = doc.y;
 
+      
         doc.fontSize(11)
            .font('Helvetica-Bold')
-           .text('BILL TO:', leftColumnX, currentY);
-
-        doc.font('Tamil')
-           .fontSize(10)
-           .text(deliveryOrder.Retailer_Name || 'Customer', leftColumnX, currentY + 20);
-
-        doc.font('Tamil')
-           .text(deliveryOrder.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 });
+           .text(deliveryOrder.Company_Name || 'PUKAL FOODS PVT LTD', leftColumnX, currentY);
 
         doc.font('Helvetica')
-           .text(`GSTIN: ${deliveryOrder.GST_No || 'Not Available'}`, leftColumnX, currentY + 70);
+           .fontSize(9)
+           .text(`Address: ${deliveryOrder.Company_Address || '6A VISWANATHAPURAM MAIN ROAD'}`, leftColumnX, currentY + 15, { width: 250 });
 
         doc.font('Helvetica')
-           .text(`Phone: ${deliveryOrder.Retailer_Mobile || 'N/A'}`, leftColumnX, currentY + 85);
+           .fontSize(9)
+           .text(`City: ${deliveryOrder.Region || 'Madurai'} - ${deliveryOrder.Pincode || '625014'}`, leftColumnX, currentY + 25);
 
+        let gstinText = 'GSTIN / UIN: ';
+        if (deliveryOrder.Gst_Number || deliveryOrder.VAT_TIN_Number) {
+            if (deliveryOrder.Gst_Number) gstinText += deliveryOrder.Gst_Number;
+            if (deliveryOrder.Gst_Number && deliveryOrder.VAT_TIN_Number) gstinText += ' || ';
+            if (deliveryOrder.VAT_TIN_Number) gstinText += deliveryOrder.VAT_TIN_Number;
+        } else {
+            gstinText += 'Not Available';
+        }
+        doc.font('Helvetica')
+           .fontSize(9)
+           .text(gstinText, leftColumnX, currentY + 45);
+
+        doc.font('Helvetica')
+           .fontSize(9)
+           .text(`State: ${deliveryOrder.Company_State || 'Tamilnadu'}`, leftColumnX, currentY + 55);
+
+        doc.font('Helvetica')
+           .fontSize(9)
+           .text('Code:', leftColumnX, currentY + 65);
+
+   
         doc.font('Helvetica-Bold')
-           .text('INVOICE DETAILS:', rightColumnX, currentY);
+           .fontSize(10)
+           .text('Buyer (Bill to)', leftColumnX, currentY + 75);
+
+        doc.font('Tamil')
+           .fontSize(9)
+           .text(deliveryOrder.Retailer_Name || '', leftColumnX, currentY + 95);
 
         doc.font('Helvetica')
-           .text(`Invoice No: ${deliveryOrder.Do_Inv_No}`, rightColumnX, currentY + 20)
-           .text(`Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
-           .text(`Delivery Date: ${deliveryOrder.Do_Date ? new Date(deliveryOrder.Do_Date).toLocaleDateString('en-GB') : 'N/A'}`, rightColumnX, currentY + 50);
+           .fontSize(9)
+           .text(`${deliveryOrder.Mobile_No || ''} - ${deliveryOrder.Party_Mailing_Address || ''}`, leftColumnX, currentY + 105, { width: 250 });
 
-        currentY += 120;
+        doc.font('Helvetica')
+           .fontSize(9)
+           .text(`${deliveryOrder.Reatailer_City || ''} - ${deliveryOrder.PinCode || ''}`, leftColumnX, currentY + 115);
+
+        doc.font('Helvetica')
+           .fontSize(9)
+           .text(`GSTIN / UIN: ${deliveryOrder.GST_No || ''}`, leftColumnX, currentY + 125);
+
+        doc.font('Helvetica')
+           .fontSize(9)
+           .text(`State Name: ${deliveryOrder.StateGet || 'Tamilnadu'}`, leftColumnX, currentY + 135);
+
+        doc.font('Helvetica')
+           .fontSize(9)
+           .text('Code:', leftColumnX, currentY + 145);
+
+       
+        const extraDetails = [
+            { labelOne: 'Invoice No', dataOne: deliveryOrder.Do_Inv_No, labelTwo: 'Dated', dataTwo: LocalDate(deliveryOrder.Do_Date) },
+            { labelOne: 'Delivery Note', dataOne: '', labelTwo: 'Mode/Terms of Payment', dataTwo: '' },
+            { labelOne: 'Reference No. & Date', dataOne: '', labelTwo: 'Other References', dataTwo: '' },
+            { labelOne: 'Buyer\'s Order No', dataOne: '', labelTwo: 'Dated', dataTwo: '' },
+            { labelOne: 'Dispatch Doc No', dataOne: '', labelTwo: 'Delivery Note Date', dataTwo: '' },
+            { labelOne: 'Dispatched through', dataOne: '', labelTwo: 'Destination', dataTwo: '' },
+            { labelOne: 'Bill of Lading/LR-RR No', dataOne: '', labelTwo: 'Motor Vehicle No', dataTwo: '' },
+        ];
+
+        let rightY = currentY + 15;
+        extraDetails.forEach(detail => {
+            doc.font('Helvetica')
+               .fontSize(8)
+               .text(detail.labelOne, rightColumnX, rightY)
+               .text(`: ${detail.dataOne}`, rightColumnX + 80, rightY);
+            
+            doc.font('Helvetica')
+               .fontSize(8)
+               .text(detail.labelTwo, rightColumnX + 160, rightY)
+               .text(`: ${detail.dataTwo}`, rightColumnX + 250, rightY);
+            
+            rightY += 15;
+        });
+
+        doc.font('Helvetica')
+           .fontSize(8)
+           .text('Terms of Delivery', rightColumnX, rightY);
+
+        currentY = rightY + 50;
+        
+      
+        currentY = checkPageBreak(currentY, 50);
+
 
         doc.moveTo(leftColumnX, currentY)
            .lineTo(550, currentY)
@@ -2957,53 +3089,56 @@ const downloadGeneratedPdf = async (req, res) => {
 
         doc.fontSize(9)
            .font('Helvetica-Bold')
-           .text('S.No', leftColumnX, currentY + 10)
-           .text('Item', leftColumnX + 35, currentY + 10)
+           .text('Sno', leftColumnX, currentY + 10)
+           .text('Product', leftColumnX + 35, currentY + 10)
            .text('HSN/SAC', leftColumnX + 180, currentY + 10)
-           .text('Qty', leftColumnX + 250, currentY + 10)
-           .text('Units', leftColumnX + 290, currentY + 10)
-           .text('Rate', leftColumnX + 330, currentY + 10)
+           .text('Quantity', leftColumnX + 250, currentY + 10)
+           .text('Rate', leftColumnX + 300, currentY + 10)
+           .text('Rate', leftColumnX + 340, currentY + 10)
            .text('Amount', leftColumnX + 420, currentY + 10);
 
-        currentY += 30;
+   
+        let rateDesc = '';
+        if (isInclusive) rateDesc = '(Incl. of Tax)';
+        else if (isNotTaxableBill) rateDesc = '(Tax not applicable)';
+        else if (isExclusiveBill) rateDesc = '(Excl. of Tax)';
 
-        let subtotal = 0;
-        let totalCgst = 0;
-        let totalSgst = 0;
-        let totalIgst = 0;
+        doc.fontSize(7)
+           .font('Helvetica')
+           .text(rateDesc, leftColumnX + 335, currentY + 20);
 
-        if (stockDetails && stockDetails.length > 0) {
-            stockDetails.forEach((item, index) => {
+        currentY += 35;
+
+
+        if (includedProducts && includedProducts.length > 0) {
+            for (let index = 0; index < includedProducts.length; index++) {
+                const item = includedProducts[index];
+                
+         
+                currentY = checkPageBreak(currentY, 25);
+                
                 const qty = Number(item.Bill_Qty) || 0;
-                const rate = Number(item.Item_Rate) || 0;
-                const discount = Number(item.Discount_per) || 0;
-                const taxRate = Number(item.Gst_percentage) || 0;
-                const unit = item.Units || 'Pcs';
+                const itemRate = Number(item.Item_Rate) || 0;
+                const taxableAmount = Number(item.Taxable_Amount) || 0;
                 const productName = item.Product_Name || '-';
-          
-                let taxableValue = qty * rate;
+                const unit = item.Units || 'Pcs';
                 
-                if (discount > 0) {
-                    taxableValue = taxableValue - (taxableValue * discount / 100);
+        
+                const gstPercentage = IS_IGST ? (item?.Igst || 0) : Addition(item?.Sgst || 0, item?.Cgst || 0);
+                
+ 
+                let rateWithoutTax = itemRate;
+                let rateWithTax = itemRate;
+                
+                if (isInclusive) {
+                    const itemTax = taxCalc(1, itemRate, gstPercentage);
+                    rateWithoutTax = Subraction(itemRate, itemTax);
+                    rateWithTax = itemRate;
+                } else if (isExclusiveBill) {
+                    const itemTax = taxCalc(0, itemRate, gstPercentage);
+                    rateWithoutTax = itemRate;
+                    rateWithTax = Addition(itemRate, itemTax);
                 }
-                
-                subtotal += taxableValue;
-                
-                let cgst = 0, sgst = 0, igst = 0;
-                
-                if (taxRate > 0) {
-                    if (deliveryOrder.Place_Of_Supply === companyDetails.State) {
-                        cgst = taxableValue * (taxRate / 2) / 100;
-                        sgst = taxableValue * (taxRate / 2) / 100;
-                        totalCgst += cgst;
-                        totalSgst += sgst;
-                    } else {
-                        igst = taxableValue * taxRate / 100;
-                        totalIgst += igst;
-                    }
-                }
-                
-                const totalAmount = taxableValue + cgst + sgst + igst;
             
                 doc.font('Helvetica')
                    .fontSize(8)
@@ -3014,34 +3149,13 @@ const downloadGeneratedPdf = async (req, res) => {
                 
                 doc.font('Helvetica')
                    .text(item.HSN_Code || '-', leftColumnX + 180, currentY)  
-                   .text(qty.toFixed(2), leftColumnX + 250, currentY)
-                   .text(unit, leftColumnX + 290, currentY)
-                   .text(`${rate.toFixed(2)}`, leftColumnX + 330, currentY)
-                   .text(`${totalAmount.toFixed(2)}`, leftColumnX + 420, currentY);
+                   .text(`${NumberFormat(qty)}${unit ? ' (' + unit + ')' : ''}`, leftColumnX + 250, currentY)
+                   .text(NumberFormat(rateWithoutTax), leftColumnX + 305, currentY)
+                   .text(NumberFormat(rateWithTax), leftColumnX + 345, currentY)
+                   .text(NumberFormat(taxableAmount), leftColumnX + 425, currentY);
                 
                 currentY += 20;
-                
-                if (currentY > 750) {
-                    doc.addPage();
-                    currentY = 50;
-                    
-                    doc.moveTo(leftColumnX, currentY)
-                       .lineTo(550, currentY)
-                       .stroke();
-                    
-                    doc.fontSize(9)
-                       .font('Helvetica-Bold')
-                       .text('S.No', leftColumnX, currentY + 10)
-                       .text('Item', leftColumnX + 35, currentY + 10)
-                       .text('HSN/SAC', leftColumnX + 180, currentY + 10)
-                       .text('Qty', leftColumnX + 250, currentY + 10)
-                       .text('Unit', leftColumnX + 290, currentY + 10)
-                       .text('Rate', leftColumnX + 330, currentY + 10)
-                       .text('Amount', leftColumnX + 420, currentY + 10);
-                    
-                    currentY += 30;
-                }
-            });
+            }
         }
 
         doc.moveTo(leftColumnX, currentY)
@@ -3050,68 +3164,174 @@ const downloadGeneratedPdf = async (req, res) => {
 
         currentY += 20;
 
-        const roundOff = Number(deliveryOrder.Round_off) || 0;
-        const grandTotal = subtotal + totalCgst + totalSgst + totalIgst + roundOff;
+    
+        currentY = checkPageBreak(currentY, 200);
 
+
+        doc.fontSize(9)
+           .font('Helvetica')
+           .text('Amount Chargeable (in words):', leftColumnX, currentY)
+           .text(`INR ${numberToWords(parseInt(deliveryOrder?.Total_Invoice_value || 0))} Only.`, leftColumnX + 150, currentY);
+
+        currentY += 25;
+
+       
         const totalsX = 380;
         const totalsValueX = 480;
 
         doc.fontSize(9)
-           .font('Helvetica')
-           .text('Taxable Value:', totalsX, currentY)
-           .text(`${subtotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+           .font('Helvetica');
+
+
+        doc.text('Total Taxable Amount', totalsX - 150, currentY)
+           .text(NumberFormat(totalValueBeforeTax.TotalValue), totalsValueX, currentY, { align: 'right' });
 
         currentY += 18;
 
-        if (totalCgst > 0) {
-            const cgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
-            doc.text(`CGST @ ${cgstRate.toFixed(2)}%:`, totalsX, currentY)
-               .text(`${totalCgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+
+        if (!IS_IGST) {
+            doc.text('CGST', totalsX - 150, currentY)
+               .text(NumberFormat(deliveryOrder?.CSGT_Total || 0), totalsValueX, currentY, { align: 'right' });
+            currentY += 18;
+
+            doc.text('SGST', totalsX - 150, currentY)
+               .text(NumberFormat(deliveryOrder?.SGST_Total || 0), totalsValueX, currentY, { align: 'right' });
+            currentY += 18;
+        } else {
+            doc.text('IGST', totalsX - 150, currentY)
+               .text(NumberFormat(deliveryOrder?.IGST_Total || 0), totalsValueX, currentY, { align: 'right' });
             currentY += 18;
         }
 
-        if (totalSgst > 0) {
-            const sgstRate = stockDetails[0]?.Gst_percentage ? (stockDetails[0].Gst_percentage / 2) : 9;
-            doc.text(`SGST @ ${sgstRate.toFixed(2)}%:`, totalsX, currentY)
-               .text(`${totalSgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-            currentY += 18;
-        }
 
-        if (totalIgst > 0) {
-            const igstRate = stockDetails[0]?.Gst_percentage || 18;
-            doc.text(`IGST @ ${igstRate.toFixed(2)}%:`, totalsX, currentY)
-               .text(`${totalIgst.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-            currentY += 18;
-        }
+        doc.text('Round Off', totalsX - 150, currentY)
+           .text(NumberFormat(deliveryOrder?.Round_off || 0), totalsValueX, currentY, { align: 'right' });
 
-        if (roundOff !== 0) {
-            doc.text('Round Off:', totalsX, currentY)
-               .text(`${roundOff.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
-            currentY += 18;
-        }
+        currentY += 18;
+
+   
+        doc.font('Helvetica-Bold')
+           .text('Total', totalsX - 150, currentY)
+           .text(NumberFormat(deliveryOrder?.Total_Invoice_value || 0), totalsValueX, currentY, { align: 'right' });
+
+        currentY += 30;
+
+   
+        doc.fontSize(9)
+           .font('Helvetica-Bold');
 
     
-        doc.moveTo(totalsX - 10, currentY)
-           .lineTo(totalsValueX + 70, currentY)
-           .stroke();
+        doc.text('HSN / SAC', leftColumnX, currentY)
+           .text('Taxable Value', leftColumnX + 100, currentY);
+
+        if (IS_IGST) {
+            doc.text('IGST Tax', leftColumnX + 200, currentY)
+               .text('Total', leftColumnX + 350, currentY);
+        } else {
+            doc.text('Central Tax', leftColumnX + 200, currentY)
+               .text('State Tax', leftColumnX + 300, currentY)
+               .text('Total', leftColumnX + 400, currentY);
+        }
+
+        currentY += 15;
+
+ 
+        if (IS_IGST) {
+            doc.text('Rate', leftColumnX + 180, currentY)
+               .text('Amount', leftColumnX + 230, currentY)
+               .text('Tax Amount', leftColumnX + 330, currentY);
+        } else {
+            doc.text('Rate', leftColumnX + 180, currentY)
+               .text('Amount', leftColumnX + 220, currentY)
+               .text('Rate', leftColumnX + 270, currentY)
+               .text('Amount', leftColumnX + 310, currentY)
+               .text('Tax Amount', leftColumnX + 370, currentY);
+        }
 
         currentY += 10;
+        doc.moveTo(leftColumnX, currentY)
+           .lineTo(550, currentY)
+           .stroke();
+        currentY += 5;
 
-        doc.fontSize(11)
+   
+        doc.font('Helvetica')
+           .fontSize(8);
+
+        TaxData.forEach((item) => {
+       
+            currentY = checkPageBreak(currentY, 20);
+            
+            doc.text(item.hsnCode || 'N/A', leftColumnX, currentY)
+               .text(NumberFormat(item.taxableValue), leftColumnX + 100, currentY);
+
+            if (IS_IGST) {
+                doc.text(NumberFormat(item.igstPercentage), leftColumnX + 180, currentY)
+                   .text(NumberFormat(item.igst), leftColumnX + 230, currentY)
+                   .text(NumberFormat(item.totalTax), leftColumnX + 330, currentY);
+            } else {
+                doc.text(NumberFormat(item.cgstPercentage), leftColumnX + 180, currentY)
+                   .text(NumberFormat(item.cgst), leftColumnX + 220, currentY)
+                   .text(NumberFormat(item.sgstPercentage), leftColumnX + 270, currentY)
+                   .text(NumberFormat(item.sgst), leftColumnX + 310, currentY)
+                   .text(NumberFormat(item.totalTax), leftColumnX + 370, currentY);
+            }
+            
+            currentY += 15;
+        });
+
+        currentY = checkPageBreak(currentY, 20);
+        
+        doc.font('Helvetica-Bold');
+
+        const hsnTotalTaxable = TaxData.reduce((sum, item) => sum + (item.taxableValue || 0), 0);
+        const hsnTotalCgst = TaxData.reduce((sum, item) => sum + (item.cgst || 0), 0);
+        const hsnTotalSgst = TaxData.reduce((sum, item) => sum + (item.sgst || 0), 0);
+        const hsnTotalIgst = TaxData.reduce((sum, item) => sum + (item.igst || 0), 0);
+        const hsnTotalTax = TaxData.reduce((sum, item) => sum + (item.totalTax || 0), 0);
+
+        doc.text('Total', leftColumnX, currentY)
+           .text(NumberFormat(hsnTotalTaxable), leftColumnX + 100, currentY);
+
+        if (IS_IGST) {
+            doc.text('', leftColumnX + 180, currentY)
+               .text(NumberFormat(hsnTotalIgst), leftColumnX + 230, currentY)
+               .text(NumberFormat(hsnTotalTax), leftColumnX + 330, currentY);
+        } else {
+            doc.text('', leftColumnX + 180, currentY)
+               .text(NumberFormat(hsnTotalCgst), leftColumnX + 220, currentY)
+               .text('', leftColumnX + 270, currentY)
+               .text(NumberFormat(hsnTotalSgst), leftColumnX + 310, currentY)
+               .text(NumberFormat(hsnTotalTax), leftColumnX + 370, currentY);
+        }
+
+        currentY += 20;
+
+        currentY = checkPageBreak(currentY, 30);
+        
+        doc.font('Helvetica')
+           .fontSize(9)
            .font('Helvetica-Bold')
-           .text('GRAND TOTAL:', totalsX, currentY)
-           .text(`${grandTotal.toFixed(2)}`, totalsValueX, currentY, { align: 'right' });
+           .text(`Tax Amount (in words) : INR ${numberToWords(parseInt(hsnTotalTax))} only.`, leftColumnX, currentY);
 
-        currentY += 25;
+        currentY += 30;
 
-      
+     
+        doc.fontSize(8)
+           .text('This is a Computer Generated Invoice', { align: 'center' });
+
         if (!shouldDownload) {
-            const buttonY = currentY + 100;
+   
+            if (currentY + 80 > PAGE_HEIGHT - PAGE_BOTTOM_MARGIN) {
+                doc.addPage();
+                currentY = 50;
+            }
+            
+            const buttonY = Math.min(currentY + 20, PAGE_HEIGHT - PAGE_BOTTOM_MARGIN - 40);
             const buttonX = 200;
             const buttonWidth = 200;
             const buttonHeight = 30;
 
-            
             doc.save();
             doc.roundedRect(buttonX, buttonY, buttonWidth, buttonHeight, 5)
                .fillAndStroke('#007bff', '#0056b3');
@@ -3125,7 +3345,6 @@ const downloadGeneratedPdf = async (req, res) => {
                    align: 'center'
                });
 
-    
             doc.fillColor('#000000');
             
             const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${Do_Inv_No}&download=true`;
@@ -3142,58 +3361,24 @@ const downloadGeneratedPdf = async (req, res) => {
             doc.fillColor('#000000');
         }
 
-
         doc.end();
 
-    
         if (shouldDownload) {
-          
-            await new Promise((resolve, reject) => {
-                const checkFileInterval = setInterval(() => {
-                    if (fsSync.existsSync(filePath)) {
-                        const stats = fsSync.statSync(filePath);
-                        if (stats.size > 0) {
-                            clearInterval(checkFileInterval);
-                            resolve();
-                        }
-                    }
-                }, 100);
-
-               
-                setTimeout(() => {
-                    clearInterval(checkFileInterval);
-                    reject(new Error('Timeout waiting for PDF generation'));
-                }, 10000);
+            await new Promise((resolve) => {
+                setTimeout(resolve, 1000);
             });
 
-        
             if (fsSync.existsSync(filePath)) {
                 const stats = fsSync.statSync(filePath);
                 
-                if (stats.size === 0) {
-                    console.error('Generated PDF file is empty');
-                    return servError(new Error('Generated PDF is empty'), res);
-                }
-                
-      
                 res.setHeader('Content-Type', 'application/pdf');
                 res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
                 res.setHeader('Content-Length', stats.size);
                 
-             
                 const readStream = fsSync.createReadStream(filePath);
-                
-                readStream.on('error', (err) => {
-                    console.error('Error reading file:', err);
-                    if (!res.headersSent) {
-                        return servError(err, res);
-                    }
-                });
-                
                 readStream.pipe(res);
             } else {
-                console.error('File not found after generation:', filePath);
-                return servError(new Error('File not found after generation'), res);
+                return servError(new Error('File not found'), res);
             }
         }
 
@@ -3204,6 +3389,28 @@ const downloadGeneratedPdf = async (req, res) => {
         }
     }
 };
+
+
+function numberToWords(num) {
+    if (num === 0) return 'Zero';
+    
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                  'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+                  'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    
+    const numToWords = (n) => {
+        if (n < 20) return ones[n];
+        if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+        if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + numToWords(n % 100) : '');
+        if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
+        if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
+        return numToWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + numToWords(n % 10000000) : '');
+    };
+    
+    return numToWords(num);
+}
+
     return {
         getSalesInvoiceMobileFilter1,
         getSalesInvoiceMobileFilter2,
