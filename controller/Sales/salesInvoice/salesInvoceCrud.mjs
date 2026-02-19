@@ -576,7 +576,7 @@ export const createSalesInvoice = async (req, res) => {
                     inserted.Batch_Name
                 INTO @batchDetails (DO_St_Id, Item_Id, Bill_Qty, GoDown_Id, Batch_Name)
                 SELECT
-                    @Do_Date, @Do_Id, p.S_No, p.Item_Id,
+                    @Do_Date, @Do_Id, ISNULL(p.S_No, ROW_NUMBER() OVER (ORDER BY (SELECT 1))), p.Item_Id,
                     p.Bill_Qty, p.Alt_Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
                     p.Item_Rate, p.GoDown_Id, p.Amount, p.Free_Qty, p.Total_Qty,
                     p.Taxble, p.Taxable_Rate, p.HSN_Code,
@@ -1083,7 +1083,7 @@ export const updateSalesInvoice = async (req, res) => {
                     inserted.Batch_Name
                 INTO @batchDetails (DO_St_Id, Item_Id, Bill_Qty, GoDown_Id, Batch_Name)
                 SELECT
-                    @Do_Date, @Do_Id, p.S_No, p.Item_Id,
+                    @Do_Date, @Do_Id, ISNULL(p.S_No, ROW_NUMBER() OVER (ORDER BY (SELECT 1))), p.Item_Id,
                     p.Bill_Qty, p.Alt_Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
                     p.Item_Rate, p.GoDown_Id, p.Amount, p.Free_Qty, p.Total_Qty,
                     p.Taxble, p.Taxable_Rate, p.HSN_Code,
