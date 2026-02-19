@@ -684,23 +684,17 @@ const getStorageStockItemWiseMobile = async (req, res) => {
                     filteredData = filteredData.filter(row => {
                         const value = row[columnName];
                         if (value === undefined || value === null) return false;
-                        // Convert to string and trim for comparison
+                       
                         const stringValue = String(value).trim();
                         return filterValues.some(fv => String(fv).trim() === stringValue);
                     });
                     
                   
-                } else if (!columnName) {
-                    console.log(`Skipping Group Filter Level ${levelId} - Column not found in template`);
-                } else {
-                    console.log(`Skipping Group Filter Level ${levelId} - No filter values provided`);
-                }
+                } 
             }
-        } else {
-            console.log('No active group filters to apply');
-        }
+        } 
 
-        // Filter out zero quantity records
+       
         const beforeZeroFilter = filteredData.length;
         filteredData = filteredData.filter(
             row => !(
@@ -892,16 +886,10 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
                         return filterValues.some(fv => String(fv).trim() === stringValue);
                     });
                     
-                    console.log(`Group Filter Level ${levelId} (${columnName}): ${beforeCount} -> ${filteredData.length} records`);
-                } else if (!columnName) {
-                    console.log(`Skipping Group Filter Level ${levelId} - Column not found in template`);
-                } else {
-                    console.log(`Skipping Group Filter Level ${levelId} - No filter values provided`);
-                }
+                   
+                } 
             }
-        } else {
-            console.log('No active group filters to apply');
-        }
+        } 
 
         // Filter out zero quantity records
         const beforeZeroFilter = filteredData.length;
