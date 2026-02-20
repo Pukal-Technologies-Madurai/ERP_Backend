@@ -228,6 +228,7 @@ const SaleOrder = () => {
                     .input('HSN_Code', productDetails.HSN_Code)
                     .input('Unit_Id', product.UOM ?? '')
                     .input('Unit_Name', product.Units ?? '')
+                    .input('GoDown_Id', toNumber(product.GoDown_Id) || null)
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', gstPercentage)
                     .input('Cgst', cgstPer ?? 0)
@@ -242,11 +243,11 @@ const SaleOrder = () => {
                         INSERT INTO tbl_Sales_Order_Stock_Info (
                             So_Date, Sales_Order_Id, S_No, Item_Id, Pre_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty, 
                             Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate, 
-                            Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+                            Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on, GoDown_Id
                         ) VALUES (
                             @So_Date, @Sales_Order_Id, @S_No, @Item_Id, @Pre_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, 
                             @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate, 
-                            @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+                            @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on, @GoDown_Id
                         );`
                     )
 
@@ -505,6 +506,7 @@ const SaleOrder = () => {
                     .input('HSN_Code', productDetails.HSN_Code)
                     .input('Unit_Id', product.UOM ?? '')
                     .input('Unit_Name', product.Units ?? '')
+                    .input('GoDown_Id', toNumber(product.GoDown_Id) || null)
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', gstPercentage)
                     .input('Cgst', cgstPer ?? 0)
@@ -519,11 +521,11 @@ const SaleOrder = () => {
                             INSERT INTO tbl_Sales_Order_Stock_Info (
                                 So_Date, Sales_Order_Id, S_No, Item_Id, Pre_Id, Bill_Qty, Item_Rate, Amount, Free_Qty, Total_Qty, 
                                 Taxble, Taxable_Rate, HSN_Code, Unit_Id, Unit_Name, Taxable_Amount, Tax_Rate, 
-                                Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on
+                                Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on, GoDown_Id
                             ) VALUES (
                                 @So_Date, @Sales_Order_Id, @S_No, @Item_Id, @Pre_Id, @Bill_Qty, @Item_Rate, @Amount, @Free_Qty, @Total_Qty, 
                                 @Taxble, @Taxable_Rate, @HSN_Code, @Unit_Id, @Unit_Name, @Taxable_Amount, @Tax_Rate, 
-                                @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
+                                @Cgst, @Cgst_Amo, @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on, @GoDown_Id
                             );`
                     )
 
