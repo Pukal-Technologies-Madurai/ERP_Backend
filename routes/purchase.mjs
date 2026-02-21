@@ -1,5 +1,6 @@
 import express from 'express';
 import purchaseInvoice from '../controller/Purchase/purchaseInvoice.mjs';
+import { getPurchaseDue } from '../controller/Purchase/purchaseDue.mjs';
 
 const PurchaseRoute = express.Router();
 
@@ -9,6 +10,8 @@ PurchaseRoute.put('/purchaseOrder', purchaseInvoice.editPurchaseOrder);
 PurchaseRoute.delete('/purchaseOrder', purchaseInvoice.cancelPurchaseOrder);
 PurchaseRoute.get('/purchaseOrder/involvedStaffs', purchaseInvoice.getInvolvedStaffs);
 PurchaseRoute.get('/purchaseInvoiceMobile', purchaseInvoice.getPurchaseInvoiceMobile);
+
+PurchaseRoute.get('/invoice/paymentDue', getPurchaseDue);
 
 PurchaseRoute.get('/voucherType', purchaseInvoice.getVoucherType);
 PurchaseRoute.get('/stockItemLedgerName', purchaseInvoice.getStockItemLedgerName);
