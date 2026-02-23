@@ -2752,7 +2752,7 @@ const downloadGeneratedPdf = async (req, res) => {
             fsSync.mkdirSync(uploadDir, { recursive: true });
         }
 
-        // Fetch delivery order details with all necessary joins
+    
         const deliveryOrderRequest = await new sql.Request()
             .input("Do_Inv_No", sql.NVarChar, formattedInvoiceNo)
             .query(`
@@ -2799,21 +2799,55 @@ const downloadGeneratedPdf = async (req, res) => {
             `);
 
         const stockDetails = stockRequest.recordset || [];
+          
+   const staffInfoRequest = await new sql.Request()
+    .input("Do_Id", sql.Int, deliveryOrder.Do_Id)
+    .query(`
+        SELECT 
+            stf.Emp_Id AS empId,
+            stf.Emp_Type_Id AS empTypeId,
+            e.Cost_Center_Name AS empName,
+            cc.Cost_Category AS empType
+        FROM tbl_Sales_Delivery_Staff_Info AS stf
+        LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = stf.Emp_Id
+        LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = stf.Emp_Type_Id
+        WHERE stf.Do_Id = @Do_Id
+    `);
 
-    
+const staffDetails = staffInfoRequest.recordset || [];
+
+const transportInfo = staffDetails.find(s => s.empTypeId === 2) || {};
+
+const brokerInfo = staffDetails.find(s => s.empType === 'Broker') || {};
+
+const transportText = transportInfo.empName || '';
+const brokerText = brokerInfo.empName || '';
+
+
         const doc = new PDFDocument({
             margin: 50,
             size: 'A4',
             bufferPages: true
         });
 
-        const possibleTamilFonts = [
+        // const possibleTamilFonts = [
+        //     path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
+        //     path.join(__dirname, '..', 'fonts', 'latha.ttf'),
+        //     'C:/Windows/Fonts/latha.ttf',
+        //     'C:/Windows/Fonts/Nirmala.ttf'
+        // ];
+      const possibleTamilFonts = [
             path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
             path.join(__dirname, '..', 'fonts', 'latha.ttf'),
+            path.join(__dirname, '..', 'fonts', 'bamini.ttf'),
+            path.join(__dirname, '..', 'fonts', 'NotoSansTamilUI-Regular.ttf'),
             'C:/Windows/Fonts/latha.ttf',
-            'C:/Windows/Fonts/Nirmala.ttf'
+            'C:/Windows/Fonts/bamini.ttf',
+            'C:/Windows/Fonts/NotoSansTamil-Regular.ttf',
+            'C:/Windows/Fonts/Nirmala.ttf',
+            'C:/Windows/Fonts/NirmalaB.ttf',
+            'C:/Windows/Fonts/kartika.ttf'
         ];
-
         let tamilFontRegistered = false;
         for (const fontPath of possibleTamilFonts) {
             try {
@@ -2975,9 +3009,6 @@ const downloadGeneratedPdf = async (req, res) => {
         };
 
 
-        doc.fontSize(16)
-           .font('Helvetica-Bold')
-           .text('SALES INVOICE', { align: 'center' });
 
         doc.moveDown(1);
 
@@ -2988,15 +3019,15 @@ const downloadGeneratedPdf = async (req, res) => {
       
         doc.fontSize(11)
            .font('Helvetica-Bold')
-           .text(deliveryOrder.Company_Name || 'PUKAL FOODS PVT LTD', leftColumnX, currentY);
+           .text(deliveryOrder.Company_Name, leftColumnX, currentY);
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
-           .text(`Address: ${deliveryOrder.Company_Address || '6A VISWANATHAPURAM MAIN ROAD'}`, leftColumnX, currentY + 15, { width: 250 });
+           .text(`Address: ${deliveryOrder.Company_Address}`, leftColumnX, currentY + 15, { width: 250 });
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
-           .text(`City: ${deliveryOrder.Region || 'Madurai'} - ${deliveryOrder.Pincode || '625014'}`, leftColumnX, currentY + 25);
+           .text(`City: ${deliveryOrder.Region} - ${deliveryOrder.Pincode }`, leftColumnX, currentY + 25);
 
         let gstinText = 'GSTIN / UIN: ';
         if (deliveryOrder.Gst_Number || deliveryOrder.VAT_TIN_Number) {
@@ -3006,66 +3037,69 @@ const downloadGeneratedPdf = async (req, res) => {
         } else {
             gstinText += 'Not Available';
         }
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
            .text(gstinText, leftColumnX, currentY + 45);
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
            .text(`State: ${deliveryOrder.Company_State || 'Tamilnadu'}`, leftColumnX, currentY + 55);
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
            .text('Code:', leftColumnX, currentY + 65);
 
    
         doc.font('Helvetica-Bold')
            .fontSize(10)
-           .text('Buyer (Bill to)', leftColumnX, currentY + 75);
+           .text('Buyer (Bill to)', leftColumnX, currentY + 85);
 
         doc.font('Tamil')
            .fontSize(9)
-           .text(deliveryOrder.Retailer_Name || '', leftColumnX, currentY + 95);
+           .text(deliveryOrder.Retailer_Name || '', leftColumnX, currentY + 98);
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
-           .text(`${deliveryOrder.Mobile_No || ''} - ${deliveryOrder.Party_Mailing_Address || ''}`, leftColumnX, currentY + 105, { width: 250 });
+           .text(`${deliveryOrder.Mobile_No || ''} - ${deliveryOrder.Party_Mailing_Address || ''}`, leftColumnX, currentY + 110, { width: 250 });
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
-           .text(`${deliveryOrder.Reatailer_City || ''} - ${deliveryOrder.PinCode || ''}`, leftColumnX, currentY + 115);
+           .text(`${deliveryOrder.Reatailer_City || ''} - ${deliveryOrder.PinCode || ''}`, leftColumnX, currentY + 123);
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
-           .text(`GSTIN / UIN: ${deliveryOrder.GST_No || ''}`, leftColumnX, currentY + 125);
+           .text(`GSTIN / UIN: ${deliveryOrder.GST_No || ''}`, leftColumnX, currentY + 137);
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
-           .text(`State Name: ${deliveryOrder.StateGet || 'Tamilnadu'}`, leftColumnX, currentY + 135);
+           .text(`State Name: ${deliveryOrder.StateGet || 'Tamilnadu'}`, leftColumnX, currentY + 152);
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(9)
-           .text('Code:', leftColumnX, currentY + 145);
+           .text('Code:', leftColumnX, currentY + 165);
+             
+        
+
 
        
         const extraDetails = [
             { labelOne: 'Invoice No', dataOne: deliveryOrder.Do_Inv_No, labelTwo: 'Dated', dataTwo: LocalDate(deliveryOrder.Do_Date) },
             { labelOne: 'Delivery Note', dataOne: '', labelTwo: 'Mode/Terms of Payment', dataTwo: '' },
-            { labelOne: 'Reference No. & Date', dataOne: '', labelTwo: 'Other References', dataTwo: '' },
+            { labelOne: 'Reference No. & Date', dataOne: '', labelTwo: 'Other References', dataTwo:brokerText  },
             { labelOne: 'Buyer\'s Order No', dataOne: '', labelTwo: 'Dated', dataTwo: '' },
             { labelOne: 'Dispatch Doc No', dataOne: '', labelTwo: 'Delivery Note Date', dataTwo: '' },
-            { labelOne: 'Dispatched through', dataOne: '', labelTwo: 'Destination', dataTwo: '' },
-            { labelOne: 'Bill of Lading/LR-RR No', dataOne: '', labelTwo: 'Motor Vehicle No', dataTwo: '' },
+            { labelOne: 'Dispatched through', dataOne: transportText , labelTwo: 'Destination', dataTwo: '' },
+            { labelOne: 'Bill of Lading/LR-RR No', dataOne: '' , labelTwo: 'Motor Vehicle No', dataTwo:'' },
         ];
 
         let rightY = currentY + 15;
         extraDetails.forEach(detail => {
-            doc.font('Helvetica')
+            doc.font('Tamil')
                .fontSize(8)
                .text(detail.labelOne, rightColumnX, rightY)
                .text(`: ${detail.dataOne}`, rightColumnX + 80, rightY);
             
-            doc.font('Helvetica')
+            doc.font('Tamil')
                .fontSize(8)
                .text(detail.labelTwo, rightColumnX + 160, rightY)
                .text(`: ${detail.dataTwo}`, rightColumnX + 250, rightY);
@@ -3073,11 +3107,11 @@ const downloadGeneratedPdf = async (req, res) => {
             rightY += 15;
         });
 
-        doc.font('Helvetica')
+        doc.font('Tamil')
            .fontSize(8)
            .text('Terms of Delivery', rightColumnX, rightY);
 
-        currentY = rightY + 50;
+        currentY = rightY + 65;
         
       
         currentY = checkPageBreak(currentY, 50);
@@ -3104,7 +3138,7 @@ const downloadGeneratedPdf = async (req, res) => {
         else if (isExclusiveBill) rateDesc = '(Excl. of Tax)';
 
         doc.fontSize(7)
-           .font('Helvetica')
+           .font('Tamil')
            .text(rateDesc, leftColumnX + 335, currentY + 20);
 
         currentY += 35;
@@ -3202,7 +3236,11 @@ const downloadGeneratedPdf = async (req, res) => {
                .text(NumberFormat(deliveryOrder?.IGST_Total || 0), totalsValueX, currentY, { align: 'right' });
             currentY += 18;
         }
+     
+        doc.text('Total Expences', totalsX - 150, currentY)
+           .text(NumberFormat(deliveryOrder?.Total_Expences  || 0), totalsValueX, currentY, { align: 'right' });
 
+        currentY += 18;
 
         doc.text('Round Off', totalsX - 150, currentY)
            .text(NumberFormat(deliveryOrder?.Round_off || 0), totalsValueX, currentY, { align: 'right' });
