@@ -526,6 +526,16 @@ const tripActivities = () => {
                 ), TRIP_DETAILS AS (
                     SELECT
                         td.*, ta.*,
+                        COALESCE(pm.Product_Rate, 0) AS Product_Rate,
+                        CASE 
+                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                        THEN 0
+                        ELSE CONVERT(
+                            DECIMAL(18,2),
+                            COALESCE(QTY, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                        )
+                    END AS Bag,
                         COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
                         COALESCE(gm_from.Godown_Name, 'Unknown') AS FromLocation,
                         COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation,
@@ -542,6 +552,8 @@ const tripActivities = () => {
                         ON gm_to.Godown_Id = ta.To_Location
                     LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po
                         ON po.Trip_Id = td.Trip_Id AND po.Trip_Item_SNo = td.Arrival_Id
+                        LEFT JOIN tbl_Pack_Master as pck
+                        ON pck.Pack_Id=pm.Pack_Id
                     WHERE 
                         td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
                 ), MAPED_ARRIVALS AS (

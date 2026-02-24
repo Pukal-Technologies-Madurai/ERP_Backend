@@ -754,7 +754,7 @@ const DeliveryOrder = () => {
                     .input("Taxble", Taxble)
                     .input("Taxable_Rate", itemRateGst.base_amount)
                     .input("HSN_Code", productDetails.HSN_Code)
-                    .input("GoDown_Id", 1)
+                    .input("GoDown_Id", product.GoDown_Id)
                     .input("Unit_Id", product.UOM ?? "")
                     .input("Unit_Name", product.Units ?? "")
                     .input("Taxable_Amount", gstInfo.base_amount)
@@ -1324,7 +1324,7 @@ const editmobileApi = async (req, res) => {
         const {
             Do_Id, Retailer_Id, Delivery_Person_Id,
             Delivery_Status, Delivery_Time, Delivery_Location, 
-            Delivery_Latitude, Delivery_Longitude, Payment_Mode, 
+            Delivery_Latitude, Delivery_Longitude, Payment_Mode,GoDown_Id,
             Payment_Status, Payment_Ref_No, Altered_by, Altered_on,Cancel_status,
             Product_Array,
             Branch_Id, Narration, GST_Inclusive = 1, IS_IGST = 0
@@ -1637,7 +1637,7 @@ const editmobileApi = async (req, res) => {
                     .input("Taxble", Taxble)
                     .input("Taxable_Rate", itemRateGst.base_amount)
                     .input("HSN_Code", productDetails.HSN_Code)
-                    .input("GoDown_Id", 1)
+                    .input("GoDown_Id", product.GoDown_Id)
                     .input("Unit_Id", product.UOM ?? "")
                     .input("Unit_Name", product.Units ?? "")
                     .input("Taxable_Amount", gstInfo.base_amount)
@@ -3617,6 +3617,7 @@ WHERE
     CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
     AND
     CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
+     AND sdgi.Delivery_Status IN (1, 2, 4, 5,6) 
     AND NOT EXISTS (
         SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
     )`
