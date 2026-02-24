@@ -85,3 +85,24 @@ export const onlineSalesReportLOL = async (req, res) => {
         servError(error, res);
     }
 }
+
+export const onlineSalesReportItemLOL = async (req,res) => {
+     try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Sales_Item_LOL_VW @Fromdate, @Todate`);
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+}
