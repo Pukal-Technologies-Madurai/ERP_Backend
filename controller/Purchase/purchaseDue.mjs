@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { isEqualNumber, ISOString, toNumber } from "../../helper_functions.mjs";
+import { isEqualNumber, ISOString, isValidNumber, toNumber } from "../../helper_functions.mjs";
 import { sentData, servError } from "../../res.mjs";
 
 export const getPurchaseDue = async (req, res) => {
@@ -8,9 +8,12 @@ export const getPurchaseDue = async (req, res) => {
             Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString(),
             Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
 
+        const { VoucherType } = req.query;
+
         const request = await new sql.Request()
-            .input('Fromdate', Fromdate)
-            .input('Todate', Todate)
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .input('VoucherType', VoucherType)
             .query(`
                 -- DECLARE @Fromdate DATE = '2026-02-01', @Todate DATE = '2026-02-23';
                 -- GETTING OPENING BALANCE
@@ -46,10 +49,13 @@ export const getPurchaseDue = async (req, res) => {
                         Po_Entry_Date BETWEEN @Fromdate AND @Todate
                         AND Cancel_status = 0
                 		AND PIN_Id NOT IN (SELECT invoiceId FROM @purchaseReturn UNION SELECT invoiceId FROM @salesReturn)
+                        ${isValidNumber(VoucherType) ? ` AND Voucher_Type = @VoucherType ` : ''}
                 -- PURCHASE INVOICE GENERAL INFO
                     SELECT 
                     	pigi.PIN_Id AS invoiceId,
                     	pigi.Po_Inv_No AS invoiceNumber,
+                        pigi.Voucher_Type AS voucherTypeId,
+						vt.Voucher_Type AS voucherTypeGet,
                     	bm.BranchCode AS branchNameGet,
                     	COALESCE(pigi.PaymentDays, 0) AS paymentDueDays,
                     	pigi.Po_Entry_Date invoiceDate,
@@ -62,6 +68,7 @@ export const getPurchaseDue = async (req, res) => {
                     FROM tbl_Purchase_Order_Inv_Gen_Info AS pigi
                     LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = pigi.Branch_Id
                     LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = pigi.Retailer_Id
+					LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = pigi.Voucher_Type
                     WHERE pigi.PIN_Id IN (SELECT invoiceId FROM @parchaseInvoice)
                     ORDER BY pigi.Po_Entry_Date DESC;
                 -- PRODUCT DETAILS
@@ -71,7 +78,7 @@ export const getPurchaseDue = async (req, res) => {
                     	pisi.Item_Id AS itemId,
                     	pm.Product_Name AS productNameGet,
                     	pisi.Bill_Qty AS kgsValue,
-                    	pisi.Bill_Alt_Qty AS bagsValue,
+                    	pisi.Alt_Act_Qty AS bagsValue,
                     	pisi.Item_Rate AS rateValue,
                     	pisi.Amount AS amountValue
                     FROM tbl_Purchase_Order_Inv_Stock_Info AS pisi
@@ -135,7 +142,7 @@ export const getPurchaseDue = async (req, res) => {
                 payRefs,
                 journalRefs,
             }
-        });
+        }).filter(invoice => invoice.paymentDue > 0).sort((a, b) => new Date(a.paymentDueDate) - new Date(b.paymentDueDate));
 
         sentData(res, result);
     } catch (e) {

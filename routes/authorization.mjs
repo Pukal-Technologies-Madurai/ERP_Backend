@@ -3,6 +3,7 @@ import LoginController from '../controller/Authorization/login.mjs';
 import appMenu from '../controller/Authorization/appMenu.mjs';
 import authenticateToken from '../middleware/auth.mjs';
 import branchRight from '../controller/Authorization/branchRight.mjs';
+import { getModuleConfiguration, postModuleConfiguration, putModuleConfiguration } from '../controller/Authorization/moduleConfiguration.mjs';
 
 const AuthorizationRouter = express.Router();
 
@@ -33,6 +34,10 @@ AuthorizationRouter.put('/menuMaster', appMenu.updateMenu);
 AuthorizationRouter.get('/userBranches', branchRight.getUserBranches);
 AuthorizationRouter.post('/userBranches', branchRight.modifyUserBranch)
 AuthorizationRouter.post('/userBranches/saveAll', branchRight.saveAllUserBranches);
+
+AuthorizationRouter.get('/moduleConfiguration', getModuleConfiguration);
+AuthorizationRouter.post('/moduleConfiguration', postModuleConfiguration);
+AuthorizationRouter.put('/moduleConfiguration', putModuleConfiguration);
 
 
 export default AuthorizationRouter;
