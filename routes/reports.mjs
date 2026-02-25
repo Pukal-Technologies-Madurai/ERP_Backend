@@ -15,7 +15,7 @@ import deliveryReports from '../controller/Reports/deliveryReports.mjs';
 import expences from '../controller/Masters/expences.mjs';
 import templateMobile from '../controller/Reports/templateMobile.mjs';
 import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
-import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL  } from '../controller/Reports/externalAPI.mjs';
+import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL  } from '../controller/Reports/externalAPI.mjs';
 
 
 const ReportRouter = express.Router();
@@ -166,5 +166,6 @@ ReportRouter.get('/externalAPI/unitEconomicsReport', unitEconomicsReport);
 
 
 ReportRouter.get('/externalAPI/onlineSalesReportLOL', onlineSalesReportLOL);
+ReportRouter.get('/externalAPI/onlineSalesReportItemLOL', onlineSalesReportItemLOL);
 
 export default ReportRouter;
