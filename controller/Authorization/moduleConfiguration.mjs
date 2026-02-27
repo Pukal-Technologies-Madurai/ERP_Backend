@@ -1,18 +1,34 @@
 import sql from 'mssql';
 import { invalidInput, dataFound, failed, servError, sentData } from '../../res.mjs';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const userPortal = process.env.USERPORTALDB
 
 export const getModuleConfiguration = async (req, res) => {
     try {
+        if (!userPortal) {
+            return failed(res, 'User Portal DB not configured')
+        }
         const { moduleName } = req.query;
         const request = new sql.Request();
         const result = await request
             .input('moduleName', moduleName)
             .query(`
-                SELECT mr.*, u.Name AS createdByGet
-                FROM tbl_Module_Rules AS mr
-                JOIN tbl_Users AS u ON mr.createdBy = u.UserId
+                SELECT
+                    rules.*,
+                    access.Sno,
+	                COALESCE(access.ruleId, rules.id) AS ruleId,
+	                COALESCE(access.getOption, 0) AS getOption,
+	                COALESCE(access.createOption, 0) AS createOption,
+	                COALESCE(access.updateOption, 0) AS updateOption,
+	                COALESCE(access.deleteOption, 0) AS deleteOption,
+	                COALESCE(access.modifiedAt, rules.createdOn) AS modifiedAt
+                FROM [${userPortal}].[dbo].[tbl_Module_Rules] AS rules
+                LEFT JOIN [dbo].[tbl_Module_Rules_Access] AS access ON access.ruleId = rules.id
                 WHERE 1 = 1
-                ${moduleName ? ` AND mr.moduleName = @moduleName ` : ''}`
+                ${moduleName ? ` AND rules.moduleName = @moduleName ` : ''}
+                ORDER BY rules.ruleNumber`
             );
 
         sentData(res, result.recordset)

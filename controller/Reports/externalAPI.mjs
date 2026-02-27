@@ -44,7 +44,7 @@ export const onlineSalesReportItem = async (req, res) => {
     }
 };
 
-export const unitEconomicsReport = async (req, res) => { 
+export const unitEconomicsReport = async (req, res) => {
     try {
         const { Fromdate, Todate } = req.query;
 
@@ -56,10 +56,17 @@ export const unitEconomicsReport = async (req, res) => {
             .input("Todate", toDate)
             .query(`EXEC Reporting_Online_Unit_Eco_VW @Fromdate, @Todate`);
 
-        const recordset = result.recordset ?? [];
-        if (!recordset.length) return noData(res);
+        const [rows, meta] = result.recordsets || [];
 
-        dataFound(res, recordset);
+        if (!rows || rows.length === 0) {
+            return noData(res);
+        }
+
+        dataFound(res, {
+            rows,                                
+            lastStockValueDate: meta?.[0] ?? null 
+        });
+
     } catch (error) {
         servError(error, res);
     }
