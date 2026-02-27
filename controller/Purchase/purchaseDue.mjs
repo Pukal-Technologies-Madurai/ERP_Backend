@@ -17,29 +17,29 @@ export const getPurchaseDue = async (req, res) => {
             .query(`
                 -- DECLARE @Fromdate DATE = '2026-02-01', @Todate DATE = '2026-02-23';
                 -- GETTING OPENING BALANCE
-                	DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
-                -- GETTING PURCHASE RETURN
-                	DECLARE @purchaseReturn TABLE (invoiceId INT NOT NULL);
-                	INSERT INTO @purchaseReturn (invoiceId)
-                	SELECT purchase.PIN_Id 
-                	FROM tbl_Sales_Delivery_Gen_Info AS sales 
-                	JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON purchase.Ref_Po_Inv_No = sales.Do_Inv_No 
-                	WHERE 
-                		sales.Do_Date >= @OB_Date AND 
-                		sales.Cancel_status <> 0 AND 
-                		purchase.Cancel_status = 0 AND
-                		COALESCE(purchase.Ref_Po_Inv_No, '') <> '';
-                -- SALES RETURN 
-                	DECLARE @salesReturn TABLE (invoiceId INT NOT NULL);
-                	INSERT INTO @salesReturn (invoiceId)
-                	SELECT purchase.PIN_Id 
-                	FROM tbl_Sales_Delivery_Gen_Info AS sales 
-                	JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON purchase.Po_Inv_No = sales.Ref_Inv_Number
-                	WHERE 
-                		purchase.Po_Entry_Date <= @Fromdate
-                		AND purchase.Cancel_status <> 0 
-                		AND sales.Cancel_status <> 0
-                		AND COALESCE(sales.Ref_Inv_Number, '') <> '';
+                    DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
+                -- PURCHASE RETURN 
+                    DECLARE @purchaseReturn TABLE (invoiceId INT NOT NULL);
+                    INSERT INTO @purchaseReturn (invoiceId)
+                    SELECT purchase.PIN_Id 
+                    FROM tbl_Sales_Delivery_Gen_Info AS sales 
+                    JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Po_Inv_No) = TRIM(sales.Ref_Inv_Number)
+                    WHERE 
+                	    purchase.Po_Entry_Date >= @OB_Date AND 
+                	    purchase.Cancel_status = 0 AND 
+                	    sales.Cancel_status <> 0 AND 
+                	    COALESCE(sales.Ref_Inv_Number, '') <> '';
+                -- GETTING SALES RETURN
+                    DECLARE @salesReturn TABLE (invoiceId INT NOT NULL);
+                    INSERT INTO @salesReturn (invoiceId)
+                    SELECT purchase.PIN_Id 
+                    FROM tbl_Sales_Delivery_Gen_Info AS sales 
+                    JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Ref_Po_Inv_No) = TRIM(sales.Do_Inv_No) 
+                    WHERE 
+                	    sales.Do_Date >= @OB_Date AND 
+                	    sales.Cancel_status <> 0 AND 
+                	    purchase.Cancel_status = 0 AND
+                	    COALESCE(purchase.Ref_Po_Inv_No, '') <> '';
                 -- FOR INVOICE FILTERS
                     DECLARE @parchaseInvoice TABLE(invoiceId INT NOT NULL, invoiceNum NVARCHAR(50) NOT NULL);
                     INSERT INTO @parchaseInvoice (invoiceId, invoiceNum)
@@ -48,7 +48,8 @@ export const getPurchaseDue = async (req, res) => {
                     WHERE 
                         Po_Entry_Date BETWEEN @Fromdate AND @Todate
                         AND Cancel_status = 0
-                		AND PIN_Id NOT IN (SELECT invoiceId FROM @purchaseReturn UNION SELECT invoiceId FROM @salesReturn)
+                		AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = PIN_Id)
+                		AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = PIN_Id)
                         ${isValidNumber(VoucherType) ? ` AND Voucher_Type = @VoucherType ` : ''}
                 -- PURCHASE INVOICE GENERAL INFO
                     SELECT 
