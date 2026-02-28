@@ -3618,9 +3618,10 @@ WHERE
     AND
     CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
      AND sdgi.Delivery_Status IN (1, 2, 4, 5,6) 
-    AND NOT EXISTS (
-        SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
-    )`
+   -- AND NOT EXISTS (
+   --     SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
+  --  )
+   `
 
         const request = new sql.Request();
         request.input('from', Fromdate);

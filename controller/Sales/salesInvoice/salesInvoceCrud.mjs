@@ -115,94 +115,6 @@ const createRetailerDeliveryAddress = async ({
     }
 }
 
-const handleDeliveryAndShippingAddress = async ({
-    deliveryAddressDetails,
-    shipingAddressDetails,
-    Retailer_Id,
-    transaction
-}) => {
-    let delivery_id_to_post = deliveryAddressDetails?.delivery_id;
-    let shiping_id_to_post = shipingAddressDetails?.delivery_id;
-
-    const isDeliveryInvalidId = !checkIsNumber(deliveryAddressDetails?.delivery_id) && (
-        deliveryAddressDetails?.deliveryName || deliveryAddressDetails?.phoneNumber
-        || deliveryAddressDetails?.cityName || deliveryAddressDetails?.deliveryAddress
-        || deliveryAddressDetails?.gstNumber || deliveryAddressDetails?.stateName
-    );
-
-    const isShippingInvalidId = !checkIsNumber(shipingAddressDetails?.delivery_id) && (
-        shipingAddressDetails?.deliveryName || shipingAddressDetails?.phoneNumber
-        || shipingAddressDetails?.cityName || shipingAddressDetails?.deliveryAddress
-        || shipingAddressDetails?.gstNumber || shipingAddressDetails?.stateName
-    );
-
-    const areAddressesSame = (
-        (deliveryAddressDetails?.deliveryName || '') === (shipingAddressDetails?.deliveryName || '') &&
-        (deliveryAddressDetails?.phoneNumber || '') === (shipingAddressDetails?.phoneNumber || '') &&
-        (deliveryAddressDetails?.cityName || '') === (shipingAddressDetails?.cityName || '') &&
-        (deliveryAddressDetails?.deliveryAddress || '') === (shipingAddressDetails?.deliveryAddress || '') &&
-        (deliveryAddressDetails?.gstNumber || '') === (shipingAddressDetails?.gstNumber || '') &&
-        (deliveryAddressDetails?.stateName || '') === (shipingAddressDetails?.stateName || '')
-    );
-
-    if (isDeliveryInvalidId && isShippingInvalidId && areAddressesSame) {
-        const newAddressId = await createRetailerDeliveryAddress({
-            retailerId: Retailer_Id,
-            deliveryName: String(deliveryAddressDetails.deliveryName),
-            phoneNumber: String(deliveryAddressDetails.phoneNumber),
-            cityName: String(deliveryAddressDetails.cityName),
-            deliveryAddress: String(deliveryAddressDetails.deliveryAddress),
-            gstNumber: String(deliveryAddressDetails.gstNumber),
-            stateName: String(deliveryAddressDetails.stateName),
-            transaction
-        });
-
-        if (!checkIsNumber(newAddressId)) {
-            throw new Error('Failed to create address');
-        }
-        delivery_id_to_post = newAddressId;
-        shiping_id_to_post = newAddressId;
-    } else {
-        if (isDeliveryInvalidId) {
-            const newDeliveryId = await createRetailerDeliveryAddress({
-                retailerId: Retailer_Id,
-                deliveryName: String(deliveryAddressDetails.deliveryName),
-                phoneNumber: String(deliveryAddressDetails.phoneNumber),
-                cityName: String(deliveryAddressDetails.cityName),
-                deliveryAddress: String(deliveryAddressDetails.deliveryAddress),
-                gstNumber: String(deliveryAddressDetails.gstNumber),
-                stateName: String(deliveryAddressDetails.stateName),
-                transaction
-            });
-
-            if (!checkIsNumber(newDeliveryId)) {
-                throw new Error('Failed to create delivery address');
-            }
-            delivery_id_to_post = newDeliveryId;
-        }
-
-        if (isShippingInvalidId) {
-            const newShipingId = await createRetailerDeliveryAddress({
-                retailerId: Retailer_Id,
-                deliveryName: String(shipingAddressDetails.deliveryName),
-                phoneNumber: String(shipingAddressDetails.phoneNumber),
-                cityName: String(shipingAddressDetails.cityName),
-                deliveryAddress: String(shipingAddressDetails.deliveryAddress),
-                gstNumber: String(shipingAddressDetails.gstNumber),
-                stateName: String(shipingAddressDetails.stateName),
-                transaction
-            });
-
-            if (!checkIsNumber(newShipingId)) {
-                throw new Error('Failed to create shiping address');
-            }
-            shiping_id_to_post = newShipingId;
-        }
-    }
-
-    return { delivery_id_to_post, shiping_id_to_post };
-}
-
 export const getSalesInvoice = async (req, res) => {
     try {
         const { Retailer_Id, Cancel_status, Created_by, VoucherType, Do_Id } = req.query;
@@ -253,6 +165,12 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
                     sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
+                    COALESCE(sda.deliveryName, '') AS shippingName,
+                    COALESCE(sda.phoneNumber, '') AS shippingPhoneNumber,
+                    COALESCE(sda.cityName, '') AS shippingCityName,
+                    COALESCE(sda.gstNumber, '') AS shippingGstNumber,
+                    COALESCE(sda.stateName, '') AS shippingStateName,
+                    COALESCE(sda.deliveryAddress,'') AS shippingDeliveryAddress,
                     ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
                     ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
                     ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
@@ -270,23 +188,40 @@ export const getSalesInvoice = async (req, res) => {
                     ON cb.UserId = sdgi.Created_by
                 LEFT JOIN tbl_Voucher_Type AS v
                     ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda
+                ON sda.Id = sdgi.shipingAddressId
                 WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY  sdgi.Do_Id desc;
                 -- product details
-                SELECT
+                 SELECT
                     oi.*,
                     pm.Product_Id,
+                    COALESCE(pm.Short_Name, 'not available') AS Short_Name,
                     COALESCE(pm.Product_Name, 'not available') AS Product_Name,
                     COALESCE(pm.Product_Name, 'not available') AS Item_Name,
                     COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
                     COALESCE(u.Units, 'not available') AS UOM,
-                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                FROM tbl_Sales_Delivery_Stock_Info AS oi
-                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-                WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
-                ORDER BY oi.S_No ASC;
+                        CASE 
+                    WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                         OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                    THEN 0
+                    ELSE CONVERT(
+                                 DECIMAL(18,2),
+                                 COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                              )
+                     END AS Bag,
+                                        COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                 FROM tbl_Sales_Delivery_Stock_Info AS oi
+                 LEFT JOIN tbl_Product_Master AS pm 
+                     ON pm.Product_Id = oi.Item_Id
+                 LEFT JOIN tbl_UOM AS u 
+                     ON u.Unit_Id = oi.Unit_Id
+                 LEFT JOIN tbl_Pack_Master AS pck
+                     ON pck.Pack_Id = pm.Pack_Id
+                 LEFT JOIN tbl_Brand_Master AS b 
+                     ON b.Brand_Id = pm.Brand
+                 WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                 ORDER BY oi.S_No ASC;
                 -- expence details
                 SELECT 
                     exp.*, 
@@ -511,13 +446,56 @@ export const createSalesInvoice = async (req, res) => {
         // const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
 
         await transaction.begin();
+        let delivery_id_to_post = deliveryAddressDetails.delivery_id;
+        let shiping_id_to_post = shipingAddressDetails.delivery_id;
 
-        const { delivery_id_to_post, shiping_id_to_post } = await handleDeliveryAndShippingAddress({
-            deliveryAddressDetails,
-            shipingAddressDetails,
-            Retailer_Id,
-            transaction
-        });
+        if (
+            !checkIsNumber(deliveryAddressDetails.delivery_id)
+            && (
+                deliveryAddressDetails.deliveryName || deliveryAddressDetails.phoneNumber
+                || deliveryAddressDetails.cityName || deliveryAddressDetails.deliveryAddress
+                || deliveryAddressDetails.gstNumber || deliveryAddressDetails.stateName
+            )) {
+            const newDeliveryId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(deliveryAddressDetails.deliveryName),
+                phoneNumber: String(deliveryAddressDetails.phoneNumber),
+                cityName: String(deliveryAddressDetails.cityName),
+                deliveryAddress: String(deliveryAddressDetails.deliveryAddress),
+                gstNumber: String(deliveryAddressDetails.gstNumber),
+                stateName: String(deliveryAddressDetails.stateName),
+                transaction
+            });
+
+            if (!checkIsNumber(newDeliveryId)) {
+                throw new Error('Failed to create delivery address');
+            }
+            delivery_id_to_post = newDeliveryId;
+        }
+
+        if (
+            !checkIsNumber(shipingAddressDetails.delivery_id)
+            && (
+                shipingAddressDetails.deliveryName || shipingAddressDetails.phoneNumber
+                || shipingAddressDetails.cityName || shipingAddressDetails.deliveryAddress
+                || shipingAddressDetails.gstNumber || shipingAddressDetails.stateName
+            )) {
+            const newShipingId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(shipingAddressDetails.deliveryName),
+                phoneNumber: String(shipingAddressDetails.phoneNumber),
+                cityName: String(shipingAddressDetails.cityName),
+                deliveryAddress: String(shipingAddressDetails.deliveryAddress),
+                gstNumber: String(shipingAddressDetails.gstNumber),
+                stateName: String(shipingAddressDetails.stateName),
+                transaction
+            });
+
+            if (!checkIsNumber(newShipingId)) {
+                throw new Error('Failed to create shiping address');
+            }
+            shiping_id_to_post = newShipingId;
+        }
 
         const request = new sql.Request(transaction)
             .input('Do_Id', Do_Id)
@@ -939,12 +917,56 @@ export const updateSalesInvoice = async (req, res) => {
 
         await transaction.begin();
 
-        const { delivery_id_to_post, shiping_id_to_post } = await handleDeliveryAndShippingAddress({
-            deliveryAddressDetails,
-            shipingAddressDetails,
-            Retailer_Id,
-            transaction
-        });
+        let delivery_id_to_post = deliveryAddressDetails.delivery_id;
+        let shiping_id_to_post = shipingAddressDetails.delivery_id;
+
+        if (
+            !checkIsNumber(deliveryAddressDetails.delivery_id)
+            && (
+                deliveryAddressDetails.deliveryName || deliveryAddressDetails.phoneNumber
+                || deliveryAddressDetails.cityName || deliveryAddressDetails.deliveryAddress
+                || deliveryAddressDetails.gstNumber || deliveryAddressDetails.stateName
+            )) {
+            const newDeliveryId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(deliveryAddressDetails.deliveryName),
+                phoneNumber: String(deliveryAddressDetails.phoneNumber),
+                cityName: String(deliveryAddressDetails.cityName),
+                deliveryAddress: String(deliveryAddressDetails.deliveryAddress),
+                gstNumber: String(deliveryAddressDetails.gstNumber),
+                stateName: String(deliveryAddressDetails.stateName),
+                transaction
+            });
+
+            if (!checkIsNumber(newDeliveryId)) {
+                throw new Error('Failed to create delivery address');
+            }
+            delivery_id_to_post = newDeliveryId;
+        }
+
+        if (
+            !checkIsNumber(shipingAddressDetails.delivery_id)
+            && (
+                shipingAddressDetails.deliveryName || shipingAddressDetails.phoneNumber
+                || shipingAddressDetails.cityName || shipingAddressDetails.deliveryAddress
+                || shipingAddressDetails.gstNumber || shipingAddressDetails.stateName
+            )) {
+            const newShipingId = await createRetailerDeliveryAddress({
+                retailerId: Retailer_Id,
+                deliveryName: String(shipingAddressDetails.deliveryName),
+                phoneNumber: String(shipingAddressDetails.phoneNumber),
+                cityName: String(shipingAddressDetails.cityName),
+                deliveryAddress: String(shipingAddressDetails.deliveryAddress),
+                gstNumber: String(shipingAddressDetails.gstNumber),
+                stateName: String(shipingAddressDetails.stateName),
+                transaction
+            });
+
+            if (!checkIsNumber(newShipingId)) {
+                throw new Error('Failed to create shiping address');
+            }
+            shiping_id_to_post = newShipingId;
+        }
 
         const request = new sql.Request(transaction)
             .input('Do_Id', Do_Id)
