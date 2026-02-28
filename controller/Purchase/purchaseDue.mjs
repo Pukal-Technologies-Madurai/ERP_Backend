@@ -8,12 +8,15 @@ export const getPurchaseDue = async (req, res) => {
             Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString(),
             Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
 
-        const { VoucherType } = req.query;
+        const { VoucherType, CreatedBy, BranchId, RetailerId } = req.query;
 
         const request = await new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
             .input('VoucherType', VoucherType)
+            .input('CreatedBy', CreatedBy)
+            .input('BranchId', BranchId)
+            .input('RetailerId', RetailerId)
             .query(`
                 -- DECLARE @Fromdate DATE = '2026-02-01', @Todate DATE = '2026-02-23';
                 -- GETTING OPENING BALANCE
@@ -51,6 +54,9 @@ export const getPurchaseDue = async (req, res) => {
                 		AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = PIN_Id)
                 		AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = PIN_Id)
                         ${isValidNumber(VoucherType) ? ` AND Voucher_Type = @VoucherType ` : ''}
+                        ${isValidNumber(CreatedBy) ? ` AND Created_by = @CreatedBy ` : ''}
+                        ${isValidNumber(BranchId) ? ` AND Branch_Id = @BranchId ` : ''}
+                        ${isValidNumber(RetailerId) ? ` AND Retailer_Id = @RetailerId ` : ''}
                 -- PURCHASE INVOICE GENERAL INFO
                     SELECT 
                     	pigi.PIN_Id AS invoiceId,

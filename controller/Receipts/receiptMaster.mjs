@@ -307,7 +307,6 @@ const ReceiptMaster = () => {
         const transaction = new sql.Transaction();
 
         try {
-
             const {
                 receipt_id, remarks, status,
                 credit_ledger, credit_ledger_name,

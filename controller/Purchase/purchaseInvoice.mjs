@@ -42,7 +42,8 @@ function buildBulkPurchaseRows(Product_Array, productsData, { isInclusive, isNot
         const Total_Qty = RoundNumber(Bill_Qty + Free_Qty);
 
         const Bill_Alt_Qty = Division(Bill_Qty, pack);
-        const Alt_Act_Qty = Bill_Alt_Qty;
+        const Act_Qty = toNumber(product?.Act_Qty) || Bill_Qty;
+        const Alt_Act_Qty = Division(Act_Qty, pack);
 
         // ---------- Row for tbl_Purchase_Order_Inv_Stock_Info (bulk insert) ----------
         stockRows.push({
@@ -51,7 +52,7 @@ function buildBulkPurchaseRows(Product_Array, productsData, { isInclusive, isNot
             S_No: index + 1,
             Item_Id: toNumber(product?.Item_Id),
             Bill_Qty,
-            Act_Qty: toNumber(product?.Act_Qty) || Bill_Qty,
+            Act_Qty,
             Bill_Alt_Qty,
             Alt_Act_Qty,
             Unit_Id: product?.Unit_Id ?? '',

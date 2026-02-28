@@ -15,14 +15,26 @@ export const getPurchaseFilterValues = async (req, res) => {
                 SELECT DISTINCT pigi.Created_by AS value, u.Name AS label
                 FROM tbl_Purchase_Order_Inv_Gen_Info AS pigi
                 LEFT JOIN tbl_Users AS u
-                ON u.UserId = pigi.Created_by;`
+                ON u.UserId = pigi.Created_by;
+                -- Branch
+                SELECT DISTINCT pigi.Branch_Id AS value, b.BranchName AS label
+                FROM tbl_Purchase_Order_Inv_Gen_Info AS pigi
+                LEFT JOIN tbl_Branch_Master AS b
+                ON b.BranchId = pigi.Branch_Id
+                -- Retailer
+                SELECT DISTINCT pigi.Retailer_Id AS value, r.Retailer_Name AS label
+                FROM tbl_Purchase_Order_Inv_Gen_Info AS pigi
+                LEFT JOIN tbl_Retailers_Master AS r
+                ON r.Retailer_Id = pigi.Retailer_Id;`
             );
 
         const result = await request;
 
         dataFound(res, [], 'data found', {
             voucherType: toArray(result.recordsets[0]),
-            created_by: toArray(result.recordsets[1])
+            created_by: toArray(result.recordsets[1]),
+            branch: toArray(result.recordsets[2]),
+            retailer: toArray(result.recordsets[3])
         });
     } catch (e) {
         servError(e, res);
