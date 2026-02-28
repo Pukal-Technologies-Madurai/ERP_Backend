@@ -120,7 +120,7 @@ const PaymentDataDependency = () => {
                 .input('Todate', Todate)
                 .query(`
                     DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
-                    -- PURCHASE RETURN 
+                -- PURCHASE RETURN 
                     DECLARE @purchaseReturn TABLE (invoiceId NVARCHAR(20) NOT NULL);
                         INSERT INTO @purchaseReturn (invoiceId)
                         SELECT purchase.Po_Inv_No 
@@ -132,7 +132,7 @@ const PaymentDataDependency = () => {
                         	purchase.Cancel_status = 0 AND 
                         	sales.Cancel_status <> 0 AND 
                         	COALESCE(sales.Ref_Inv_Number, '') <> '';
-                    -- GETTING SALES RETURN
+                -- GETTING SALES RETURN
                         DECLARE @salesReturn TABLE (invoiceId NVARCHAR(20) NOT NULL);
                         INSERT INTO @salesReturn (invoiceId)
                         SELECT purchase.Po_Inv_No 
@@ -144,7 +144,7 @@ const PaymentDataDependency = () => {
                         	sales.Cancel_status <> 0 AND 
                         	purchase.Cancel_status = 0 AND
                         	COALESCE(purchase.Ref_Po_Inv_No, '') <> '';
-                    -- GETTING PAYMENT OUTSTANDING
+                -- GETTING PAYMENT OUTSTANDING
                     SELECT 
                     	inv.*,
                     	inv.Paid_Amount + inv.journalAdjustment AS totalReference
@@ -195,7 +195,7 @@ const PaymentDataDependency = () => {
                     		AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = pig.Po_Inv_No)
                     		AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = pig.Po_Inv_No)
                         UNION ALL
-                    -- from purchase invoice
+                -- from purchase invoice
                         SELECT 
                             cb.OB_Id AS bill_id, 
                             cb.bill_no, 
@@ -238,7 +238,7 @@ const PaymentDataDependency = () => {
                     		AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = cb.bill_no)
                     		AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = cb.bill_no)
                     	UNION ALL
-                    -- receipt outstanding
+                -- receipt outstanding
                     	SELECT 
                     		rgi.receipt_id,
                     		rgi.receipt_invoice_no,
@@ -282,7 +282,7 @@ const PaymentDataDependency = () => {
                             AND rgi.receipt_date >= @OB_Date
                             AND rgi.status <> 0
                     	UNION ALL
-                    -- Journal outstanding
+                -- Journal outstanding
                     	SELECT
                     		jgi.JournalId,
                     		jgi.JournalVoucherNo,

@@ -80,15 +80,30 @@ const ReceiptDataDependency = () => {
                 .input('Todate', Todate)
                 .query(`
                     DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
-                --filtering sales returns
-                    DECLARE @PurchaseInvoiceNumber TABLE (invNumber NVARCHAR(50) NOT NULL);
-                    INSERT INTO @PurchaseInvoiceNumber (invNumber)
-                    SELECT DISTINCT Ref_Po_Inv_No 
-                    FROM tbl_Purchase_Order_Inv_Gen_Info
+                -- PURCHASE RETURN 
+                    DECLARE @purchaseReturn TABLE (invoiceId NVARCHAR(20) NOT NULL);
+                    INSERT INTO @purchaseReturn (invoiceId)
+                    SELECT sales.Do_Inv_No 
+                    FROM tbl_Sales_Delivery_Gen_Info AS sales 
+                    JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Po_Inv_No) = TRIM(sales.Ref_Inv_Number)
+                    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sales.Retailer_Id AND rm.AC_Id = @Acc_Id
                     WHERE 
-                        Po_Entry_Date >= @OB_Date
-                    	AND Ref_Po_Inv_No IS NOT NULL
-                    	AND TRIM(COALESCE(Ref_Po_Inv_No, '')) <> ''
+                    	purchase.Po_Entry_Date >= @OB_Date AND 
+                    	purchase.Cancel_status = 0 AND 
+                    	sales.Cancel_status <> 0 AND 
+                    	COALESCE(sales.Ref_Inv_Number, '') <> '';
+                -- GETTING SALES RETURN
+                    DECLARE @salesReturn TABLE (invoiceId NVARCHAR(20) NOT NULL);
+                    INSERT INTO @salesReturn (invoiceId)
+                    SELECT sales.Do_Inv_No 
+                    FROM tbl_Sales_Delivery_Gen_Info AS sales 
+                    JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Ref_Po_Inv_No) = TRIM(sales.Do_Inv_No) 
+                    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sales.Retailer_Id AND rm.AC_Id = @Acc_Id
+                    WHERE 
+                    	sales.Do_Date >= @OB_Date AND 
+                    	sales.Cancel_status <> 0 AND 
+                    	purchase.Cancel_status = 0 AND
+                    	COALESCE(purchase.Ref_Po_Inv_No, '') <> '';
                 -- outstandings
                     SELECT 
                     	inv.*,
@@ -137,9 +152,10 @@ const ReceiptDataDependency = () => {
                             pig.Cancel_status <> 0
                             AND a.Acc_Id = @Acc_Id
                             AND pig.Do_Date >= @OB_Date
-                    		AND	pig.Do_Inv_No NOT IN (SELECT invNumber FROM @PurchaseInvoiceNumber)
+                    		AND	NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = pig.Do_Inv_No)
+                			AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = pig.Do_Inv_No)
                         UNION ALL
-                    -- from opening balance
+                -- from opening balance
                         SELECT 
                             cb.OB_Id AS bill_id, 
                             cb.bill_no, 
@@ -179,9 +195,10 @@ const ReceiptDataDependency = () => {
                             cb.OB_date >= @OB_Date 
                             AND cb.Retailer_id = @Acc_Id 
                             AND cb.cr_amount = 0
-                    		AND cb.bill_no NOT IN (SELECT invNumber FROM @PurchaseInvoiceNumber)
+                    		AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = cb.bill_no)
+                			AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = cb.bill_no)
                     	UNION ALL
-                    -- Payment outstanding
+                -- Payment outstanding
                     	SELECT
                     		pgi.pay_id,
                     		pgi.payment_invoice_no,
@@ -227,7 +244,7 @@ const ReceiptDataDependency = () => {
                             AND pgi.payment_date >= @OB_Date
                             AND pgi.status       <> 0
                     	UNION ALL
-                    -- Journal outstanding
+                -- Journal outstanding
                     	SELECT
                     		jgi.JournalId,
                     		jgi.JournalVoucherNo,

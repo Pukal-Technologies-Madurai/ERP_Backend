@@ -56,7 +56,31 @@ const getAccountPendingReference = async (req, res) => {
             .input('Acc_Id', sql.BigInt, Acc_Id)
             .input('JournalAutoId', sql.NVarChar(200), JournalAutoId)
             .query(`
-                DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
+            	DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
+            -- PURCHASE RETURN 
+                DECLARE @purchaseReturn TABLE (purchaseInvoiceId NVARCHAR(20) NOT NULL, salesInvoiceId NVARCHAR(20) NOT NULL);
+                INSERT INTO @purchaseReturn (purchaseInvoiceId, salesInvoiceId)
+                SELECT purchase.Po_Inv_No, sales.Do_Inv_No 
+                FROM tbl_Sales_Delivery_Gen_Info AS sales 
+                JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Po_Inv_No) = TRIM(sales.Ref_Inv_Number)
+                JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id AND rm.AC_Id = @Acc_Id
+                WHERE 
+                	purchase.Po_Entry_Date >= @OB_Date AND 
+                	purchase.Cancel_status = 0 AND 
+                	sales.Cancel_status <> 0 AND 
+                	COALESCE(sales.Ref_Inv_Number, '') <> '';
+            -- GETTING SALES RETURN
+                DECLARE @salesReturn TABLE (purchaseInvoiceId NVARCHAR(20) NOT NULL, salesInvoiceId NVARCHAR(20) NOT NULL);;
+                INSERT INTO @salesReturn (purchaseInvoiceId, salesInvoiceId)
+                SELECT purchase.Po_Inv_No, sales.Do_Inv_No
+                FROM tbl_Sales_Delivery_Gen_Info AS sales 
+                JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Ref_Po_Inv_No) = TRIM(sales.Do_Inv_No) 
+                JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id AND rm.AC_Id = @Acc_Id
+                WHERE 
+                	sales.Do_Date >= @OB_Date AND 
+                	sales.Cancel_status <> 0 AND 
+                	purchase.Cancel_status = 0 AND
+                	COALESCE(purchase.Ref_Po_Inv_No, '') <> '';
             -- OUTSTANDING SALES (Invoices + OB)
                 SELECT *
                 FROM (
@@ -90,7 +114,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = pig.Do_Id 
                                 AND jr.RefNo = pig.Do_Inv_No
                                 AND jr.RefType = 'SALES'
-                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+            					${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide,
                         pig.Do_Inv_No AS BillRefNo
@@ -101,11 +125,8 @@ const getAccountPendingReference = async (req, res) => {
                         pig.Cancel_status <> 0
                         AND a.Acc_Id = @Acc_Id
                         AND pig.Do_Date >= @OB_Date
-                        AND pig.Do_Inv_No NOT IN (
-                            SELECT TRIM(COALESCE(Ref_Po_Inv_No, '')) 
-                            FROM tbl_Purchase_Order_Inv_Gen_Info
-                            WHERE Po_Entry_Date >= @OB_Date
-                        )
+                        AND	NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.salesInvoiceId = pig.Do_Inv_No)
+                        AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.salesInvoiceId = pig.Do_Inv_No)
                     UNION ALL
             -- Opening balance (sales side)
                     SELECT 
@@ -148,11 +169,8 @@ const getAccountPendingReference = async (req, res) => {
                         cb.OB_date >= @OB_Date
                         AND cb.Retailer_id = @Acc_Id
                         AND cb.cr_amount = 0
-                        AND TRIM(COALESCE(cb.bill_no, '')) NOT IN (
-                            SELECT TRIM(COALESCE(Ref_Po_Inv_No, '')) 
-                            FROM tbl_Purchase_Order_Inv_Gen_Info
-                            WHERE Po_Entry_Date >= @OB_Date
-                        )
+                        AND	NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.salesInvoiceId = cb.bill_no)
+                        AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.salesInvoiceId = cb.bill_no)
                 ) S
                 WHERE S.totalValue > S.againstAmount + S.journalAdjustment
                 UNION ALL
@@ -194,7 +212,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = rgi.receipt_id 
                                 AND jr.RefNo = rgi.receipt_invoice_no
                                 AND jr.RefType = 'RECEIPT'
-                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+            					${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide,
                         rgi.receipt_invoice_no AS BillRefNo
@@ -239,7 +257,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = pig.PIN_Id 
                                 AND jr.RefNo = pig.Po_Inv_No
                                 AND jr.RefType = 'PURCHASE'
-                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+            					${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide,
                         pig.Ref_Po_Inv_No AS BillRefNo
@@ -250,11 +268,8 @@ const getAccountPendingReference = async (req, res) => {
                         pig.Cancel_status = 0
                         AND a.Acc_Id = @Acc_Id
                         AND pig.Po_Entry_Date >= @OB_Date
-                        AND pig.Po_Inv_No NOT IN (
-							SELECT TRIM(COALESCE(Ref_Inv_Number, '')) 
-							FROM tbl_Sales_Delivery_Gen_Info
-							WHERE Do_Date >= @OB_Date
-						)
+                        AND	NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.purchaseInvoiceId = pig.Po_Inv_No)
+                        AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.purchaseInvoiceId = pig.Po_Inv_No)
                     UNION ALL
             -- Opening balance (purchase side)
                     SELECT 
@@ -288,7 +303,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = cb.OB_Id 
                                 AND jr.RefNo = cb.bill_no
                                 AND jr.RefType = 'PURCHASE-OB'
-                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+            					${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Cr' AS accountSide,
                         cb.bill_no AS BillRefNo
@@ -297,11 +312,8 @@ const getAccountPendingReference = async (req, res) => {
                         cb.OB_date >= @OB_Date
                         AND cb.Retailer_id = @Acc_Id
                         AND cb.dr_amount = 0
-                        AND cb.bill_no NOT IN (
-							SELECT TRIM(COALESCE(Ref_Inv_Number, '')) 
-							FROM tbl_Sales_Delivery_Gen_Info
-							WHERE Do_Date >= @OB_Date
-						)
+                        AND	NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.purchaseInvoiceId = cb.bill_no)
+                        AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.purchaseInvoiceId = cb.bill_no)
                 ) P
                 WHERE P.totalValue > P.againstAmount + P.journalAdjustment
                 UNION ALL
@@ -340,7 +352,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefId = pgi.pay_id 
                                 AND jr.RefNo = pgi.payment_invoice_no
                                 AND jr.RefType = 'PAYMENT'
-                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+            					${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                         ), 0) AS journalAdjustment,
                         'Dr' AS accountSide,
                         pgi.payment_invoice_no AS BillRefNo
@@ -394,7 +406,7 @@ const getAccountPendingReference = async (req, res) => {
                                 AND jr.RefType = 'JOURNAL'
                                 AND jh.JournalVoucherNo <> jgi.JournalVoucherNo
                                 AND jh.JournalId <> jgi.JournalId
-                                ${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
+            					${JournalAutoId ? ' AND jh.JournalAutoId <> @JournalAutoId ' : ''}
                     	) + (
                             SELECT COALESCE(SUM(jbr.Amount), 0)
                             FROM dbo.tbl_Journal_Bill_Reference AS jbr
@@ -403,7 +415,7 @@ const getAccountPendingReference = async (req, res) => {
                     			AND jbr.LineId = jei.LineId
                     			AND jbr.Acc_Id = jei.Acc_Id
                     			AND jbr.DrCr = jei.DrCr
-                                ${JournalAutoId ? ' AND jei.JournalAutoId <> @JournalAutoId ' : ''}
+            					${JournalAutoId ? ' AND jei.JournalAutoId <> @JournalAutoId ' : ''}
                         ) AS journalAdjustment,
                         jei.DrCr AS accountSide,
                         jgi.JournalVoucherNo AS BillRefNo
