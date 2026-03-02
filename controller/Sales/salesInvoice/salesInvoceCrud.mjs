@@ -203,6 +203,7 @@ const handleDeliveryAndShippingAddress = async ({
     return { delivery_id_to_post, shiping_id_to_post };
 }
 
+
 export const getSalesInvoice = async (req, res) => {
     try {
         const { Retailer_Id, Cancel_status, Created_by, VoucherType, Do_Id } = req.query;
@@ -253,6 +254,12 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
                     sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
+                    COALESCE(sda.deliveryName, '') AS shippingName,
+                    COALESCE(sda.phoneNumber, '') AS shippingPhoneNumber,
+                    COALESCE(sda.cityName, '') AS shippingCityName,
+                    COALESCE(sda.gstNumber, '') AS shippingGstNumber,
+                    COALESCE(sda.stateName, '') AS shippingStateName,
+                    COALESCE(sda.deliveryAddress,'') AS shippingDeliveryAddress,
                     ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
                     ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
                     ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
@@ -270,23 +277,40 @@ export const getSalesInvoice = async (req, res) => {
                     ON cb.UserId = sdgi.Created_by
                 LEFT JOIN tbl_Voucher_Type AS v
                     ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda
+                ON sda.Id = sdgi.shipingAddressId
                 WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY  sdgi.Do_Id desc;
                 -- product details
-                SELECT
+                 SELECT
                     oi.*,
                     pm.Product_Id,
+                    COALESCE(pm.Short_Name, 'not available') AS Short_Name,
                     COALESCE(pm.Product_Name, 'not available') AS Product_Name,
                     COALESCE(pm.Product_Name, 'not available') AS Item_Name,
                     COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
                     COALESCE(u.Units, 'not available') AS UOM,
-                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                FROM tbl_Sales_Delivery_Stock_Info AS oi
-                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-                WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
-                ORDER BY oi.S_No ASC;
+                        CASE 
+                    WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                         OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                    THEN 0
+                    ELSE CONVERT(
+                                 DECIMAL(18,2),
+                                 COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                              )
+                     END AS Bag,
+                                        COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                 FROM tbl_Sales_Delivery_Stock_Info AS oi
+                 LEFT JOIN tbl_Product_Master AS pm 
+                     ON pm.Product_Id = oi.Item_Id
+                 LEFT JOIN tbl_UOM AS u 
+                     ON u.Unit_Id = oi.Unit_Id
+                 LEFT JOIN tbl_Pack_Master AS pck
+                     ON pck.Pack_Id = pm.Pack_Id
+                 LEFT JOIN tbl_Brand_Master AS b 
+                     ON b.Brand_Id = pm.Brand
+                 WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                 ORDER BY oi.S_No ASC;
                 -- expence details
                 SELECT 
                     exp.*, 
@@ -355,6 +379,171 @@ export const getSalesInvoice = async (req, res) => {
         servError(e, res);
     }
 }
+
+
+export const getSalesInvoiceById = async (req, res) => {
+    try {
+        const { Do_Id } = req.query;
+       
+
+        const getCurrespondingAccount = new sql.Request()
+            .query(`
+                SELECT Acc_Id, AC_Reason 
+                FROM tbl_Default_AC_Master 
+                WHERE 
+                    Type = 'DEFAULT' 
+                    AND Acc_Id IS NOT NULL;`
+            );
+
+        const expData = (await getCurrespondingAccount).recordset;
+
+        const excludeList = expData.map(exp => exp.Acc_Id).join(', ');
+
+        const request = new sql.Request()
+            .input('Do_Id', Do_Id)
+            .query(`
+                -- declaring table variable
+                DECLARE @FilteredInvoice TABLE (Do_Id INT);
+                -- inserting data to temp table
+                INSERT INTO @FilteredInvoice (Do_Id)
+                SELECT Do_Id
+                FROM tbl_Sales_Delivery_Gen_Info
+              WHERE 1=1
+            ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''};
+                -- sales general details
+                SELECT 
+                    sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                    sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                    sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
+                    sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                    sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
+                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
+                    COALESCE(sda.deliveryName, '') AS shippingName,
+                    COALESCE(sda.phoneNumber, '') AS shippingPhoneNumber,
+                    COALESCE(sda.cityName, '') AS shippingCityName,
+                    COALESCE(sda.gstNumber, '') AS shippingGstNumber,
+                    COALESCE(sda.stateName, '') AS shippingStateName,
+                    COALESCE(sda.deliveryAddress,'') AS shippingDeliveryAddress,
+                    ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
+                    ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
+                    ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                FROM 
+                    tbl_Sales_Delivery_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm 
+                    ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS bm 
+                    ON bm.BranchId = sdgi.Branch_Id
+                LEFT JOIN tbl_Users AS cb 
+                    ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_Voucher_Type AS v
+                    ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda
+                ON sda.Id = sdgi.shipingAddressId
+                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+                ORDER BY  sdgi.Do_Id desc;
+                -- product details
+                 SELECT
+                    oi.*,
+                    pm.Product_Id,
+                    COALESCE(pm.Short_Name, 'not available') AS Short_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Item_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                        CASE 
+                    WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                         OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                    THEN 0
+                    ELSE CONVERT(
+                                 DECIMAL(18,2),
+                                 COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                              )
+                     END AS Bag,
+                                        COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                 FROM tbl_Sales_Delivery_Stock_Info AS oi
+                 LEFT JOIN tbl_Product_Master AS pm 
+                     ON pm.Product_Id = oi.Item_Id
+                 LEFT JOIN tbl_UOM AS u 
+                     ON u.Unit_Id = oi.Unit_Id
+                 LEFT JOIN tbl_Pack_Master AS pck
+                     ON pck.Pack_Id = pm.Pack_Id
+                 LEFT JOIN tbl_Brand_Master AS b 
+                     ON b.Brand_Id = pm.Brand
+                 WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                 ORDER BY oi.S_No ASC;
+                -- expence details
+                SELECT 
+                    exp.*, 
+                    em.Account_name AS Expence_Name, 
+                    CASE  
+                        WHEN exp.Expence_Value_DR > 0 THEN exp.Expence_Value_DR 
+                        ELSE -exp.Expence_Value_CR
+                    END AS Expence_Value
+                FROM tbl_Sales_Delivery_Expence_Info AS exp
+                LEFT JOIN tbl_Account_Master AS em
+                    ON em.Acc_Id = exp.Expense_Id
+                WHERE 
+                    exp.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                    ${excludeList ? ` AND exp.Expense_Id NOT IN (${excludeList}) ` : ''};
+                -- staff involved
+                SELECT 
+                    stf.*,
+                    e.Cost_Center_Name AS Emp_Name,
+                    cc.Cost_Category AS Involved_Emp_Type
+                FROM tbl_Sales_Delivery_Staff_Info AS stf
+                LEFT JOIN tbl_ERP_Cost_Center AS e
+                    ON e.Cost_Center_Id = stf.Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc
+                    ON cc.Cost_Category_Id = stf.Emp_Type_Id
+                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+            -- Alteration History
+                SELECT ah.*, u.Name AS alterByGet 
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                WHERE 
+                    alteredTable = 'tbl_Sales_Delivery_Gen_Info' 
+                    AND alteredRowId IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);`
+            );
+
+        const result = await request;
+
+        const SalesGeneralInfo = toArray(result.recordsets[0]);
+        const Products_List = toArray(result.recordsets[1]);
+        const Expence_Array = toArray(result.recordsets[2]);
+        const Staffs_Array = toArray(result.recordsets[3]);
+        const Alteration_History = toArray(result.recordsets[4]);
+
+        if (SalesGeneralInfo.length > 0) {
+            const resData = SalesGeneralInfo.map(row => ({
+                ...row,
+                Products_List: Products_List.filter(
+                    fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
+                ),
+                Expence_Array: Expence_Array.filter(
+                    fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                ),
+                Staffs_Array: Staffs_Array.filter(
+                    fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                ),
+                alterationHistory: Alteration_History.filter(
+                    fil => isEqualNumber(fil.alteredRowId, row.Do_Id)
+                )
+            }));
+
+            dataFound(res, resData);
+        } else {
+            noData(res);
+        }
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 
 export const createSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
