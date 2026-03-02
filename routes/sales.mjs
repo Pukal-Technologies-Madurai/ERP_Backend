@@ -3,7 +3,7 @@ import salesOrder from '../controller/Sales/salesOrder.mjs';
 import salesEntry from '../controller/Sales/salesEntry.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 import {
-    getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation
+    getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation,getSalesInvoiceById
 } from '../controller/Sales/salesInvoice/salesInvoceCrud.mjs';
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
@@ -37,6 +37,8 @@ SalesRouter.post('/salesInvoice', createSalesInvoice);
 SalesRouter.get('/salesInvoice/tallySync', salesTallySync);
 SalesRouter.put('/salesInvoice', updateSalesInvoice);
 SalesRouter.post('/salesInvoice/liveSales', liveSalesCreation);
+
+SalesRouter.get('/salesInvoiceById', getSalesInvoiceById);
 
 SalesRouter.get('/presaleOrder/getList', salesOrder.getPresaleOrder)
 SalesRouter.post('/presaleOrder/saleOrderCreationWithPso', salesOrder.saleOrderCreationWithPso)
