@@ -136,11 +136,14 @@ const CustomerAPIs = () => {
         try {
             const request = new sql.query(`
                 SELECT 
-                	Ledger_Tally_Id, 
-                	Ledger_Name,
-                	Actual_Party_Name_with_Brokers
-                FROM tbl_Ledger_LOL
-                ORDER BY Ledger_Name`
+                lol.Ledger_Tally_Id, 
+                lol.Ledger_Name,
+            	lol.Actual_Party_Name_with_Brokers,
+            	am.Acc_Id
+            FROM tbl_Ledger_LOL AS lol
+            JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = lol.Ret_Id
+            JOIN tbl_Account_Master AS am ON am.Acc_Id = rm.AC_Id
+            ORDER BY lol.Ledger_Name`
             );
 
             const result = await request;
@@ -176,7 +179,7 @@ const CustomerAPIs = () => {
                 }));
 
                 const flattenedArray = recordsetArray.flat();
-                
+
                 return sentData(res, toArray(flattenedArray).map(inv => ({ ...inv, accountSide: 'Dr' })));
 
             } else if (stringCompare(source, 'ERP')) {

@@ -203,7 +203,6 @@ const handleDeliveryAndShippingAddress = async ({
     return { delivery_id_to_post, shiping_id_to_post };
 }
 
-
 export const getSalesInvoice = async (req, res) => {
     try {
         const { Retailer_Id, Cancel_status, Created_by, VoucherType, Do_Id } = req.query;
@@ -254,12 +253,6 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
                     sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
-                    COALESCE(sda.deliveryName, '') AS shippingName,
-                    COALESCE(sda.phoneNumber, '') AS shippingPhoneNumber,
-                    COALESCE(sda.cityName, '') AS shippingCityName,
-                    COALESCE(sda.gstNumber, '') AS shippingGstNumber,
-                    COALESCE(sda.stateName, '') AS shippingStateName,
-                    COALESCE(sda.deliveryAddress,'') AS shippingDeliveryAddress,
                     ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
                     ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
                     ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
@@ -277,40 +270,23 @@ export const getSalesInvoice = async (req, res) => {
                     ON cb.UserId = sdgi.Created_by
                 LEFT JOIN tbl_Voucher_Type AS v
                     ON v.Vocher_Type_Id = sdgi.Voucher_Type
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda
-                ON sda.Id = sdgi.shipingAddressId
                 WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY  sdgi.Do_Id desc;
                 -- product details
-                 SELECT
+                SELECT
                     oi.*,
                     pm.Product_Id,
-                    COALESCE(pm.Short_Name, 'not available') AS Short_Name,
                     COALESCE(pm.Product_Name, 'not available') AS Product_Name,
                     COALESCE(pm.Product_Name, 'not available') AS Item_Name,
                     COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
                     COALESCE(u.Units, 'not available') AS UOM,
-                        CASE 
-                    WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-                         OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-                    THEN 0
-                    ELSE CONVERT(
-                                 DECIMAL(18,2),
-                                 COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-                              )
-                     END AS Bag,
-                                        COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                 FROM tbl_Sales_Delivery_Stock_Info AS oi
-                 LEFT JOIN tbl_Product_Master AS pm 
-                     ON pm.Product_Id = oi.Item_Id
-                 LEFT JOIN tbl_UOM AS u 
-                     ON u.Unit_Id = oi.Unit_Id
-                 LEFT JOIN tbl_Pack_Master AS pck
-                     ON pck.Pack_Id = pm.Pack_Id
-                 LEFT JOIN tbl_Brand_Master AS b 
-                     ON b.Brand_Id = pm.Brand
-                 WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
-                 ORDER BY oi.S_No ASC;
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Delivery_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                ORDER BY oi.S_No ASC;
                 -- expence details
                 SELECT 
                     exp.*, 
@@ -380,12 +356,9 @@ export const getSalesInvoice = async (req, res) => {
     }
 }
 
-
 export const getSalesInvoiceById = async (req, res) => {
     try {
         const { Do_Id } = req.query;
-       
-
         const getCurrespondingAccount = new sql.Request()
             .query(`
                 SELECT Acc_Id, AC_Reason 
@@ -543,7 +516,6 @@ export const getSalesInvoiceById = async (req, res) => {
         servError(e, res);
     }
 }
-
 
 export const createSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
@@ -736,7 +708,7 @@ export const createSalesInvoice = async (req, res) => {
             .input('Total_Invoice_value', Math.round(Total_Invoice_value))
             .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
 
-            .input('Delivery_Status', 1)
+            .input('Delivery_Status', Delivery_Status)
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
             .input('paymentDueDays', toNumber(paymentDueDays))
