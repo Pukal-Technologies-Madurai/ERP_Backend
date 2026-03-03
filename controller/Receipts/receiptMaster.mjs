@@ -304,7 +304,7 @@ const ReceiptMaster = () => {
     }
 
     const updateReceipt = async (req, res) => {
-        const transaction = new sql.Transaction();
+        const transaction = req.transaction;
 
         try {
             const {
@@ -312,7 +312,9 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount, altered_by,
-                check_no, check_date, bank_name, bank_date, is_new_ref, is_journal_type = 0, transaction_type = ''
+                check_no, check_date, bank_name, 
+                bank_date, is_new_ref, 
+                is_journal_type = 0, transaction_type = ''
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -330,9 +332,7 @@ const ReceiptMaster = () => {
                 return invalidInput(res, 'Enter Required Fields', { errors });
             }
 
-            await transaction.begin();
-
-            const Alter_Id = randomNumber(6, 8);
+            const Alter_Id = req.alterId;
 
             // update values
 

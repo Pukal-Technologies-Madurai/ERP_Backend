@@ -278,7 +278,7 @@ const createJournal = async (req, res) => {
 };
 
 const editJournal = async (req, res) => {
-    const tx = new sql.Transaction();
+    const tx = req.transaction;
 
     try {
         const parsed = EditJournalSchema.safeParse(req.body || {});
@@ -322,9 +322,7 @@ const editJournal = async (req, res) => {
             JournalVoucherNo,
             BranchId: dbBranchId,
         } = hdrQ.recordset[0];
-
-        await tx.begin();
-
+        
         await new sql.Request(tx)
             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
             .query(`

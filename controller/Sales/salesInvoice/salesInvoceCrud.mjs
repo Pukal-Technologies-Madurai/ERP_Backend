@@ -998,7 +998,7 @@ export const createSalesInvoice = async (req, res) => {
 }
 
 export const updateSalesInvoice = async (req, res) => {
-    const transaction = new sql.Transaction();
+    const transaction = req.transaction;
 
     try {
         const {
@@ -1006,7 +1006,7 @@ export const updateSalesInvoice = async (req, res) => {
             Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
             deliveryAddressDetails = {}, shipingAddressDetails = {},
-            Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0, Alter_Reason = '', paymentDueDays = 0
+            Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
         } = req.body;
 
         const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -1026,7 +1026,7 @@ export const updateSalesInvoice = async (req, res) => {
         }
 
         const productsData = (await getProducts()).dataArray;
-        const Alter_Id = Math.floor(Math.random() * 999999);
+        const Alter_Id = req.alterId;
 
         const TotalExpences = toNumber(RoundNumber(
             toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
@@ -1098,8 +1098,6 @@ export const updateSalesInvoice = async (req, res) => {
         const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
         // const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
 
-        await transaction.begin();
-
         const { delivery_id_to_post, shiping_id_to_post } = await handleDeliveryAndShippingAddress({
             deliveryAddressDetails,
             shipingAddressDetails,
@@ -1137,7 +1135,6 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Payment_Status', Payment_Status)
             .input('paymentDueDays', toNumber(paymentDueDays))
             .input('shipingAddressId', shiping_id_to_post)
-            .input('Alter_Reason', Alter_Reason)
             .input('alterAt', new Date())
             .query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info 
@@ -1171,13 +1168,7 @@ export const updateSalesInvoice = async (req, res) => {
                     shipingAddressId = @shipingAddressId,
                     paymentDueDays = @paymentDueDays
                 WHERE
-                    Do_Id = @Do_Id
-                -- SAVING ALTERATION DETAILS
-                INSERT INTO tbl_Alteration_History (
-                    alteredTable, alteredRowId, alterBy, alterAt, alterId, reason
-                ) VALUES (
-                    'tbl_Sales_Delivery_Gen_Info', @Do_Id, @Altered_by, @alterAt, @Alter_Id, @Alter_Reason
-                )`
+                    Do_Id = @Do_Id;`
             );
 
         const result = await request;

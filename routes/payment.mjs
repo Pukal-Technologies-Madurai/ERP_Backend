@@ -4,11 +4,22 @@ import paymentDependency from '../controller/Payment/dataDependency.mjs';
 import paymentReport from '../controller/Payment/paymentReport.mjs';
 import debtorsCreditors from '../controller/Payment/debtorsCreditors.mjs';
 import bankStatement from '../controller/Payment/bankStatement.mjs';
+import { alterHistory } from '../middleware/alterHistory.mjs';
+
 const PaymentRouter = express.Router();
 
 PaymentRouter.get('/paymentMaster', paymentMaster.getPayments);
 PaymentRouter.post('/paymentMaster', paymentMaster.createGeneralInfoPayments);
-PaymentRouter.put('/paymentMaster', paymentMaster.updateGeneralInfoPayments);
+PaymentRouter.put(
+    '/paymentMaster', 
+    alterHistory({
+        alteredTable: 'tbl_Payment_General_Info',
+        rowIdField: 'pay_id',
+        userField: 'altered_by',
+        reason: 'Alter_Reason',
+    }),
+    paymentMaster.updateGeneralInfoPayments
+);
 PaymentRouter.get('/paymentMasterMobile',paymentMaster.getPaymentMobile);
 
 PaymentRouter.get('/paymentMaster/filtersValues', paymentDependency.getFilterValues);

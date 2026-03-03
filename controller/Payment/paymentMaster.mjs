@@ -302,14 +302,9 @@ const PaymentMaster = () => {
     }
 
     const updateGeneralInfoPayments = async (req, res) => {
-        const transaction = new sql.Transaction();
-        let transactionBegun = false;
+        const transaction = req.transaction;
 
         try {
-
-            await transaction.begin();
-            transactionBegun = true;
-
             const {
                 pay_id, remarks, status, is_new_ref = 0,
                 credit_ledger, credit_ledger_name,
@@ -333,7 +328,7 @@ const PaymentMaster = () => {
                 return invalidInput(res, 'Enter Required Fields', { errors });
             }
 
-            const Alter_Id = randomNumber(6, 8);
+            const Alter_Id = req.alterId;
             // update values
 
             const request = new sql.Request(transaction)
@@ -407,7 +402,7 @@ const PaymentMaster = () => {
             success(res, 'Changes Saved')
 
         } catch (e) {
-            if (transactionBegun && transaction._aborted === false) {
+            if (transaction._aborted === false) {
                 try {
                     await transaction.rollback();
                 } catch (rollbackErr) {

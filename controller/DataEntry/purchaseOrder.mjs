@@ -136,38 +136,38 @@ const PurchaseOrderDataEntry = () => {
     }
 
     const createPurchaseOrder = async (req, res) => {
-        const {
-            BranchId,
-            LoadingDate = '',
-            TradeConfirmDate = '',
-            OwnerId = 0,
-            OwnerName = '',
-            BrokerId = 0,
-            BrokerName = '',
-            PartyId = '',
-            PartyName = '',
-            PartyAddress = '',
-            PaymentCondition = '',
-            Remarks = '',
-            OrderStatus = '',
-            Discount = 0,
-            QualityCondition = '',
-            PaymentDays = 0,
-            CreatedBy = ''
-        } = req?.body?.OrderDetails;
-
-        if (!checkIsNumber(BranchId)) {
-            return invalidInput(res, 'Select Branch')
-        }
-
-        const OrderItems = Array.isArray(req.body.OrderItems) ? req.body.OrderItems : [];
-        const DelivdryDetails = Array.isArray(req.body.DelivdryDetails) ? req.body.DelivdryDetails : [];
-        const TranspoterDetails = Array.isArray(req.body.TranspoterDetails) ? req.body.TranspoterDetails : [];
-        const StaffDetails = Array.isArray(req.body.StaffDetails) ? req.body.StaffDetails : [];
-
         const transaction = new sql.Transaction();
 
         try {
+
+            const {
+                BranchId,
+                LoadingDate = '',
+                TradeConfirmDate = '',
+                OwnerId = 0,
+                OwnerName = '',
+                BrokerId = 0,
+                BrokerName = '',
+                PartyId = '',
+                PartyName = '',
+                PartyAddress = '',
+                PaymentCondition = '',
+                Remarks = '',
+                OrderStatus = '',
+                Discount = 0,
+                QualityCondition = '',
+                PaymentDays = 0,
+                CreatedBy = ''
+            } = req.body;
+
+            if (!checkIsNumber(BranchId)) {
+                return invalidInput(res, 'Select Branch')
+            }
+
+            const OrderItems = Array.isArray(req.body.OrderItems) ? req.body.OrderItems : [];
+            const DelivdryDetails = Array.isArray(req.body.DelivdryDetails) ? req.body.DelivdryDetails : [];
+            const TranspoterDetails = Array.isArray(req.body.TranspoterDetails) ? req.body.TranspoterDetails : [];
+            const StaffDetails = Array.isArray(req.body.StaffDetails) ? req.body.StaffDetails : [];
 
             const currentYear = new Date().getFullYear();
 
@@ -367,35 +367,33 @@ const PurchaseOrderDataEntry = () => {
 
     const updatePurchaseOrder = async (req, res) => {
 
-        const {
-            Sno = '',
-            LoadingDate = '',
-            TradeConfirmDate = '',
-            OwnerId = 0,
-            OwnerName = '',
-            BrokerId = 0,
-            BrokerName = '',
-            PartyId = 0,
-            PartyName = '',
-            PartyAddress = '',
-            PaymentCondition = '',
-            Remarks = '',
-            OrderStatus = '',
-            Discount = 0,
-            QualityCondition = '',
-            PaymentDays = 0,
-            CreatedBy = ''
-        } = req.body.OrderDetails;
-
-        const OrderItems = Array.isArray(req.body.OrderItems) ? req.body.OrderItems : [];
-        const DelivdryDetails = Array.isArray(req.body.DelivdryDetails) ? req.body.DelivdryDetails : [];
-        const TranspoterDetails = Array.isArray(req.body.TranspoterDetails) ? req.body.TranspoterDetails : [];
-        const StaffDetails = Array.isArray(req.body.StaffDetails) ? req.body.StaffDetails : [];
-
-        const transaction = new sql.Transaction();
+        const transaction = req.transaction;
 
         try {
-            await transaction.begin();
+            const {
+                Sno = '',
+                LoadingDate = '',
+                TradeConfirmDate = '',
+                OwnerId = 0,
+                OwnerName = '',
+                BrokerId = 0,
+                BrokerName = '',
+                PartyId = 0,
+                PartyName = '',
+                PartyAddress = '',
+                PaymentCondition = '',
+                Remarks = '',
+                OrderStatus = '',
+                Discount = 0,
+                QualityCondition = '',
+                PaymentDays = 0,
+                CreatedBy = ''
+            } = req.body;
+
+            const OrderItems = Array.isArray(req.body.OrderItems) ? req.body.OrderItems : [];
+            const DelivdryDetails = Array.isArray(req.body.DelivdryDetails) ? req.body.DelivdryDetails : [];
+            const TranspoterDetails = Array.isArray(req.body.TranspoterDetails) ? req.body.TranspoterDetails : [];
+            const StaffDetails = Array.isArray(req.body.StaffDetails) ? req.body.StaffDetails : [];
 
             // Update Order General Details
             const updateOrderDetails = await new sql.Request(transaction)

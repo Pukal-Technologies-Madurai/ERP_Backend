@@ -3,6 +3,7 @@ import paymentCollection from '../controller/Delivery/paymentCollection.mjs';
 import receiptMaster from '../controller/Receipts/receiptMaster.mjs';
 import dataDependency from '../controller/Receipts/dataDependency.mjs';
 import receiptReport from '../controller/Receipts/receiptReport.mjs';
+import { alterHistory } from '../middleware/alterHistory.mjs';
 
 const ReceiptsRouter = express.Router();
 
@@ -20,7 +21,16 @@ ReceiptsRouter.put('/verifyStatus',paymentCollection.verifyStatus);
 
 ReceiptsRouter.get('/receiptMaster', receiptMaster.getReceipts);
 ReceiptsRouter.post('/receiptMaster', receiptMaster.createReceipt);
-ReceiptsRouter.put('/receiptMaster', receiptMaster.updateReceipt);
+ReceiptsRouter.put(
+    '/receiptMaster', 
+    alterHistory({
+        alteredTable: 'tbl_Receipt_General_Info',
+        rowIdField: 'receipt_id',
+        userField: 'altered_by',
+        reason: 'Alter_Reason',
+    }),
+    receiptMaster.updateReceipt
+);
 
 ReceiptsRouter.get('/receiptMaster/filtersValues', dataDependency.getFilterValues);
 ReceiptsRouter.get('/receiptMaster/search', dataDependency.searchReceiptInvoice);

@@ -5,8 +5,6 @@ import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 
-
-
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
 const SaleOrder = () => {
@@ -337,34 +335,35 @@ const SaleOrder = () => {
     }
 
     const editSaleOrder = async (req, res) => {
-        const {
-            So_Id, Retailer_Id, Sales_Person_Id, Branch_Id, Cancel_status,
-            Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0,
-            Staff_Involved_List = []
-        } = req.body;
-
-        const So_Date = ISOString(req?.body?.So_Date);
-        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
-        const isInclusive = isEqualNumber(GST_Inclusive, 1);
-        const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
-        const isIGST = isEqualNumber(IS_IGST, 1);
-        const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-
-        if (
-            !checkIsNumber(So_Id)
-            || !checkIsNumber(Retailer_Id)
-            || !checkIsNumber(Sales_Person_Id)
-            || !checkIsNumber(Created_by)
-            || (!Array.isArray(Product_Array) || Product_Array.length === 0)
-        ) {
-            return invalidInput(res, 'Retailer_Id, Sales_Person_Id, Product_Array is Required')
-        }
-
-        const transaction = new sql.Transaction();
+        const transaction = req.transaction;
 
         try {
+            const alterId = req.alterId;
+
+            const {
+                So_Id, Retailer_Id, Sales_Person_Id, Branch_Id, Cancel_status,
+                Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0,
+                Staff_Involved_List = []
+            } = req.body;
+
+            const So_Date = ISOString(req?.body?.So_Date);
+            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+            const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
+
+            if (
+                !checkIsNumber(So_Id)
+                || !checkIsNumber(Retailer_Id)
+                || !checkIsNumber(Sales_Person_Id)
+                || !checkIsNumber(Created_by)
+                || (!Array.isArray(Product_Array) || Product_Array.length === 0)
+            ) {
+                return invalidInput(res, 'Retailer_Id, Sales_Person_Id, Product_Array is Required')
+            }
+
             const productsData = (await getProducts()).dataArray;
-            const Alter_Id = Math.floor(Math.random() * 999999);
 
             const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
@@ -408,8 +407,6 @@ const SaleOrder = () => {
                 TotalTax: 0
             });
 
-            await transaction.begin();
-
             const request = new sql.Request(transaction)
                 .input('soid', So_Id)
                 .input('date', So_Date)
@@ -428,7 +425,7 @@ const SaleOrder = () => {
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
                 .input('narration', Narration)
                 .input('alterby', Created_by)
-                .input('Alter_Id', Alter_Id)
+                .input('Alter_Id', alterId)
                 .input('alteron', new Date())
                 .input('Trans_Type', 'UPDATE')
                 .query(`

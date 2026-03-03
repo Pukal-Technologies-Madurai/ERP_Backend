@@ -1,12 +1,21 @@
 import express from 'express';
 import contra from '../controller/Contra/contraMaster.mjs';
 import dependency from '../controller/Contra/dependency.mjs';
-
+import { alterHistory } from '../middleware/alterHistory.mjs';
 const contraRouter = express.Router();
 
 contraRouter.get('/master', contra.getContra);
 contraRouter.post('/master', contra.createContra);
-contraRouter.put('/master', contra.editContra);
+contraRouter.put(
+    '/master',
+    alterHistory({
+        alteredTable: 'tbl_Contra_General_Info',
+        rowIdField: 'ContraAutoId',
+        userField: 'CreatedBy',
+        reason: 'Alter_Reason',
+    }), 
+    contra.editContra
+);
 
 contraRouter.get('/filtersValues', dependency.getFilterValues);
 

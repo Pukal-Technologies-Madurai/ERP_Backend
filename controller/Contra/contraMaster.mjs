@@ -192,7 +192,7 @@ const createContra = async (req, res) => {
 };
 
 const editContra = async (req, res) => {
-    const tx = new sql.Transaction();
+    const tx = new req.transaction;
     try {
         const {
             ContraAutoId,
@@ -233,7 +233,7 @@ const editContra = async (req, res) => {
 
         const { ContraId, Year_Id, VoucherType, ContraNo, ContraVoucherNo } = hdrQ.recordset[0];
 
-        await tx.begin();
+        const Alter_Id = req.alterId
 
         await new sql.Request(tx)
             .input("ContraAutoId", ContraAutoId)
@@ -251,6 +251,7 @@ const editContra = async (req, res) => {
             .input("TransactionType", TransactionType)
             .input("Narration", Narration)
             .input("ContraStatus", ContraStatus)
+            .input("AlterId", Alter_Id)
             .query(`
                 UPDATE dbo.tbl_Contra_General_Info
                 SET
@@ -269,7 +270,7 @@ const editContra = async (req, res) => {
                     ChequeDate = @ChequeDate,
                     TransactionType = @TransactionType,
                     UpdatedAt = GETDATE(),
-                    AlterId = AlterId + 1
+                    AlterId = @AlterId
                 WHERE ContraAutoId = @ContraAutoId;`
             );
 

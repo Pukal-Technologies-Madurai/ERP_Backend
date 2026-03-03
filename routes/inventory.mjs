@@ -7,6 +7,7 @@ import tripmaster from '../controller/Inventory/tripmaster.mjs';
 import arrivalMaster from '../controller/Inventory/arrivalMaster.mjs';
 import batchProcess from '../controller/Inventory/batchProcess.mjs';
 import inventoryReport from '../controller/Inventory/reports.mjs';
+import { alterHistory } from '../middleware/alterHistory.mjs';
 
 const inventoryRouter = express.Router();
 
@@ -28,7 +29,16 @@ inventoryRouter.get('/stockJournal/inwardsReport', stockJournals.getDestinationI
 
 inventoryRouter.get('/tripSheet', tripmaster.getTripDetails);
 inventoryRouter.post('/tripSheet', tripmaster.createTripDetails);
-inventoryRouter.put('/tripSheet', tripmaster.updateTripDetails);
+inventoryRouter.put(
+    '/tripSheet', 
+    alterHistory({
+        alteredTable: 'tbl_Trip_Master',
+        rowIdField: 'Trip_Id',
+        userField: 'Updated_By',
+        reason: 'Alter_Reason',
+    }),
+    tripmaster.updateTripDetails
+);
 
 inventoryRouter.get('/tripSheet/arrivalEntry', arrivalMaster.getArrivalEntry);
 inventoryRouter.get('/tripSheet/arrivalEntry/filters', arrivalMaster.getArrivalFilters);
@@ -41,7 +51,16 @@ inventoryRouter.put('/tripSheet/arrivalEntry', arrivalMaster.editArrivalEntry);
 inventoryRouter.post('/stockProcessing/getWithFilters', stockProcessing.getProcessingDetails);
 inventoryRouter.get('/stockProcessing/itemsUsed', stockProcessing.getItemsUsedInProcessing);
 inventoryRouter.post('/stockProcessing', stockProcessing.createStockProcessing);
-inventoryRouter.put('/stockProcessing', stockProcessing.updateStockProcessing);
+inventoryRouter.put(
+    '/stockProcessing', 
+    alterHistory({
+        alteredTable: 'tbl_Processing_Gen_Info',
+        rowIdField: 'PR_Id',
+        userField: 'Updated_By',
+        reason: 'Alter_Reason',
+    }),
+    stockProcessing.updateStockProcessing
+);
 inventoryRouter.delete('/stockProcessing', stockProcessing.deleteStockProcessing);
 
 inventoryRouter.get('/batchMaster/materialInward', batchProcess.getUnAssignedBatchFromMaterialInward);

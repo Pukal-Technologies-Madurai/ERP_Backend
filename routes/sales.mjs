@@ -12,11 +12,22 @@ import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPr
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
 import salesReports from '../controller/Sales/reports.mjs';
 import salesRetrunEntry from '../controller/Sales/salesReturn/salesRetrunEntry.mjs';
+import { alterHistory } from '../middleware/alterHistory.mjs';
+
 const SalesRouter = express.Router();
 
 SalesRouter.get('/saleOrder', salesOrder.getSaleOrder);
 SalesRouter.post('/saleOrder', salesOrder.saleOrderCreation);
-SalesRouter.put('/saleOrder', salesOrder.editSaleOrder);
+SalesRouter.put(
+    '/saleOrder',
+    alterHistory({
+        alteredTable: 'tbl_Sales_Order_Gen_Info',
+        rowIdField: 'So_Id',
+        userField: 'Created_by',
+        reason: 'Alter_Reason',
+    }),
+    salesOrder.editSaleOrder
+);
 SalesRouter.get('/saleDelivery', salesOrder.getDeliveryorder);
 SalesRouter.get('/saleOrder/importPosOrders', salesOrder.importFromPos);
 SalesRouter.get('/saleOrder/retailers', salesOrder.getRetailerNameForSearch);
@@ -35,7 +46,16 @@ SalesRouter.get('/salesFilterDropdown', salesInvoice.getMobileReportDropdowns)
 SalesRouter.get('/salesInvoice', getSalesInvoice);
 SalesRouter.post('/salesInvoice', createSalesInvoice);
 SalesRouter.get('/salesInvoice/tallySync', salesTallySync);
-SalesRouter.put('/salesInvoice', updateSalesInvoice);
+SalesRouter.put(
+    '/salesInvoice', 
+        alterHistory({
+        alteredTable: 'tbl_Sales_Delivery_Gen_Info',
+        rowIdField: 'Do_Id',
+        userField: 'Altered_by',
+        reason: 'Alter_Reason',
+    }),
+    updateSalesInvoice
+);
 SalesRouter.post('/salesInvoice/liveSales', liveSalesCreation);
 
 SalesRouter.get('/salesInvoiceById', getSalesInvoiceById);

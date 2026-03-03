@@ -97,9 +97,9 @@ function buildBulkPurchaseRows(Product_Array, productsData, { isInclusive, isNot
     return { stockRows, batchRows };
 }
 
-const PurchaseOrder = () => {
+const PurchaseInvoice = () => {
 
-    const purchaseOrderCreation = async (req, res) => {
+    const purchaseInvoiceCreation = async (req, res) => {
         const {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
@@ -522,35 +522,35 @@ const PurchaseOrder = () => {
         }
     }
 
-    const editPurchaseOrder = async (req, res) => {
-        const {
-            PIN_Id, Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
-            Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
-            Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
-            QualityCondition = '', PaymentDays = 0, Expence_Array = []
-        } = req.body;
-
-        const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
-        const Po_Entry_Date = ISOString(req?.body?.Po_Entry_Date);
-        const isInclusive = isEqualNumber(GST_Inclusive, 1);
-        const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
-        const isIGST = isEqualNumber(IS_IGST, 1);
-
-        if (
-            !checkIsNumber(PIN_Id)
-            || !checkIsNumber(Retailer_Id)
-            || !checkIsNumber(Created_by)
-            // || (!Array.isArray(Product_Array) || Product_Array.length === 0)
-            || (!Array.isArray(StaffArray))
-        ) {
-            return invalidInput(res, 'PIN_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array, StaffArray is Required')
-        }
-
-        const transaction = new sql.Transaction();
+    const editPurchaseInvoice = async (req, res) => {
+        const transaction = req.transaction;
 
         try {
+            const {
+                PIN_Id, Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
+                Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
+                Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
+                QualityCondition = '', PaymentDays = 0, Expence_Array = []
+            } = req.body;
+
+            const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
+            const Po_Entry_Date = ISOString(req?.body?.Po_Entry_Date);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+
+            if (
+                !checkIsNumber(PIN_Id)
+                || !checkIsNumber(Retailer_Id)
+                || !checkIsNumber(Created_by)
+                // || (!Array.isArray(Product_Array) || Product_Array.length === 0)
+                || (!Array.isArray(StaffArray))
+            ) {
+                return invalidInput(res, 'PIN_Id, Retailer_Id, Sales_Person_Id, Created_by, Product_Array, StaffArray is Required')
+            }
+
             const productsData = (await getProducts(0)).dataArray;
-            const Alter_Id = Math.floor(Math.random() * 999999);
+            const Alter_Id = req.alterId;
 
             const TotalExpences = toNumber(RoundNumber(
                 toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
@@ -596,8 +596,6 @@ const PurchaseOrder = () => {
                 TotalValue: 0,
                 TotalTax: 0
             });
-
-            await transaction.begin();
 
             const request = new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
@@ -942,7 +940,7 @@ const PurchaseOrder = () => {
         }
     }
 
-    const cancelPurchaseOrder = async (req, res) => {
+    const cancelPurchaseInvoice = async (req, res) => {
         try {
             const { PIN_Id } = req.query;
 
@@ -967,7 +965,7 @@ const PurchaseOrder = () => {
         }
     }
 
-    const getPurchaseOrder = async (req, res) => {
+    const getPurchaseInvoice = async (req, res) => {
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -1302,10 +1300,10 @@ const PurchaseOrder = () => {
     };
 
     return {
-        purchaseOrderCreation,
-        editPurchaseOrder,
-        cancelPurchaseOrder,
-        getPurchaseOrder,
+        purchaseInvoiceCreation,
+        editPurchaseInvoice,
+        cancelPurchaseInvoice,
+        getPurchaseInvoice,
         getVoucherType,
         getStockItemLedgerName,
         getInvolvedStaffs,
@@ -1314,4 +1312,4 @@ const PurchaseOrder = () => {
 }
 
 
-export default PurchaseOrder();
+export default PurchaseInvoice();

@@ -249,45 +249,43 @@ const tripActivities = () => {
     };
 
     const updateTripDetails = async (req, res) => {
-
-        const {
-            Trip_Id,
-            Branch_Id,
-            Trip_Date,
-            Vehicle_No,
-            Trip_ST_KM = 0,
-            Trip_EN_KM = 0,
-            PhoneNumber = '',
-            LoadingLoad = 0,
-            LoadingEmpty = 0,
-            UnloadingLoad = 0,
-            UnloadingEmpty = 0,
-            Godownlocation = 0,
-            BillType = 0,
-            VoucherType = '',
-            Narration = '',
-            Updated_By = '',
-            TripStatus = 'New',
-            Product_Array = [],
-            EmployeesInvolved = []
-        } = req.body;
-
-        const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null,
-            EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
-
-        if (!checkIsNumber(Branch_Id) || Trip_Date === '' || !checkIsNumber(Trip_Id)) {
-            return invalidInput(res, 'Check values ');
-        }
-        if (StartTime && EndTime && new Date(StartTime) > new Date(EndTime)) {
-            return invalidInput(res, 'Start Time cannot be greater than End Time');
-        }
-        if (Trip_ST_KM && Trip_EN_KM && Number(Trip_ST_KM) > Number(Trip_EN_KM)) {
-            return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
-        }
-
-        const transaction = new sql.Transaction();
+        const transaction = req.transaction;
 
         try {
+
+            const {
+                Trip_Id,
+                Branch_Id,
+                Trip_Date,
+                Vehicle_No,
+                Trip_ST_KM = 0,
+                Trip_EN_KM = 0,
+                PhoneNumber = '',
+                LoadingLoad = 0,
+                LoadingEmpty = 0,
+                UnloadingLoad = 0,
+                UnloadingEmpty = 0,
+                Godownlocation = 0,
+                BillType = 0,
+                Narration = '',
+                Updated_By = '',
+                TripStatus = 'New',
+                Product_Array = [],
+                EmployeesInvolved = []
+            } = req.body;
+
+            const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null,
+                EndTime = isValidDate(req.body.EndTime) ? new Date(req.body.EndTime) : null;
+
+            if (!checkIsNumber(Branch_Id) || Trip_Date === '' || !checkIsNumber(Trip_Id)) {
+                return invalidInput(res, 'Check values ');
+            }
+            if (StartTime && EndTime && new Date(StartTime) > new Date(EndTime)) {
+                return invalidInput(res, 'Start Time cannot be greater than End Time');
+            }
+            if (Trip_ST_KM && Trip_EN_KM && Number(Trip_ST_KM) > Number(Trip_EN_KM)) {
+                return invalidInput(res, 'Vehicle Start KM cannot be greater than Vehicle End KM');
+            }
 
             const tripCheck = await new sql.Request()
                 .input('Trip_Id', Trip_Id)
@@ -300,8 +298,6 @@ const tripActivities = () => {
             }
 
             const Trip_Tot_Kms = Subraction(Trip_EN_KM, Trip_ST_KM);
-
-            await transaction.begin();
 
             const updateMaster = await new sql.Request(transaction)
                 .input('Trip_Id', toNumber(Trip_Id))

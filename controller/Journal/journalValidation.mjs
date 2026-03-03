@@ -83,6 +83,7 @@ export const EditJournalSchema = z
         Narration: zNullableString(),
         JournalStatus: zNumber("JournalStatus"),
         BranchId: zNumber("BranchId").optional(),
+        CreatedBy: zPositive("CreatedBy"),
         Entries: z.array(EntrySchema).min(1, { message: "Entries is required" }),
     })
     .superRefine((data, ctx) => {

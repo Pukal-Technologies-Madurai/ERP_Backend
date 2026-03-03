@@ -10,6 +10,7 @@ import { getMachineOuternController, MachineOuternControll } from '../controller
 import { getInwardActivity, InwardActivityControll } from '../controller/DataEntry/inwardActivity.mjs';
 import purchaseOrder from '../controller/DataEntry/purchaseOrder.mjs';
 import costCenter from '../controller/DataEntry/costCenter.mjs';
+import { alterHistory } from '../middleware/alterHistory.mjs';
 
 const dataEntryRouter = express.Router();
 
@@ -72,24 +73,32 @@ dataEntryRouter.put('/dataEntryAttendance', attendance.updateAttendance)
 dataEntryRouter.get('/godownLocationMaster', purchaseOrder.godownLocation);
 dataEntryRouter.get('/purchaseOrderEntry', purchaseOrder.getPurchaseOrder)
 dataEntryRouter.post('/purchaseOrderEntry', purchaseOrder.createPurchaseOrder)
-dataEntryRouter.put('/purchaseOrderEntry', purchaseOrder.updatePurchaseOrder)
+dataEntryRouter.put(
+    '/purchaseOrderEntry',
+    alterHistory({
+        alteredTable: 'tbl_PurchaseOrderGeneralDetails',
+        rowIdField: 'Sno',
+        userField: 'CreatedBy',
+        reason: 'Alter_Reason',
+    }),
+    purchaseOrder.updatePurchaseOrder)
 dataEntryRouter.delete('/purchaseOrderEntry', purchaseOrder.deleteOrderPermanantly);
 dataEntryRouter.get('/purchaseOrderEntry/delivery/partyBased', purchaseOrder.getDeliveryByPartyId);
 dataEntryRouter.put('/purchaseOrderEntry/ArrivalUpdate', purchaseOrder.updateArrivalDetails);
 dataEntryRouter.get('/pendingPartyInvoice', purchaseOrder.getPartyForInvoice);
-dataEntryRouter.get('/purchaseOrderMobile',purchaseOrder.getPurchaseOrderMobile);
+dataEntryRouter.get('/purchaseOrderMobile', purchaseOrder.getPurchaseOrderMobile);
 
 dataEntryRouter.get('/costCenter', costCenter.getCostCenter);
 dataEntryRouter.post('/costCenter', costCenter.createCostCenter);
 dataEntryRouter.put('/costCenter', costCenter.updateCostCenter);
 
-dataEntryRouter.get('/costCenter/category',costCenter.getCostCenterCategory)
-dataEntryRouter.post('/costCategory',costCenter.createCostCategory)
-dataEntryRouter.put('/costCategory',costCenter.updateCostCategory)
-dataEntryRouter.delete('/costCategory',costCenter.deleteCostCategory)
-dataEntryRouter.get('/costCategory/DropDown',costCenter.costCategoryDropDown)
+dataEntryRouter.get('/costCenter/category', costCenter.getCostCenterCategory)
+dataEntryRouter.post('/costCategory', costCenter.createCostCategory)
+dataEntryRouter.put('/costCategory', costCenter.updateCostCategory)
+dataEntryRouter.delete('/costCategory', costCenter.deleteCostCategory)
+dataEntryRouter.get('/costCategory/DropDown', costCenter.costCategoryDropDown)
 
-dataEntryRouter.get('/costCenter/report',costCenter.costCenterInvolvedReports)
-dataEntryRouter.get('/costCenter/report/employee',costCenter.costCenterEmployeeReports)
+dataEntryRouter.get('/costCenter/report', costCenter.costCenterInvolvedReports)
+dataEntryRouter.get('/costCenter/report/employee', costCenter.costCenterEmployeeReports)
 
 export default dataEntryRouter;

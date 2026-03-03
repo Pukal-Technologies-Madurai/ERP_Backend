@@ -348,7 +348,7 @@ const StockManagement = () => {
     }
 
     const updateStockProcessing = async (req, res) => {
-        const transaction = new sql.Transaction();
+        const transaction = req.transaction;
 
         try {
 
@@ -407,8 +407,6 @@ const StockManagement = () => {
                 Staff_Type_Id: toNumber(item?.Staff_Type_Id),
                 Staff_Id: toNumber(item?.Staff_Id)
             }));
-
-            await transaction.begin();
 
             const updateOrderDetails = await new sql.Request(transaction)
                 .input('Branch_Id', toNumber(Branch_Id))
