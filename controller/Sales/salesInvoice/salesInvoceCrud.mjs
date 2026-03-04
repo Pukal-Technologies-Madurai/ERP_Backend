@@ -38,7 +38,7 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}, packData = 
         const Alt_Bill_Qty = Division(Bill_Qty, pack)
 
         stockRows.push({
-            S_No: index + 1,
+            S_No: toNumber(product?.S_No) || index + 1,
             Item_Id: toNumber(product.Item_Id),
             Bill_Qty,
             Alt_Bill_Qty,

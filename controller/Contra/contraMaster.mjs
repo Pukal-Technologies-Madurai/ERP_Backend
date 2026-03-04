@@ -192,7 +192,7 @@ const createContra = async (req, res) => {
 };
 
 const editContra = async (req, res) => {
-    const tx = new req.transaction;
+    const tx = req.transaction;
     try {
         const {
             ContraAutoId,
