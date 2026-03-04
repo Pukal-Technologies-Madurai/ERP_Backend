@@ -118,7 +118,7 @@ const JWEDecrypt = async (jweToken) => {
 
 
 const getToken = async () => {
-  const TOKEN_URL = 'https://tmb.apiuat.tmbank.in/tmb-api-external/uat-ext/accountstatement/oauth2/token';
+  const TOKEN_URL = 'https://tmbapi.tmbank.in/tmb-api-external/tmb-api/tmb_acctstmt/oauth2/token';
   const CLIENT_ID = process.env.TMB_CLIENT_ID;
   const CLIENT_SECRET = process.env.TMB_CLIENT_SECRET;
 
@@ -127,9 +127,10 @@ const getToken = async () => {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET,
-    scope: 'actstmt',
+    scope: 'acctstmt',
     grant_type: 'client_credentials',
   });
+
 
 
   const res = await fetch(TOKEN_URL, {
@@ -137,6 +138,7 @@ const getToken = async () => {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
+  console.log("res",res)
 
   if (!res.ok) throw new Error(`Token API failed (${res.status})`);
   const data = await res.json();
@@ -148,19 +150,20 @@ const getToken = async () => {
 
 const fetchStatement = async (req, res) => {
   try {
-    const { accountNo, startDate, endDate } = req.body;
-    if (!accountNo || !startDate || !endDate) return invalidInput(res, 'Missing required fields');
+    const {  startDate, endDate } = req.body;
+    if ( !startDate || !endDate) return invalidInput(res, 'Missing required fields');
 
 
 
 
     const accessToken = await getToken();
 
+    const  accNo='002530350870041'
 
-    const encryptedRequest = await JWEEncrypt({ accountNo, startDate, endDate });
+    const encryptedRequest = await JWEEncrypt({ accNo, startDate, endDate });
 
 
-    const SERVICE_URL = 'https://tmb.apiuat.tmbank.in/tmb-api-external/uat-ext/tmb_accountstatement_api/fetchstatement';
+    const SERVICE_URL = 'https://tmbapi.tmbank.in/tmb-api-external/tmb-api/tmb_accountstatement_api/fetchstatement';
     const apiRes = await fetch(SERVICE_URL, {
       method: 'POST',
       headers: {
@@ -239,15 +242,16 @@ const decryptEndpoint = async (req, res) => {
 const syncStatement = async (req, res) => {
   let transaction;
   try {
-    const { accountNo, startDate, endDate } = req.body;
-    if (!accountNo || !startDate || !endDate)
+    const {  startDate, endDate } = req.body;
+    if ( !startDate || !endDate)
       return invalidInput(res, 'Missing required fields');
 
     const accessToken = await getToken();
+    const accountNo='002530350870041'
     const encryptedRequest = await JWEEncrypt({ accountNo, startDate, endDate });
 
     const SERVICE_URL =
-      'https://tmb.apiuat.tmbank.in/tmb-api-external/uat-ext/tmb_accountstatement_api/fetchstatement';
+      'https://tmbapi.tmbank.in/tmb-api-external/tmb-api/tmb_accountstatement_api/fetchstatement';
     const apiRes = await fetch(SERVICE_URL, {
       method: 'POST',
       headers: {
@@ -258,6 +262,7 @@ const syncStatement = async (req, res) => {
       },
       body: JSON.stringify({ Request: encryptedRequest }),
     });
+    
 
     const text = await apiRes.text();
     if (!apiRes.ok) return invalidInput(res, `TMB API failed: ${apiRes.status}: ${text}`);
@@ -366,6 +371,7 @@ const syncStatement = async (req, res) => {
 const getTokenEndpoint = async (req, res) => {
   try {
     const token = await getToken();
+
     sentData(res, { access_token: token });
   } catch (error) {
     servError(error, res);
