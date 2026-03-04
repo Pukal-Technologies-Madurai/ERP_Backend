@@ -446,6 +446,132 @@ const posBranchController = () => {
         }
     };
 
+
+
+
+    const getStockGroup=async (req,res)=>{
+        // const { Emp_Id, reqDate } = req.query;
+         
+            //   if (!checkIsNumber(Emp_Id)) {
+            //       return invalidInput(res, 'Emp_Id is required');
+            //   }
+      
+              try {
+                  const request = new sql.Request()
+                      .query(`
+                        SELECT DISTINCT Stock_Group 
+                            FROM tbl_Stock_LOS 
+                            WHERE Stock_Group IS NOT NULL 
+                            ORDER BY Stock_Group
+                             `);
+      
+                  const result = await request;
+      
+                  if (result.recordset.length > 0) {
+                      return dataFound(res, result.recordset)
+                  } else {
+                      return noData(res)
+                  }
+              } catch (e) {
+                  return servError(e, res);
+              }
+    }
+
+
+
+    const getPOSGroupsByStock = async (req, res) => {
+    const { stockGroup } = req.query;
+    
+    if (!stockGroup) {
+        return invalidInput(res, 'Stock_Group is required');
+    }
+    
+    try {
+        const request = new sql.Request()
+            .input('Stock_Group', sql.VarChar, stockGroup)
+            .query(`
+                SELECT DISTINCT 
+                    POS_Group,
+                    COUNT(*) as ItemCount,
+                    MIN(Auto_Id) as FirstItemId,
+                    MAX(Auto_Id) as LastItemId
+                FROM tbl_Stock_LOS 
+                WHERE Stock_Group = @Stock_Group 
+                    AND POS_Group IS NOT NULL
+                GROUP BY POS_Group
+                ORDER BY POS_Group
+            `);
+
+        const result = await request;
+
+        if (result.recordset.length > 0) {
+            // Format the response
+            const formattedData = result.recordset.map(item => ({
+                posGroup: item.POS_Group,
+                itemCount: item.ItemCount,
+                firstItemId: item.FirstItemId,
+                lastItemId: item.LastItemId
+            }));
+            
+            return res.status(200).json({
+                success: true,
+                message: 'POS Groups found',
+                data: formattedData,
+                totalGroups: formattedData.length,
+                stockGroup: stockGroup
+            });
+        } else {
+            return res.status(200).json({
+                success: true,
+                message: 'No POS Groups found for this Stock Group',
+                data: [],
+                totalGroups: 0,
+                stockGroup: stockGroup
+            });
+        }
+    } catch (e) {
+        return servError(e, res);
+    }
+};
+
+const getPosGroupDetails=async(req,res)=>{
+  
+    const { posGroup } = req.query;
+    
+    if (!posGroup) {
+        return res.status(400).json({
+            success: false,
+            message: 'POS_Group is required'
+        });
+    }
+    
+    try {
+        const request = new sql.Request()
+            .input('POS_Group', sql.NVarChar, posGroup)
+            .query(`
+                SELECT * FROM tbl_Stock_LOS 
+                WHERE POS_Group = @POS_Group
+                ORDER BY Auto_Id
+            `);
+        
+        const result = await request;
+        
+        res.json({
+            success: true,
+            message: result.recordset.length > 0 ? 'Items found' : 'No items found',
+            data: result.recordset
+        });
+        
+    } catch (error) {
+        console.error('Error fetching items:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Database error',
+            error: error.message
+        });
+    }
+}
+
     return {
 
         getPosBrand,
@@ -457,8 +583,11 @@ const posBranchController = () => {
         brokers,
         getRetailersOpt,
         getBrokersOpt,
-        getTransporterOpt
-
+        getTransporterOpt,
+        getStockGroup,
+        getPOSGroupsByStock,
+        getPosGroupDetails
+        
     }
 }
 

@@ -23,5 +23,10 @@ PosRouter.get('/retailerMasterOpt',pos.getRetailersOpt)
 
 PosRouter.get('/brokersOpt',pos.getBrokersOpt)
 PosRouter.get('/transportersOpt',pos.getTransporterOpt)
+
+PosRouter.get('/StockDetails',pos.getStockGroup)
+PosRouter.get('/posGroupsByStock', pos.getPOSGroupsByStock);
+PosRouter.get('/posGroupList',pos.getPosGroupDetails)
+
 export default PosRouter;
 
