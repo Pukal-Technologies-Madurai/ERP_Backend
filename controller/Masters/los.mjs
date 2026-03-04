@@ -163,44 +163,7 @@ const los = () => {
                 throw new Error("Stock record not found");
             }
 
-            const ledgerRequest = new sql.Request(req.db)
-                .input('Stock_Tally_Id', Stock_Tally_Id)
-                .input('Stock_Item', Stock_Item || null)
-                .input('Brand', Brand || null)
-                .input('Group_ST', Group_ST || null)
-                .input('Bag', Bag || null)
-                .input('Stock_Group', Stock_Group || null)
-                .input('S_Sub_Group_1', S_Sub_Group_1 || null)
-                .input('Grade_Item_Group', Grade_Item_Group || null)
-                .input('Item_Name_Modified', Item_Name_Modified || null)
-                .input('POS_Group', POS_Group || null)
-                .input('Active', sql.Bit, Active || null)
-                .input('POS_Item_Name', POS_Item_Name || null)
-                .input('Item_Group_Id', Item_Group_Id || null);
-
-            const ledgerResult = await ledgerRequest.query(`
-                UPDATE tbl_Stock_LOS
-                SET 
-                    Stock_Item = @Stock_Item,
-                    Brand = @Brand,
-                    Group_ST = @Group_ST,
-                    Bag = @Bag,
-                    Stock_Group = @Stock_Group,
-                    S_Sub_Group_1 = @S_Sub_Group_1,
-                    Grade_Item_Group = @Grade_Item_Group,
-                    Item_Name_Modified = @Item_Name_Modified,
-                    POS_Group = @POS_Group,
-                    Active = @Active,
-                    POS_Item_Name = @POS_Item_Name,
-                    Item_Group_Id = @Item_Group_Id
-                WHERE Stock_Tally_Id = @Stock_Tally_Id;`
-            );
-
-            if (ledgerResult.rowsAffected[0] === 0) {
-                throw new Error("Los record not found");
-            }
-
-            await transaction.commit();
+          await transaction.commit();
             success(res, 'Data Updated')
 
         } catch (e) {
@@ -225,9 +188,9 @@ const los = () => {
                 );
             }
 
-            if (!req.db) {
-                return invalidInput(res, "Database connection is required");
-            }
+            // if (!req.db) {
+            //     return invalidInput(res, "Database connection is required");
+            // }
 
             const workbook = XLSX.read(req.file.buffer, {
                 type: "buffer",
@@ -426,25 +389,25 @@ const los = () => {
                  WHERE Stock_Item = @productname
              `;
 
-                    const updateQuerySecondary = `
-                 UPDATE tbl_Stock_LOS 
-                 SET ${setClauses.join(", ")}
-                 WHERE Stock_Item = @productname
-             `;
+            //         const updateQuerySecondary = `
+            //      UPDATE tbl_Stock_LOS 
+            //      SET ${setClauses.join(", ")}
+            //      WHERE Stock_Item = @productname
+            //  `;
 
                     const updateResult = await requestPrimary.query(updateQueryPrimary);
                     if (updateResult.rowsAffected[0] === 0) {
                         throw new Error("No rows were updated in primary database");
                     }
 
-                    const requestSecondary = new sql.Request(req.db);
-                    Object.entries(filteredUpdates).forEach(([key, value]) => {
-                        const paramName = `param_${key}`;
-                        requestSecondary.input(paramName, sql.NVarChar, value);
-                    });
-                    requestSecondary.input("productname", sql.NVarChar, Stock_Item);
+                    // const requestSecondary = new sql.Request(req.db);
+                    // Object.entries(filteredUpdates).forEach(([key, value]) => {
+                    //     const paramName = `param_${key}`;
+                    //     requestSecondary.input(paramName, sql.NVarChar, value);
+                    // });
+                    // requestSecondary.input("productname", sql.NVarChar, Stock_Item);
 
-                    await requestSecondary.query(updateQuerySecondary);
+                    // await requestSecondary.query(updateQuerySecondary);
 
                     successCount++;
                     results.push({

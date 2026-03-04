@@ -190,68 +190,7 @@ const lol = () => {
                 throw new Error("Ledger record not found");
             }
 
-            const result1 = await new sql.Request(req.db)
-                .input('Ledger_Tally_Id', Ledger_Tally_Id)
-                .input('Ledger_Name', Ledger_Name)
-                .input('Ledger_Alias', Ledger_Alias || null)
-                .input('Party_Name', Party_Name || null)
-                .input('Actual_Party_Name_with_Brokers', Actual_Party_Name_with_Brokers || null)
-                .input('Party_Mailing_Name', Party_Mailing_Name || null)
-                .input('Party_Mailing_Address', Party_Mailing_Address || null)
-                .input('Party_Location', Party_Location || null)
-                .input('Party_District', Party_District || null)
-                .input('Party_Mobile_1', Party_Mobile_1 || null)
-                .input('Party_Mobile_2', Party_Mobile_2 || null)
-                .input('Party_Nature', Party_Nature || null)
-                .input('Party_Group', Party_Group || null)
-                .input('Payment_Mode', Payment_Mode || null)
-                .input('Ref_Brokers', Ref_Brokers || null)
-                .input('Ref_Owners', Ref_Owners || null)
-                .input('File_No', File_No || null)
-                .input('Date_Added', Date_Added)
-                .input('A1', sql.VarChar, A1 || null)
-                .input('A2', sql.VarChar, A2 || null)
-                .input('A3', sql.VarChar, A3 || null)
-                .input('A4', sql.VarChar, A4 || null)
-                .input('A5', sql.VarChar, A5 || null)
-                .input('GST_No', GST_No || null)
-                .input('Route_Name', Route_Name || null)
-                .input('Auto_Id', sql.Int, Auto_Id)
-                .query(`
-                   UPDATE tbl_Ledger_LOL 
-                   SET 
-                       Ledger_Tally_Id = @Ledger_Tally_Id,
-                       Ledger_Name = @Ledger_Name,
-                       Ledger_Alias = @Ledger_Alias,
-                       Party_Name = @Party_Name,
-                       Actual_Party_Name_with_Brokers = @Actual_Party_Name_with_Brokers,
-                       Party_Mailing_Name = @Party_Mailing_Name,
-                       Party_Mailing_Address = @Party_Mailing_Address,
-                       Party_Location = @Party_Location,
-                       Party_District = @Party_District,
-                       Party_Mobile_1 = @Party_Mobile_1,
-                       Party_Mobile_2 = @Party_Mobile_2,
-                       Party_Nature = @Party_Nature,
-                       Party_Group = @Party_Group,
-                       Payment_Mode = @Payment_Mode,
-                       Ref_Brokers = @Ref_Brokers,
-                       Ref_Owners = @Ref_Owners,
-                       File_No = @File_No,
-                       Date_Added = @Date_Added,
-                       A1 = @A1,
-                       A2 = @A2,
-                       A3 = @A3,
-                       A4 = @A4,
-                       A5 = @A5,
-                       GST_No=@GST_No,
-                       Route_Name=@Route_Name
-                   WHERE Ledger_Tally_Id = @Ledger_Tally_Id
-               `);
-
-            if (result1.rowsAffected[0] === 0) {
-                throw new Error("Ledger record not found");
-            }
-
+         
             await transaction.commit();
 
             success(res, 'Data Updated')
@@ -274,7 +213,7 @@ const lol = () => {
             if (!company_id || !Created_By || isRetailer === undefined)
                 return invalidInput(res, "Company_id, Created_By, and isRetailer are required");
 
-            if (!req.db) return invalidInput(res, "Secondary database connection not available");
+            // if (!req.db) return invalidInput(res, "Secondary database connection not available");
 
             await transaction.begin();
 
@@ -443,14 +382,14 @@ const lol = () => {
                     );
 
 
-                    const updateSecondary = new sql.Request(req.db).input("ledgerName", sql.NVarChar, Ledger_Name);
-                    for (const [key, value] of Object.entries(updateFields)) {
-                        const param = `param_${key}`;
-                        updateSecondary.input(param, value);
-                    }
-                    await updateSecondary.query(
-                        `UPDATE tbl_Ledger_LoL SET ${setFields.filter(f => f !== "IsUpdated = 1").join(", ")} WHERE Ledger_Name = @ledgerName`
-                    );
+                    // const updateSecondary = new sql.Request(req.db).input("ledgerName", sql.NVarChar, Ledger_Name);
+                    // for (const [key, value] of Object.entries(updateFields)) {
+                    //     const param = `param_${key}`;
+                    //     updateSecondary.input(param, value);
+                    // }
+                    // await updateSecondary.query(
+                    //     `UPDATE tbl_Ledger_LoL SET ${setFields.filter(f => f !== "IsUpdated = 1").join(", ")} WHERE Ledger_Name = @ledgerName`
+                    // );
 
                     successCount++;
                     results.push({
