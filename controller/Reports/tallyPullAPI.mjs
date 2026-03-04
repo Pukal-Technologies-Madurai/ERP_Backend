@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { dataFound, noData, invalidInput, servError } from '../../res.mjs';
+import { dataFound, noData, invalidInput, servError, sentData } from '../../res.mjs';
 import { isEqualNumber, ISOString } from '../../helper_functions.mjs';
 
 const toArray = (data) => {
@@ -610,6 +610,58 @@ const tallyStockJournalUpdateAPI = async (req, res) => {
     }
 }
 
+// -------- New updates API ---------------
+
+const debitNote = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Debit_Note_New_API');
+
+        const result = await request;
+        const [generalInfo, StockInfo, expencess] = result.recordsets;
+
+        const debitNote = generalInfo.map(info => ({
+            ...info,
+            ALLINVENTORYENTRIES: StockInfo.filter(stock => isEqualNumber(stock.DB_Id, info.DB_Id)),
+            LEDGERENTRIES: expencess.filter(exp => isEqualNumber(exp.DB_Id, info.DB_Id))
+        }));
+
+        sentData(res, debitNote)
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
+const creditNote = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Credit_Note_New_API');
+
+        const result = await request;
+        const [generalInfo, StockInfo, expencess] = result.recordsets;
+
+        const creditNote = generalInfo.map(info => ({
+            ...info,
+            ALLINVENTORYENTRIES: StockInfo.filter(stock => isEqualNumber(stock.CR_Id, info.CR_Id)),
+            LEDGERENTRIES: expencess.filter(exp => isEqualNumber(exp.CR_Id, info.CR_Id))
+        }));
+
+        sentData(res, creditNote)
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
 
 export default {
     externalAPI,
@@ -637,6 +689,10 @@ export default {
     tallyJournalUpdateApi,
     tallyPaymentUpdateAPI,
     tallyReceiptUpdateAPI,
-    tallyStockJournalUpdateAPI
+    tallyStockJournalUpdateAPI,
 
+
+    // -- new updates api
+    debitNote,
+    creditNote
 };

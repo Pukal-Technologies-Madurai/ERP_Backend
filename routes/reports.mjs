@@ -56,6 +56,10 @@ ReportRouter.get('/tally-payment-update-api', tallyPullAPI.tallyPaymentUpdateAPI
 ReportRouter.get('/tally-receipt-update-api', tallyPullAPI.tallyReceiptUpdateAPI);
 ReportRouter.get('/tally-stockJournal-update-api', tallyPullAPI.tallyStockJournalUpdateAPI);
 
+// -- new updates api
+ReportRouter.get('/tally-debit-note-api', tallyPullAPI.debitNote);
+ReportRouter.get('/tally-credit-note-api', tallyPullAPI.creditNote);
+
 
 ReportRouter.get('/template', template.getTemplates);
 ReportRouter.post('/template/executeQuery', dbconnect, template.executeTemplateSQL);
