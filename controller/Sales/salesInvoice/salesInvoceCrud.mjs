@@ -359,30 +359,32 @@ export const getSalesInvoice = async (req, res) => {
 export const getSalesInvoiceById = async (req, res) => {
     try {
         const { Do_Id } = req.query;
+        
         const getCurrespondingAccount = new sql.Request()
             .query(`
                 SELECT Acc_Id, AC_Reason 
                 FROM tbl_Default_AC_Master 
                 WHERE 
                     Type = 'DEFAULT' 
-                    AND Acc_Id IS NOT NULL;`
-            );
+                    AND Acc_Id IS NOT NULL;
+            `);
 
         const expData = (await getCurrespondingAccount).recordset;
-
-        const excludeList = expData.map(exp => exp.Acc_Id).join(', ');
+        console.log('Default accounts:', expData);
 
         const request = new sql.Request()
             .input('Do_Id', Do_Id)
             .query(`
                 -- declaring table variable
                 DECLARE @FilteredInvoice TABLE (Do_Id INT);
+                
                 -- inserting data to temp table
                 INSERT INTO @FilteredInvoice (Do_Id)
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
-              WHERE 1=1
-            ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''};
+                WHERE 1=1
+                ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''};
+                
                 -- sales general details
                 SELECT 
                     sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
@@ -415,11 +417,12 @@ export const getSalesInvoiceById = async (req, res) => {
                 LEFT JOIN tbl_Voucher_Type AS v
                     ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Sales_Delivery_Address AS sda
-                ON sda.Id = sdgi.shipingAddressId
+                    ON sda.Id = sdgi.shipingAddressId
                 WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
-                ORDER BY  sdgi.Do_Id desc;
+                ORDER BY sdgi.Do_Id DESC;
+                
                 -- product details
-                 SELECT
+                SELECT
                     oi.*,
                     pm.Product_Id,
                     COALESCE(pm.Short_Name, 'not available') AS Short_Name,
@@ -427,27 +430,28 @@ export const getSalesInvoiceById = async (req, res) => {
                     COALESCE(pm.Product_Name, 'not available') AS Item_Name,
                     COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
                     COALESCE(u.Units, 'not available') AS UOM,
-                        CASE 
-                    WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-                         OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-                    THEN 0
-                    ELSE CONVERT(
-                                 DECIMAL(18,2),
-                                 COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-                              )
-                     END AS Bag,
-                                        COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                 FROM tbl_Sales_Delivery_Stock_Info AS oi
-                 LEFT JOIN tbl_Product_Master AS pm 
-                     ON pm.Product_Id = oi.Item_Id
-                 LEFT JOIN tbl_UOM AS u 
-                     ON u.Unit_Id = oi.Unit_Id
-                 LEFT JOIN tbl_Pack_Master AS pck
-                     ON pck.Pack_Id = pm.Pack_Id
-                 LEFT JOIN tbl_Brand_Master AS b 
-                     ON b.Brand_Id = pm.Brand
-                 WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
-                 ORDER BY oi.S_No ASC;
+                    CASE 
+                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                        THEN 0
+                        ELSE CONVERT(
+                                     DECIMAL(18,2),
+                                     COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                                  )
+                    END AS Bag,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Delivery_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm 
+                    ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u 
+                    ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Pack_Master AS pck
+                    ON pck.Pack_Id = pm.Pack_Id
+                LEFT JOIN tbl_Brand_Master AS b 
+                    ON b.Brand_Id = pm.Brand
+                WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                ORDER BY oi.S_No ASC;
+                
                 -- expence details
                 SELECT 
                     exp.*, 
@@ -461,7 +465,8 @@ export const getSalesInvoiceById = async (req, res) => {
                     ON em.Acc_Id = exp.Expense_Id
                 WHERE 
                     exp.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
-                    ${excludeList ? ` AND exp.Expense_Id NOT IN (${excludeList}) ` : ''};
+                ORDER BY exp.Sno;
+                
                 -- staff involved
                 SELECT 
                     stf.*,
@@ -473,14 +478,15 @@ export const getSalesInvoiceById = async (req, res) => {
                 LEFT JOIN tbl_ERP_Cost_Category AS cc
                     ON cc.Cost_Category_Id = stf.Emp_Type_Id
                 WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
-            -- Alteration History
+                
+                -- Alteration History
                 SELECT ah.*, u.Name AS alterByGet 
                 FROM tbl_Alteration_History AS ah
                 LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
                 WHERE 
                     alteredTable = 'tbl_Sales_Delivery_Gen_Info' 
-                    AND alteredRowId IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);`
-            );
+                    AND alteredRowId IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+            `);
 
         const result = await request;
 
@@ -489,6 +495,12 @@ export const getSalesInvoiceById = async (req, res) => {
         const Expence_Array = toArray(result.recordsets[2]);
         const Staffs_Array = toArray(result.recordsets[3]);
         const Alteration_History = toArray(result.recordsets[4]);
+
+        console.log('SalesGeneralInfo count:', SalesGeneralInfo.length);
+        console.log('Products_List count:', Products_List.length);
+        console.log('Expence_Array count:', Expence_Array.length);
+        console.log('Staffs_Array count:', Staffs_Array.length);
+        console.log('Alteration_History count:', Alteration_History.length);
 
         if (SalesGeneralInfo.length > 0) {
             const resData = SalesGeneralInfo.map(row => ({
@@ -506,16 +518,16 @@ export const getSalesInvoiceById = async (req, res) => {
                     fil => isEqualNumber(fil.alteredRowId, row.Do_Id)
                 )
             }));
-
-            dataFound(res, resData);
+              dataFound(res, resData);
         } else {
-            noData(res);
+              noData(res)
         }
 
-    } catch (e) {
-        servError(e, res);
+    } catch (error) {
+          servError(error,res)
     }
-}
+};
+
 
 export const createSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();

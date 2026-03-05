@@ -1,10 +1,10 @@
 import sql from 'mssql'
-import { servError, dataFound, noData, invalidInput, failed, success } from '../../res.mjs';
+import { servError, dataFound, noData, invalidInput, failed, success,sentData } from '../../res.mjs';
 import { checkIsNumber, isEqualNumber } from '../../helper_functions.mjs';
 import { getProducts, getNextId } from '../../middleware/miniAPIs.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
 
-
+import getImage from '../../middleware/getImageIfExist.mjs';
 
 
 
@@ -572,6 +572,82 @@ const getPosGroupDetails=async(req,res)=>{
     }
 }
 
+
+    const getAllProductsPos = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
+                    SELECT 
+                        p.*,
+                        stl.Stock_Tally_Id,
+                        stl.Alter_Tally_Id,
+                        stl.Stock_Item,
+                        stl.Group_ST,
+                        stl.Bag,
+                        stl.Stock_Group,
+                        stl.S_Sub_Group_1,
+                        stl.Grade_Item_Group,
+                        stl.Item_Name_Modified,
+                        stl.POS_Group,
+                        stl.POS_Item_Name,
+                        
+                        COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
+                        COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
+                        COALESCE(u.Units, 'NOT FOUND') AS Units,
+                        COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
+                        COALESCE(p.Product_Rate, 0) AS Item_Rate
+                    FROM 
+                        tbl_Product_Master AS p
+                        LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
+                        LEFT JOIN tbl_Product_Group AS pg ON pg.Pro_Group_Id = p.Product_Group
+                        LEFT JOIN tbl_Brokerage AS br ON br.Product_Id=p.Product_Id
+                        LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
+                        LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                        LEFT JOIN tbl_Stock_LOS AS stl ON stl.Pro_Id=p.product_Id
+                    ORDER BY p.Product_Id DESC`
+                );
+
+            const productResult = (await request).recordset;
+
+            const withImage = productResult.map(product => ({
+                ...product,
+                productImageUrl: getImage('products', product?.Product_Image_Name),
+            }));
+
+            sentData(res, withImage);
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+const getProductsWithStock = async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                Product_Id,
+                Product_Name,
+                Short_Name as Print_Name,
+                Pos_Brand_Id as IGroup_Id,
+                0 as Brand,
+                [UOM_Id] as Unit,
+                coalesce([Product_Rate], 0) as Price,
+                [IsActive] as Is_Active
+            FROM tbl_Product_Master 
+        `;
+        
+         const result = await sql.query(query);
+      
+                  if (result.recordset.length > 0) {
+                      return dataFound(res, result.recordset)
+                  } else {
+                      return noData(res)
+                  }
+              } catch (e) {
+                  return servError(e, res);
+              } 
+};
+
     return {
 
         getPosBrand,
@@ -586,7 +662,9 @@ const getPosGroupDetails=async(req,res)=>{
         getTransporterOpt,
         getStockGroup,
         getPOSGroupsByStock,
-        getPosGroupDetails
+        getPosGroupDetails,
+        getAllProductsPos,
+        getProductsWithStock
         
     }
 }
