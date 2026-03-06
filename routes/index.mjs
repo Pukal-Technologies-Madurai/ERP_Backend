@@ -19,7 +19,9 @@ import PaymentRouter from './payment.mjs';
 import AnalalyticsRouter from './analytics.mjs';
 import JournalRouter from './journal.mjs';
 import ContraRouter from './contra.mjs'
-import PosRouter from './pos.mjs'
+import PosRouter from './pos.mjs';
+import CreditNoteRouter from './creditNote.mjs';
+import DebitNoteRouter from './debitNote.mjs';
 
 const indexRouter = express.Router();
 
@@ -41,6 +43,8 @@ indexRouter.use('/receipt', ReceiptsRouter);
 indexRouter.use('/payment', PaymentRouter);
 indexRouter.use('/journal', JournalRouter);
 indexRouter.use('/contra', ContraRouter);
-indexRouter.use('/pos',PosRouter);
+indexRouter.use('/pos', PosRouter);
+indexRouter.use('/creditNote', CreditNoteRouter);
+indexRouter.use('/debitNote', DebitNoteRouter);
 
 export default indexRouter;

@@ -1,8 +1,8 @@
 import sql from 'mssql';
-import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../../helper_functions.mjs';
-import { invalidInput, servError, dataFound, noData, success } from '../../../res.mjs';
-import { getNextId, getProducts } from '../../../middleware/miniAPIs.mjs';
-import { calculateGSTDetails } from '../../../middleware/taxCalculator.mjs';
+import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
+import { invalidInput, servError, dataFound, noData, success } from '../../res.mjs';
+import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
+import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
@@ -898,6 +898,39 @@ export const deleteCreditNote = async (req, res) => {
 
         await request;
         success(res, 'Credit Note deleted successfully!');
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+export const getFilterValues = async (req, res) => {
+    try {
+        const request = new sql.Request()
+            .query(`
+                -- Voucher
+                SELECT DISTINCT rec.Voucher_Type AS value, v.Voucher_Type AS label
+                FROM tbl_Credit_Note_Gen_Info AS rec
+                LEFT JOIN tbl_Voucher_Type AS v
+                ON v.Vocher_Type_Id = rec.Voucher_Type
+                -- Retailer
+                SELECT DISTINCT rec.Retailer_Id AS value, r.Retailer_Name AS label
+                FROM tbl_Credit_Note_Gen_Info AS rec
+                LEFT JOIN tbl_Retailers_Master AS r
+                ON r.Retailer_Id = rec.Retailer_Id
+                -- Created By
+                SELECT DISTINCT rec.Created_by AS value, u.Name AS label
+                FROM tbl_Credit_Note_Gen_Info AS rec
+                LEFT JOIN tbl_Users AS u
+                ON u.UserId = rec.Created_by;`
+            );
+
+        const result = await request;
+
+        dataFound(res, [], 'data found', {
+            voucherType: toArray(result.recordsets[0]),
+            retailers: toArray(result.recordsets[1]),
+            createdBy: toArray(result.recordsets[2])
+        });
     } catch (e) {
         servError(e, res);
     }

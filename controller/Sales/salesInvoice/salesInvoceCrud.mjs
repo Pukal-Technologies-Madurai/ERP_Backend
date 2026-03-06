@@ -205,7 +205,7 @@ const handleDeliveryAndShippingAddress = async ({
 
 export const getSalesInvoice = async (req, res) => {
     try {
-        const { Retailer_Id, Cancel_status, Created_by, VoucherType, Do_Id } = req.query;
+        const { Retailer_Id, Cancel_status, Created_by, VoucherType, Branch_Id } = req.query;
         const
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -230,7 +230,7 @@ export const getSalesInvoice = async (req, res) => {
             .input('cancel', Cancel_status)
             .input('creater', Created_by)
             .input('VoucherType', VoucherType)
-            .input('Do_Id', Do_Id)
+            .input('Branch_Id', Branch_Id)
             .query(`
                 -- declaring table variable
                 DECLARE @FilteredInvoice TABLE (Do_Id INT);
@@ -244,7 +244,7 @@ export const getSalesInvoice = async (req, res) => {
                     ${checkIsNumber(Cancel_status) ? ' AND Cancel_status = @cancel ' : ''}
                     ${checkIsNumber(Created_by) ? ' AND Created_by = @creater ' : ''}
                     ${checkIsNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''}
-                    ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''};
+                    ${checkIsNumber(Branch_Id) ? ' AND Branch_Id = @Branch_Id ' : ''}
                 -- sales general details
                 SELECT 
                     sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
@@ -527,7 +527,6 @@ export const getSalesInvoiceById = async (req, res) => {
           servError(error,res)
     }
 };
-
 
 export const createSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
