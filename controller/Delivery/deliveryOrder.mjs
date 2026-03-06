@@ -3532,7 +3532,7 @@ SELECT
       CASE
   WHEN sda.deliveryName IS NOT NULL THEN sda.deliveryName
   ELSE rm.Retailer_Name
-END AS Retailer_Name,
+  END AS Retailer_Name,
     COALESCE(sda.deliveryAddress, '') AS Delivery_Address,
     COALESCE(sda.cityName, '') AS City_Name,
     COALESCE(sda.stateName, '') AS State_Name,
@@ -3544,7 +3544,7 @@ END AS Retailer_Name,
     COALESCE(rmt.Route_Name, '') AS RouteName,
     COALESCE(am.Area_Name, '') AS AreaName,
     COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
-
+    COALESCE(sogi.So_Date,'') AS So_Date,
     COALESCE((
         SELECT Top 1 ds.Emp_Id 
         FROM DELIVERY_STAFF ds 
@@ -3776,6 +3776,7 @@ WHERE
         servError(e, res);
     }
 };
+
 
 
 
