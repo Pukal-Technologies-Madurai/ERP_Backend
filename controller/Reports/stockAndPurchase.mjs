@@ -199,7 +199,7 @@ const StockAndPurchaseReport = () => {
 
         try {
 
-            const result = await new sql.Request(req.db)
+            const result = await new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('To_date', Todate)
                 .input('Ledger_Id', Number(Ledger_Id))

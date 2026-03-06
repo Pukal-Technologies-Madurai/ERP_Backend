@@ -28,5 +28,8 @@ PosRouter.get('/StockDetails',pos.getStockGroup)
 PosRouter.get('/posGroupsByStock', pos.getPOSGroupsByStock);
 PosRouter.get('/posGroupList',pos.getPosGroupDetails)
 
+PosRouter.get('/posProductList',pos.getAllProductsPos)
+
+PosRouter.get('/posProductWithStock',pos.getProductsWithStock)
 export default PosRouter;
 
