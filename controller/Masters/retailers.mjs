@@ -164,7 +164,8 @@ const RetailerControll = () => {
                     LEFT JOIN tbl_Account_Master AS a ON a.Acc_Id = r.AC_Id 
                     LEFT JOIN tbl_ERP_POS_Master AS pos ON pos.Retailer_Id = r.Retailer_Id 
                     LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ret_Id = r.Retailer_Id
-                    WHERE r.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds);
+                    WHERE r.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds)
+                    ORDER BY r.Retailer_Name ASC;
                     -- getting retailer gen info
                     SELECT 
                         id,

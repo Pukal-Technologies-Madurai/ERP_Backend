@@ -358,7 +358,7 @@ export const getSalesInvoice = async (req, res) => {
 
 export const getSalesInvoiceById = async (req, res) => {
     try {
-        const { Do_Id } = req.query;
+        const { Do_Id, Do_Inv_No } = req.query;
         
         const getCurrespondingAccount = new sql.Request()
             .query(`
@@ -374,6 +374,7 @@ export const getSalesInvoiceById = async (req, res) => {
 
         const request = new sql.Request()
             .input('Do_Id', Do_Id)
+            .input('Do_Inv_No', Do_Inv_No)
             .query(`
                 -- declaring table variable
                 DECLARE @FilteredInvoice TABLE (Do_Id INT);
@@ -383,7 +384,8 @@ export const getSalesInvoiceById = async (req, res) => {
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 1=1
-                ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''};
+                ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
+                ${!stringCompare(Do_Inv_No, '') ? ' AND Do_Inv_No = @Do_Inv_No ' : ''};
                 
                 -- sales general details
                 SELECT 

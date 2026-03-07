@@ -51,7 +51,7 @@ const sfProductController = () => {
                         LEFT JOIN tbl_Brokerage AS br ON br.Product_Id=p.Product_Id
                         LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
                         LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
-                    ORDER BY p.Product_Id DESC`
+                    ORDER BY p.Product_Name ASC`
                 );
 
             const productResult = (await request).recordset;
@@ -139,7 +139,7 @@ const sfProductController = () => {
                 LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
                 LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
             ${whereClause}
-            ORDER BY p.Product_Id DESC
+            ORDER BY p.Product_Name ASC
         `;
 
             const productResult = await request.query(productQuery);
@@ -783,7 +783,7 @@ const sfProductController = () => {
                 LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
                 LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
             ${whereClause}
-            ORDER BY p.Product_Id DESC
+            ORDER BY p.Product_Name ASC
         `;
 
             const productResult = await request.query(productQuery);
