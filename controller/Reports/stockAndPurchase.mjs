@@ -203,7 +203,7 @@ const StockAndPurchaseReport = () => {
                 .input('Fromdate', Fromdate)
                 .input('To_date', Todate)
                 .input('Ledger_Id', Number(Ledger_Id))
-                .execute('Avg_Live_Sales_Report_2')
+                .execute('Avg_Live_Sales_Report_4')
 
             if (result.recordset.length > 0) {
                 dataFound(res, result.recordsets[0], 'dataFound', { dataTypeInfo: result.recordsets[1] })
