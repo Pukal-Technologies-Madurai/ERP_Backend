@@ -1,7 +1,7 @@
 import sql from 'mssql';
-import { dataFound, failed, invalidInput, noData, servError, success } from '../../res.mjs';
-import { checkIsNumber, isEqualNumber } from '../../helper_functions.mjs';
-import { getUserBasedRights, getUserIdByAuth, getUserMenuRights, getUserTypeBasedRights, getUserTypeByAuth } from '../../middleware/miniAPIs.mjs';
+import { dataFound, failed, invalidInput, servError, success } from '../../res.mjs';
+import { isEqualNumber } from '../../helper_functions.mjs';
+import { getUserBasedRights, getUserIdByAuth, getUserMenuRights, getUserTypeBasedRights } from '../../middleware/miniAPIs.mjs';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -221,7 +221,7 @@ const appMenu = () => {
 
     const createNewMenu = async (req, res) => {
         const {
-            name, menu_type, parent_id, url, display_order
+            name, menu_type, parent_id, url, tUrl, rUrl, display_order, is_active = 1, actionType = 'internal'
         } = req.body;
 
         try {
@@ -230,13 +230,16 @@ const appMenu = () => {
                 .input('menu_type', menu_type)
                 .input('parent_id', parent_id ? parent_id : null)
                 .input('url', url)
+                .input('tUrl', tUrl)
+                .input('rUrl', rUrl)
+                .input('actionType', actionType)
                 .input('display_order', display_order)
-                .input('is_active', 1)
+                .input('is_active', is_active)
                 .query(`
                     INSERT INTO [${userPortalDB}].[dbo].[tbl_AppMenu] (
-                        name, menu_type, parent_id, url, display_order, is_active
+                        name, menu_type, parent_id, url, tUrl, rUrl, actionType, display_order, is_active
                     ) VALUES (
-                        @name, @menu_type, @parent_id, @url, @display_order, @is_active
+                        @name, @menu_type, @parent_id, @url, @tUrl, @rUrl, @actionType, @display_order, @is_active
                     );`
                 );
 
@@ -252,20 +255,21 @@ const appMenu = () => {
 
     const updateMenu = async (req, res) => {
         const {
-            id, name, menu_type, parent_id, url, display_order, is_active
+            id, name, menu_type, parent_id, url, tUrl, rUrl, display_order, is_active = 1, actionType = 'internal'
         } = req.body;
 
         try {
-            const activeState = isEqualNumber(is_active, 1) || is_active == true;
-            
             const result = await new sql.Request()
                 .input('id', id)
                 .input('name', name)
                 .input('menu_type', menu_type)
                 .input('parent_id', parent_id ? parent_id : null)
                 .input('url', url)
+                .input('tUrl', tUrl)
+                .input('rUrl', rUrl)
+                .input('actionType', actionType)
                 .input('display_order', display_order)
-                .input('is_active', activeState ? 1 : 0)
+                .input('is_active', is_active)
                 .query(`
                     UPDATE
                         [${userPortalDB}].[dbo].[tbl_AppMenu]
@@ -274,6 +278,9 @@ const appMenu = () => {
                         menu_type = @menu_type,
                         parent_id = @parent_id,
                         url = @url,
+                        tUrl = @tUrl,
+                        rUrl = @rUrl,
+                        actionType = @actionType,
                         display_order = @display_order,
                         is_active = @is_active
                     WHERE
@@ -308,8 +315,8 @@ const appMenu = () => {
                     [${userPortalDB}].[dbo].[tbl_AppMenu] AS m`);
 
             const result = menuData.recordset.map(data => ({
-                ...data, 
-                is_active: data.is_active ? 1 : 0, 
+                ...data,
+                is_active: data.is_active,
                 ParantData: JSON.parse(data.ParantData)
             }));
 
