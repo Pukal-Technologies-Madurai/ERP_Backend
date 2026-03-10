@@ -20,13 +20,28 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const allowedOrigins = [
+    "https://reports.erpsmt.in/",
+];
+
 const app = express();
-app.use(cors());
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error("Not allowed by CORS"));
+            }
+        }
+    })
+);
+
 app.use(express.json({ limit: '50mb' }));
 app.use((req, res, next) => {
-  res.locals.requestId = crypto.randomUUID();
-  res.locals.startedAt = process.hrtime.bigint();
-  next();
+    res.locals.requestId = crypto.randomUUID();
+    res.locals.startedAt = process.hrtime.bigint();
+    next();
 });
 
 
