@@ -3638,8 +3638,8 @@ function numberToWords(num) {
       .input('Cancel_status', sql.Int, 1)
       
 
-      .input('Created_by', sql.Int, generalInfo.Created_by || 1)
-      .input('Altered_by', sql.Int, generalInfo.Created_by || 1)
+      .input('Created_by', sql.Int, generalInfo.Created_by || 0)
+      .input('Altered_by', sql.Int, '')
       .input('Created_on', sql.DateTime, generalInfo.Created_on)
       .input('Alterd_on', sql.DateTime, generalInfo.Created_on)
       .input('Trans_Type', sql.NVarChar, 'INSERT')
@@ -3890,6 +3890,7 @@ function numberToWords(num) {
     });
   }
 };
+
 
 
     return {
