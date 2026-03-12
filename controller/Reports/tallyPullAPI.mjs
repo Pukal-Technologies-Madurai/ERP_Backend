@@ -22,6 +22,21 @@ const cleanArray = (arr) => {
     return arr;
 };
 
+const nullDefender = (data, numberColumn = []) => {
+    if (!Array.isArray(data)) return [];
+
+    return data.map(item => {
+        return Object.fromEntries(
+            Object.entries(item).map(([key, value]) => {
+                if (numberColumn.includes(key)) {
+                    return [key, value ? Number(value) : 0];
+                }
+                return [key, value || ''];
+            })
+        )
+    })
+}
+
 const externalAPI = async (req, res) => {
     try {
         // const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
@@ -662,6 +677,37 @@ const creditNote = async (req, res) => {
     }
 }
 
+const salesNewApi = async (req, res) => {
+    try {
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', req.query.Fromdate)
+            .input('Todate', req.query.Todate)
+            .execute('Online_Sales_New_API');
+
+        const numberColumn = ['Sal_Id', 'Credit_Days', 'Invoiceamount'];
+
+        const result = await request;
+        const [generalInfo, StockInfo, expencess, broker, transporter] = result.recordsets;
+
+        const genNullDef = nullDefender(generalInfo, numberColumn)
+
+        const creditNote = genNullDef.map(info => ({
+            ...info,
+            ALLINVENTORYENTRIES: StockInfo.filter(stock => isEqualNumber(stock.Sal_Id, info.Sal_Id)),
+            LEDGERENTRIES: expencess.filter(exp => isEqualNumber(exp.Sal_Id, info.Sal_Id)),
+            Other_Reference: broker.find(br => isEqualNumber(br.Sal_Id, info.Sal_Id)) || '',
+            Dispatched_Through: transporter.find(tr => isEqualNumber(tr.Sal_Id, info.Sal_Id)) || '',
+        }));
+
+        dataFound(res, { Sales: creditNote })
+    } catch (e) {
+        servError(e, res)
+    }
+}
+
 
 export default {
     externalAPI,
@@ -672,7 +718,7 @@ export default {
     externalAPIPayment,
     externalAPIJournal,
     externalAPIContra,
-    
+
     // -- admin api
     tallyAdminPurchaseAPI,
     tallyAdminSaleAPI,
@@ -694,5 +740,6 @@ export default {
 
     // -- new updates api
     debitNote,
-    creditNote
+    creditNote,
+    salesNewApi
 };

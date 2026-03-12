@@ -59,6 +59,7 @@ ReportRouter.get('/tally-stockJournal-update-api', tallyPullAPI.tallyStockJourna
 // -- new updates api
 ReportRouter.get('/tally-debit-note-api', tallyPullAPI.debitNote);
 ReportRouter.get('/tally-credit-note-api', tallyPullAPI.creditNote);
+ReportRouter.get('/tally-sales-new-api', tallyPullAPI.salesNewApi);
 
 
 ReportRouter.get('/template', template.getTemplates);

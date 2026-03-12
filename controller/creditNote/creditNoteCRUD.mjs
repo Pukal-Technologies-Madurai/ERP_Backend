@@ -688,7 +688,6 @@ export const updateCreditNote = async (req, res) => {
             .input('Narration', sql.NVarChar, Narration)
             .input('Cancel_status', sql.Int, toNumber(Cancel_status))
             .input('Stock_Item_Ledger_Name', sql.NVarChar, Stock_Item_Ledger_Name)
-            .input('Trans_Type', sql.NVarChar, 'UPDATE')
             .input('Alter_Id', sql.BigInt, Alter_Id)
             .input('Altered_by', sql.BigInt, Altered_by)
             .input('Alterd_on', sql.DateTime, new Date())
@@ -720,7 +719,6 @@ export const updateCreditNote = async (req, res) => {
                     Total_Tax = @Total_Tax,
                     Total_Invoice_value = @Total_Invoice_value,
                     Stock_Item_Ledger_Name = @Stock_Item_Ledger_Name,
-                    Trans_Type = @Trans_Type,
                     Ref_Inv_Number = @Ref_Inv_Number,
                     Ref_Inv_Date = @Ref_Inv_Date,
                     Alter_Id = @Alter_Id,
