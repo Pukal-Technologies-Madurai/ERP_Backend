@@ -2317,31 +2317,31 @@ const deliveryTripsheetList = async (req, res) => {
         const branchIdNum = Branch_Id ? parseInt(Branch_Id, 10) : null;
         const deliveryPersonIdNum = Delivery_Person_Id ? parseInt(Delivery_Person_Id, 10) : null;
 
-        // 1. Get Trip Master Data
+    
         let tripMasterQuery = `
-SELECT
-    tr.Trip_Id,
-    tr.Challan_No,
-    tr.EndTime,
-    tr.StartTime,
-    tr.Trip_Date,
-    tr.Trip_EN_KM,
-    tr.Trip_No,
-    tr.Trip_ST_KM,
-    tr.Trip_Tot_Kms,
-    tr.Vehicle_No,
-    tr.Branch_Id,
-    tr.BillType,
-    tr.VoucherType,
-    tr.TR_INV_ID,
-    bm.BranchName,
-    MIN(sgi.Do_Date) AS DO_Date
-FROM tbl_Trip_Master tr
-LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
-LEFT JOIN tbl_Trip_Details td ON td.Trip_Id = tr.Trip_Id
-LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(td.Delivery_Id AS INT)
-WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate
-    AND tr.BillType = 'SALES'
+           SELECT
+               tr.Trip_Id,
+               tr.Challan_No,
+               tr.EndTime,
+               tr.StartTime,
+               tr.Trip_Date,
+               tr.Trip_EN_KM,
+               tr.Trip_No,
+               tr.Trip_ST_KM,
+               tr.Trip_Tot_Kms,
+               tr.Vehicle_No,
+               tr.Branch_Id,
+               tr.BillType,
+               tr.VoucherType,
+               tr.TR_INV_ID,
+               bm.BranchName,
+               MIN(sgi.Do_Date) AS DO_Date
+           FROM tbl_Trip_Master tr
+           LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
+           LEFT JOIN tbl_Trip_Details td ON td.Trip_Id = tr.Trip_Id
+           LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(td.Delivery_Id AS INT)
+           WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate
+            AND tr.BillType = 'SALES'
 `;
 
         const conditions = [];
@@ -2362,13 +2362,13 @@ WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate
         }
 
         tripMasterQuery += `
-GROUP BY 
-    tr.Trip_Id, tr.Challan_No, tr.EndTime, tr.StartTime, tr.Trip_Date,
-    tr.Trip_EN_KM, tr.Trip_No, tr.Trip_ST_KM, tr.Trip_Tot_Kms,
-    tr.Vehicle_No, tr.Branch_Id, tr.BillType, tr.VoucherType,
-    tr.TR_INV_ID, bm.BranchName
-ORDER BY tr.Trip_Date DESC
-`;
+                   GROUP BY 
+                       tr.Trip_Id, tr.Challan_No, tr.EndTime, tr.StartTime, tr.Trip_Date,
+                       tr.Trip_EN_KM, tr.Trip_No, tr.Trip_ST_KM, tr.Trip_Tot_Kms,
+                       tr.Vehicle_No, tr.Branch_Id, tr.BillType, tr.VoucherType,
+                       tr.TR_INV_ID, bm.BranchName
+                   ORDER BY tr.Trip_Date DESC
+                     `;
 
         const request = new sql.Request();
         request.input('FromDate', sql.Date, FromDate);
@@ -2392,49 +2392,49 @@ ORDER BY tr.Trip_Date DESC
             return noData(res);
         }
 
-        // 2. Get Trip Details
+       
         const tripDetailsQuery = `
-SELECT DISTINCT
-    td.Trip_Id,
-    td.Delivery_Id,
-    sgi.Do_Id,
-    sgi.So_No,
-    sgi.Do_Inv_No,
-    lol.Ledger_Name,
-    lol.Ledger_Alias,
-    TRY_CAST(sgi.Retailer_Id AS INT) as Retailer_Id,
-    CAST(COALESCE(TRY_CAST(sgi.Total_Before_Tax AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Before_Tax,
-    CAST(COALESCE(TRY_CAST(sgi.Total_Invoice_Value AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Invoice_Value,
-    CAST(COALESCE(TRY_CAST(sgi.SGST_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as SGST_Total,
-    CAST(COALESCE(TRY_CAST(sgi.CSGT_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as CSGT_Total,
-    CAST(COALESCE(TRY_CAST(sgi.IGST_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as IGST_Total,
-    TRY_CAST(sgi.Delivery_Person_Id AS INT) as Delivery_Person_Id,
-    sgi.Delivery_Status,
-    sgi.Cancel_status,
-    CAST(COALESCE(TRY_CAST(sgi.Total_Tax AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Tax,
-    sgi.Created_by,
-    sgi.Altered_by,
-    sgi.Do_Date AS Delivery_Do_Date,
-    ecc.Cost_Center_Name,
-    ecc.User_Id,
-    us.Name,
-    ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,
-    ISNULL(sgi.Payment_Mode, 0) AS Payment_Mode,
-    ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
-    ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
-    ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
-    ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
-    ISNULL(sgi.Collected_By, 0) AS Collected_By,
-    ISNULL(sgi.Collected_Status, 0) AS Collected_Status,
-    sgi.Payment_Status
-FROM tbl_Trip_Details td
-INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(td.Delivery_Id AS INT)
-LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = TRY_CAST(sgi.Delivery_Person_Id AS INT)
-LEFT JOIN tbl_Users us ON us.UserId = TRY_CAST(ecc.User_Id AS INT)
-LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id=TRY_CAST(sgi.Retailer_Id AS INT)
-LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id=TRY_CAST(rm.Retailer_Id AS INT)
-WHERE td.Trip_Id IN (${tripIds.map((_, i) => `@TripId${i}`).join(',')})
-`;
+               SELECT DISTINCT
+                   td.Trip_Id,
+                   td.Delivery_Id,
+                   sgi.Do_Id,
+                   sgi.So_No,
+                   sgi.Do_Inv_No,
+                   lol.Ledger_Name,
+                   lol.Ledger_Alias,
+                   TRY_CAST(sgi.Retailer_Id AS INT) as Retailer_Id,
+                   CAST(COALESCE(TRY_CAST(sgi.Total_Before_Tax AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Before_Tax,
+                   CAST(COALESCE(TRY_CAST(sgi.Total_Invoice_Value AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Invoice_Value,
+                   CAST(COALESCE(TRY_CAST(sgi.SGST_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as SGST_Total,
+                   CAST(COALESCE(TRY_CAST(sgi.CSGT_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as CSGT_Total,
+                   CAST(COALESCE(TRY_CAST(sgi.IGST_Total AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as IGST_Total,
+                   TRY_CAST(sgi.Delivery_Person_Id AS INT) as Delivery_Person_Id,
+                   sgi.Delivery_Status,
+                   sgi.Cancel_status,
+                   CAST(COALESCE(TRY_CAST(sgi.Total_Tax AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Tax,
+                   sgi.Created_by,
+                   sgi.Altered_by,
+                   sgi.Do_Date AS Delivery_Do_Date,
+                   ecc.Cost_Center_Name,
+                   ecc.User_Id,
+                   us.Name,
+                   ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,
+                   ISNULL(sgi.Payment_Mode, 0) AS Payment_Mode,
+                   ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
+                   ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
+                   ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
+                   ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
+                   ISNULL(sgi.Collected_By, 0) AS Collected_By,
+                   ISNULL(sgi.Collected_Status, 0) AS Collected_Status,
+                   sgi.Payment_Status
+               FROM tbl_Trip_Details td
+               INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(td.Delivery_Id AS INT)
+               LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = TRY_CAST(sgi.Delivery_Person_Id AS INT)
+               LEFT JOIN tbl_Users us ON us.UserId = TRY_CAST(ecc.User_Id AS INT)
+               LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id=TRY_CAST(sgi.Retailer_Id AS INT)
+               LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id=TRY_CAST(rm.Retailer_Id AS INT)
+               WHERE td.Trip_Id IN (${tripIds.map((_, i) => `@TripId${i}`).join(',')})
+               `;
 
         const detailsRequest = new sql.Request();
         tripIds.forEach((id, i) => {
@@ -2468,78 +2468,80 @@ WHERE td.Trip_Id IN (${tripIds.map((_, i) => `@TripId${i}`).join(',')})
                 }
             });
 
-            // 3. Get Products Data
+           
             let productMap = {};
             let staffMap = {};
-            let deliveryInvoiceMap = {}; // Store Do_Inv_No for each Do_Id
+            let deliveryInvoiceMap = {}; 
             
             if (deliveryIds.length > 0) {
-                // Get Products Data
+     
                 const productsQuery = `
-SELECT DISTINCT
-    TRY_CAST(sdsi.Delivery_Order_Id AS INT) AS Do_Id,
-    sdsi.S_No,
-    TRY_CAST(sdsi.Item_Id AS INT) AS Item_Id,
-    CAST(COALESCE(TRY_CAST(sdsi.Bill_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Bill_Qty,
-    CAST(COALESCE(TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Act_Qty,
-    CAST(COALESCE(TRY_CAST(sdsi.Taxable_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxable_Rate,
-    CAST(COALESCE(TRY_CAST(sdsi.Item_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Item_Rate,
-    CAST(COALESCE(TRY_CAST(sdsi.Amount AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Amount,
-    CAST(COALESCE(TRY_CAST(sdsi.Free_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Free_Qty,
-    CAST(COALESCE(TRY_CAST(sdsi.Total_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Qty,
-    CAST(COALESCE(TRY_CAST(sdsi.Taxble AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxble,
-    sdsi.HSN_Code,
-    TRY_CAST(sdsi.Unit_Id AS INT) AS Unit_Id,
-    sdsi.Unit_Name,
-    TRY_CAST(sdsi.Act_unit_Id AS INT) AS Act_unit_Id,
-    TRY_CAST(sdsi.Alt_Act_Unit_Id AS INT) AS Alt_Act_Unit_Id,
-    CAST(COALESCE(TRY_CAST(sdsi.Taxable_Amount AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxable_Amount,
-    CAST(COALESCE(TRY_CAST(sdsi.Tax_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Tax_Rate,
-    CAST(COALESCE(TRY_CAST(sdsi.Cgst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Cgst,
-    CAST(COALESCE(TRY_CAST(sdsi.Cgst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Cgst_Amo,
-    CAST(COALESCE(TRY_CAST(sdsi.Sgst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Sgst,
-    CAST(COALESCE(TRY_CAST(sdsi.Sgst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Sgst_Amo,
-    CAST(COALESCE(TRY_CAST(sdsi.Igst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Igst,
-    CAST(COALESCE(TRY_CAST(sdsi.Igst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Igst_Amo,
-    CAST(COALESCE(TRY_CAST(sdsi.Final_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Final_Amo,
-    sdsi.Created_on,
-    sdsi.Batch_Name,
-    sgi.Do_Inv_No,
-    pm.Product_Name,
-    TRY_CAST(pm.Pack_Id AS INT) AS Pack_Id,
-    CAST(COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) AS Pack,
-    pm.Product_Image_Name,
-    bm.BranchName AS Branch,
-    rm.Retailer_Name,
-    CAST(COALESCE(TRY_CAST(rm.Latitude AS DECIMAL(10,6)), 0) AS DECIMAL(10,6)) as Latitude,
-    CAST(COALESCE(TRY_CAST(rm.Longitude AS DECIMAL(10,6)), 0) AS DECIMAL(10,6)) as Longitude,
-    sda.deliveryName AS Party_Mailing_Name,
-    sda.cityName AS Party_Location,
-    -- Calculate Alt_Act_Qty with safe conversion
-    CASE 
-        WHEN COALESCE(TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)), 0) = 0 
-             OR COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0) = 0
-        THEN 0
-        ELSE CAST(
-            TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)) 
-            / NULLIF(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0)
-            AS DECIMAL(18,2)
-        )
-    END AS Alt_Act_Qty,
-    sdsi.DO_St_Id,
-    sdsi.Do_Date,
-    TRY_CAST(sdsi.Delivery_Order_Id AS INT) AS Delivery_Order_Id,
-    TRY_CAST(sdsi.GoDown_Id AS INT) AS GoDown_Id
-FROM tbl_Sales_Delivery_Stock_Info sdsi
-INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(sdsi.Delivery_Order_Id AS INT)
-LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = TRY_CAST(sdsi.Item_Id AS INT)
-LEFT JOIN tbl_Pack_Master ppm ON ppm.Pack_Id = TRY_CAST(pm.Pack_Id AS INT)
-LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = TRY_CAST(sgi.Branch_Id AS INT)
-LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = TRY_CAST(sgi.Retailer_Id AS INT)
-LEFT JOIN tbl_Sales_Delivery_Address sda ON sda.id = TRY_CAST(sgi.shipingAddressId AS INT)
-WHERE TRY_CAST(sdsi.Delivery_Order_Id AS INT) IN (${deliveryIds.map((_, i) => `@DeliveryId${i}`).join(',')})
-ORDER BY TRY_CAST(sdsi.Delivery_Order_Id AS INT), sdsi.S_No
-`;
+               SELECT DISTINCT
+                   TRY_CAST(sdsi.Delivery_Order_Id AS INT) AS Do_Id,
+                   sdsi.S_No,
+                   sogi.So_Date,
+                   TRY_CAST(sdsi.Item_Id AS INT) AS Item_Id,
+                   CAST(COALESCE(TRY_CAST(sdsi.Bill_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Bill_Qty,
+                   CAST(COALESCE(TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Act_Qty,
+                   CAST(COALESCE(TRY_CAST(sdsi.Taxable_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxable_Rate,
+                   CAST(COALESCE(TRY_CAST(sdsi.Item_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Item_Rate,
+                   CAST(COALESCE(TRY_CAST(sdsi.Amount AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Amount,
+                   CAST(COALESCE(TRY_CAST(sdsi.Free_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Free_Qty,
+                   CAST(COALESCE(TRY_CAST(sdsi.Total_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Total_Qty,
+                   CAST(COALESCE(TRY_CAST(sdsi.Taxble AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxble,
+                   sdsi.HSN_Code,
+                   TRY_CAST(sdsi.Unit_Id AS INT) AS Unit_Id,
+                   sdsi.Unit_Name,
+                   TRY_CAST(sdsi.Act_unit_Id AS INT) AS Act_unit_Id,
+                   TRY_CAST(sdsi.Alt_Act_Unit_Id AS INT) AS Alt_Act_Unit_Id,
+                   CAST(COALESCE(TRY_CAST(sdsi.Taxable_Amount AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxable_Amount,
+                   CAST(COALESCE(TRY_CAST(sdsi.Tax_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Tax_Rate,
+                   CAST(COALESCE(TRY_CAST(sdsi.Cgst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Cgst,
+                   CAST(COALESCE(TRY_CAST(sdsi.Cgst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Cgst_Amo,
+                   CAST(COALESCE(TRY_CAST(sdsi.Sgst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Sgst,
+                   CAST(COALESCE(TRY_CAST(sdsi.Sgst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Sgst_Amo,
+                   CAST(COALESCE(TRY_CAST(sdsi.Igst AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Igst,
+                   CAST(COALESCE(TRY_CAST(sdsi.Igst_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Igst_Amo,
+                   CAST(COALESCE(TRY_CAST(sdsi.Final_Amo AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Final_Amo,
+                   sdsi.Created_on,
+                   sdsi.Batch_Name,
+                   sgi.Do_Inv_No,
+                   pm.Product_Name,
+                   TRY_CAST(pm.Pack_Id AS INT) AS Pack_Id,
+                   CAST(COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) AS Pack,
+                   pm.Product_Image_Name,
+                   bm.BranchName AS Branch,
+                   rm.Retailer_Name,
+                   CAST(COALESCE(TRY_CAST(rm.Latitude AS DECIMAL(10,6)), 0) AS DECIMAL(10,6)) as Latitude,
+                   CAST(COALESCE(TRY_CAST(rm.Longitude AS DECIMAL(10,6)), 0) AS DECIMAL(10,6)) as Longitude,
+                   sda.deliveryName AS Party_Mailing_Name,
+                   sda.cityName AS Party_Location,
+                   -- Calculate Alt_Act_Qty with safe conversion
+                   CASE 
+                       WHEN COALESCE(TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)), 0) = 0 
+                            OR COALESCE(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0) = 0
+                       THEN 0
+                       ELSE CAST(
+                           TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)) 
+                           / NULLIF(TRY_CAST(ppm.Pack AS DECIMAL(18,2)), 0)
+                           AS DECIMAL(18,2)
+                       )
+                   END AS Alt_Act_Qty,
+                   sdsi.DO_St_Id,
+                   sdsi.Do_Date,
+                   TRY_CAST(sdsi.Delivery_Order_Id AS INT) AS Delivery_Order_Id,
+                   TRY_CAST(sdsi.GoDown_Id AS INT) AS GoDown_Id
+               FROM tbl_Sales_Delivery_Stock_Info sdsi
+               INNER JOIN tbl_Sales_Delivery_Gen_Info sgi ON TRY_CAST(sgi.Do_Id AS INT) = TRY_CAST(sdsi.Delivery_Order_Id AS INT)
+               LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = TRY_CAST(sdsi.Item_Id AS INT)
+               LEFT JOIN tbl_Pack_Master ppm ON ppm.Pack_Id = TRY_CAST(pm.Pack_Id AS INT)
+               LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = TRY_CAST(sgi.Branch_Id AS INT)
+               LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = TRY_CAST(sgi.Retailer_Id AS INT)
+               LEFT JOIN tbl_Sales_Order_Gen_Info sogi ON sogi.So_Id=TRY_CAST(sgi.So_No AS INT)
+               LEFT JOIN tbl_Sales_Delivery_Address sda ON sda.id = TRY_CAST(sgi.shipingAddressId AS INT)
+               WHERE TRY_CAST(sdsi.Delivery_Order_Id AS INT) IN (${deliveryIds.map((_, i) => `@DeliveryId${i}`).join(',')})
+               ORDER BY TRY_CAST(sdsi.Delivery_Order_Id AS INT), sdsi.S_No
+               `;
 
                 const productsRequest = new sql.Request();
                 deliveryIds.forEach((id, i) => {
@@ -2557,20 +2559,20 @@ ORDER BY TRY_CAST(sdsi.Delivery_Order_Id AS INT), sdsi.S_No
                     productMap[doId].push(product);
                 });
 
-                // Get Staff Info
-                const staffQuery = `
-SELECT
-    ssi.Id,
-    TRY_CAST(ssi.Do_Id AS INT) AS Do_Id,
-    TRY_CAST(ssi.Emp_Id AS INT) AS Emp_Id,
-    ecc.Cost_Center_Name AS Emp_Name,
-    TRY_CAST(ssi.Emp_Type_Id AS INT) AS Emp_Type_Id,
-    et.Cost_Category AS Emp_Type_Name
-FROM tbl_Sales_Delivery_Staff_Info ssi
-LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = TRY_CAST(ssi.Emp_Id AS INT)
-LEFT JOIN tbl_ERP_Cost_Category et ON et.Cost_Category_Id = TRY_CAST(ssi.Emp_Type_Id AS INT)
-WHERE TRY_CAST(ssi.Do_Id AS INT) IN (${deliveryIds.map((_, i) => `@StaffDoId${i}`).join(',')})
-`;
+       
+                                        const staffQuery = `
+                        SELECT
+                            ssi.Id,
+                            TRY_CAST(ssi.Do_Id AS INT) AS Do_Id,
+                            TRY_CAST(ssi.Emp_Id AS INT) AS Emp_Id,
+                            ecc.Cost_Center_Name AS Emp_Name,
+                            TRY_CAST(ssi.Emp_Type_Id AS INT) AS Emp_Type_Id,
+                            et.Cost_Category AS Emp_Type_Name
+                        FROM tbl_Sales_Delivery_Staff_Info ssi
+                        LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = TRY_CAST(ssi.Emp_Id AS INT)
+                        LEFT JOIN tbl_ERP_Cost_Category et ON et.Cost_Category_Id = TRY_CAST(ssi.Emp_Type_Id AS INT)
+                        WHERE TRY_CAST(ssi.Do_Id AS INT) IN (${deliveryIds.map((_, i) => `@StaffDoId${i}`).join(',')})
+                        `;
 
                 const staffRequest = new sql.Request();
                 deliveryIds.forEach((id, i) => {
@@ -2589,19 +2591,19 @@ WHERE TRY_CAST(ssi.Do_Id AS INT) IN (${deliveryIds.map((_, i) => `@StaffDoId${i}
                 });
             }
 
-            // 4. Get Employees Involved
+            
             const employeesQuery = `
-SELECT
-    te.Trip_Id,
-    te.Involved_Emp_Id,
-    e.Cost_Center_Name AS Emp_Name,
-    cc.Cost_Category,
-    cc.Cost_Category_Id AS Cost_Center_Type_Id
-FROM tbl_Trip_Employees te
-LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = te.Involved_Emp_Id
-LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
-WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
-`;
+                            SELECT
+                                te.Trip_Id,
+                                te.Involved_Emp_Id,
+                                e.Cost_Center_Name AS Emp_Name,
+                                cc.Cost_Category,
+                                cc.Cost_Category_Id AS Cost_Center_Type_Id
+                            FROM tbl_Trip_Employees te
+                            LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = te.Involved_Emp_Id
+                            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+                            WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
+                            `;
 
             const empRequest = new sql.Request();
             tripIds.forEach((id, i) => {
@@ -2624,17 +2626,18 @@ WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
                 });
             });
 
-            // 5. Assemble Final Data with Sales Invoice No sorting
+          
             const finalData = tripMasterResult.recordset.map(trip => {
                 const tripId = trip.Trip_Id;
                 const details = tripDetailsMap[tripId] || [];
                 
-                // Format Trip_Details (without Products_List)
+               
                 const formattedTripDetails = details.map(detail => {
                     return {
                         Delivery_Id: detail.Delivery_Id,
                         Do_Id: detail.Do_Id,
                         So_No: detail.So_No,
+                        So_Date:details.So_Date,
                         Ledger_Name:detail.Ledger_Name,
                         Total_Before_Tax: detail.Total_Before_Tax,
                         Total_Invoice_Value: detail.Total_Invoice_Value,
@@ -2660,15 +2663,13 @@ WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
                     };
                 });
                 
-                // Format Product_Array with Sales Invoice No ASC sorting
-                // First, sort details by Do_Inv_No (Sales Invoice No)
+                
                 const sortedDetails = [...details].sort((a, b) => {
-                    // Handle null/undefined values
+           
                     const invoiceA = a.Do_Inv_No || '';
                     const invoiceB = b.Do_Inv_No || '';
                     
-                    // Custom sorting for alphanumeric invoice numbers like "OGS/000175/25-26"
-                    // Extract numeric part for better sorting
+             
                     const numA = extractInvoiceNumber(invoiceA);
                     const numB = extractInvoiceNumber(invoiceB);
                     
@@ -2676,7 +2677,7 @@ WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
                         return numA - numB;
                     }
                     
-                    // Fallback to string comparison
+               
                     return invoiceA.localeCompare(invoiceB);
                 });
                 
@@ -2685,7 +2686,7 @@ WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
                     const products = productMap[doId] || [];
                     
                     const formattedProducts = products.map(product => {
-                        // Remove Do_Id from product to match your structure
+                      
                         const { Do_Id, ...productWithoutDoId } = product;
                         return {
                             ...productWithoutDoId,
@@ -2698,6 +2699,7 @@ WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
                         So_No: detail.So_No,
                         Retailer_Name: detail.Cost_Center_Name || 'N/A',
                         Product_Do_Date: detail.Delivery_Do_Date,
+                        So_Date:detail.So_Date,
                         Products_List: formattedProducts
                     };
                 });
@@ -3590,7 +3592,8 @@ SELECT
     COALESCE((
         SELECT 
             sd.*,
-            sdgi.Do_Inv_No,
+            COALESCE(sogi.So_Date,'') AS So_Date,
+            COALESCE(sdgi.Do_Inv_No,'') AS Do_Inv_No,
             COALESCE(ti.Transporter_Name, '') AS Transporter_Name,
              -- COALESCE(sda.deliveryName, '') AS Retailer_Name
               CASE
