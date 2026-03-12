@@ -534,7 +534,13 @@ const tripActivities = () => {
                     END AS Bag,
                         COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
                         COALESCE(gm_from.Godown_Name, 'Unknown') AS FromLocation,
+                        COALESCE(gm_from.Godown_Address,'Unknown') AS FromAddress,
+                        COALESCE(gm_from.Gst_No,'Unknown') AS FromGst,
+                        COALESCE(gm_from.Phone_No,'Unknown') AS FromPhone,
                         COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation,
+                        COALESCE(gm_to.Godown_Address,'Unknown') AS ToAddress,
+                        COALESCE(gm_to.Phone_No,'Unknown') AS ToPhone,
+                        COALESCE(gm_to.Gst_No,'Unknown') AS ToGst,
                         po.OrderId AS arrivalOrderId
                     FROM
                         tbl_Trip_Details AS td
@@ -550,6 +556,7 @@ const tripActivities = () => {
                         ON po.Trip_Id = td.Trip_Id AND po.Trip_Item_SNo = td.Arrival_Id
                         LEFT JOIN tbl_Pack_Master as pck
                         ON pck.Pack_Id=pm.Pack_Id
+
                     WHERE 
                         td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
                 ), MAPED_ARRIVALS AS (
