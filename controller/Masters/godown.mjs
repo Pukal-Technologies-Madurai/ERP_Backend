@@ -26,7 +26,7 @@ const Godown = () => {
 
     const createGodown = async (req, res) => {
         try {
-            const { Godown_Name, Created_By } = req.body;
+            const { Godown_Name, Created_By,Godown_Address,Gst_No,Phone_No } = req.body;
 
             if (!Godown_Name) {
                 return failed(res, 'Godown name is required');
@@ -53,12 +53,15 @@ const Godown = () => {
             await request
                 .input('Godown_Id', Godown_Id)
                 .input('Godown_Name', Godown_Name)
+                .input('Godown_Address', Godown_Address)
+                .input('Gst_No', Gst_No)
+                .input('Phone_No', Phone_No)
                 .input('Alter_Id', Alter_Id)
                 .input('Created_By', Created_By)
                 .input('Created_Time', new Date())
                 .query(`
-                INSERT INTO tbl_Godown_Master (Godown_Id, Godown_Name,Alter_Id,Created_By,Created_Time) 
-                VALUES (@Godown_Id, @Godown_Name,@Alter_Id,@Created_By,@Created_Time)
+                INSERT INTO tbl_Godown_Master (Godown_Id, Godown_Name,Godown_Address,Gst_No,Phone_No,Alter_Id,Created_By,Created_Time) 
+                VALUES (@Godown_Id, @Godown_Name,@Godown_Address,@Gst_No,@Phone_No,@Alter_Id,@Created_By,@Created_Time)
             `);
 
             success(res, 'Godown created successfully.');
@@ -70,31 +73,28 @@ const Godown = () => {
 
     const updateGodown = async (req, res) => {
         try {
-            const { Godown_Id, Godown_Name, Alter_By } = req.body;
+            const { Godown_Id, Godown_Name,Godown_Address, Gst_No,Phone_No,Alter_By } = req.body;
 
             if (!Godown_Id || !Godown_Name) {
                 return invalidInput(res, "Godown_Name are required");
             }
 
-            const checkExisting = await new sql.Request()
-                .input('Godown_Name', Godown_Name)
-                .query('SELECT 1 FROM tbl_Godown_Master WHERE Godown_Name = @Godown_Name');
-
-            if (checkExisting.recordset.length > 0) {
-                return failed(res, 'Godown_Name already exists');
-            }
+           
 
             const Alter_Id = randomNumber();
             const request = new sql.Request();
             await request
                 .input('Godown_Id', Godown_Id)
                 .input('Godown_Name', Godown_Name)
+                .input('Godown_Address', Godown_Address)
+                .input('Gst_No', Gst_No)
+                .input('Phone_No', Phone_No)
                 .input('Alter_Id', Alter_Id)
                 .input('Alter_By', Alter_By)
                 .input('Alter_Time', new Date())
                 .query(`
                 UPDATE tbl_Godown_Master 
-                SET Godown_Name = @Godown_Name,Alter_Id=@Alter_Id, Alter_By=@Alter_By,Alter_Time=@Alter_Time
+                SET Godown_Name = @Godown_Name,Alter_Id=@Alter_Id, Alter_By=@Alter_By,Alter_Time=@Alter_Time,Godown_Address=@Godown_Address,Gst_No=@Gst_No,Phone_No=@Phone_No
                 WHERE Godown_Id = @Godown_Id
             `);
 
