@@ -286,32 +286,12 @@ const ReceiptDataDependency = () => {
                     ) AS inv
                     WHERE 
                         inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value
-                    ORDER BY inv.Do_Date ASC;
-                    -- CREDIT NOTE ENTRIES
-	                SELECT 
-	                	sdgi.Do_Id, 
-	                	COALESCE(sdgi.Total_Invoice_value, 0) AS invoiceValue,
-	                	COALESCE(SUM(cn.Total_Invoice_value), 0) AS creditNoteTotal
-	                FROM tbl_Credit_Note_Gen_Info AS cn
-	                JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON TRIM(sdgi.Do_Inv_No) = TRIM(cn.Ref_Inv_Number)
-	                WHERE cn.Cancel_status <> 0 AND sdgi.Cancel_status <> 0
-	                GROUP BY sdgi.Do_Id, sdgi.Total_Invoice_value`
+                    ORDER BY inv.Do_Date ASC;`
                 );
 
             const result = await request;
 
-            const [invoiceOutstanding, creditNotes] = result.recordsets;
-
-            const invoiceOutstandingWithCreditNotes = invoiceOutstanding.map(inv => {
-                const creditNote = creditNotes.find(cn => isEqualNumber(cn.Do_Id, inv.Do_Id));
-
-                return {
-                    ...inv,
-                    creditNoteTotal: creditNote?.creditNoteTotal || 0
-                }
-            })
-
-            sentData(res, invoiceOutstandingWithCreditNotes);
+            sentData(res, result.recordset);
         } catch (e) {
             servError(e, res);
         }
