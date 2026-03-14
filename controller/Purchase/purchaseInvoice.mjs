@@ -972,7 +972,8 @@ const PurchaseInvoice = () => {
 
             const {
                 Retailer_Id, Cancel_status, VoucherType,
-                Cost_Center_Type_Id, Involved_Emp_Id, filterItems
+                Cost_Center_Type_Id, Involved_Emp_Id, filterItems,
+                PIN_Id, Po_Inv_No
             } = req.query;
 
             const request = new sql.Request()
@@ -984,6 +985,8 @@ const PurchaseInvoice = () => {
                 .input('Cost_Center_Type_Id', Cost_Center_Type_Id)
                 .input('Involved_Emp_Id', Involved_Emp_Id)
                 .input('filterItems', filterItems)
+                .input('PIN_Id', PIN_Id)
+                .input('Po_Inv_No', Po_Inv_No)
                 .query(`
                     -- Step 1: Declare table variable to collect filtered PIN_Ids
                     DECLARE @FilteredPurchase TABLE (PIN_Id INT);
@@ -1000,7 +1003,9 @@ const PurchaseInvoice = () => {
                         ${checkIsNumber(VoucherType) ? ' AND pigi.Voucher_Type = @VoucherType' : ''}
                         ${checkIsNumber(Cost_Center_Type_Id) ? ' AND pisd.Cost_Center_Type_Id = @Cost_Center_Type_Id' : ''}
                         ${checkIsNumber(Involved_Emp_Id) ? ' AND pisd.Involved_Emp_Id = @Involved_Emp_Id' : ''}
-                        ${checkIsNumber(filterItems) ? ' AND pisi.Item_Id = @filterItems ' : ''};
+                        ${checkIsNumber(filterItems) ? ' AND pisi.Item_Id = @filterItems ' : ''}
+                        ${checkIsNumber(PIN_Id) ? ' AND pigi.PIN_Id = @PIN_Id ' : ''}
+                        ${!stringCompare(Po_Inv_No, '') ? ' AND pigi.Po_Inv_No = @Po_Inv_No ' : ''}
                     -- Step 3: Get Purchase General Info
                     SELECT 
                         pigi.*,

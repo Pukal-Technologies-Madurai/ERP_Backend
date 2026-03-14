@@ -79,7 +79,7 @@ const ReceiptDataDependency = () => {
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
                 .query(`
-                    DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
+                	DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
                 -- PURCHASE RETURN 
                     DECLARE @purchaseReturn TABLE (invoiceId NVARCHAR(20) NOT NULL);
                     INSERT INTO @purchaseReturn (invoiceId)
@@ -107,7 +107,8 @@ const ReceiptDataDependency = () => {
                 -- outstandings
                     SELECT 
                     	inv.*,
-                    	inv.Paid_Amount + inv.journalAdjustment AS totalReference
+                    	COALESCE(inv.Paid_Amount, 0) + COALESCE(inv.journalAdjustment, 0)  AS totalReference,
+                		COALESCE(inv.creditNoteAdjustment, 0) AS creditNoteAdjustment
                     FROM (
                         SELECT 
                             pig.Do_Id,
@@ -120,7 +121,7 @@ const ReceiptDataDependency = () => {
                             'INV' AS dataSource,
                             ISNULL(pig.Ref_Inv_Number, pig.Do_Inv_No) AS bill_ref_number,
                             COALESCE((
-                                SELECT SUM(pb.Credit_Amo) 
+                                SELECT COALESCE(SUM(pb.Credit_Amo), 0) 
                                 FROM tbl_Receipt_Bill_Info AS pb
                                 JOIN tbl_Receipt_General_Info AS pgi
                                     ON pgi.receipt_id = pb.receipt_id
@@ -131,7 +132,7 @@ const ReceiptDataDependency = () => {
                                     AND pb.bill_name = pig.Do_Inv_No
                             ), 0) AS Paid_Amount,
                             COALESCE((
-                                SELECT SUM(jr.Amount)
+                                SELECT COALESCE(SUM(jr.Amount), 0)
                                 FROM dbo.tbl_Journal_Bill_Reference jr
                                 JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
                                 JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
@@ -142,12 +143,19 @@ const ReceiptDataDependency = () => {
                                     AND jr.RefId = pig.Do_Id 
                                     AND jr.RefNo = pig.Do_Inv_No
                                     AND jr.RefType = 'SALES'
-                            ), 0) AS journalAdjustment
+                            ), 0) AS journalAdjustment,
+                			COALESCE((
+                				SELECT COALESCE(SUM(cn.Total_Invoice_value), 0)
+                				FROM tbl_Credit_Note_Gen_Info AS cn
+                				WHERE 
+                					TRIM(cn.Ref_Inv_Number) = TRIM(pig.Do_Inv_No)
+                					AND cn.Cancel_status <> 0 
+                			), 0) creditNoteAdjustment
                         FROM tbl_Sales_Delivery_Gen_Info AS pig
                         JOIN tbl_Retailers_Master AS r
                             ON r.Retailer_Id = pig.Retailer_Id
                         LEFT JOIN tbl_Account_Master AS a
-                            ON a.ERP_Id = R.ERP_Id
+                            ON a.Acc_Id = r.AC_Id
                         WHERE 
                             pig.Cancel_status <> 0
                             AND a.Acc_Id = @Acc_Id
@@ -189,7 +197,14 @@ const ReceiptDataDependency = () => {
                                     AND jr.RefId = cb.OB_Id 
                                     AND jr.RefNo = cb.bill_no
                                     AND jr.RefType = 'SALES-OB'
-                            ), 0) AS journalAdjustment
+                            ), 0) AS journalAdjustment,
+                			COALESCE((
+                				SELECT COALESCE(SUM(cn.Total_Invoice_value), 0)
+                				FROM tbl_Credit_Note_Gen_Info AS cn
+                				WHERE 
+                					TRIM(cn.Ref_Inv_Number) = TRIM(cb.bill_no)
+                					AND cn.Cancel_status <> 0 
+                			), 0) creditNoteAdjustment
                         FROM tbl_Ledger_Opening_Balance AS cb
                         WHERE 
                             cb.OB_date >= @OB_Date 
@@ -237,7 +252,8 @@ const ReceiptDataDependency = () => {
                                     AND jr.RefId = pgi.pay_id 
                                     AND jr.RefNo = pgi.payment_invoice_no
                                     -- AND jr.RefType = 'PAYMENT'
-                            ), 0) AS journalAdjustment
+                            ), 0) AS journalAdjustment,
+                			0 creditNoteAdjustment
                     	FROM tbl_Payment_General_Info AS pgi
                     	WHERE 
                     		pgi.debit_ledger     = @Acc_Id
@@ -275,7 +291,8 @@ const ReceiptDataDependency = () => {
                                     AND je.DrCr   = 'Dr'
                                     AND jr.RefId = jgi.JournalId 
                                     AND jr.RefNo = jgi.JournalVoucherNo
-                            ), 0) AS journalAdjustment
+                            ), 0) AS journalAdjustment,
+                			0 AS creditNoteAdjustment
                     	FROM tbl_Journal_Entries_Info AS jei
                     	LEFT JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
                     	WHERE 
@@ -283,6 +300,49 @@ const ReceiptDataDependency = () => {
                             AND jgi.JournalDate		>= @OB_Date
                             AND jgi.JournalStatus	<> 0
                     		AND jei.DrCr			= 'Dr'
+                		UNION ALL
+                -- DEBIT NOTE 
+                    	SELECT
+                    		dngi.DB_Id,
+                    		dngi.DB_Inv_No,
+                    		dngi.DB_Date,
+                    		am.Acc_Id,
+                    		dngi.Total_Before_Tax,
+                    		dngi.Total_Tax,
+                    		dngi.Total_Invoice_value,
+                    		'DEBIT_NOTE' AS dataSource,
+                            dngi.DB_Inv_No AS bill_ref_number,
+                    		 (
+                                SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
+                                FROM tbl_Receipt_Bill_Info AS rbi
+                                JOIN tbl_Receipt_General_Info AS rgi ON rgi.receipt_id = rbi.receipt_id
+                                WHERE 
+                                    rgi.status <> 0
+                                    -- AND rgi.receipt_bill_type = 1
+                                    AND rbi.bill_id = dngi.DB_Id
+                                    AND rbi.bill_name = dngi.DB_Inv_No
+                            ) AS Paid_Amount,
+                            COALESCE((
+                                SELECT COALESCE(SUM(jr.Amount), 0)
+                                FROM dbo.tbl_Journal_Bill_Reference jr
+                                JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                                JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
+                                WHERE 
+                                    jh.JournalStatus <> 0
+                                    AND je.Acc_Id = @Acc_Id
+                                    AND je.DrCr   = 'Cr'
+                                    AND jr.RefId = dngi.DB_Id 
+                                    AND jr.RefNo = dngi.DB_Inv_No
+                            ), 0) AS journalAdjustment,
+                			0 debitNoteAdjustment
+                    	FROM tbl_Debit_Note_Gen_Info AS dngi
+                		JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
+                		JOIN tbl_Account_Master AS am ON am.Acc_Id = rm.AC_Id
+                    	WHERE 
+                    		am.Acc_Id				= @Acc_Id
+                            AND dngi.DB_Date		>= @OB_Date
+                            AND dngi.Cancel_status  <> 0
+                			AND COALESCE(dngi.Ref_Inv_Number, '') = ''
                     ) AS inv
                     WHERE 
                         inv.Paid_Amount + inv.journalAdjustment < inv.Total_Invoice_value

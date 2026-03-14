@@ -12,6 +12,7 @@ import { listRoutes } from './middleware/apiList.mjs';
 import { failed } from './res.mjs';
 import { staticPaths } from './staticPaths.mjs';
 import crypto from "node:crypto";
+import { idempotencyValidator } from './middleware/reqIdValidator.mjs';
 
 dotenv.config();
 
@@ -50,7 +51,7 @@ app.use(morgan('dev', { stream: logStream }));
 
 connectDB();
 
-app.use('/api', indexRouter);
+app.use('/api', idempotencyValidator, indexRouter);
 
 app.use('/api', (req, res) => {
     try {
