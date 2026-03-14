@@ -109,7 +109,7 @@ const getStorageStockGodownWise = async (req, res) => {
             .input('Todate', Todate)
             .input('Godown_Id', Godown_Id)
             .input('Item_Id', 0)
-            .execute('Stock_Summarry_Search_Godown_New');
+            .execute('Stock_Summarry_Search_Godown_Old');
 
         const result = await request;
 

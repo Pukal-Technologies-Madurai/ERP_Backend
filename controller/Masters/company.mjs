@@ -242,7 +242,27 @@ const companyControl = () => {
         }
     }
 
-
+const getUrl = async (req, res) => {
+    try {
+        const { Company_id } = req.query;
+        const result = await new sql.Request()
+            .input("Company_id", sql.Int, Number(Company_id))   
+            .query(`
+                SELECT * 
+                FROM [${userPortalDB}].[dbo].[tbl_Company] 
+                WHERE Global_Comp_Id = @Company_id
+            `);
+        if (!result.recordset.length) {
+            return noData(res, "Company not found");
+        }
+        
+        dataFound(res, result.recordset[0]);
+ 
+    } catch (e) {
+        servError(e, res);
+    }
+};
+ 
 
     return {
         getCompanyDrowDown,
@@ -252,6 +272,7 @@ const companyControl = () => {
         deleteCompany,
         getMYCompanyAccess,
         postCompanyAccess,
+        getUrl
     }
 }
 
