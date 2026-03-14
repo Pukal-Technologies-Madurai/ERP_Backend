@@ -49,6 +49,7 @@ MastersRouter.put('/company', company.putCompany);
 MastersRouter.delete('/company', company.deleteCompany);
 MastersRouter.get('/company/dropDown', company.getCompanyDrowDown);
 
+MastersRouter.get('/company/url', company.getUrl);
 
 MastersRouter.get('/branch', branch.getBranch);
 MastersRouter.post('/branch', branch.postBranch);
