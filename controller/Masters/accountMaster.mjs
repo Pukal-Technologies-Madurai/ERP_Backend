@@ -187,10 +187,10 @@ const accountMaster = () => {
 
             await insertRequest.query(`
                 INSERT INTO tbl_Account_Master (
-                    Acc_Id, Account_name, Account_Alias_Name, Group_Id,creditLimit,percentageValue,creditDays
+                    Acc_Id, Account_name, Account_Alias_Name, Group_Id,creditLimit,percentageValue,creditDays,
                     Alter_Id, Created_By, Created_Time
                 ) VALUES (
-                    @Acc_Id, @Account_name, @Account_Alias_Name, @Group_Id,@creditLimit,@percentageValue,@creditDays
+                    @Acc_Id, @Account_name, @Account_Alias_Name, @Group_Id,@creditLimit,@percentageValue,@creditDays,
                     @Alter_Id, @Created_By, @Created_Time
                 );`
             );
