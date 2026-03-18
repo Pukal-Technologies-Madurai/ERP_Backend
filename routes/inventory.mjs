@@ -86,4 +86,9 @@ inventoryRouter.get('/batchMaster/stockBalance', batchProcess.getBatchStockBalan
 inventoryRouter.get('/trunoverRatio', inventoryReport.getInventoryReport);
 
 
+inventoryRouter.get('/getStockAdjustments',inventoryReport.getStockAdjustment)
+inventoryRouter.post('/getStockAdjustments',inventoryReport.createStockJournalAdjustment)
+inventoryRouter.put('/getStockAdjustments',inventoryReport.updateStockJournalAdjustment)
+
+
 export default inventoryRouter;

@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { servError, sentData } from '../../res.mjs';
+import { servError, sentData,success } from '../../res.mjs';
 import { isEqualNumber, ISOString } from '../../helper_functions.mjs';
 
 const getInventoryReport = async (req, res) => {
@@ -133,4 +133,251 @@ const getInventoryReport = async (req, res) => {
     }
 };
 
-export default { getInventoryReport };
+
+
+const getStockAdjustment = async (req, res) => {
+    try {
+        const result = await sql.query(`
+            SELECT 
+                i.Aj_id,
+                i.invoice_no,
+                i.Adj_date,
+                i.Adj_ledger_id AS godown_id,
+                ISNULL(g.Godown_Name, 'Unassigned') AS godown_name,
+                i.total_value,
+                i.narration,
+                i.Adjust_Type,
+                i.created_on,
+                i.altered_on,
+                d.Aj_A_id,
+                d.name_item_id,
+                d.name_item_id AS Item_Id,
+                pm.Product_Name,
+                d.bill_qty,
+                d.rate,
+                d.amount,
+                d.act_qty,
+                d.Adj_Payment
+            FROM [dbo].[tbl_Stock_Adjustment_Info] i
+            LEFT JOIN [dbo].[tbl_Godown_Master] g 
+                ON i.Adj_ledger_id = g.Godown_Id
+            LEFT JOIN [dbo].[tbl_Stock_Adjustment_Details] d 
+                ON i.Aj_id = d.Aj_id
+            LEFT JOIN [dbo].[tbl_Product_Master] pm
+                ON d.name_item_id = pm.Product_Id
+            ORDER BY i.Adj_date DESC, i.Aj_id asc, d.name_item_id
+        `);
+
+        // ✅ Group flat rows into adjustments with nested details array
+        const groupedMap = new Map();
+
+        for (const row of result.recordset) {
+            if (!groupedMap.has(row.Aj_id)) {
+                // First time seeing this Aj_id — create the parent object
+                groupedMap.set(row.Aj_id, {
+                    Aj_id:       row.Aj_id,
+                    invoice_no:  row.invoice_no,
+                    Adj_date:    row.Adj_date,
+                    godown_id:   row.godown_id,
+                    godown_name: row.godown_name,
+                    total_value: row.total_value,
+                    narration:   row.narration,
+                    Adjust_Type: row.Adjust_Type,
+                    created_on:  row.created_on,
+                    altered_on:  row.altered_on,
+                    details: []
+                });
+            }
+
+            // Push detail row if it has a valid product
+            if (row.Aj_A_id) {
+                groupedMap.get(row.Aj_id).details.push({
+                    Aj_A_id:      row.Aj_A_id,
+                    Aj_id:        row.Aj_id,
+                    name_item_id: row.name_item_id,
+                    Item_Id:      row.Item_Id,       // ✅ frontend needs this
+                    Product_Name: row.Product_Name,
+                    bill_qty:     row.bill_qty,
+                    act_qty:      row.act_qty,
+                    rate:         row.rate,
+                    amount:       row.amount,
+                    Adj_Payment:  row.Adj_Payment,
+                });
+            }
+        }
+
+        const adjustments = Array.from(groupedMap.values());
+
+        return res.status(200).json({
+            success: true,
+            message: 'Stock adjustments fetched successfully',
+            adjustments
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+const createStockJournalAdjustment = async (req, res) => {
+    try {
+        const { adjustmentDetails, Product_Array } = req.body;
+        const { godownId, adjustmentType } = adjustmentDetails;
+
+
+        if (!Product_Array || Product_Array.length === 0) {
+            return res.status(400).json({ success: false, message: 'Product details are required' });
+        }
+
+        
+        const maxIdResult = await sql.query(`
+            SELECT ISNULL(MAX(Aj_id), 0) + 1 AS Next_Id 
+            FROM tbl_Stock_Adjustment_Info
+        `);
+        const nextAjId = maxIdResult.recordset[0].Next_Id;
+
+        const invoiceNo = `STAJ${String(nextAjId).padStart(4, '0')}`;
+
+        const totalValue = Product_Array.reduce((sum, item) => sum + (parseFloat(item.Amount) || 0), 0);
+
+
+        await sql.query(`
+            INSERT INTO tbl_Stock_Adjustment_Info 
+                (Aj_id, invoice_no, Adj_date, Adj_ledger_id, total_value, narration, created_on, altered_on, Adjust_Type)
+            VALUES 
+                (
+                    ${nextAjId},
+                    '${invoiceNo}',
+                    GETDATE(),
+                    ${godownId || 0},
+                    ${totalValue},
+                    '${(req.body.narration || '').replace(/'/g, "''")}',
+                    GETDATE(),
+                    GETDATE(),
+                    ${adjustmentType}
+                )
+        `);
+
+       
+        const maxDetailIdResult = await sql.query(`
+            SELECT ISNULL(MAX(Aj_A_id), 0) + 1 AS Next_Detail_Id 
+            FROM tbl_Stock_Adjustment_Details
+        `);
+        let nextDetailId = maxDetailIdResult.recordset[0].Next_Detail_Id;
+
+
+        for (const item of Product_Array) {
+    await sql.query(`
+        INSERT INTO tbl_Stock_Adjustment_Details 
+            (Aj_id, name_item_id, bill_qty, rate, amount, act_qty, Adj_Payment)
+        VALUES 
+            (
+                ${nextAjId},
+                ${item.Item_Id || 0},
+                ${parseFloat(item.Bill_Qty) || 0},
+                ${parseFloat(item.Item_Rate) || 0},
+                ${parseFloat(item.Amount) || 0},
+                ${parseFloat(item.Act_Qty) || 0},
+                ${parseFloat(item.Adj_Payment) || 0}
+            )
+    `);
+}
+
+        return res.status(200).json({
+            success: true,
+            message: 'Stock adjustment created successfully',
+            others: {
+                Id: nextAjId,
+                Invoice_No: invoiceNo
+            }
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+const updateStockJournalAdjustment = async (req, res) => {
+    try {
+        const { adjustmentDetails, Product_Array, Aj_id, narration,invoiceNo } = req.body;
+        const { godownId, adjustmentType } = adjustmentDetails;
+        
+
+        const existCheck = await sql.query(`
+            SELECT Aj_id, created_on, invoice_no 
+            FROM tbl_Stock_Adjustment_Info 
+            WHERE Aj_id = ${Aj_id}
+        `);
+
+       
+        const existingRecord = existCheck.recordset[0];
+
+        
+        const totalValue = Product_Array.reduce((sum, item) => {
+            return sum + (parseFloat(item.Amount) || 0);
+        }, 0);
+
+       
+        
+
+      
+        const updateInfoQuery = `
+            UPDATE tbl_Stock_Adjustment_Info 
+            SET 
+                invoice_no = '${invoiceNo}',
+                Adj_date = GETDATE(),
+                Adj_ledger_id = ${godownId},
+                total_value = ${totalValue},
+                narration = '${(narration || '').replace(/'/g, "''")}',
+                altered_on = GETDATE(),
+                Adjust_Type = ${adjustmentType}
+            WHERE Aj_id = ${Aj_id}
+        `;
+        
+        await sql.query(updateInfoQuery);
+
+
+        const deleteDetailsQuery = `
+            DELETE FROM tbl_Stock_Adjustment_Details 
+            WHERE Aj_id = ${Aj_id}
+        `;
+        
+        await sql.query(deleteDetailsQuery);
+
+        
+        for (const item of Product_Array) {
+     
+            if (!item.Item_Id) {
+                console.warn("Skipping item without Item_Id:", item);
+                continue;
+            }
+
+            const insertDetailsQuery = `
+                INSERT INTO tbl_Stock_Adjustment_Details 
+                    (Aj_id, name_item_id, bill_qty, rate, amount, act_qty, Adj_Payment)
+                VALUES 
+                    (
+                        ${Aj_id},
+                        ${item.Item_Id},
+                        ${parseFloat(item.Bill_Qty) || 0},
+                        ${parseFloat(item.Item_Rate) || 0},
+                        ${parseFloat(item.Amount) || 0},
+                        ${parseFloat(item.Act_Qty) || 0},
+                        ${parseFloat(item.Adj_Payment) || 0}
+                    )
+            `;
+            
+       
+            await sql.query(insertDetailsQuery);
+        }
+
+         return success(res, 'Journal Updated Successfully');
+
+    }  catch (e) {
+        servError(e, res);
+    }
+};
+
+
+
+export default { getInventoryReport,getStockAdjustment,createStockJournalAdjustment,updateStockJournalAdjustment };
