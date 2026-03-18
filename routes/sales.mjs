@@ -60,6 +60,8 @@ SalesRouter.post('/salesInvoice/liveSales', liveSalesCreation);
 
 SalesRouter.get('/salesInvoiceById', getSalesInvoiceById);
 
+SalesRouter.get('/getInvoiceDetails',salesInvoice.getInvoiceDetails)
+
 SalesRouter.get('/presaleOrder/getList', salesOrder.getPresaleOrder)
 SalesRouter.post('/presaleOrder/saleOrderCreationWithPso', salesOrder.saleOrderCreationWithPso)
 SalesRouter.put('/presaleOrder/saleOrderCreationWithPso', salesOrder.updatesaleOrderWithPso)
