@@ -125,7 +125,7 @@ const ReceiptDataDependency = () => {
                     ${getDebitNoteOutstanding()}
                     ) AS inv
                     WHERE 
-                        COALESCE(inv.BalanceAmount, 0) <= inv.Total_Invoice_value
+                        COALESCE(inv.BalanceAmount, 0) > 0
                     ORDER BY inv.Do_Date ASC;`
                 );
 
