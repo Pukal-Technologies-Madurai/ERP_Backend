@@ -81,8 +81,9 @@ dataEntryRouter.put(
         userField: 'CreatedBy',
         reason: 'Alter_Reason',
     }),
-    purchaseOrder.updatePurchaseOrder)
+    purchaseOrder.updatePurchaseOrder);
 dataEntryRouter.delete('/purchaseOrderEntry', purchaseOrder.deleteOrderPermanantly);
+dataEntryRouter.post('/purchaseOrderEntry/parameters', purchaseOrder.saveOrderItemParameters);
 dataEntryRouter.get('/purchaseOrderEntry/delivery/partyBased', purchaseOrder.getDeliveryByPartyId);
 dataEntryRouter.put('/purchaseOrderEntry/ArrivalUpdate', purchaseOrder.updateArrivalDetails);
 dataEntryRouter.get('/pendingPartyInvoice', purchaseOrder.getPartyForInvoice);

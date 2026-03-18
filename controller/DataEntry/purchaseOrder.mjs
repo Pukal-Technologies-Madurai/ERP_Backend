@@ -73,21 +73,32 @@ const PurchaseOrderDataEntry = () => {
                     FROM tbl_Purchase_Order_Inv_Gen_Order AS igo
                     LEFT JOIN tbl_Purchase_Order_Inv_Stock_Info AS isd
                         ON isd.PIN_Id = igo.PIN_Id
-                    WHERE igo.Order_Id IN (SELECT Sno FROM @FilteredOrders);`
+                    WHERE igo.Order_Id IN (SELECT Sno FROM @FilteredOrders);
+                    -------------------------Item Parameters--------------------------
+                    SELECT 
+                        param.*,
+                        mp.parameterName,
+                        mp.dataType
+                    FROM tbl_PurchaseOrderParameterDetails AS param
+                    LEFT JOIN tbl_Module_Parameters AS mp ON mp.numID = param.ParameterId
+                    WHERE param.OrderId IN (SELECT Sno FROM @FilteredOrders);`
                 );
 
             const result = await request;
 
             const [
                 generalInfo, productDetails, deliveryDetails,
-                transporterDetails, Staffdetails, invoicedOrders
+                transporterDetails, Staffdetails, invoicedOrders, itemParameters
             ] = result.recordsets;
 
             if (generalInfo.length > 0) {
                 const extractedData = generalInfo.map(o => ({
                     ...o,
                     ConvertedAsInvoices: invoicedOrders.filter(fil => isEqualNumber(fil.Order_Id, o.Sno)),
-                    ItemDetails: productDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    ItemDetails: productDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)).map(item => ({
+                        ...item,
+                        ParameterDetails: itemParameters.filter(param => isEqualNumber(param.OrderId, o.Sno) && isEqualNumber(param.ItemId, item.ItemId))
+                    })),
                     DeliveryDetails: deliveryDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
                     TranspoterDetails: transporterDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
                     StaffDetails: Staffdetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno))
@@ -685,6 +696,57 @@ const PurchaseOrderDataEntry = () => {
         }
     };
 
+    const saveOrderItemParameters = async (req, res) => {
+        const { OrderId, ItemId, parameters } = req.body;
+
+        if (!checkIsNumber(OrderId) || !checkIsNumber(ItemId)) {
+            return invalidInput(res, 'OrderId and ItemId are required');
+        }
+
+        const transaction = new sql.Transaction();
+
+        try {
+            await transaction.begin();
+
+            await new sql.Request(transaction)
+                .input('OrderId', sql.BigInt, OrderId)
+                .input('ItemId', sql.BigInt, ItemId)
+                .query(`DELETE FROM tbl_PurchaseOrderParameterDetails WHERE OrderId = @OrderId AND ItemId = @ItemId;`);
+
+            if (Array.isArray(parameters)) {
+                for (let i = 0; i < parameters.length; i++) {
+                    const param = parameters[i];
+                    const result = await new sql.Request(transaction)
+                        .input('OrderId', sql.BigInt, OrderId)
+                        .input('ItemId', sql.BigInt, ItemId)
+                        .input('ParameterId', sql.BigInt, param.ParameterId)
+                        .input('ParameterValueOne', sql.NVarChar, param.ParameterValueOne || '')
+                        .input('ParameterValueTwo', sql.NVarChar, param.ParameterValueTwo || '')
+                        .input('CreatedAt', sql.DateTimeOffset, new Date())
+                        .query(`
+                            INSERT INTO tbl_PurchaseOrderParameterDetails (
+                                id, OrderId, ItemId, ParameterId, ParameterValueOne, ParameterValueTwo, CreatedAt
+                            ) VALUES (
+                                NEWID(), @OrderId, @ItemId, @ParameterId, @ParameterValueOne, @ParameterValueTwo, @CreatedAt
+                            );
+                        `);
+                    
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert parameter');
+                    }
+                }
+            }
+
+            await transaction.commit();
+            return success(res, 'Parameters saved successfully.');
+        } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
+            servError(e, res);
+        }
+    }
+
     const deleteOrderPermanantly = async (req, res) => {
         const { OrderId } = req.body;
 
@@ -1146,7 +1208,8 @@ const PurchaseOrderDataEntry = () => {
         deleteOrderPermanantly,
         getDeliveryByPartyId,
         getPartyForInvoice,
-        getPurchaseOrderMobile
+        getPurchaseOrderMobile,
+        saveOrderItemParameters
     }
 }
 

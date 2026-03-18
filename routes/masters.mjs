@@ -14,6 +14,7 @@ import retailerClosingStock from '../controller/Masters/retailerClosingStock.mjs
 import employeesTasks from '../controller/EmployeesInvolved/EmployeesTask.mjs';
 import TallyMasters from '../controller/Masters/tallyMasters.mjs';
 import voucherType from '../controller/Masters/voucherType.mjs';
+import moduleParameters from '../controller/Masters/moduleParameters.mjs';
 import branchPos from '../controller/Masters/pos.mjs';
 import uom from '../controller/Masters/uom.mjs';
 import posRateMaster from '../controller/Masters/posRateMaster.mjs';
@@ -175,6 +176,10 @@ MastersRouter.post('/voucher', voucherType.addVoucherType);
 MastersRouter.put('/voucher', voucherType.editVoucherType);
 MastersRouter.delete('/voucher', voucherType.deleteVoucherType);
 
+MastersRouter.get('/moduleParameters', moduleParameters.getModuleParameters);
+MastersRouter.post('/moduleParameters', moduleParameters.addModuleParameter);
+MastersRouter.put('/moduleParameters', moduleParameters.editModuleParameter);
+MastersRouter.delete('/moduleParameters', moduleParameters.deleteModuleParameter);
 
 MastersRouter.get('/expences', expenceMaster.getExpences);
 
