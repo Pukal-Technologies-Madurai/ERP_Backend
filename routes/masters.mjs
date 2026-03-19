@@ -93,6 +93,7 @@ MastersRouter.delete('/baseGroup', baseGroup.deleteBaseGroup);
 
 MastersRouter.get('/retailers', retailers.getSFCustomers);
 MastersRouter.get('/retailers/dropDown', retailers.getRetailerDropDown);
+MastersRouter.get('/retailers/address', retailers.getRetailerAddress);
 MastersRouter.get('/retailers/areaRetailers', retailers.getAreaRetailers);
 MastersRouter.get('/retailers/info', retailers.getRetailerInfo);
 MastersRouter.post('/retailers', retailers.addRetailers);

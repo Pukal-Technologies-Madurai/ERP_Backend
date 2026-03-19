@@ -166,19 +166,6 @@ const RetailerControll = () => {
                     LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ret_Id = r.Retailer_Id
                     WHERE r.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds)
                     ORDER BY r.Retailer_Name ASC;
-                    -- getting retailer gen info
-                    SELECT 
-                        id,
-                        retailerId,
-                        deliveryName,
-                        phoneNumber,
-                        cityName,
-                        deliveryAddress,
-                        gstNumber,
-                        stateName
-                    FROM tbl_Sales_Delivery_Address 
-                    WHERE retailerId IN (SELECT DISTINCT Retailer_Id FROM @retailerIds)
-                    ORDER BY id
                     -- COST CATEGORY
                     SELECT 
                         Cost_Category_Id AS costTypeId,
@@ -189,19 +176,49 @@ const RetailerControll = () => {
 
             const result = await request;
 
-            const [retailers, deliveryAddresses, costTypeDetails] = result.recordsets;
+            const [retailers, costTypeDetails] = result.recordsets;
 
             const withAddresses = retailers.map(retailer => ({
                 ...retailer,
-                deliveryAddresses: deliveryAddresses.filter(
-                    address => isEqualNumber(address.retailerId, retailer.Retailer_Id)
-                ),
+                deliveryAddresses: [],
                 brokerTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Broker')?.costTypeId),
                 transporterTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Transport')?.costTypeId),
             }));
 
             if (result.recordset.length > 0) {
                 dataFound(res, withAddresses)
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
+    const getRetailerAddress = async (req, res) => {
+        const { Retailer_Id } = req.query;
+
+        try {
+            const request = new sql.Request()
+                .input('Retailer_Id', Retailer_Id)
+                .query(`
+                    SELECT 
+                        id,
+                        retailerId,
+                        deliveryName,
+                        phoneNumber,
+                        cityName,
+                        deliveryAddress,
+                        gstNumber,
+                        stateName
+                    FROM tbl_Sales_Delivery_Address 
+                    WHERE retailerId = @Retailer_Id`
+                );
+
+            const result = await request;
+
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset)
             } else {
                 noData(res)
             }
@@ -1348,6 +1365,7 @@ const RetailerControll = () => {
     return {
         getSFCustomers,
         getRetailerDropDown,
+        getRetailerAddress,
         getAreaRetailers,
         postLocationForCustomer,
         verifyLocation,
