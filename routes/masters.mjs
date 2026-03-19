@@ -52,6 +52,13 @@ MastersRouter.get('/company/dropDown', company.getCompanyDrowDown);
 
 MastersRouter.get('/company/url', company.getUrl);
 
+MastersRouter.get('/itemGroup',prodGroup.ItemGroupMaster)
+MastersRouter.post('/itemGroup',prodGroup.ItemGroupMasterCreate)
+MastersRouter.put('/itemGroup',prodGroup.ItemGroupMasterUpdate)
+
+MastersRouter.get('/stockGroupMaster',prodGroup.stockGroupMaster)
+MastersRouter.get('/productGroup',prodGroup.ProductListStockGroup)
+
 MastersRouter.get('/branch', branch.getBranch);
 MastersRouter.post('/branch', branch.postBranch);
 MastersRouter.put('/branch', branch.putBranch);
@@ -330,5 +337,13 @@ MastersRouter.get("/accountMasterSales/accounts", accountMasterSales.getAccountD
 MastersRouter.get("/accountMasterSales/salespersons", accountMasterSales.getSalesPersonDropdown);
 
 MastersRouter.get('/retailersPaginated', retailers.getSFCustomersPaginated);
+
+
+
+
+MastersRouter.get('/voucherGroups/dropdown', voucherGroup.getVoucherTypeDropdown);
+MastersRouter.get('/voucherGroups', voucherGroup.getVoucherGroup);
+MastersRouter.post('/voucherGroups', voucherGroup.createVoucherGroup);
+MastersRouter.put('/voucherGroups', voucherGroup.updateVoucherGroup);
 
 export default MastersRouter;
