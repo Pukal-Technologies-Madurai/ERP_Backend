@@ -1,7 +1,9 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, invalidInput, failed, success } from '../../res.mjs';
 import { checkIsNumber } from '../../helper_functions.mjs';
-
+const DB_Name  = process.env.DATABASE;
+const COM_ID  = Number(process.env.COMPANY);
+const userPortalDB = process.env.USERPORTALDB;
 
 const companyControl = () => {
 
