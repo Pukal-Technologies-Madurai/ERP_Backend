@@ -222,7 +222,7 @@ const getStockAdjustment = async (req, res) => {
 const createStockJournalAdjustment = async (req, res) => {
     try {
         const { adjustmentDetails, Product_Array } = req.body;
-        const { godownId, adjustmentType } = adjustmentDetails;
+        const { godownId, adjustmentType,Adj_date } = adjustmentDetails;
 
 
         if (!Product_Array || Product_Array.length === 0) {
@@ -239,7 +239,7 @@ const createStockJournalAdjustment = async (req, res) => {
         const invoiceNo = `STAJ${String(nextAjId).padStart(4, '0')}`;
 
         const totalValue = Product_Array.reduce((sum, item) => sum + (parseFloat(item.Amount) || 0), 0);
-
+    
 
         await sql.query(`
             INSERT INTO tbl_Stock_Adjustment_Info 
@@ -248,7 +248,7 @@ const createStockJournalAdjustment = async (req, res) => {
                 (
                     ${nextAjId},
                     '${invoiceNo}',
-                    GETDATE(),
+                    '${Adj_date}',
                     ${godownId || 0},
                     ${totalValue},
                     '${(req.body.narration || '').replace(/'/g, "''")}',
