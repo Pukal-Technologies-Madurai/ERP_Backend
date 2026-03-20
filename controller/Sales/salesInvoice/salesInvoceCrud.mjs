@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../../helper_functions.mjs';
+import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOString, isValidNumber, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../../helper_functions.mjs';
 import { invalidInput, servError, dataFound, noData, success } from '../../../res.mjs';
 import { getNextId, getProducts } from '../../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../../middleware/taxCalculator.mjs';
@@ -242,13 +242,13 @@ export const getSalesInvoice = async (req, res) => {
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 
                     Do_Date BETWEEN @Fromdate AND @Todate
-                    ${checkIsNumber(Retailer_Id) ? ' AND Retailer_Id = @retailer ' : ''}
-                    ${checkIsNumber(Cancel_status) ? ' AND Cancel_status = @cancel ' : ''}
-                    ${checkIsNumber(Created_by) ? ' AND Created_by = @creater ' : ''}
-                    ${checkIsNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''}
-                    ${checkIsNumber(Branch_Id) ? ' AND Branch_Id = @Branch_Id ' : ''}
-                    ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
-                    ${!stringCompare(Do_Inv_No, '') ? ' AND Do_Inv_No = @Do_Inv_No ' : ''};
+                    ${isValidNumber(Retailer_Id) ? ' AND Retailer_Id = @retailer ' : ''}
+                    ${isValidNumber(Cancel_status) ? ' AND Cancel_status = @cancel ' : ''}
+                    ${isValidNumber(Created_by) ? ' AND Created_by = @creater ' : ''}
+                    ${isValidNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''}
+                    ${isValidNumber(Branch_Id) ? ' AND Branch_Id = @Branch_Id ' : ''}
+                    ${isValidNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
+                    ${!stringCompare(Do_Inv_No, '') ? ' AND Do_Inv_No = @Do_Inv_No ' : ''}
                 -- sales general details
                 SELECT 
                     sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
@@ -326,6 +326,7 @@ export const getSalesInvoice = async (req, res) => {
             );
 
         const result = await request;
+        console.log(result)
 
         const SalesGeneralInfo = toArray(result.recordsets[0]);
         const Products_List = toArray(result.recordsets[1]);
@@ -388,9 +389,9 @@ export const getSalesInvoiceById = async (req, res) => {
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 1=1
-                ${checkIsNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
+                ${isValidNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
                 ${!stringCompare(Do_Inv_No, '') ? ' AND Do_Inv_No = @Do_Inv_No ' : ''}
-                ${checkIsNumber(Retailer_Id) ? ' AND Retailer_Id = @Retailer_Id ' : ''}
+                ${isValidNumber(Retailer_Id) ? ' AND Retailer_Id = @Retailer_Id ' : ''}
                 
                 -- sales general details
                 SELECT 
@@ -1006,7 +1007,7 @@ export const createSalesInvoice = async (req, res) => {
         // const salesDetails = await getSalesInvoiceDetails(Do_Id);
         // const salesInvoice = salesDetails.success ? (salesDetails?.data[0] ? salesDetails?.data[0] : {}) : {};
 
-        success(res, 'Invoice created!', [], { Do_Id })
+        success(res, 'Invoice created!', [], { Do_Id, Total_Invoice_value, Round_off, Do_Inv_No })
     } catch (e) {
         if (transaction._aborted === false) {
             await transaction.rollback();

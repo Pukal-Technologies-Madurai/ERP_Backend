@@ -22,6 +22,7 @@ const tripActivities = () => {
                 UnloadingLoad = 0,
                 UnloadingEmpty = 0,
                 Godownlocation = 0,
+                addressGodown = 0,
                 BillType = '',
                 VoucherType = '',
                 Narration = '',
@@ -136,6 +137,7 @@ const tripActivities = () => {
                 .input('UnloadingLoad', Number(UnloadingLoad || 0))
                 .input('UnloadingEmpty', Number(UnloadingEmpty || 0))
                 .input('Godownlocation', toNumber(Godownlocation))
+                .input('addressGodown', toNumber(addressGodown))
                 .input('BillType', BillType)
                 .input('Narration', Narration)
                 .input('TripStatus', 'New')
@@ -148,12 +150,12 @@ const tripActivities = () => {
                     INSERT INTO tbl_Trip_Master (
                        Trip_Id, TR_INV_ID, Branch_Id, T_No, VoucherType, Year_Id, Challan_No, Trip_Date, Vehicle_No,
                        PhoneNumber, LoadingLoad, LoadingEmpty, UnloadingLoad, UnloadingEmpty, Narration, BillType,
-                       StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Godownlocation, TripStatus,
+                       StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Godownlocation, addressGodown, TripStatus,
                        Created_At, Created_By
                     ) VALUES (
                        @Trip_Id, @TR_INV_ID, @Branch_Id, @T_No, @VoucherType, @Year_Id, @Challan_No, @Trip_Date, @Vehicle_No,
                        @PhoneNumber, @LoadingLoad, @LoadingEmpty, @UnloadingLoad, @UnloadingEmpty, @Narration, @BillType,
-                       @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_Tot_Kms, @Trip_EN_KM, @Godownlocation, @TripStatus,
+                       @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_Tot_Kms, @Trip_EN_KM, @Godownlocation, @addressGodown, @TripStatus,
                        @Created_At, @Created_By
                     );`
                 );
@@ -266,6 +268,7 @@ const tripActivities = () => {
                 UnloadingLoad = 0,
                 UnloadingEmpty = 0,
                 Godownlocation = 0,
+                addressGodown = 0,
                 BillType = 0,
                 Narration = '',
                 Updated_By = '',
@@ -318,6 +321,7 @@ const tripActivities = () => {
                 .input('Trip_EN_KM', toNumber(Trip_EN_KM))
                 .input('Trip_Tot_Kms', Trip_Tot_Kms)
                 .input('Godownlocation', Godownlocation)
+                .input('addressGodown', toNumber(addressGodown))
                 .input('Updated_By', Updated_By)
                 .input('Updated_At', new Date())
                 .query(`
@@ -332,6 +336,7 @@ const tripActivities = () => {
                         Trip_EN_KM = @Trip_EN_KM,
                         Trip_Tot_Kms = @Trip_Tot_Kms,
                         Godownlocation = @Godownlocation,
+                        addressGodown = @addressGodown,
                         PhoneNumber = @PhoneNumber,
                         LoadingLoad = @LoadingLoad,
                         LoadingEmpty = @LoadingEmpty,
