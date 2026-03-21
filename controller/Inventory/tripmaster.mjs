@@ -503,110 +503,143 @@ const tripActivities = () => {
             request.input('ToDate', sql.Date, ToDate);
             const result = await request.query(
                 `WITH TRIP_MASTER AS (
-                    SELECT
-                        tm.*,
-                		COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                		COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
-                		COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User,
-                		COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
-                    FROM tbl_Trip_Master AS tm
-                	LEFT JOIN tbl_Branch_Master AS bm
-                	ON bm.BranchId = tm.Branch_Id
-                	LEFT JOIN tbl_Users AS cb_created
-                	ON cb_created.UserId = tm.Created_By
-                	LEFT JOIN tbl_Users AS cb_updated
-                	ON cb_updated.UserId = tm.Updated_By
-                    LEFT JOIN tbl_Voucher_Type AS v
-                    ON v.Vocher_Type_Id = tm.VoucherType
-                    WHERE 
-                		tm.Trip_Date BETWEEN @FromDate AND @ToDate
-                        AND tm.BillType IN (
-                            'MATERIAL INWARD',
-                            'OTHER GODOWN'
-                        )
-                ), TRIP_DETAILS AS (
-                    SELECT
-                        td.*, ta.*,
-                        COALESCE(pm.Product_Rate, 0) AS Product_Rate,
-                        CASE 
-                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-                             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-                        THEN 0
-                        ELSE CONVERT(
-                            DECIMAL(18,2),
-                            COALESCE(QTY, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-                        )
-                    END AS Bag,
-                        COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
-                        COALESCE(gm_from.Godown_Name, 'Unknown') AS FromLocation,
-                        COALESCE(gm_from.Godown_Address,'Unknown') AS FromAddress,
-                        COALESCE(gm_from.Gst_No,'Unknown') AS FromGst,
-                        COALESCE(gm_from.Phone_No,'Unknown') AS FromPhone,
-                        COALESCE(gm_to.Godown_Name, 'Unknown') AS ToLocation,
-                        COALESCE(gm_to.Godown_Address,'Unknown') AS ToAddress,
-                        COALESCE(gm_to.Phone_No,'Unknown') AS ToPhone,
-                        COALESCE(gm_to.Gst_No,'Unknown') AS ToGst,
-                        po.OrderId AS arrivalOrderId
-                    FROM
-                        tbl_Trip_Details AS td
-                    LEFT JOIN tbl_Trip_Arrival as ta
-                        ON ta.Arr_Id = td.Arrival_Id
-                    LEFT JOIN tbl_Product_Master AS pm
-                        ON pm.Product_Id = ta.Product_Id
-                    LEFT JOIN tbl_Godown_Master AS gm_from
-                        ON gm_from.Godown_Id = ta.From_Location
-                    LEFT JOIN tbl_Godown_Master AS gm_to
-                        ON gm_to.Godown_Id = ta.To_Location
-                    LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po
-                        ON po.Trip_Id = td.Trip_Id AND po.Trip_Item_SNo = td.Arrival_Id
-                        LEFT JOIN tbl_Pack_Master as pck
-                        ON pck.Pack_Id=pm.Pack_Id
-
-                    WHERE 
-                        td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
-                ), MAPED_ARRIVALS AS (
-                    SELECT 
-                        Id, OrderId, Trip_Id, Trip_Item_SNo, TransporterIndex,
-                        LocationId, Location, ArrivalDate, ItemId, ItemName,
-                        Quantity, Weight, BilledRate
-                    FROM tbl_PurchaseOrderDeliveryDetails
-                    WHERE Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
-                ),TRIP_EMPLOYEES AS (
-                    SELECT 
-                        te.*,
-                        e.Cost_Center_Name AS Emp_Name,
-                        cc.Cost_Category
-                    FROM 
-                        tbl_Trip_Employees AS te
-                    LEFT JOIN tbl_ERP_Cost_Center AS e
-                        ON e.Cost_Center_Id = te.Involved_Emp_Id
-                    LEFT JOIN tbl_ERP_Cost_Category AS cc
-                        ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
-                	WHERE 
-                        te.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
-                )
-                SELECT 
-                    tm.*,
-                    COALESCE((
-                        SELECT td.* 
-                        FROM TRIP_DETAILS AS td
-                        WHERE td.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS Products_List,
-                    COALESCE((
-                        SELECT te.* 
-                        FROM TRIP_EMPLOYEES AS te
-                        WHERE te.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS Employees_Involved,
-                    COALESCE((
-                        SELECT ma.* 
-                        FROM MAPED_ARRIVALS AS ma
-                        WHERE ma.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS ConvertedPurchaseOrders
-                FROM 
-                    TRIP_MASTER AS tm`
+    SELECT
+        tm.*,
+        COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+        COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
+        COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User,
+        COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+        COALESCE(gmm.Godown_Name, 'unknown') AS addressGodown_Name,
+        COALESCE(gmm.Godown_Address, 'unknown') AS addressGodownAddress,
+        COALESCE(gmm.Gst_No, 'unknown') AS addressGodownGst_No,
+        COALESCE(gmm.Phone_No, 'unknown') AS addressGodownPhone_No
+    FROM tbl_Trip_Master AS tm
+    LEFT JOIN tbl_Branch_Master AS bm
+        ON bm.BranchId = tm.Branch_Id
+    LEFT JOIN tbl_Users AS cb_created
+        ON cb_created.UserId = tm.Created_By
+    LEFT JOIN tbl_Users AS cb_updated
+        ON cb_updated.UserId = tm.Updated_By
+    LEFT JOIN tbl_Voucher_Type AS v
+        ON v.Vocher_Type_Id = tm.VoucherType
+    LEFT JOIN tbl_Godown_Master AS gmm
+        ON gmm.Godown_Id = tm.addressGodown
+    WHERE 
+        tm.Trip_Date BETWEEN @FromDate AND @ToDate
+        AND tm.BillType IN (
+            'MATERIAL INWARD',
+            'OTHER GODOWN'
+        )
+), TRIP_DETAILS AS (
+    SELECT
+        td.*, ta.*,
+        COALESCE(pm.Product_Rate, 0) AS Product_Rate,
+        CASE 
+            WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                 OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+            THEN 0
+            ELSE CONVERT(
+                DECIMAL(18,2),
+                COALESCE(QTY, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+            )
+        END AS Bag,
+        COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+        -- Modified FromLocation logic
+        CASE 
+            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodown_Name, 'Unknown')
+            ELSE COALESCE(gm_from.Godown_Name, 'Unknown')
+        END AS FromLocation,
+        CASE 
+            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownAddress, 'Unknown')
+            ELSE COALESCE(gm_from.Godown_Address, 'Unknown')
+        END AS FromAddress,
+        CASE 
+            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownGst_No, 'Unknown')
+            ELSE COALESCE(gm_from.Gst_No, 'Unknown')
+        END AS FromGst,
+        CASE 
+            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownPhone_No, 'Unknown')
+            ELSE COALESCE(gm_from.Phone_No, 'Unknown')
+        END AS FromPhone,
+        -- Modified ToLocation logic
+        CASE 
+            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodown_Name, 'Unknown')
+            ELSE COALESCE(gm_to.Godown_Name, 'Unknown')
+        END AS ToLocation,
+        CASE 
+            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownAddress, 'Unknown')
+            ELSE COALESCE(gm_to.Godown_Address, 'Unknown')
+        END AS ToAddress,
+        CASE 
+            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownPhone_No, 'Unknown')
+            ELSE COALESCE(gm_to.Phone_No, 'Unknown')
+        END AS ToPhone,
+        CASE 
+            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownGst_No, 'Unknown')
+            ELSE COALESCE(gm_to.Gst_No, 'Unknown')
+        END AS ToGst,
+        po.OrderId AS arrivalOrderId
+    FROM
+        tbl_Trip_Details AS td
+    LEFT JOIN tbl_Trip_Arrival as ta
+        ON ta.Arr_Id = td.Arrival_Id
+    LEFT JOIN tbl_Product_Master AS pm
+        ON pm.Product_Id = ta.Product_Id
+    LEFT JOIN tbl_Godown_Master AS gm_from
+        ON gm_from.Godown_Id = ta.From_Location
+    LEFT JOIN tbl_Godown_Master AS gm_to
+        ON gm_to.Godown_Id = ta.To_Location
+    LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po
+        ON po.Trip_Id = td.Trip_Id AND po.Trip_Item_SNo = td.Arrival_Id
+    LEFT JOIN tbl_Pack_Master as pck
+        ON pck.Pack_Id = pm.Pack_Id
+    LEFT JOIN TRIP_MASTER AS tm
+        ON tm.Trip_Id = td.Trip_Id
+    WHERE 
+        td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+), MAPED_ARRIVALS AS (
+    SELECT 
+        Id, OrderId, Trip_Id, Trip_Item_SNo, TransporterIndex,
+        LocationId, Location, ArrivalDate, ItemId, ItemName,
+        Quantity, Weight, BilledRate
+    FROM tbl_PurchaseOrderDeliveryDetails
+    WHERE Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+), TRIP_EMPLOYEES AS (
+    SELECT 
+        te.*,
+        e.Cost_Center_Name AS Emp_Name,
+        cc.Cost_Category
+    FROM 
+        tbl_Trip_Employees AS te
+    LEFT JOIN tbl_ERP_Cost_Center AS e
+        ON e.Cost_Center_Id = te.Involved_Emp_Id
+    LEFT JOIN tbl_ERP_Cost_Category AS cc
+        ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+    WHERE 
+        te.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+)
+SELECT 
+    tm.*,
+    COALESCE((
+        SELECT td.* 
+        FROM TRIP_DETAILS AS td
+        WHERE td.Trip_Id = tm.Trip_Id
+        FOR JSON PATH
+    ), '[]') AS Products_List,
+    COALESCE((
+        SELECT te.* 
+        FROM TRIP_EMPLOYEES AS te
+        WHERE te.Trip_Id = tm.Trip_Id
+        FOR JSON PATH
+    ), '[]') AS Employees_Involved,
+    COALESCE((
+        SELECT ma.* 
+        FROM MAPED_ARRIVALS AS ma
+        WHERE ma.Trip_Id = tm.Trip_Id
+        FOR JSON PATH
+    ), '[]') AS ConvertedPurchaseOrders
+FROM 
+    TRIP_MASTER AS tm`
             );
 
             if (result.recordset.length > 0) {
