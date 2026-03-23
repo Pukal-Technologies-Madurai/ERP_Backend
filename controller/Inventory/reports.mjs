@@ -165,15 +165,15 @@ const getStockAdjustment = async (req, res) => {
                 ON i.Aj_id = d.Aj_id
             LEFT JOIN [dbo].[tbl_Product_Master] pm
                 ON d.name_item_id = pm.Product_Id
-            ORDER BY i.Adj_date DESC, i.Aj_id asc, d.name_item_id
+            ORDER BY  i.invoice_no  desc
         `);
 
-        // ✅ Group flat rows into adjustments with nested details array
+
         const groupedMap = new Map();
 
         for (const row of result.recordset) {
             if (!groupedMap.has(row.Aj_id)) {
-                // First time seeing this Aj_id — create the parent object
+           
                 groupedMap.set(row.Aj_id, {
                     Aj_id:       row.Aj_id,
                     invoice_no:  row.invoice_no,
@@ -185,17 +185,18 @@ const getStockAdjustment = async (req, res) => {
                     Adjust_Type: row.Adjust_Type,
                     created_on:  row.created_on,
                     altered_on:  row.altered_on,
+                    godown_name:row.godown_name,
                     details: []
                 });
             }
 
-            // Push detail row if it has a valid product
+
             if (row.Aj_A_id) {
                 groupedMap.get(row.Aj_id).details.push({
                     Aj_A_id:      row.Aj_A_id,
                     Aj_id:        row.Aj_id,
                     name_item_id: row.name_item_id,
-                    Item_Id:      row.Item_Id,       // ✅ frontend needs this
+                    Item_Id:      row.Item_Id,      
                     Product_Name: row.Product_Name,
                     bill_qty:     row.bill_qty,
                     act_qty:      row.act_qty,
