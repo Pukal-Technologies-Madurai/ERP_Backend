@@ -144,3 +144,76 @@ export const SalesGraphCard = async (req, res) => {
         servError(error, res);
     }
 };
+
+
+export const onlinePurchaseReport = async (req, res) => {
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Purchase_VW @Fromdate, @Todate`);
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
+export const onlinePurchaseReportItem = async (req, res) => {
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Purchase_Item_VW @Fromdate, @Todate`);
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
+export const PurchaseGraphCard = async (req, res) => {
+   try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Dashboard_Purchase_VW @Fromdate, @Todate`);
+
+        const [DayWise, WeekWiseData, DayWiseTonnage, WeekWiseTonnage] = result.recordsets || [];
+
+        if (!DayWise || DayWise.length === 0) {
+            return noData(res);
+        }
+
+        dataFound(res, {
+            DayWise,                                
+            WeekWiseData,
+            DayWiseTonnage,
+            WeekWiseTonnage
+        });
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
