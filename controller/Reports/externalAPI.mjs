@@ -156,7 +156,7 @@ export const onlinePurchaseReport = async (req, res) => {
         const result = await new sql.Request()
             .input("Fromdate", fromDate)
             .input("Todate", toDate)
-            .query(EXEC Reporting_Online_Purchase_VW @Fromdate, @Todate);
+            .query(`EXEC Reporting_Online_Purchase_VW @Fromdate, @Todate`);
 
         const recordset = result.recordset ?? [];
         if (!recordset.length) return noData(res);
@@ -177,7 +177,7 @@ export const onlinePurchaseReportItem = async (req, res) => {
         const result = await new sql.Request()
             .input("Fromdate", fromDate)
             .input("Todate", toDate)
-            .query(EXEC Reporting_Online_Purchase_Item_VW @Fromdate, @Todate);
+            .query(`EXEC Reporting_Online_Purchase_Item_VW @Fromdate, @Todate`);
 
         const recordset = result.recordset ?? [];
         if (!recordset.length) return noData(res);
@@ -198,7 +198,7 @@ export const PurchaseGraphCard = async (req, res) => {
         const result = await new sql.Request()
             .input("Fromdate", fromDate)
             .input("Todate", toDate)
-            .query(EXEC Reporting_Dashboard_Purchase_VW @Fromdate, @Todate);
+            .query(`EXEC Reporting_Dashboard_Purchase_VW @Fromdate, @Todate`);
 
         const [DayWise, WeekWiseData, DayWiseTonnage, WeekWiseTonnage] = result.recordsets || [];
 
