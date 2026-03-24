@@ -115,11 +115,11 @@ SELECT
     COALESCE(pig.Ref_Po_Inv_No, '') AS bill_ref_number,
     ISNULL(pb.Paid_Amount, 0) AS Paid_Amount,
     ISNULL(jr.journalAdjustment, 0) AS journalAdjustment,
-    ISNULL(cn.creditNoteAdjustment, 0) AS creditNoteAdjustment,
+    ISNULL(cn.debitNoteAdjustment, 0) AS debitNoteAdjustment,
     pig.Total_Invoice_value
         - ISNULL(pb.Paid_Amount, 0)
         - ISNULL(jr.journalAdjustment, 0)
-        - ISNULL(cn.creditNoteAdjustment, 0) AS BalanceAmount
+        - ISNULL(cn.debitNoteAdjustment, 0) AS BalanceAmount
 FROM @filteredPurchaseInv AS fp
 JOIN tbl_Purchase_Order_Inv_Gen_Info AS pig ON fp.voucherId = pig.PIN_Id AND fp.voucherNumber = pig.Po_Inv_No
 JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pig.Retailer_Id
@@ -153,12 +153,12 @@ LEFT JOIN (
         AND jr.RefType = 'PURCHASE'
     GROUP BY jr.RefId, jr.RefNo
 ) jr ON jr.RefId = pig.PIN_Id AND jr.RefNo = pig.Po_Inv_No
--- ************************* CREDIT NOTE *************************
+-- ************************* DEBIT NOTE *************************
 LEFT JOIN (
     SELECT 
         Ref_Inv_Number,
-        SUM(Total_Invoice_value) creditNoteAdjustment
-    FROM tbl_Credit_Note_Gen_Info
+        SUM(Total_Invoice_value) debitNoteAdjustment
+    FROM tbl_Debit_Note_Gen_Info
     JOIN @filteredPurchaseInv AS fil ON fil.voucherNumber = Ref_Inv_Number
     WHERE Cancel_status <> 0
     GROUP BY Ref_Inv_Number
@@ -178,11 +178,11 @@ SELECT
     cb.bill_no AS bill_ref_number,
     ISNULL(pb.Paid_Amount, 0) AS Paid_Amount,
     ISNULL(jr.journalAdjustment, 0) AS journalAdjustment,
-    ISNULL(cn.creditNoteAdjustment, 0) AS creditNoteAdjustment,
+    ISNULL(cn.debitNoteAdjustment, 0) AS debitNoteAdjustment,
     cb.cr_amount
         - ISNULL(pb.Paid_Amount, 0)
         - ISNULL(jr.journalAdjustment, 0)
-        - ISNULL(cn.creditNoteAdjustment, 0) AS BalanceAmount
+        - ISNULL(cn.debitNoteAdjustment, 0) AS BalanceAmount
 FROM @filteredOb AS fo
 JOIN tbl_Ledger_Opening_Balance AS cb ON fo.voucherId = cb.OB_Id AND fo.voucherNumber = cb.bill_no
 -- ************************* PAYMENT *************************
@@ -218,8 +218,8 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT 
         Ref_Inv_Number,
-        SUM(Total_Invoice_value) creditNoteAdjustment
-    FROM tbl_Credit_Note_Gen_Info
+        SUM(Total_Invoice_value) debitNoteAdjustment
+    FROM tbl_Debit_Note_Gen_Info
     JOIN @filteredOb AS fil ON fil.voucherNumber = Ref_Inv_Number
     WHERE Cancel_status <> 0
     GROUP BY Ref_Inv_Number
@@ -239,7 +239,7 @@ SELECT
     rgi.receipt_invoice_no AS bill_ref_number,
     ISNULL(rp.Paid_Amount, 0) + ISNULL(pb.PayAmount, 0) AS Paid_Amount,
     ISNULL(jr.journalAdjustment, 0) AS journalAdjustment,
-    0 AS creditNoteAdjustment,
+    0 AS debitNoteAdjustment,
     rgi.credit_amount - (ISNULL(rp.Paid_Amount, 0) + ISNULL(pb.PayAmount, 0)) - ISNULL(jr.journalAdjustment, 0) AS BalanceAmount
 FROM @filteredReceipt AS fr
 JOIN tbl_Receipt_General_Info AS rgi ON fr.voucherId = rgi.receipt_id AND fr.voucherNumber = rgi.receipt_invoice_no
@@ -296,7 +296,7 @@ SELECT
     jgi.JournalVoucherNo AS bill_ref_number,
     ISNULL(pb.Paid_Amount, 0) AS Paid_Amount,
     ISNULL(jr.journalAdjustment, 0) AS journalAdjustment,
-    0 AS creditNoteAdjustment,
+    0 AS debitNoteAdjustment,
     jei.Amount - ISNULL(pb.Paid_Amount, 0) - ISNULL(jr.journalAdjustment, 0) AS BalanceAmount
 FROM @filteredJournal AS fj
 JOIN tbl_Journal_General_Info AS jgi ON fj.voucherId = jgi.JournalId AND fj.voucherNumber = jgi.JournalVoucherNo
@@ -342,7 +342,7 @@ SELECT
     cngi.CR_Inv_No AS bill_ref_number,
     ISNULL(pb.Paid_Amount, 0) AS Paid_Amount,
     ISNULL(jr.journalAdjustment, 0) AS journalAdjustment,
-    0 AS creditNoteAdjustment,
+    0 AS debitNoteAdjustment,
     cngi.Total_Invoice_value - ISNULL(pb.Paid_Amount, 0) - ISNULL(jr.journalAdjustment, 0) AS BalanceAmount
 FROM @filteredCreditNote AS fc
 JOIN tbl_Credit_Note_Gen_Info AS cngi ON fc.voucherId = cngi.CR_Id AND fc.voucherNumber = cngi.CR_Inv_No

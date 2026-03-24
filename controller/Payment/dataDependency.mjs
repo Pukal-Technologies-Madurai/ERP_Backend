@@ -147,7 +147,7 @@ const PaymentDataDependency = () => {
                 -- GETTING PAYMENT OUTSTANDING
                     SELECT 
                     	inv.*,
-                    	COALESCE(inv.Paid_Amount, 0) + COALESCE(inv.journalAdjustment, 0) + COALESCE(inv.creditNoteAdjustment, 0) AS totalReference,
+                    	COALESCE(inv.Paid_Amount, 0) + COALESCE(inv.journalAdjustment, 0) + COALESCE(inv.debitNoteAdjustment, 0) AS totalReference,
                         COALESCE(inv.BalanceAmount, 0) AS paymentPendingAmount
                     FROM (
                     ${getPurchaseInvOutstanding()}
