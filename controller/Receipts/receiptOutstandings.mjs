@@ -120,7 +120,8 @@ SELECT
         - ISNULL(rp.ReceiptAmount,0)
         - ISNULL(jr.JournalAmount,0)
         - ISNULL(cn.CreditNoteAmount,0) AS BalanceAmount
-FROM tbl_Sales_Delivery_Gen_Info pig
+FROM @filteredSalesInv AS fs
+JOIN tbl_Sales_Delivery_Gen_Info pig ON fs.voucherId = pig.Do_Id AND fs.voucherNumber = pig.Do_Inv_No
 JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
 LEFT JOIN tbl_Account_Master a ON a.Acc_Id = r.AC_Id
 -- ************************* RECEIPT *************************
@@ -131,7 +132,7 @@ LEFT JOIN (
         SUM(pb.Credit_Amo) ReceiptAmount
     FROM tbl_Receipt_Bill_Info pb
     JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
-    JOIN @filteredSalesInv AS fil ON fil.voucherId = pb.bill_id AND fil.voucherNumber = pb.bill_name
+    JOIN @filteredSalesInv AS fil ON fil.voucherId = pb.bill_id AND fil.voucherNumber = TRIM(pb.bill_name)
     WHERE pgi.status <> 0
     GROUP BY pb.bill_id, pb.bill_name
 ) rp ON rp.bill_id = pig.Do_Id AND rp.bill_name = pig.Do_Inv_No
@@ -144,7 +145,7 @@ LEFT JOIN (
     FROM dbo.tbl_Journal_Bill_Reference jr
     JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
     JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-    JOIN @filteredSalesInv AS fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = jr.RefNo
+    JOIN @filteredSalesInv AS fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = TRIM(jr.RefNo)
     WHERE 
         jh.JournalStatus <> 0
         AND je.Acc_Id = @Acc_Id
@@ -158,16 +159,10 @@ LEFT JOIN (
         Ref_Inv_Number,
         SUM(Total_Invoice_value) CreditNoteAmount
     FROM tbl_Credit_Note_Gen_Info
-    JOIN @filteredSalesInv AS fil ON fil.voucherNumber = Ref_Inv_Number
+    JOIN @filteredSalesInv AS fil ON fil.voucherNumber = TRIM(Ref_Inv_Number)
     WHERE Cancel_status <> 0
     GROUP BY Ref_Inv_Number
 ) cn ON cn.Ref_Inv_Number = pig.Do_Inv_No
-WHERE 
-    pig.Cancel_status <> 0
-    AND a.Acc_Id = @Acc_Id
-    AND pig.Do_Date >= @OB_Date
-    AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = pig.Do_Inv_No)
-    AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = pig.Do_Inv_No)
 `;
 
 export const getObOutstanding = () => `
@@ -188,7 +183,8 @@ SELECT
         - ISNULL(rp.Paid_Amount,0)
         - ISNULL(jr.JournalAmount,0)
         - ISNULL(cn.CreditNoteAmount,0) AS BalanceAmount
-FROM tbl_Ledger_Opening_Balance cb
+FROM @filteredOb AS fo
+JOIN tbl_Ledger_Opening_Balance cb ON fo.voucherId = cb.OB_Id AND fo.voucherNumber = cb.bill_no
 -- ************************* RECEIPT TOTAL *************************
 LEFT JOIN (
     SELECT 
@@ -197,7 +193,7 @@ LEFT JOIN (
         SUM(pb.Credit_Amo) AS Paid_Amount
     FROM tbl_Receipt_Bill_Info pb
     JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
-    JOIN @filteredOb AS fil ON fil.voucherId = pb.bill_id AND fil.voucherNumber = pb.bill_name
+    JOIN @filteredOb AS fil ON fil.voucherId = pb.bill_id AND fil.voucherNumber = TRIM(pb.bill_name)
     WHERE pgi.status <> 0
     GROUP BY pb.bill_id, pb.bill_name
 ) rp ON rp.bill_id = cb.OB_Id AND rp.bill_name = cb.bill_no
@@ -210,7 +206,7 @@ LEFT JOIN (
     FROM dbo.tbl_Journal_Bill_Reference jr
     JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
     JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-    JOIN @filteredOb AS fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = jr.RefNo
+    JOIN @filteredOb AS fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = TRIM(jr.RefNo)
     WHERE 
         jh.JournalStatus <> 0
         AND je.DrCr = 'Cr'
@@ -227,12 +223,6 @@ LEFT JOIN (
     WHERE Cancel_status <> 0
     GROUP BY Ref_Inv_Number
 ) cn ON cn.Ref_Inv_Number = cb.bill_no
-WHERE 
-    cb.OB_date >= @OB_Date
-    AND cb.Retailer_id = @Acc_Id
-    AND cb.cr_amount = 0
-    AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.invoiceId = cb.bill_no)
-    AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.invoiceId = cb.bill_no)
 `;
 
 export const getPaymentOutstanding = () => `
@@ -250,7 +240,8 @@ SELECT
     ISNULL(jr.JournalAmount, 0) AS journalAdjustment,
     0 AS creditNoteAdjustment,
     pgi.debit_amount - (ISNULL(rp.ReceiptAmount, 0) + ISNULL(pb.PayAmount, 0)) - ISNULL(jr.JournalAmount, 0) AS BalanceAmount
-FROM tbl_Payment_General_Info AS pgi
+FROM @filteredPayment AS fp
+JOIN tbl_Payment_General_Info AS pgi ON fp.voucherId = pgi.pay_id AND fp.voucherNumber = pgi.payment_invoice_no
 LEFT JOIN (
     SELECT 
         rbi.bill_id,
@@ -286,10 +277,6 @@ LEFT JOIN (
         AND je.DrCr = 'Cr'
     GROUP BY jr.RefId, jr.RefNo
 ) jr ON jr.RefId = pgi.pay_id AND jr.RefNo = pgi.payment_invoice_no
-WHERE 
-    pgi.debit_ledger     = @Acc_Id
-    AND pgi.payment_date >= @OB_Date
-    AND pgi.status       <> 0
 `;
 
 export const getJournalOutstanding = () => `
@@ -307,8 +294,9 @@ SELECT
     ISNULL(jr.JournalAmount, 0) AS journalAdjustment,
     0 AS creditNoteAdjustment,
     jei.Amount - ISNULL(rp.ReceiptAmount, 0) - ISNULL(jr.JournalAmount, 0) AS BalanceAmount
-FROM tbl_Journal_Entries_Info AS jei
-LEFT JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
+FROM @filteredJournal AS fj
+JOIN tbl_Journal_General_Info AS jgi ON fj.voucherId = jgi.JournalId AND fj.voucherNumber = jgi.JournalVoucherNo
+JOIN tbl_Journal_Entries_Info AS jei ON jgi.JournalAutoId = jei.JournalAutoId AND jei.Acc_Id = @Acc_Id AND jei.DrCr = 'Dr'
 LEFT JOIN (
     SELECT 
         rbi.bill_id,
@@ -335,11 +323,6 @@ LEFT JOIN (
         AND je.DrCr = 'Dr'
     GROUP BY jr.RefId, jr.RefNo
 ) jr ON jr.RefId = jgi.JournalId AND jr.RefNo = jgi.JournalVoucherNo
-WHERE 
-    jei.Acc_Id				= @Acc_Id
-    AND jgi.JournalDate		>= @OB_Date
-    AND jgi.JournalStatus	<> 0
-    AND jei.DrCr			= 'Dr'
 `;
 
 export const getDebitNoteOutstanding = () => `
@@ -357,7 +340,8 @@ SELECT
     ISNULL(jr.JournalAmount, 0) AS journalAdjustment,
     0 AS creditNoteAdjustment,
     dngi.Total_Invoice_value - ISNULL(rp.ReceiptAmount, 0) - ISNULL(jr.JournalAmount, 0) AS BalanceAmount
-FROM tbl_Debit_Note_Gen_Info AS dngi
+FROM @filteredDebitNote AS fd
+JOIN tbl_Debit_Note_Gen_Info AS dngi ON fd.voucherId = dngi.DB_Id AND fd.voucherNumber = dngi.DB_Inv_No
 JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
 JOIN tbl_Account_Master AS am ON am.Acc_Id = rm.AC_Id
 LEFT JOIN (
@@ -386,9 +370,4 @@ LEFT JOIN (
         AND je.DrCr = 'Cr'
     GROUP BY jr.RefId, jr.RefNo
 ) jr ON jr.RefId = dngi.DB_Id AND jr.RefNo = dngi.DB_Inv_No
-WHERE 
-    am.Acc_Id				= @Acc_Id
-    AND dngi.DB_Date		>= @OB_Date
-    AND dngi.Cancel_status  <> 0
-    AND COALESCE(dngi.Ref_Inv_Number, '') = ''
 `;
