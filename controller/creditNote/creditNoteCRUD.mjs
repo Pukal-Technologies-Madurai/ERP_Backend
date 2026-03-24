@@ -116,9 +116,11 @@ export const getCreditNote = async (req, res) => {
                     pm.Product_Id,
                     COALESCE(pm.Product_Name, 'not available') AS Product_Name,
                     COALESCE(pm.Product_Name, 'not available') AS Item_Name,
-                    COALESCE(u.Units, 'not available') AS UOM
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(bm.Brand_Name, 'not available') AS BrandGet
                 FROM tbl_Credit_Note_Stock_Info AS oi
                 LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_Brand_Master AS bm ON bm.Brand_Id = pm.Brand
                 LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
                 WHERE oi.CR_Id IN (SELECT DISTINCT CR_Id FROM @FilteredInvoice)
                 ORDER BY oi.S_No ASC;
@@ -519,8 +521,8 @@ export const createCreditNote = async (req, res) => {
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
             for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                 const exp = Expence_Array[expInd];
-                const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
-                const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? Math.abs(toNumber(exp?.Expence_Value)) : 0;
+                const Expence_Value_DR = toNumber(exp?.Expence_Value) < 0 ? Math.abs(toNumber(exp?.Expence_Value)) : 0;
+                const Expence_Value_CR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
 
                 const request = new sql.Request(transaction)
                     .input('CR_Id', CR_Id)
@@ -540,6 +542,66 @@ export const createCreditNote = async (req, res) => {
 
                 if (result.rowsAffected[0] === 0) {
                     throw new Error('Failed to insert Expence row in credit note creation');
+                }
+            }
+        }
+
+        const taxTypes = [
+            { expName: 'CGST', Value: CGST },
+            { expName: 'SGST', Value: SGST },
+            { expName: 'IGST', Value: IGST },
+            { expName: 'ROUNDOFF', Value: Round_off }
+        ].filter(fil => toNumber(fil.Value) !== 0);
+
+        let snoOffset = toNumber(Expence_Array?.length) || 0;
+
+        const getExpName = new sql.Request();
+        taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+        const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
+
+        if (taxTypes.length > 0) {
+            const getCurrespondingAccount = getExpName.query(`
+                SELECT Acc_Id, AC_Reason 
+                FROM tbl_Default_AC_Master 
+                WHERE AC_Reason IN (${inClause}) 
+                AND Acc_Id IS NOT NULL;`
+            );
+
+            const expData = (await getCurrespondingAccount).recordset;
+
+            const missing = taxTypes.filter(exp =>
+                !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+            );
+
+            if (missing.length > 0) {
+                throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+            }
+
+            for (let i = 0; i < taxTypes.length; i++) {
+                const { expName, Value } = taxTypes[i];
+                const numValue = Number(Value);
+                const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                const Expence_Value_DR = numValue < 0 ? Math.abs(numValue) : 0;
+                const Expence_Value_CR = numValue >= 0 ? numValue : 0;
+
+                const request = new sql.Request(transaction)
+                    .input('CR_Id', CR_Id)
+                    .input('Sno', snoOffset + i + 1)
+                    .input('Expense_Id', Expense_Id)
+                    .input('Expence_Value_DR', Expence_Value_DR)
+                    .input('Expence_Value_CR', Expence_Value_CR)
+                    .query(`
+                        INSERT INTO tbl_Credit_Note_Expence_Info (
+                            CR_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                        ) VALUES (
+                            @CR_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                        )`
+                    );
+
+                const result = await request;
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error('Failed to insert tax expense row');
                 }
             }
         }
@@ -840,6 +902,66 @@ export const updateCreditNote = async (req, res) => {
 
                 if (result.rowsAffected[0] === 0) {
                     throw new Error('Failed to insert Expence row in credit note update');
+                }
+            }
+        }
+
+        const taxTypes = [
+            { expName: 'CGST', Value: CGST },
+            { expName: 'SGST', Value: SGST },
+            { expName: 'IGST', Value: IGST },
+            { expName: 'ROUNDOFF', Value: Round_off }
+        ].filter(fil => toNumber(fil.Value) !== 0);
+
+        let snoOffset = toNumber(Expence_Array?.length) || 0;
+
+        const getExpName = new sql.Request();
+        taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+        const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
+
+        if (taxTypes.length > 0) {
+            const getCurrespondingAccount = getExpName.query(`
+                SELECT Acc_Id, AC_Reason 
+                FROM tbl_Default_AC_Master 
+                WHERE AC_Reason IN (${inClause}) 
+                AND Acc_Id IS NOT NULL;`
+            );
+
+            const expData = (await getCurrespondingAccount).recordset;
+
+            const missing = taxTypes.filter(exp =>
+                !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+            );
+
+            if (missing.length > 0) {
+                throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+            }
+
+            for (let i = 0; i < taxTypes.length; i++) {
+                const { expName, Value } = taxTypes[i];
+                const numValue = Number(Value);
+                const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                const request = new sql.Request(transaction)
+                    .input('CR_Id', CR_Id)
+                    .input('Sno', snoOffset + i + 1)
+                    .input('Expense_Id', Expense_Id)
+                    .input('Expence_Value_DR', Expence_Value_DR)
+                    .input('Expence_Value_CR', Expence_Value_CR)
+                    .query(`
+                        INSERT INTO tbl_Credit_Note_Expence_Info (
+                            CR_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                        ) VALUES (
+                            @CR_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                        )`
+                    );
+
+                const result = await request;
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error('Failed to insert tax expense row');
                 }
             }
         }

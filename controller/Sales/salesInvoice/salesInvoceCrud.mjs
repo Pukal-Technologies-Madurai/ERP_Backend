@@ -263,17 +263,18 @@ export const getSalesInvoice = async (req, res) => {
                     COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                     COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                     COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+                    COALESCE(delBy.Name, 'unknown') AS Delivery_Person_Name,
+                    COALESCE(salPer.Name, 'unknown') AS Sales_Person_Name
                 FROM 
                     tbl_Sales_Delivery_Gen_Info AS sdgi
-                LEFT JOIN tbl_Retailers_Master AS rm 
-                    ON rm.Retailer_Id = sdgi.Retailer_Id
-                LEFT JOIN tbl_Branch_Master AS bm 
-                    ON bm.BranchId = sdgi.Branch_Id
-                LEFT JOIN tbl_Users AS cb 
-                    ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Voucher_Type AS v
-                    ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_Users AS delBy ON delBy.UserId = sdgi.Delivery_Person_Id
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No
+                LEFT JOIN tbl_Users AS salPer ON salPer.UserId = sogi.Sales_Person_Id
                 WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY  sdgi.Do_Id desc;
                 -- product details
