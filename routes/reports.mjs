@@ -16,7 +16,7 @@ import expences from '../controller/Masters/expences.mjs';
 import templateMobile from '../controller/Reports/templateMobile.mjs';
 import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
-    onlinePurchaseReportItem,PurchaseGraphCard
+    onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport
   } from '../controller/Reports/externalAPI.mjs';
 
 
@@ -182,5 +182,11 @@ ReportRouter.get('/externalAPI/onlinePurchaseReport', onlinePurchaseReport);
 ReportRouter.get('/externalAPI/onlinePurchaseReportItem', onlinePurchaseReportItem);
 ReportRouter.get('/externalAPI/PurchaseGraph', PurchaseGraphCard);
 
+
+ReportRouter.get('/externalAPI/SaleOrderReport', SaleOrderReport);
+ReportRouter.get('/externalAPI/SaleOrderReportItem', SaleOrderReportItem);
+
+ReportRouter.get('/externalAPI/PurchaseOrderReport', PurchaseOrderReport);
+ReportRouter.get('/externalAPI/PurchaseOrderReportItem', PurchaseOrderItemReport)
 
 export default ReportRouter;
