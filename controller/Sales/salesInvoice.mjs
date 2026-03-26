@@ -19,35 +19,35 @@ import { clearScreenDown } from 'readline';
 const SalesInvoice = () => {
 
     const getSalesInvoiceMobileFilter1 = async (req, res) => {
-    try {
-        const { 
-            Retailer_Id, 
-            Cancel_status = 0, 
-            Created_by, 
-            VoucherType, 
-            Branch_Id, 
-            User_Id,
-            filter1, 
-            filter2,
-            filter3,
-            filter4
-        } = req.query;
+        try {
+            const {
+                Retailer_Id,
+                Cancel_status = 0,
+                Created_by,
+                VoucherType,
+                Branch_Id,
+                User_Id,
+                filter1,
+                filter2,
+                filter3,
+                filter4
+            } = req.query;
 
-        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
-        const parseFilterValues = (filterParam) => {
-            if (!filterParam) return null;
-            return filterParam.split(',').map(val => val.trim()).filter(val => val);
-        };
+            const parseFilterValues = (filterParam) => {
+                if (!filterParam) return null;
+                return filterParam.split(',').map(val => val.trim()).filter(val => val);
+            };
 
-        const filter1Values = parseFilterValues(filter1);
-        const filter2Values = parseFilterValues(filter2);
-        // const filter3Values = parseFilterValues(filter3);
-        //  const filter4Values = parseFilterValues(filter4);
+            const filter1Values = parseFilterValues(filter1);
+            const filter2Values = parseFilterValues(filter2);
+            // const filter3Values = parseFilterValues(filter3);
+            //  const filter4Values = parseFilterValues(filter4);
 
-     
-        const mobileFilters = await new sql.Request().query(`
+
+            const mobileFilters = await new sql.Request().query(`
             SELECT 
                 mrd.Type AS FilterType,
                 mrd.Column_Name AS ColumnName,
@@ -71,156 +71,156 @@ const SalesInvoice = () => {
             ORDER BY mrd.Type
         `);
 
-        const checkTableHasRetId = async (tableName) => {
-            try {
-                const columnCheck = await new sql.Request().query(`
+            const checkTableHasRetId = async (tableName) => {
+                try {
+                    const columnCheck = await new sql.Request().query(`
                     SELECT COLUMN_NAME 
                     FROM INFORMATION_SCHEMA.COLUMNS 
                     WHERE TABLE_NAME = '${tableName}' 
                     AND COLUMN_NAME = 'Ret_Id'
                 `);
-                return columnCheck.recordset.length > 0;
-            } catch (error) {
-                console.error(`Error checking Ret_Id for ${tableName}:`, error);
-                return false;
+                    return columnCheck.recordset.length > 0;
+                } catch (error) {
+                    console.error(`Error checking Ret_Id for ${tableName}:`, error);
+                    return false;
+                }
+            };
+
+            const tableRetIdMap = {};
+            for (const filter of mobileFilters.recordset) {
+                if (filter.TableName && !tableRetIdMap[filter.TableName]) {
+                    tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
+                }
             }
-        };
 
-        const tableRetIdMap = {};
-        for (const filter of mobileFilters.recordset) {
-            if (filter.TableName && !tableRetIdMap[filter.TableName]) {
-                tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
-            }
-        }
+            const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
+                if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
+                    return null;
+                }
 
-       const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
-    if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
-        return null;
-    }
-
-    const tableName = filterConfig.TableName;
-    const columnName = filterConfig.ColumnName;
-    const hasRetId = tableRetIdMap[tableName] || false;
-    
- 
-    const specialTables = {
-        'tbl_Ledger_LOL': {
-            joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
-            fromClause: tableName,
-            additionalJoins: ''
-        },
-        'tbl_Stock_LOS': {
-            joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
-            fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
-            whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
-        }
-    };
-
-    const isSingleValue = filterValues.length === 1;
-    const placeholders = isSingleValue 
-        ? `@${filterParamName}` 
-        : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-
-    const condition = isSingleValue 
-        ? `${columnName} = ${placeholders}`
-        : `${columnName} IN (${placeholders})`;
+                const tableName = filterConfig.TableName;
+                const columnName = filterConfig.ColumnName;
+                const hasRetId = tableRetIdMap[tableName] || false;
 
 
-    if (specialTables[tableName]) {
-        const specialConfig = specialTables[tableName];
-        return `EXISTS (
+                const specialTables = {
+                    'tbl_Ledger_LOL': {
+                        joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
+                        fromClause: tableName,
+                        additionalJoins: ''
+                    },
+                    'tbl_Stock_LOS': {
+                        joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
+                        fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
+                        whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
+                    }
+                };
+
+                const isSingleValue = filterValues.length === 1;
+                const placeholders = isSingleValue
+                    ? `@${filterParamName}`
+                    : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
+
+                const condition = isSingleValue
+                    ? `${columnName} = ${placeholders}`
+                    : `${columnName} IN (${placeholders})`;
+
+
+                if (specialTables[tableName]) {
+                    const specialConfig = specialTables[tableName];
+                    return `EXISTS (
             SELECT 1 FROM ${specialConfig.fromClause}
             ${specialConfig.whereClause || ''}
             ${specialConfig.whereClause ? 'AND' : 'WHERE'} ${condition}
             ${specialConfig.joinCondition}
         )`;
-    }
-    
-  
-    const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
-    
-    return `EXISTS (
+                }
+
+
+                const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
+
+                return `EXISTS (
         SELECT 1 FROM ${tableName} 
         WHERE ${tableName}.${condition}
         ${retIdCondition}
     )`;
-};
+            };
 
-       
-        const getCurrespondingAccount = await new sql.Request().query(`
+
+            const getCurrespondingAccount = await new sql.Request().query(`
             SELECT Acc_Id 
             FROM tbl_Default_AC_Master 
             WHERE Type = 'DEFAULT' AND Acc_Id IS NOT NULL;
         `);
-        const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
+            const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
 
-        let branchCondition = '';
+            let branchCondition = '';
 
-        if (User_Id) {
-            const getBranches = await new sql.Request()
-                .input('User_Id', User_Id)
-                .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
-            
-            const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
+            if (User_Id) {
+                const getBranches = await new sql.Request()
+                    .input('User_Id', User_Id)
+                    .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
 
-            if (Branch_Id) {
-                const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
-                const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
+                const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
 
-                if (finalBranches.length) {
-                    branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
-                } else {
-                    return res.json({ data: [], message: "No data", success: true, others: {} });
-                }
-            } else if (allowedBranches.length) {
-                branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
-            }
-        }
+                if (Branch_Id) {
+                    const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
+                    const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
 
-        let mobileFilterConditions = [];
-        const request = new sql.Request()
-            .input('Fromdate', Fromdate)
-            .input('Todate', Todate);
-
-        if (Retailer_Id) request.input('retailer', Retailer_Id);
-        if (Cancel_status) request.input('cancel', Cancel_status);
-        if (Created_by) request.input('creater', Created_by);
-        if (VoucherType) request.input('VoucherType', VoucherType);
-
-        const filterConditions = [
-            { values: filter1Values, paramName: 'filter1', index: 0 },
-            { values: filter2Values, paramName: 'filter2', index: 1 },
-            // { values: filter3Values, paramName: 'filter3', index: 2 },
-            // { values: filter4Values, paramName: 'filter3', index: 3 }
-        ];
-
-        for (let i = 0; i < filterConditions.length; i++) {
-            const { values, paramName, index } = filterConditions[i];
-            
-            if (values && values.length > 0 && mobileFilters.recordset.length > index) {
-                const filterConfig = mobileFilters.recordset[index];
-                const condition = buildFilterCondition(filterConfig, values, paramName);
-                
-                if (condition) {
-                    mobileFilterConditions.push(condition);
-                    
-                    if (values.length === 1) {
-                        request.input(paramName, values[0]);
+                    if (finalBranches.length) {
+                        branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
                     } else {
-                        values.forEach((value, idx) => {
-                            request.input(`${paramName}${idx}`, value);
-                        });
+                        return res.json({ data: [], message: "No data", success: true, others: {} });
+                    }
+                } else if (allowedBranches.length) {
+                    branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
+                }
+            }
+
+            let mobileFilterConditions = [];
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate);
+
+            if (Retailer_Id) request.input('retailer', Retailer_Id);
+            if (Cancel_status) request.input('cancel', Cancel_status);
+            if (Created_by) request.input('creater', Created_by);
+            if (VoucherType) request.input('VoucherType', VoucherType);
+
+            const filterConditions = [
+                { values: filter1Values, paramName: 'filter1', index: 0 },
+                { values: filter2Values, paramName: 'filter2', index: 1 },
+                // { values: filter3Values, paramName: 'filter3', index: 2 },
+                // { values: filter4Values, paramName: 'filter3', index: 3 }
+            ];
+
+            for (let i = 0; i < filterConditions.length; i++) {
+                const { values, paramName, index } = filterConditions[i];
+
+                if (values && values.length > 0 && mobileFilters.recordset.length > index) {
+                    const filterConfig = mobileFilters.recordset[index];
+                    const condition = buildFilterCondition(filterConfig, values, paramName);
+
+                    if (condition) {
+                        mobileFilterConditions.push(condition);
+
+                        if (values.length === 1) {
+                            request.input(paramName, values[0]);
+                        } else {
+                            values.forEach((value, idx) => {
+                                request.input(`${paramName}${idx}`, value);
+                            });
+                        }
                     }
                 }
             }
-        }
 
-        const mobileFilterCondition = mobileFilterConditions.length > 0 
-            ? ` AND ${mobileFilterConditions.join(' AND ')} `
-            : '';
+            const mobileFilterCondition = mobileFilterConditions.length > 0
+                ? ` AND ${mobileFilterConditions.join(' AND ')} `
+                : '';
 
-       
-        const sqlQuery = `
+
+            const sqlQuery = `
             DECLARE @FilteredInvoice TABLE (Do_Id INT PRIMARY KEY);
 
             INSERT INTO @FilteredInvoice (Do_Id)
@@ -323,97 +323,97 @@ ORDER BY llos.Pro_Id;
         `;
 
 
-     const result = await request.query(sqlQuery);
- 
-const SalesGeneralInfo = toArray(result.recordsets[0]);
-const Products_List = toArray(result.recordsets[1]);
-const Expence_Array = toArray(result.recordsets[2]);
-const Staffs_Array = toArray(result.recordsets[3]);
-const StockInfo = toArray(result.recordsets[4]);  
-const LedgerInfo = toArray(result.recordsets[5]);  
+            const result = await request.query(sqlQuery);
 
-if (SalesGeneralInfo.length > 0) {
-    const ledgerMap = {};
-    const stockMap = {}; 
-    
-   
-    LedgerInfo.forEach(ledger => {
-        if (!ledgerMap[ledger.Ret_Id]) {
-            ledgerMap[ledger.Ret_Id] = ledger;
+            const SalesGeneralInfo = toArray(result.recordsets[0]);
+            const Products_List = toArray(result.recordsets[1]);
+            const Expence_Array = toArray(result.recordsets[2]);
+            const Staffs_Array = toArray(result.recordsets[3]);
+            const StockInfo = toArray(result.recordsets[4]);
+            const LedgerInfo = toArray(result.recordsets[5]);
+
+            if (SalesGeneralInfo.length > 0) {
+                const ledgerMap = {};
+                const stockMap = {};
+
+
+                LedgerInfo.forEach(ledger => {
+                    if (!ledgerMap[ledger.Ret_Id]) {
+                        ledgerMap[ledger.Ret_Id] = ledger;
+                    }
+                });
+
+
+                StockInfo.forEach(stock => {
+                    if (!stockMap[stock.Pro_Id]) {
+                        stockMap[stock.Pro_Id] = stock;
+                    }
+                });
+
+                const resData = SalesGeneralInfo.map(row => {
+                    const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
+
+
+                    const productsWithStock = Products_List
+                        .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
+                        .map(product => {
+                            const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
+                            return {
+                                ...product,
+                                ...productStock
+                            };
+                        });
+
+                    return {
+                        ...row,
+                        ...ledgerInfo,
+                        Products_List: productsWithStock,
+                        Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+                        Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+                    };
+                });
+
+                dataFound(res, resData);
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            console.error('API Error:', e);
+            servError(e, res);
         }
-    });
-    
+    };
 
-    StockInfo.forEach(stock => {
-        if (!stockMap[stock.Pro_Id]) { 
-            stockMap[stock.Pro_Id] = stock;
-        }
-    });
-    
-    const resData = SalesGeneralInfo.map(row => {
-        const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
-        
-        
-        const productsWithStock = Products_List
-            .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
-            .map(product => {
-                const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
-                return {
-                    ...product,
-                    ... productStock  
-                };
-            });
-        
-        return {
-            ...row,
-            ...ledgerInfo,
-            Products_List: productsWithStock,  
-            Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
-            Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
-        };
-    });
+    const getSalesInvoiceMobileFilter2 = async (req, res) => {
+        try {
+            const {
+                Retailer_Id,
+                Cancel_status = 0,
+                Created_by,
+                VoucherType,
+                Branch_Id,
+                User_Id,
+                filter1,
+                filter2,
+                filter3,
+                filter4
+            } = req.query;
 
-    dataFound(res, resData);
-} else {
-    noData(res);
-}
+            const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+            const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
-    } catch (e) {
-        console.error('API Error:', e);
-        servError(e, res);
-    }
-};
+            const parseFilterValues = (filterParam) => {
+                if (!filterParam) return null;
+                return filterParam.split(',').map(val => val.trim()).filter(val => val);
+            };
 
-  const getSalesInvoiceMobileFilter2 = async (req, res) => {
-    try {
-        const { 
-            Retailer_Id, 
-            Cancel_status = 0, 
-            Created_by, 
-            VoucherType, 
-            Branch_Id, 
-            User_Id,
-            filter1, 
-            filter2,
-            filter3,
-            filter4
-        } = req.query;
+            const filter1Values = parseFilterValues(filter1);
+            const filter2Values = parseFilterValues(filter2);
+            const filter3Values = parseFilterValues(filter3);
+            const filter4Values = parseFilterValues(filter4);
 
-        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
-        const parseFilterValues = (filterParam) => {
-            if (!filterParam) return null;
-            return filterParam.split(',').map(val => val.trim()).filter(val => val);
-        };
-
-        const filter1Values = parseFilterValues(filter1);
-        const filter2Values = parseFilterValues(filter2);
-        const filter3Values = parseFilterValues(filter3);
-         const filter4Values = parseFilterValues(filter4);
-
-     
-        const mobileFilters = await new sql.Request().query(`
+            const mobileFilters = await new sql.Request().query(`
             SELECT 
                 mrd.Type AS FilterType,
                 mrd.Column_Name AS ColumnName,
@@ -437,156 +437,156 @@ if (SalesGeneralInfo.length > 0) {
             ORDER BY mrd.Type
         `);
 
-        const checkTableHasRetId = async (tableName) => {
-            try {
-                const columnCheck = await new sql.Request().query(`
+            const checkTableHasRetId = async (tableName) => {
+                try {
+                    const columnCheck = await new sql.Request().query(`
                     SELECT COLUMN_NAME 
                     FROM INFORMATION_SCHEMA.COLUMNS 
                     WHERE TABLE_NAME = '${tableName}' 
                     AND COLUMN_NAME = 'Ret_Id'
                 `);
-                return columnCheck.recordset.length > 0;
-            } catch (error) {
-                console.error(`Error checking Ret_Id for ${tableName}:`, error);
-                return false;
+                    return columnCheck.recordset.length > 0;
+                } catch (error) {
+                    console.error(`Error checking Ret_Id for ${tableName}:`, error);
+                    return false;
+                }
+            };
+
+            const tableRetIdMap = {};
+            for (const filter of mobileFilters.recordset) {
+                if (filter.TableName && !tableRetIdMap[filter.TableName]) {
+                    tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
+                }
             }
-        };
 
-        const tableRetIdMap = {};
-        for (const filter of mobileFilters.recordset) {
-            if (filter.TableName && !tableRetIdMap[filter.TableName]) {
-                tableRetIdMap[filter.TableName] = await checkTableHasRetId(filter.TableName);
-            }
-        }
+            const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
+                if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
+                    return null;
+                }
 
-       const buildFilterCondition = (filterConfig, filterValues, filterParamName) => {
-    if (!filterConfig || !filterConfig.TableName || !filterConfig.ColumnName || !filterValues || filterValues.length === 0) {
-        return null;
-    }
-
-    const tableName = filterConfig.TableName;
-    const columnName = filterConfig.ColumnName;
-    const hasRetId = tableRetIdMap[tableName] || false;
-    
- 
-    const specialTables = {
-        'tbl_Ledger_LOL': {
-            joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
-            fromClause: tableName,
-            additionalJoins: ''
-        },
-        'tbl_Stock_LOS': {
-            joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
-            fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
-            whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
-        }
-    };
-
-    const isSingleValue = filterValues.length === 1;
-    const placeholders = isSingleValue 
-        ? `@${filterParamName}` 
-        : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
-
-    const condition = isSingleValue 
-        ? `${columnName} = ${placeholders}`
-        : `${columnName} IN (${placeholders})`;
+                const tableName = filterConfig.TableName;
+                const columnName = filterConfig.ColumnName;
+                const hasRetId = tableRetIdMap[tableName] || false;
 
 
-    if (specialTables[tableName]) {
-        const specialConfig = specialTables[tableName];
-        return `EXISTS (
+                const specialTables = {
+                    'tbl_Ledger_LOL': {
+                        joinCondition: `AND ${tableName}.Ret_Id = sdgi.Retailer_Id`,
+                        fromClause: tableName,
+                        additionalJoins: ''
+                    },
+                    'tbl_Stock_LOS': {
+                        joinCondition: hasRetId ? `AND los.Ret_Id = sdgi.Retailer_Id` : '',
+                        fromClause: `${tableName} los INNER JOIN tbl_Sales_Delivery_Stock_Info sdsi ON sdsi.Item_Id = los.Pro_Id`,
+                        whereClause: `WHERE sdsi.Delivery_Order_Id = sdgi.Do_Id`
+                    }
+                };
+
+                const isSingleValue = filterValues.length === 1;
+                const placeholders = isSingleValue
+                    ? `@${filterParamName}`
+                    : filterValues.map((_, index) => `@${filterParamName}${index}`).join(',');
+
+                const condition = isSingleValue
+                    ? `${columnName} = ${placeholders}`
+                    : `${columnName} IN (${placeholders})`;
+
+
+                if (specialTables[tableName]) {
+                    const specialConfig = specialTables[tableName];
+                    return `EXISTS (
             SELECT 1 FROM ${specialConfig.fromClause}
             ${specialConfig.whereClause || ''}
             ${specialConfig.whereClause ? 'AND' : 'WHERE'} ${condition}
             ${specialConfig.joinCondition}
         )`;
-    }
-    
-  
-    const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
-    
-    return `EXISTS (
+                }
+
+
+                const retIdCondition = hasRetId ? `AND ${tableName}.Ret_Id = sdgi.Retailer_Id` : '';
+
+                return `EXISTS (
         SELECT 1 FROM ${tableName} 
         WHERE ${tableName}.${condition}
         ${retIdCondition}
     )`;
-};
+            };
 
-       
-        const getCurrespondingAccount = await new sql.Request().query(`
+
+            const getCurrespondingAccount = await new sql.Request().query(`
             SELECT Acc_Id 
             FROM tbl_Default_AC_Master 
             WHERE Type = 'DEFAULT' AND Acc_Id IS NOT NULL;
         `);
-        const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
+            const excludeList = getCurrespondingAccount.recordset.map(exp => exp.Acc_Id).join(',');
 
-        let branchCondition = '';
+            let branchCondition = '';
 
-        if (User_Id) {
-            const getBranches = await new sql.Request()
-                .input('User_Id', User_Id)
-                .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
-            
-            const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
+            if (User_Id) {
+                const getBranches = await new sql.Request()
+                    .input('User_Id', User_Id)
+                    .query(`SELECT Branch_Id FROM tbl_userbranchrights WHERE User_Id = @User_Id`);
 
-            if (Branch_Id) {
-                const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
-                const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
+                const allowedBranches = getBranches.recordset.map(b => b.Branch_Id);
 
-                if (finalBranches.length) {
-                    branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
-                } else {
-                    return res.json({ data: [], message: "No data", success: true, others: {} });
-                }
-            } else if (allowedBranches.length) {
-                branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
-            }
-        }
+                if (Branch_Id) {
+                    const selectedBranches = Branch_Id.split(',').map(Number).filter(n => !isNaN(n));
+                    const finalBranches = selectedBranches.filter(b => allowedBranches.length ? allowedBranches.includes(b) : true);
 
-        let mobileFilterConditions = [];
-        const request = new sql.Request()
-            .input('Fromdate', Fromdate)
-            .input('Todate', Todate);
-
-        if (Retailer_Id) request.input('retailer', Retailer_Id);
-        if (Cancel_status) request.input('cancel', Cancel_status);
-        if (Created_by) request.input('creater', Created_by);
-        if (VoucherType) request.input('VoucherType', VoucherType);
-
-        const filterConditions = [
-            { values: filter1Values, paramName: 'filter1', index: 0 },
-            { values: filter2Values, paramName: 'filter2', index: 1 },
-            { values: filter3Values, paramName: 'filter3', index: 2 },
-            { values: filter4Values, paramName: 'filter3', index: 3 }
-        ];
-
-        for (let i = 0; i < filterConditions.length; i++) {
-            const { values, paramName, index } = filterConditions[i];
-            
-            if (values && values.length > 0 && mobileFilters.recordset.length > index) {
-                const filterConfig = mobileFilters.recordset[index];
-                const condition = buildFilterCondition(filterConfig, values, paramName);
-                
-                if (condition) {
-                    mobileFilterConditions.push(condition);
-                    
-                    if (values.length === 1) {
-                        request.input(paramName, values[0]);
+                    if (finalBranches.length) {
+                        branchCondition = ` AND Branch_Id IN (${finalBranches.join(',')}) `;
                     } else {
-                        values.forEach((value, idx) => {
-                            request.input(`${paramName}${idx}`, value);
-                        });
+                        return res.json({ data: [], message: "No data", success: true, others: {} });
+                    }
+                } else if (allowedBranches.length) {
+                    branchCondition = ` AND Branch_Id IN (${allowedBranches.join(',')}) `;
+                }
+            }
+
+            let mobileFilterConditions = [];
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate);
+
+            if (Retailer_Id) request.input('retailer', Retailer_Id);
+            if (Cancel_status) request.input('cancel', Cancel_status);
+            if (Created_by) request.input('creater', Created_by);
+            if (VoucherType) request.input('VoucherType', VoucherType);
+
+            const filterConditions = [
+                { values: filter1Values, paramName: 'filter1', index: 0 },
+                { values: filter2Values, paramName: 'filter2', index: 1 },
+                { values: filter3Values, paramName: 'filter3', index: 2 },
+                { values: filter4Values, paramName: 'filter3', index: 3 }
+            ];
+
+            for (let i = 0; i < filterConditions.length; i++) {
+                const { values, paramName, index } = filterConditions[i];
+
+                if (values && values.length > 0 && mobileFilters.recordset.length > index) {
+                    const filterConfig = mobileFilters.recordset[index];
+                    const condition = buildFilterCondition(filterConfig, values, paramName);
+
+                    if (condition) {
+                        mobileFilterConditions.push(condition);
+
+                        if (values.length === 1) {
+                            request.input(paramName, values[0]);
+                        } else {
+                            values.forEach((value, idx) => {
+                                request.input(`${paramName}${idx}`, value);
+                            });
+                        }
                     }
                 }
             }
-        }
 
-        const mobileFilterCondition = mobileFilterConditions.length > 0 
-            ? ` AND ${mobileFilterConditions.join(' AND ')} `
-            : '';
+            const mobileFilterCondition = mobileFilterConditions.length > 0
+                ? ` AND ${mobileFilterConditions.join(' AND ')} `
+                : '';
 
-       
-          const sqlQuery = `
+
+            const sqlQuery = `
             DECLARE @FilteredInvoice TABLE (Do_Id INT PRIMARY KEY);
 
             INSERT INTO @FilteredInvoice (Do_Id)
@@ -686,77 +686,77 @@ ORDER BY llos.Pro_Id;
             )
             ORDER BY llol.Ret_Id, llol.Auto_Id;
         `;
-     const result = await request.query(sqlQuery);
- 
-const SalesGeneralInfo = toArray(result.recordsets[0]);
-const Products_List = toArray(result.recordsets[1]);
-const Expence_Array = toArray(result.recordsets[2]);
-const Staffs_Array = toArray(result.recordsets[3]);
-const StockInfo = toArray(result.recordsets[4]);  
-const LedgerInfo = toArray(result.recordsets[5]);  
+            const result = await request.query(sqlQuery);
 
-if (SalesGeneralInfo.length > 0) {
-    const ledgerMap = {};
-    const stockMap = {}; 
-    
-   
-    LedgerInfo.forEach(ledger => {
-        if (!ledgerMap[ledger.Ret_Id]) {
-            ledgerMap[ledger.Ret_Id] = ledger;
+            const SalesGeneralInfo = toArray(result.recordsets[0]);
+            const Products_List = toArray(result.recordsets[1]);
+            const Expence_Array = toArray(result.recordsets[2]);
+            const Staffs_Array = toArray(result.recordsets[3]);
+            const StockInfo = toArray(result.recordsets[4]);
+            const LedgerInfo = toArray(result.recordsets[5]);
+
+            if (SalesGeneralInfo.length > 0) {
+                const ledgerMap = {};
+                const stockMap = {};
+
+
+                LedgerInfo.forEach(ledger => {
+                    if (!ledgerMap[ledger.Ret_Id]) {
+                        ledgerMap[ledger.Ret_Id] = ledger;
+                    }
+                });
+
+
+                StockInfo.forEach(stock => {
+                    if (!stockMap[stock.Pro_Id]) {
+                        stockMap[stock.Pro_Id] = stock;
+                    }
+                });
+
+                const resData = SalesGeneralInfo.map(row => {
+                    const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
+
+
+                    const productsWithStock = Products_List
+                        .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
+                        .map(product => {
+                            const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
+                            return {
+                                ...product,
+                                ...productStock
+                            };
+                        });
+
+                    return {
+                        ...row,
+                        ...ledgerInfo,
+                        Products_List: productsWithStock,
+                        Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
+                        Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
+                    };
+                });
+
+                dataFound(res, resData);
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            console.error('API Error:', e);
+            servError(e, res);
         }
-    });
-    
+    };
 
-    StockInfo.forEach(stock => {
-        if (!stockMap[stock.Pro_Id]) { 
-            stockMap[stock.Pro_Id] = stock;
-        }
-    });
-    
-    const resData = SalesGeneralInfo.map(row => {
-        const ledgerInfo = ledgerMap[row.Retailer_Id] || {};
-        
-        
-        const productsWithStock = Products_List
-            .filter(fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id))
-            .map(product => {
-                const productStock = stockMap[product.Product_Id] || stockMap[product.Item_Id] || {};
-                return {
-                    ...product,
-                    ... productStock    
-                };
-            });
-        
-        return {
-            ...row,
-            ...ledgerInfo,
-            Products_List: productsWithStock,  
-            Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id)),
-            Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.Do_Id, row.Do_Id))
-        };
-    });
+    const getMobileReportDropdowns = async (req, res) => {
+        try {
+            const { reportName } = req.query;
 
-    dataFound(res, resData);
-} else {
-    noData(res);
-}
+            if (!reportName) {
+                return invalidInput(res, 'Report Name is Required')
+            }
 
-    } catch (e) {
-        console.error('API Error:', e);
-        servError(e, res);
-    }
-};
-
-const getMobileReportDropdowns = async (req, res) => {
-    try {
-        const { reportName } = req.query;
-
-        if (!reportName) {
-            return invalidInput(res, 'Report Name is Required')
-        }
-
-        // First, get the mobile report configuration
-        const mobileReportQuery = `
+            // First, get the mobile report configuration
+            const mobileReportQuery = `
             SELECT 
                 mrd.Type AS filterType,
                 mrd.Table_Id AS tableId,
@@ -782,20 +782,20 @@ const getMobileReportDropdowns = async (req, res) => {
             ORDER BY mrd.Type
         `;
 
-        const mobileReportResult = await new sql.Request()
-            .input('reportName', reportName)
-            .query(mobileReportQuery);
+            const mobileReportResult = await new sql.Request()
+                .input('reportName', reportName)
+                .query(mobileReportQuery);
 
-        if (mobileReportResult.recordset.length === 0) {
-            return res.json({
-                success: true,
-                data: [],
-                message: "No dropdown configuration found for this report"
-            });
-        }
+            if (mobileReportResult.recordset.length === 0) {
+                return res.json({
+                    success: true,
+                    data: [],
+                    message: "No dropdown configuration found for this report"
+                });
+            }
 
-        // Get group filters with Level_Id
-        const groupFilterQuery = `
+            // Get group filters with Level_Id
+            const groupFilterQuery = `
             SELECT DISTINCT
                 gtm.Table_Id,
                 gtm.Column_Name AS groupFilterColumn,
@@ -812,25 +812,157 @@ const getMobileReportDropdowns = async (req, res) => {
             ORDER BY gtm.Level_Id  -- Order by Level_Id to maintain sequence
         `;
 
-        const groupFilterResult = await new sql.Request()
-            .input('reportName', reportName)
-            .query(groupFilterQuery);
+            const groupFilterResult = await new sql.Request()
+                .input('reportName', reportName)
+                .query(groupFilterQuery);
 
-        // Regular filter promises
-        const regularFilterPromises = mobileReportResult.recordset.map(async (config) => {
-            try {
-                if (config.tableName && config.columnName) {
-                    
-                    const columnCheckQuery = `
+            // Regular filter promises
+            const regularFilterPromises = mobileReportResult.recordset.map(async (config) => {
+                try {
+                    if (config.tableName && config.columnName) {
+
+                        const columnCheckQuery = `
                         SELECT COUNT(*) as columnExists
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_NAME = '${config.tableName}' 
                         AND COLUMN_NAME = '${config.columnName}'
                     `;
-                    
-                    const columnCheck = await new sql.Request().query(columnCheckQuery);
-                    
-                    if (columnCheck.recordset[0].columnExists === 0) {
+
+                        const columnCheck = await new sql.Request().query(columnCheckQuery);
+
+                        if (columnCheck.recordset[0].columnExists === 0) {
+                            return {
+                                filterType: config.filterType,
+                                tableId: config.tableId,
+                                columnName: config.columnName,
+                                tableName: config.tableName,
+                                aliasName: config.aliasName,
+                                listTypes: config.listTypes,
+                                FilterLevel: config.FilterLevel,
+                                isGroupFilter: false,
+                                options: [],
+                                error: `Column '${config.columnName}' not found in table '${config.tableName}'`
+                            };
+                        }
+
+                        const tableInfoQuery = `
+                        SELECT COLUMN_NAME, DATA_TYPE
+                        FROM INFORMATION_SCHEMA.COLUMNS 
+                        WHERE TABLE_NAME = '${config.tableName}'
+                        ORDER BY ORDINAL_POSITION
+                    `;
+
+                        const tableInfo = await new sql.Request().query(tableInfoQuery);
+
+                        let valueColumn = null;
+
+                        const possibleIdColumns = tableInfo.recordset.filter(col =>
+                            col.COLUMN_NAME.toLowerCase() === 'id' ||
+                            col.COLUMN_NAME.toLowerCase().includes('_id') ||
+                            col.COLUMN_NAME.toLowerCase().includes('id_') ||
+                            col.COLUMN_NAME.toLowerCase().endsWith('id') ||
+                            col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + 'id' ||
+                            col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + '_id'
+                        );
+
+                        if (possibleIdColumns.length > 0) {
+                            valueColumn = possibleIdColumns[0].COLUMN_NAME;
+                        } else {
+                            const otherColumns = tableInfo.recordset.filter(col =>
+                                col.COLUMN_NAME !== config.columnName
+                            );
+                            if (otherColumns.length > 0) {
+                                valueColumn = otherColumns[0].COLUMN_NAME;
+                            } else {
+                                valueColumn = config.columnName;
+                            }
+                        }
+
+                        const dataCheckQuery = `
+                        SELECT 
+                            COUNT(*) as totalRecords,
+                            COUNT(${config.columnName}) as nonNullCount,
+                            COUNT(CASE WHEN ${config.columnName} = '' THEN 1 END) as emptyCount,
+                            COUNT(CASE WHEN ${config.columnName} IS NULL THEN 1 END) as nullCount
+                        FROM ${config.tableName}
+                    `;
+
+                        const dataCheck = await new sql.Request().query(dataCheckQuery);
+
+                        let dropdownQuery;
+                        let result;
+
+                        if (dataCheck.recordset[0].nonNullCount === 0) {
+                            const alternativeColumnQuery = `
+                            SELECT COLUMN_NAME 
+                            FROM INFORMATION_SCHEMA.COLUMNS 
+                            WHERE TABLE_NAME = '${config.tableName}'
+                            AND (COLUMN_NAME LIKE '%name%' OR COLUMN_NAME LIKE '%desc%' OR COLUMN_NAME LIKE '%title%')
+                            AND COLUMN_NAME != '${config.columnName}'
+                        `;
+
+                            const altColumns = await new sql.Request().query(alternativeColumnQuery);
+
+                            if (altColumns.recordset.length > 0) {
+                                const altColumn = altColumns.recordset[0].COLUMN_NAME;
+
+                                dropdownQuery = `
+                                SELECT DISTINCT
+                                    ${valueColumn} AS value,
+                                    ${altColumn} AS label
+                                FROM ${config.tableName}
+                                WHERE ${altColumn} IS NOT NULL 
+                                AND ${altColumn} != ''
+                                ORDER BY ${altColumn}
+                            `;
+                            } else {
+                                dropdownQuery = `
+                                SELECT DISTINCT
+                                    ${valueColumn} AS value,
+                                    ${valueColumn} AS label
+                                FROM ${config.tableName}
+                                WHERE ${valueColumn} IS NOT NULL
+                                ORDER BY ${valueColumn}
+                            `;
+                            }
+                        } else {
+                            dropdownQuery = `
+                            SELECT DISTINCT
+                                ${valueColumn} AS value,
+                                ${config.columnName} AS label
+                            FROM ${config.tableName}
+                            WHERE ${config.columnName} IS NOT NULL 
+                            AND ${config.columnName} != ''
+                            ORDER BY ${config.columnName}
+                        `;
+                        }
+
+                        result = await new sql.Request().query(dropdownQuery);
+
+                        const seenLabels = new Set();
+                        const uniqueOptions = result.recordset.filter(item => {
+                            if (seenLabels.has(item.label)) {
+                                return false;
+                            }
+                            seenLabels.add(item.label);
+                            return true;
+                        });
+
+                        return {
+                            filterType: config.filterType,
+                            tableId: config.tableId,
+                            columnName: config.columnName,
+                            tableName: config.tableName,
+                            aliasName: config.aliasName,
+                            valueColumn: valueColumn,
+                            listTypes: config.listTypes,
+                            FilterLevel: config.FilterLevel,
+                            isGroupFilter: false,
+                            options: uniqueOptions,
+                            dataSummary: dataCheck.recordset[0]
+                        };
+
+                    } else {
                         return {
                             filterType: config.filterType,
                             tableId: config.tableId,
@@ -841,230 +973,98 @@ const getMobileReportDropdowns = async (req, res) => {
                             FilterLevel: config.FilterLevel,
                             isGroupFilter: false,
                             options: [],
-                            error: `Column '${config.columnName}' not found in table '${config.tableName}'`
+                            error: "Invalid configuration - missing tableName or columnName"
                         };
                     }
 
-                    const tableInfoQuery = `
-                        SELECT COLUMN_NAME, DATA_TYPE
-                        FROM INFORMATION_SCHEMA.COLUMNS 
-                        WHERE TABLE_NAME = '${config.tableName}'
-                        ORDER BY ORDINAL_POSITION
-                    `;
-                    
-                    const tableInfo = await new sql.Request().query(tableInfoQuery);
-                    
-                    let valueColumn = null;
-                    
-                    const possibleIdColumns = tableInfo.recordset.filter(col => 
-                        col.COLUMN_NAME.toLowerCase() === 'id' ||
-                        col.COLUMN_NAME.toLowerCase().includes('_id') ||
-                        col.COLUMN_NAME.toLowerCase().includes('id_') ||
-                        col.COLUMN_NAME.toLowerCase().endsWith('id') ||
-                        col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + 'id' ||
-                        col.COLUMN_NAME.toLowerCase() === config.tableName.replace('tbl_', '').toLowerCase() + '_id'
-                    );
-
-                    if (possibleIdColumns.length > 0) {
-                        valueColumn = possibleIdColumns[0].COLUMN_NAME;
-                    } else {
-                        const otherColumns = tableInfo.recordset.filter(col => 
-                            col.COLUMN_NAME !== config.columnName
-                        );
-                        if (otherColumns.length > 0) {
-                            valueColumn = otherColumns[0].COLUMN_NAME;
-                        } else {
-                            valueColumn = config.columnName;
-                        }
-                    }
-
-                    const dataCheckQuery = `
-                        SELECT 
-                            COUNT(*) as totalRecords,
-                            COUNT(${config.columnName}) as nonNullCount,
-                            COUNT(CASE WHEN ${config.columnName} = '' THEN 1 END) as emptyCount,
-                            COUNT(CASE WHEN ${config.columnName} IS NULL THEN 1 END) as nullCount
-                        FROM ${config.tableName}
-                    `;
-
-                    const dataCheck = await new sql.Request().query(dataCheckQuery);
-
-                    let dropdownQuery;
-                    let result;
-                    
-                    if (dataCheck.recordset[0].nonNullCount === 0) {
-                        const alternativeColumnQuery = `
-                            SELECT COLUMN_NAME 
-                            FROM INFORMATION_SCHEMA.COLUMNS 
-                            WHERE TABLE_NAME = '${config.tableName}'
-                            AND (COLUMN_NAME LIKE '%name%' OR COLUMN_NAME LIKE '%desc%' OR COLUMN_NAME LIKE '%title%')
-                            AND COLUMN_NAME != '${config.columnName}'
-                        `;
-                        
-                        const altColumns = await new sql.Request().query(alternativeColumnQuery);
-
-                        if (altColumns.recordset.length > 0) {
-                            const altColumn = altColumns.recordset[0].COLUMN_NAME;
-                            
-                            dropdownQuery = `
-                                SELECT DISTINCT
-                                    ${valueColumn} AS value,
-                                    ${altColumn} AS label
-                                FROM ${config.tableName}
-                                WHERE ${altColumn} IS NOT NULL 
-                                AND ${altColumn} != ''
-                                ORDER BY ${altColumn}
-                            `;
-                        } else {
-                            dropdownQuery = `
-                                SELECT DISTINCT
-                                    ${valueColumn} AS value,
-                                    ${valueColumn} AS label
-                                FROM ${config.tableName}
-                                WHERE ${valueColumn} IS NOT NULL
-                                ORDER BY ${valueColumn}
-                            `;
-                        }
-                    } else {
-                        dropdownQuery = `
-                            SELECT DISTINCT
-                                ${valueColumn} AS value,
-                                ${config.columnName} AS label
-                            FROM ${config.tableName}
-                            WHERE ${config.columnName} IS NOT NULL 
-                            AND ${config.columnName} != ''
-                            ORDER BY ${config.columnName}
-                        `;
-                    }
-
-                    result = await new sql.Request().query(dropdownQuery);
-
-                    const seenLabels = new Set();
-                    const uniqueOptions = result.recordset.filter(item => {
-                        if (seenLabels.has(item.label)) {
-                            return false;
-                        }
-                        seenLabels.add(item.label);
-                        return true;
-                    });
-
+                } catch (error) {
+                    console.error(`Error fetching dropdown for filter ${config.filterType}:`, error);
                     return {
                         filterType: config.filterType,
                         tableId: config.tableId,
                         columnName: config.columnName,
                         tableName: config.tableName,
                         aliasName: config.aliasName,
-                        valueColumn: valueColumn,
-                        listTypes: config.listTypes,
                         FilterLevel: config.FilterLevel,
                         isGroupFilter: false,
-                        options: uniqueOptions,
-                        dataSummary: dataCheck.recordset[0]
-                    };
-
-                } else {
-                    return {
-                        filterType: config.filterType,
-                        tableId: config.tableId,
-                        columnName: config.columnName,
-                        tableName: config.tableName,
-                        aliasName: config.aliasName,
                         listTypes: config.listTypes,
-                        FilterLevel: config.FilterLevel,
-                        isGroupFilter: false,
-                        options: [], 
-                        error: "Invalid configuration - missing tableName or columnName"
+                        options: [],
+                        error: error.message
                     };
                 }
+            });
 
-            } catch (error) {
-                console.error(`Error fetching dropdown for filter ${config.filterType}:`, error);
-                return {
-                    filterType: config.filterType,
-                    tableId: config.tableId,
-                    columnName: config.columnName,
-                    tableName: config.tableName,
-                    aliasName: config.aliasName,
-                    FilterLevel: config.FilterLevel,
-                    isGroupFilter: false,
-                    listTypes: config.listTypes,
-                    options: [],
-                    error: error.message
-                };
-            }
-        });
 
-       
-        const groupFilterPromises = groupFilterResult.recordset.map(async (groupConfig) => {
-            try {
-                const actualTableName = groupConfig.Table_Name;
-                const actualColumnName = groupConfig.groupFilterColumn;
-                const levelId = groupConfig.Level_Id || 1; 
-                
-              
-                let groupFilterType = "GROUP_FILTER"; 
-                if (levelId == 1) {
-                    groupFilterType = "GROUP_FILTER";
-                } else if (levelId == 2) {
-                    groupFilterType = "GROUP_FILTER1";
-                } else if (levelId == 3) {
-                    groupFilterType = "GROUP_FILTER2";
-                }
-                
-                if (actualTableName && actualColumnName) {
-                    
-                    const columnCheckQuery = `
+            const groupFilterPromises = groupFilterResult.recordset.map(async (groupConfig) => {
+                try {
+                    const actualTableName = groupConfig.Table_Name;
+                    const actualColumnName = groupConfig.groupFilterColumn;
+                    const levelId = groupConfig.Level_Id || 1;
+
+
+                    let groupFilterType = "GROUP_FILTER";
+                    if (levelId == 1) {
+                        groupFilterType = "GROUP_FILTER";
+                    } else if (levelId == 2) {
+                        groupFilterType = "GROUP_FILTER1";
+                    } else if (levelId == 3) {
+                        groupFilterType = "GROUP_FILTER2";
+                    }
+
+                    if (actualTableName && actualColumnName) {
+
+                        const columnCheckQuery = `
                         SELECT COUNT(*) as columnExists
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_NAME = '${actualTableName}' 
                         AND COLUMN_NAME = '${actualColumnName}'
                     `;
-                    
-                    const columnCheck = await new sql.Request().query(columnCheckQuery);
-                    
-                    if (columnCheck.recordset[0].columnExists === 0) {
-                        return {
-                            filterType: groupFilterType,
-                            tableId: groupConfig.Table_Id,
-                            columnName: actualColumnName,
-                            tableName: actualTableName,
-                            aliasName: groupConfig.AliasName,
-                            listTypes: "1",
-                            FilterLevel: 3,
-                            Level_Id: levelId,
-                            isGroupFilter: true,
-                            options: [],
-                            error: `Group filter column '${actualColumnName}' not found in table '${actualTableName}'`
-                        };
-                    }
 
-                    const tableInfoQuery = `
+                        const columnCheck = await new sql.Request().query(columnCheckQuery);
+
+                        if (columnCheck.recordset[0].columnExists === 0) {
+                            return {
+                                filterType: groupFilterType,
+                                tableId: groupConfig.Table_Id,
+                                columnName: actualColumnName,
+                                tableName: actualTableName,
+                                aliasName: groupConfig.AliasName,
+                                listTypes: "1",
+                                FilterLevel: 3,
+                                Level_Id: levelId,
+                                isGroupFilter: true,
+                                options: [],
+                                error: `Group filter column '${actualColumnName}' not found in table '${actualTableName}'`
+                            };
+                        }
+
+                        const tableInfoQuery = `
                         SELECT COLUMN_NAME, DATA_TYPE
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_NAME = '${actualTableName}'
                         ORDER BY ORDINAL_POSITION
                     `;
-                    
-                    const tableInfo = await new sql.Request().query(tableInfoQuery);
-                    
-                    let valueColumn = null;
-                    
-                    const possibleIdColumns = tableInfo.recordset.filter(col => 
-                        col.COLUMN_NAME.toLowerCase() === 'id' ||
-                        col.COLUMN_NAME.toLowerCase().includes('_id') ||
-                        col.COLUMN_NAME.toLowerCase().includes('id_') ||
-                        col.COLUMN_NAME.toLowerCase().endsWith('id') ||
-                        col.COLUMN_NAME.toLowerCase() === actualTableName.replace('tbl_', '').toLowerCase() + 'id' ||
-                        col.COLUMN_NAME.toLowerCase() === actualTableName.replace('tbl_', '').toLowerCase() + '_id'
-                    );
 
-                    if (possibleIdColumns.length > 0) {
-                        valueColumn = possibleIdColumns[0].COLUMN_NAME;
-                    } else {
-                        valueColumn = actualColumnName;
-                    }
+                        const tableInfo = await new sql.Request().query(tableInfoQuery);
 
-                    const dataCheckQuery = `
+                        let valueColumn = null;
+
+                        const possibleIdColumns = tableInfo.recordset.filter(col =>
+                            col.COLUMN_NAME.toLowerCase() === 'id' ||
+                            col.COLUMN_NAME.toLowerCase().includes('_id') ||
+                            col.COLUMN_NAME.toLowerCase().includes('id_') ||
+                            col.COLUMN_NAME.toLowerCase().endsWith('id') ||
+                            col.COLUMN_NAME.toLowerCase() === actualTableName.replace('tbl_', '').toLowerCase() + 'id' ||
+                            col.COLUMN_NAME.toLowerCase() === actualTableName.replace('tbl_', '').toLowerCase() + '_id'
+                        );
+
+                        if (possibleIdColumns.length > 0) {
+                            valueColumn = possibleIdColumns[0].COLUMN_NAME;
+                        } else {
+                            valueColumn = actualColumnName;
+                        }
+
+                        const dataCheckQuery = `
                         SELECT 
                             COUNT(*) as totalRecords,
                             COUNT(${actualColumnName}) as nonNullCount,
@@ -1073,9 +1073,9 @@ const getMobileReportDropdowns = async (req, res) => {
                         FROM ${actualTableName}
                     `;
 
-                    const dataCheck = await new sql.Request().query(dataCheckQuery);
+                        const dataCheck = await new sql.Request().query(dataCheckQuery);
 
-                    let dropdownQuery = `
+                        let dropdownQuery = `
                         SELECT DISTINCT
                             ${valueColumn} AS value,
                             ${actualColumnName} AS label
@@ -1085,125 +1085,125 @@ const getMobileReportDropdowns = async (req, res) => {
                         ORDER BY ${actualColumnName}
                     `;
 
-                    const result = await new sql.Request().query(dropdownQuery);
+                        const result = await new sql.Request().query(dropdownQuery);
 
-                    const seenLabels = new Set();
-                    const uniqueOptions = result.recordset.filter(item => {
-                        if (seenLabels.has(item.label)) {
-                            return false;
-                        }
-                        seenLabels.add(item.label);
-                        return true;
-                    });
+                        const seenLabels = new Set();
+                        const uniqueOptions = result.recordset.filter(item => {
+                            if (seenLabels.has(item.label)) {
+                                return false;
+                            }
+                            seenLabels.add(item.label);
+                            return true;
+                        });
 
-                    return {
-                        filterType: groupFilterType,
-                        tableId: groupConfig.Table_Id,
-                        columnName: actualColumnName,
-                        tableName: actualTableName,
-                        aliasName: groupConfig.AliasName,
-                        valueColumn: valueColumn,
-                        listTypes: "1",
-                        FilterLevel: 3,
-                        Level_Id: levelId,
-                        isGroupFilter: true,
-                        options: uniqueOptions,
-                        dataSummary: dataCheck.recordset[0]
-                    };
+                        return {
+                            filterType: groupFilterType,
+                            tableId: groupConfig.Table_Id,
+                            columnName: actualColumnName,
+                            tableName: actualTableName,
+                            aliasName: groupConfig.AliasName,
+                            valueColumn: valueColumn,
+                            listTypes: "1",
+                            FilterLevel: 3,
+                            Level_Id: levelId,
+                            isGroupFilter: true,
+                            options: uniqueOptions,
+                            dataSummary: dataCheck.recordset[0]
+                        };
 
-                } else {
+                    } else {
+                        return {
+                            filterType: groupFilterType,
+                            tableId: groupConfig.Table_Id,
+                            columnName: groupConfig.groupFilterColumn,
+                            tableName: groupConfig.Table_Name,
+                            aliasName: groupConfig.AliasName,
+                            listTypes: "1",
+                            FilterLevel: 3,
+                            Level_Id: levelId,
+                            isGroupFilter: true,
+                            options: [],
+                            error: "Invalid group filter configuration"
+                        };
+                    }
+
+                } catch (error) {
+                    console.error(`Error fetching group filter dropdown:`, error);
+
+                    // Determine filter type based on Level_Id even in error case
+                    let groupFilterType = "GROUP_FILTER";
+                    const levelId = groupConfig.Level_Id || 1;
+                    if (levelId === 1) groupFilterType = "GROUP_FILTER";
+                    else if (levelId === 2) groupFilterType = "GROUP_FILTER1";
+                    else if (levelId === 3) groupFilterType = "GROUP_FILTER2";
+
                     return {
                         filterType: groupFilterType,
                         tableId: groupConfig.Table_Id,
                         columnName: groupConfig.groupFilterColumn,
                         tableName: groupConfig.Table_Name,
                         aliasName: groupConfig.AliasName,
-                        listTypes: "1",
                         FilterLevel: 3,
                         Level_Id: levelId,
                         isGroupFilter: true,
-                        options: [], 
-                        error: "Invalid group filter configuration"
+                        listTypes: "1",
+                        options: [],
+                        error: error.message
                     };
                 }
+            });
 
-            } catch (error) {
-                console.error(`Error fetching group filter dropdown:`, error);
-                
-                // Determine filter type based on Level_Id even in error case
-                let groupFilterType = "GROUP_FILTER";
-                const levelId = groupConfig.Level_Id || 1;
-                if (levelId === 1) groupFilterType = "GROUP_FILTER";
-                else if (levelId === 2) groupFilterType = "GROUP_FILTER1";
-                else if (levelId === 3) groupFilterType = "GROUP_FILTER2";
-                
-                return {
-                    filterType: groupFilterType,
-                    tableId: groupConfig.Table_Id,
-                    columnName: groupConfig.groupFilterColumn,
-                    tableName: groupConfig.Table_Name,
-                    aliasName: groupConfig.AliasName,
-                    FilterLevel: 3,
-                    Level_Id: levelId,
-                    isGroupFilter: true,
-                    listTypes: "1",
-                    options: [],
-                    error: error.message
-                };
-            }
-        });
+            // Execute all promises
+            const [regularResults, groupResults] = await Promise.all([
+                Promise.all(regularFilterPromises),
+                Promise.all(groupFilterPromises)
+            ]);
 
-        // Execute all promises
-        const [regularResults, groupResults] = await Promise.all([
-            Promise.all(regularFilterPromises),
-            Promise.all(groupFilterPromises)
-        ]);
+            // Combine results
+            const allResults = [...regularResults, ...groupResults];
 
-        // Combine results
-        const allResults = [...regularResults, ...groupResults];
+            // Sort results to maintain order: regular filters first (by Type), then group filters (by Level_Id)
+            const sortedResults = allResults.sort((a, b) => {
+                // Regular filters come first
+                if (!a.isGroupFilter && b.isGroupFilter) return -1;
+                if (a.isGroupFilter && !b.isGroupFilter) return 1;
 
-        // Sort results to maintain order: regular filters first (by Type), then group filters (by Level_Id)
-        const sortedResults = allResults.sort((a, b) => {
-            // Regular filters come first
-            if (!a.isGroupFilter && b.isGroupFilter) return -1;
-            if (a.isGroupFilter && !b.isGroupFilter) return 1;
-            
-            // Both regular filters - sort by filterType
-            if (!a.isGroupFilter && !b.isGroupFilter) {
-                return (a.filterType || 0) - (b.filterType || 0);
-            }
-            
-            // Both group filters - sort by Level_Id
-            if (a.isGroupFilter && b.isGroupFilter) {
-                return (a.Level_Id || 1) - (b.Level_Id || 1);
-            }
-            
-            return 0;
-        });
+                // Both regular filters - sort by filterType
+                if (!a.isGroupFilter && !b.isGroupFilter) {
+                    return (a.filterType || 0) - (b.filterType || 0);
+                }
 
-        const formattedResponse = sortedResults.map(item => ({
-            filterType: item.filterType,
-            tableId: item.tableId,
-            columnName: item.columnName,
-            tableName: item.tableName,
-            aliasName: item.aliasName,
-            valueColumn: item.valueColumn,
-            FilterLevel: item.FilterLevel,
-            Level_Id: item.Level_Id,
-            isGroupFilter: item.isGroupFilter,
-            listTypes: item.listTypes,
-            options: item.options,
-            error: item.error,
-            dataSummary: item.dataSummary
-        }));
-        
-        dataFound(res, formattedResponse);
+                // Both group filters - sort by Level_Id
+                if (a.isGroupFilter && b.isGroupFilter) {
+                    return (a.Level_Id || 1) - (b.Level_Id || 1);
+                }
 
-    } catch (error) {
-        console.error('Error in getMobileReportDropdowns:', error);
-        servError(error, res);
-    }
-};
+                return 0;
+            });
+
+            const formattedResponse = sortedResults.map(item => ({
+                filterType: item.filterType,
+                tableId: item.tableId,
+                columnName: item.columnName,
+                tableName: item.tableName,
+                aliasName: item.aliasName,
+                valueColumn: item.valueColumn,
+                FilterLevel: item.FilterLevel,
+                Level_Id: item.Level_Id,
+                isGroupFilter: item.isGroupFilter,
+                listTypes: item.listTypes,
+                options: item.options,
+                error: item.error,
+                dataSummary: item.dataSummary
+            }));
+
+            dataFound(res, formattedResponse);
+
+        } catch (error) {
+            console.error('Error in getMobileReportDropdowns:', error);
+            servError(error, res);
+        }
+    };
 
     const salesInvoiceReport = async (req, res) => {
         try {
@@ -1982,222 +1982,221 @@ const getMobileReportDropdowns = async (req, res) => {
             dataFound(res, response);
 
         } catch (err) {
-            console.error(err);
             servError(err, res);
         }
     };
 
-// const getSalesOrderInvoice = async (req, res) => {
-//     try {
+    // const getSalesOrderInvoice = async (req, res) => {
+    //     try {
 
-//              await uploadFile(req, res, 5, 'WhatsappPdf');
+    //              await uploadFile(req, res, 5, 'WhatsappPdf');
 
-//         const fileName = req?.file?.filename;
-//         const filePath = req?.file?.path;
+    //         const fileName = req?.file?.filename;
+    //         const filePath = req?.file?.path;
 
-//         if (!fileName) {
-//             return invalidInput(res, 'Product Photo is required');
-//         }
+    //         if (!fileName) {
+    //             return invalidInput(res, 'Product Photo is required');
+    //         }
 
-//         const { Do_Inv_No } = req.query;
+    //         const { Do_Inv_No } = req.query;
 
-//         const request = new sql.Request()
-//             .input('Do_Inv_No', sql.NVarChar, Do_Inv_No); 
-            
+    //         const request = new sql.Request()
+    //             .input('Do_Inv_No', sql.NVarChar, Do_Inv_No); 
 
-//         const result = await request.query(`
-//             DECLARE @FilteredOrders TABLE (Do_Id INT);
-            
-//             -- Get Delivery Orders based on Do_Inv_No
-//             INSERT INTO @FilteredOrders (Do_Id)
-//             SELECT dgi.Do_Id
-//             FROM tbl_Sales_Delivery_Gen_Info AS dgi
-//             WHERE 1 = 1
-//                 ${Do_Inv_No ? " AND dgi.Do_Inv_No = @Do_Inv_No " : ""}
-            
-//             -- Get Sales Order General Info based on filtered delivery orders
-//             SELECT 
-//                 so.*,
-//                 lol.*,
-//                 COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-//                 COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
-//                 COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-//                 COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-//                 COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
-//             FROM tbl_Sales_Order_Gen_Info AS so
-//             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
-//             LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
-//             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
-//             LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = so.Retailer_Id
-//             LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
-//             LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
-//             WHERE so.So_Id IN (
-//                 SELECT DISTINCT So_No 
-//                 FROM tbl_Sales_Delivery_Gen_Info 
-//                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
-//             );
 
-//             -- Get Sales Order Stock Info
-//             SELECT 
-//                 si.*,
-//                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-//                 COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
-//                 COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-//                 COALESCE(u.Units, 'not available') AS UOM,
-//                 COALESCE(b.Brand_Name, 'not available') AS BrandGet
-//             FROM tbl_Sales_Order_Stock_Info AS si
-//             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
-//             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
-//             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-//             WHERE si.Sales_Order_Id IN (
-//                 SELECT DISTINCT So_No 
-//                 FROM tbl_Sales_Delivery_Gen_Info 
-//                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
-//             );
+    //         const result = await request.query(`
+    //             DECLARE @FilteredOrders TABLE (Do_Id INT);
 
-//             -- Get Staff Involved
-//             SELECT 
-//                 sosi.So_Id, 
-//                 sosi.Involved_Emp_Id,
-//                 sosi.Cost_Center_Type_Id,
-//                 c.Cost_Center_Name AS EmpName,
-//                 cc.Cost_Category AS EmpType
-//             FROM tbl_Sales_Order_Staff_Info AS sosi
-//             LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
-//             LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
-//             WHERE sosi.So_Id IN (
-//                 SELECT DISTINCT So_No 
-//                 FROM tbl_Sales_Delivery_Gen_Info 
-//                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
-//             );
+    //             -- Get Delivery Orders based on Do_Inv_No
+    //             INSERT INTO @FilteredOrders (Do_Id)
+    //             SELECT dgi.Do_Id
+    //             FROM tbl_Sales_Delivery_Gen_Info AS dgi
+    //             WHERE 1 = 1
+    //                 ${Do_Inv_No ? " AND dgi.Do_Inv_No = @Do_Inv_No " : ""}
 
-//             -- Get Delivery General Info (filtered by Do_Inv_No)
-//             SELECT 
-//                 dgi.*,
-//                 lol.Ledger_Name AS Retailer_Name,
-//                 bm.BranchName AS Branch_Name,
-//                 st.Status AS DeliveryStatusName,
-//                 COALESCE((
-//                     SELECT SUM(collected_amount)
-//                     FROM tbl_Sales_Receipt_Details_Info
-//                     WHERE bill_id = dgi.Do_Id
-//                 ), 0) AS receiptsTotalAmount
-//             FROM tbl_Sales_Delivery_Gen_Info AS dgi
-//             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
-//             LEFT JOIN tbl_Ledger_Lol as lol ON lol.Ret_Id=rm.Retailer_Id
-//             LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
-//             LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
-//             WHERE dgi.Do_Id IN (SELECT Do_Id FROM @FilteredOrders);
+    //             -- Get Sales Order General Info based on filtered delivery orders
+    //             SELECT 
+    //                 so.*,
+    //                 lol.*,
+    //                 COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+    //                 COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+    //                 COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+    //                 COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+    //                 COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+    //             FROM tbl_Sales_Order_Gen_Info AS so
+    //             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+    //             LEFT JOIN tbl_Users AS sp ON sp.UserId = so.Sales_Person_Id
+    //             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+    //             LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = so.Retailer_Id
+    //             LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
+    //             LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+    //             WHERE so.So_Id IN (
+    //                 SELECT DISTINCT So_No 
+    //                 FROM tbl_Sales_Delivery_Gen_Info 
+    //                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+    //             );
 
-//             -- Get Delivery Stock Items (filtered by Do_Inv_No)
-//             SELECT 
-//                 oi.*,
-//                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-//                 COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-//                 COALESCE(u.Units, 'not available') AS UOM,
-//                 COALESCE(b.Brand_Name, 'not available') AS BrandGet
-//             FROM tbl_Sales_Delivery_Stock_Info AS oi
-//             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-//             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-//             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-//             WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredOrders);`
-//         );
+    //             -- Get Sales Order Stock Info
+    //             SELECT 
+    //                 si.*,
+    //                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+    //                 COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+    //                 COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+    //                 COALESCE(u.Units, 'not available') AS UOM,
+    //                 COALESCE(b.Brand_Name, 'not available') AS BrandGet
+    //             FROM tbl_Sales_Order_Stock_Info AS si
+    //             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+    //             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+    //             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+    //             WHERE si.Sales_Order_Id IN (
+    //                 SELECT DISTINCT So_No 
+    //                 FROM tbl_Sales_Delivery_Gen_Info 
+    //                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+    //             );
 
-//         const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
+    //             -- Get Staff Involved
+    //             SELECT 
+    //                 sosi.So_Id, 
+    //                 sosi.Involved_Emp_Id,
+    //                 sosi.Cost_Center_Type_Id,
+    //                 c.Cost_Center_Name AS EmpName,
+    //                 cc.Cost_Category AS EmpType
+    //             FROM tbl_Sales_Order_Staff_Info AS sosi
+    //             LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+    //             LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+    //             WHERE sosi.So_Id IN (
+    //                 SELECT DISTINCT So_No 
+    //                 FROM tbl_Sales_Delivery_Gen_Info 
+    //                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredOrders)
+    //             );
 
-//         if (DeliveryData.length > 0) {
-//             const resData = DeliveryData.map(delivery => {
-//                 // Find related sales order
-//                 const relatedOrder = OrderData.find(order => 
-//                     isEqualNumber(order.So_Id, delivery.So_No)
-//                 ) || {};
-                
-//                 // Find order products for this sales order
-//                 const orderProducts = ProductDetails.filter(p =>
-//                     isEqualNumber(p.Sales_Order_Id, delivery.So_No)
-//                 );
-                
-//                 // Find staff involved for this sales order
-//                 const staffInvolved = StaffInvolved.filter(s =>
-//                     isEqualNumber(s.So_Id, delivery.So_No)
-//                 );
-                
-//                 // Get delivery items for this specific delivery
-//                 const deliveryItems = DeliveryItems.filter(item =>
-//                     isEqualNumber(item.Delivery_Order_Id, delivery.Do_Id)
-//                 ).map(item => ({
-//                     ...item
-//                 }));
+    //             -- Get Delivery General Info (filtered by Do_Inv_No)
+    //             SELECT 
+    //                 dgi.*,
+    //                 lol.Ledger_Name AS Retailer_Name,
+    //                 bm.BranchName AS Branch_Name,
+    //                 st.Status AS DeliveryStatusName,
+    //                 COALESCE((
+    //                     SELECT SUM(collected_amount)
+    //                     FROM tbl_Sales_Receipt_Details_Info
+    //                     WHERE bill_id = dgi.Do_Id
+    //                 ), 0) AS receiptsTotalAmount
+    //             FROM tbl_Sales_Delivery_Gen_Info AS dgi
+    //             LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dgi.Retailer_Id
+    //             LEFT JOIN tbl_Ledger_Lol as lol ON lol.Ret_Id=rm.Retailer_Id
+    //             LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = dgi.Branch_Id
+    //             LEFT JOIN tbl_Status AS st ON st.Status_Id = dgi.Delivery_Status
+    //             WHERE dgi.Do_Id IN (SELECT Do_Id FROM @FilteredOrders);
 
-//                 // Calculate total ordered quantity from sales order
-//                 const totalOrderedQty = orderProducts.reduce(
-//                     (sum, p) => sum + toNumber(p.Bill_Qty),
-//                     0
-//                 );
-                
-//                 // Calculate total delivered quantity for this sales order across all deliveries
-//                 const allDeliveryItemsForOrder = DeliveryItems.filter(item => {
-//                     const delivery = DeliveryData.find(d => 
-//                         isEqualNumber(d.Do_Id, item.Delivery_Order_Id)
-//                     );
-//                     return delivery && isEqualNumber(delivery.So_No, delivery.So_No);
-//                 });
-                
-//                 const totalDeliveredQty = allDeliveryItemsForOrder.reduce(
-//                     (sum, p) => sum + toNumber(p.Bill_Qty),
-//                     0
-//                 );
+    //             -- Get Delivery Stock Items (filtered by Do_Inv_No)
+    //             SELECT 
+    //                 oi.*,
+    //                 COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+    //                 COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+    //                 COALESCE(u.Units, 'not available') AS UOM,
+    //                 COALESCE(b.Brand_Name, 'not available') AS BrandGet
+    //             FROM tbl_Sales_Delivery_Stock_Info AS oi
+    //             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+    //             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+    //             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+    //             WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredOrders);`
+    //         );
 
-//                 const orderStatus = totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+    //         const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = result.recordsets.map(toArray);
 
-//                 return {
-//                     ...delivery,
-//                     SalesOrderData: {
-//                         ...relatedOrder,
-//                         Products_List: orderProducts.map(p => ({ ...p })),
-//                         Staff_Involved_List: staffInvolved,
-//                         OrderStatus: orderStatus,
-//                         TotalOrderedQty: totalOrderedQty,
-//                         TotalDeliveredQty: totalDeliveredQty
-//                     },
-//                     DeliveryItems: deliveryItems,
-//                     OrderStatus: orderStatus
-//                 };
-//             });
+    //         if (DeliveryData.length > 0) {
+    //             const resData = DeliveryData.map(delivery => {
+    //                 // Find related sales order
+    //                 const relatedOrder = OrderData.find(order => 
+    //                     isEqualNumber(order.So_Id, delivery.So_No)
+    //                 ) || {};
 
-//             dataFound(res, resData);
-//         } else {
-//             noData(res);
-//         }
+    //                 // Find order products for this sales order
+    //                 const orderProducts = ProductDetails.filter(p =>
+    //                     isEqualNumber(p.Sales_Order_Id, delivery.So_No)
+    //                 );
 
-//     } catch (e) {
-//         servError(e, res);
-//     }
-// };
+    //                 // Find staff involved for this sales order
+    //                 const staffInvolved = StaffInvolved.filter(s =>
+    //                     isEqualNumber(s.So_Id, delivery.So_No)
+    //                 );
 
-const getSalesOrderInvoice = async (req, res) => {
-    let uploadedFileName = null;
-    let uploadedFilePath = null;
+    //                 // Get delivery items for this specific delivery
+    //                 const deliveryItems = DeliveryItems.filter(item =>
+    //                     isEqualNumber(item.Delivery_Order_Id, delivery.Do_Id)
+    //                 ).map(item => ({
+    //                     ...item
+    //                 }));
 
-    try {
-        // Handle file upload first (if any)
-        if (req.file) {
-            await uploadFile(req, res, 5, 'WhatsappPdf');
-            uploadedFileName = req?.file?.filename;
-            uploadedFilePath = req?.file?.path;
-        }
+    //                 // Calculate total ordered quantity from sales order
+    //                 const totalOrderedQty = orderProducts.reduce(
+    //                     (sum, p) => sum + toNumber(p.Bill_Qty),
+    //                     0
+    //                 );
 
-        const { Do_Inv_No } = req.query;
+    //                 // Calculate total delivered quantity for this sales order across all deliveries
+    //                 const allDeliveryItemsForOrder = DeliveryItems.filter(item => {
+    //                     const delivery = DeliveryData.find(d => 
+    //                         isEqualNumber(d.Do_Id, item.Delivery_Order_Id)
+    //                     );
+    //                     return delivery && isEqualNumber(delivery.So_No, delivery.So_No);
+    //                 });
 
-        // Validate input
-        if (!Do_Inv_No) {
-            return invalidInput(res, 'Invoice number is required');
-        }
+    //                 const totalDeliveredQty = allDeliveryItemsForOrder.reduce(
+    //                     (sum, p) => sum + toNumber(p.Bill_Qty),
+    //                     0
+    //                 );
 
-        const request = new sql.Request()
-            .input('Do_Inv_No', sql.NVarChar, Do_Inv_No);
+    //                 const orderStatus = totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
 
-        const result = await request.query(`
+    //                 return {
+    //                     ...delivery,
+    //                     SalesOrderData: {
+    //                         ...relatedOrder,
+    //                         Products_List: orderProducts.map(p => ({ ...p })),
+    //                         Staff_Involved_List: staffInvolved,
+    //                         OrderStatus: orderStatus,
+    //                         TotalOrderedQty: totalOrderedQty,
+    //                         TotalDeliveredQty: totalDeliveredQty
+    //                     },
+    //                     DeliveryItems: deliveryItems,
+    //                     OrderStatus: orderStatus
+    //                 };
+    //             });
+
+    //             dataFound(res, resData);
+    //         } else {
+    //             noData(res);
+    //         }
+
+    //     } catch (e) {
+    //         servError(e, res);
+    //     }
+    // };
+
+    const getSalesOrderInvoice = async (req, res) => {
+        let uploadedFileName = null;
+        let uploadedFilePath = null;
+
+        try {
+            // Handle file upload first (if any)
+            if (req.file) {
+                await uploadFile(req, res, 5, 'WhatsappPdf');
+                uploadedFileName = req?.file?.filename;
+                uploadedFilePath = req?.file?.path;
+            }
+
+            const { Do_Inv_No } = req.query;
+
+            // Validate input
+            if (!Do_Inv_No) {
+                return invalidInput(res, 'Invoice number is required');
+            }
+
+            const request = new sql.Request()
+                .input('Do_Inv_No', sql.NVarChar, Do_Inv_No);
+
+            const result = await request.query(`
             DECLARE @FilteredOrders TABLE (Do_Id INT);
             
             -- Get Delivery Orders based on Do_Inv_No
@@ -2292,470 +2291,470 @@ const getSalesOrderInvoice = async (req, res) => {
             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
             WHERE oi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredOrders);`
-        );
-
-        const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] = 
-            result.recordsets.map(recordset => toArray(recordset));
-
-        if (DeliveryData.length === 0) {
-            return noData(res);
-        }
-
-        // Process and combine the data
-        const processedData = DeliveryData.map(delivery => {
-            // Find related sales order
-            const relatedOrder = OrderData.find(order => 
-                isEqualNumber(order.So_Id, delivery.So_No)
-            ) || {};
-            
-            // Find order products for this sales order
-            const orderProducts = ProductDetails.filter(p =>
-                isEqualNumber(p.Sales_Order_Id, delivery.So_No)
-            );
-            
-            // Find staff involved for this sales order
-            const staffInvolved = StaffInvolved.filter(s =>
-                isEqualNumber(s.So_Id, delivery.So_No)
-            );
-            
-            // Get delivery items for this specific delivery
-            const deliveryItems = DeliveryItems.filter(item =>
-                isEqualNumber(item.Delivery_Order_Id, delivery.Do_Id)
             );
 
-            // Calculate totals
-            const totalOrderedQty = orderProducts.reduce(
-                (sum, p) => sum + toNumber(p.Bill_Qty),
-                0
-            );
-            
-            const totalDeliveredQty = DeliveryItems.filter(item => {
-                const itemDelivery = DeliveryData.find(d => 
-                    isEqualNumber(d.Do_Id, item.Delivery_Order_Id)
-                );
-                return itemDelivery && isEqualNumber(itemDelivery.So_No, delivery.So_No);
-            }).reduce(
-                (sum, item) => sum + toNumber(item.Bill_Qty),
-                0
-            );
+            const [OrderData, ProductDetails, StaffInvolved, DeliveryData, DeliveryItems] =
+                result.recordsets.map(recordset => toArray(recordset));
 
-            const orderStatus = totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
-
-            return {
-                ...delivery,
-                SalesOrderData: {
-                    ...relatedOrder,
-                    Products_List: orderProducts,
-                    Staff_Involved_List: staffInvolved,
-                    OrderStatus: orderStatus,
-                    TotalOrderedQty: totalOrderedQty,
-                    TotalDeliveredQty: totalDeliveredQty
-                },
-                DeliveryItems: deliveryItems,
-                OrderStatus: orderStatus,
-                uploadedFile: uploadedFileName ? {
-                    name: uploadedFileName,
-                    path: uploadedFilePath
-                } : null
-            };
-        });
-
-        dataFound(res, processedData);
-
-    } catch (error) {
-        console.error('Error in getSalesOrderInvoice:', error);
-        
-        // Clean up uploaded file if error occurred
-        if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
-            fs.unlinkSync(uploadedFilePath);
-        }
-        
-        servError(error, res);
-    }
-};
-
-
-// const getSalesOrderInvoiceDetailsForPdf=async(req,res)=>{
-//     try {
-//         const { invoiceId } = req.params;
-//         const { invoiceData, companyId, forceRegenerate } = req.body;
-        
-//         // Create uploads directory if it doesn't exist
-//         const uploadDir = `uploads/${companyId}/invoices/`;
-//         if (!fs.existsSync(uploadDir)) {
-//             fs.mkdirSync(uploadDir, { recursive: true });
-//         }
-        
-//         // Check if PDF already exists
-//         const pdfFileName = `invoice_${invoiceId}_${Date.now()}.pdf`;
-//         const pdfPath = path.join(uploadDir, pdfFileName);
-        
-//         // Create a new PDF document
-//         const doc = new PDFDocument({ margin: 50 });
-        
-//         // Create write stream
-//         const writeStream = fs.createWriteStream(pdfPath);
-//         doc.pipe(writeStream);
-        
-//         // Add content to PDF
-//         doc.fontSize(20).text('INVOICE', { align: 'center' });
-//         doc.moveDown();
-        
-//         doc.fontSize(12).text(`Invoice Number: ${invoiceData.Do_Inv_No}`);
-//         doc.text(`Date: ${new Date(invoiceData.Do_Date).toLocaleDateString()}`);
-//         doc.text(`Customer: ${invoiceData.retailerNameGet || invoiceData.Retailer_Name}`);
-//         doc.moveDown();
-        
-//         // Add invoice items table
-//         if (invoiceData.stockDetails && invoiceData.stockDetails.length > 0) {
-//             doc.fontSize(14).text('Items:', { underline: true });
-//             doc.moveDown(0.5);
-            
-//             invoiceData.stockDetails.forEach((item, index) => {
-//                 doc.text(`${index + 1}. ${item.Item_Name || 'Item'}: ${item.Bill_Qty || 0} x ₹${item.Item_Rate || 0} = ₹${(item.Bill_Qty || 0) * (item.Item_Rate || 0)}`);
-//             });
-//         }
-        
-//         doc.moveDown();
-//         doc.fontSize(16).text(`Total: ₹${invoiceData.Total_Invoice_value || 0}`, { align: 'right' });
-        
-//         // Add footer
-//         doc.moveDown(2);
-//         doc.fontSize(10).text('Thank you for your business!', { align: 'center' });
-        
-//         // Finalize PDF
-//         doc.end();
-        
-//         writeStream.on('finish', () => {
-//             // Generate the URL for the PDF
-//             const pdfUrl = `/uploads/${companyId}/invoices/${pdfFileName}`;
-//             const fullUrl = `${req.protocol}://${req.get('host')}${pdfUrl}`;
-            
-//             // Get file stats
-//             const stats = fs.statSync(pdfPath);
-            
-//             res.json({
-//                 success: true,
-//                 message: 'PDF generated successfully',
-//                 data: {
-//                     pdfUrl: fullUrl,
-//                     fileName: pdfFileName,
-//                     size: stats.size,
-//                     path: pdfPath
-//                 }
-//             });
-//         });
-        
-//         writeStream.on('error', (error) => {
-//             console.error('PDF generation error:', error);
-//             res.status(500).json({
-//                 success: false,
-//                 message: 'Failed to generate PDF'
-//             });
-//         });
-        
-//     } catch (error) {
-//         console.error('PDF generation error:', error);
-//         res.status(500).json({
-//             success: false,
-//             message: 'Failed to generate PDF'
-//         });
-//     }
-// }
-
-
-
-const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
-    try {
-         const invoiceId = req.params.invoiceId || req.body.invoiceId;
-        const { companyId, invoiceData } = req.body;
-    
-        if (!invoiceId || !companyId || !invoiceData) {
-            return invalidInput(res, 'Invoice ID, company ID, and invoice data are required');
-        }
-        
-   
-        const uploadDir = path.join(__dirname, '..', 'uploads', String(companyId), 'invoices');
-        
-        try {
-            await fs.mkdir(uploadDir, { recursive: true });
-        } catch (dirError) {
-            console.error('Error creating directory:', dirError);
-            return servError(dirError, res);
-        }
-        
-    
-        const sanitizedInvoiceId = invoiceId.replace(/[\/]/g, '_').replace(/[^a-zA-Z0-9-_]/g, '');
-        const pdfFileName = `${sanitizedInvoiceId}.pdf`;
-        const pdfPath = path.join(uploadDir, pdfFileName);
-  
-        const existingFiles = await fs.readdir(uploadDir);
-        const existingPdf = existingFiles.find(file => 
-            file === pdfFileName || file.includes(sanitizedInvoiceId)
-        );
-        
-        if (existingPdf) {
-            const existingPath = path.join(uploadDir, existingPdf);
-            const stats = await fs.stat(existingPath);
-            
-            return dataFound(res, {
-                pdfUrl: `${req.protocol}://${req.get('host')}/api/sales/downloadPdf/${encodeURIComponent(invoiceId)}`,
-                fileName: existingPdf,
-                size: stats.size,
-                path: existingPath,
-                existing: true,
-                directUrl: `${req.protocol}://${req.get('host')}/api/sales/invoice/${encodeURIComponent(invoiceId)}.pdf`
-            });
-        }
-        
-       
-        const doc = new PDFDocument({ 
-            margin: 50,
-            size: 'A4',
-            info: {
-                Title: `Invoice ${invoiceData.Do_Inv_No}`,
-                Author: 'System',
-                Subject: 'Invoice Document',
-                Keywords: 'invoice, sales, order',
-                CreationDate: new Date()
+            if (DeliveryData.length === 0) {
+                return noData(res);
             }
-        });
-        
-    
-        const writeStream = fsSync.createWriteStream(pdfPath);
-        doc.pipe(writeStream);
-        
-      
-        doc.fontSize(24)
-           .font('Helvetica-Bold')
-           .text('SALES INVOICE', { align: 'center' });
-        
-        doc.moveDown();
-        doc.lineCap('butt')
-           .lineWidth(2)
-           .moveTo(50, doc.y)
-           .lineTo(550, doc.y)
-           .stroke();
-        
-        doc.moveDown();
-        
-       
-        doc.fontSize(10)
-           .font('Helvetica')
-           .text('SM TRADERS', { align: 'right' })
-           .text('Address Line 1', { align: 'right' })
-           .text('Address Line 2', { align: 'right' })
-           .text('GSTIN:', { align: 'right' });
-        
-        doc.moveDown(2);
-        
 
-        const leftColumnX = 50;
-        const rightColumnX = 300;
-        let currentY = doc.y;
-        
+            // Process and combine the data
+            const processedData = DeliveryData.map(delivery => {
+                // Find related sales order
+                const relatedOrder = OrderData.find(order =>
+                    isEqualNumber(order.So_Id, delivery.So_No)
+                ) || {};
 
-        doc.fontSize(11)
-           .font('Helvetica-Bold')
-           .text('BILL TO:', leftColumnX, currentY);
-        
-        doc.font('Helvetica')
-           .fontSize(10)
-           .text(invoiceData.retailerNameGet || invoiceData.Retailer_Name || 'Customer', leftColumnX, currentY + 20)
-            .text(invoiceData.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 })
-           .text(`GSTIN: ${invoiceData.GST_No || '-'}`, leftColumnX, currentY + 50);
-        
-      
-        doc.font('Helvetica-Bold')
-           .text('INVOICE DETAILS:', rightColumnX, currentY);
-        
-        doc.font('Helvetica')
-           .text(`Invoice No: ${invoiceData.Do_Inv_No}`, rightColumnX, currentY + 20)
-           .text(`Date: ${new Date(invoiceData.Do_Date || new Date()).toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
-           .text(`Order No: ${invoiceData.So_No || invoiceData.Do_No || 'N/A'}`, rightColumnX, currentY + 50);
-        
-        currentY += 80;
-        
-       
-        doc.moveTo(leftColumnX, currentY)
-           .lineTo(550, currentY)
-           .stroke();
-        
-        doc.fontSize(10)
-           .font('Helvetica-Bold')
-           .text('S.No', leftColumnX, currentY + 10)
-           .text('Product', leftColumnX + 40, currentY + 10)
-           .text('HSN/SAC', leftColumnX + 250, currentY + 10)
-           .text('Qty', leftColumnX + 320, currentY + 10)
-           .text('Rate', leftColumnX + 370, currentY + 10)
-           .text('Amount', leftColumnX + 430, currentY + 10);
-        
-        currentY += 30;
-        
+                // Find order products for this sales order
+                const orderProducts = ProductDetails.filter(p =>
+                    isEqualNumber(p.Sales_Order_Id, delivery.So_No)
+                );
 
-        let grandTotal = 0;
-        let subtotal = 0;
-        
-        if (invoiceData.stockDetails && invoiceData.stockDetails.length > 0) {
-            invoiceData.stockDetails.forEach((item, index) => {
-                const itemName = item.Item_Name || item.Product_Name || 'Item';
-                const qty = Number(item.Bill_Qty) || 0;
-                const rate = Number(item.Item_Rate) || 0;
-                const amount = qty * rate;
-                subtotal += amount;
-                
-          
-                const displayName = itemName.length > 30 ? 
-                    itemName.substring(0, 27) + '...' : itemName;
-                
-                doc.font('Helvetica')
-                   .fontSize(9)
-                   .text(`${index + 1}`, leftColumnX, currentY)
-                   .text(displayName, leftColumnX + 40, currentY)
-                   .text(item.HSN_Code || '-', leftColumnX + 250, currentY)
-                   .text(qty.toFixed(2), leftColumnX + 320, currentY)
-                   .text(rate.toFixed(2), leftColumnX + 370, currentY)
-                   .text(amount.toFixed(2), leftColumnX + 430, currentY);
-                
-                currentY += 20;
-                
-         
-                if (currentY > 700) {
-                    doc.addPage();
-                    currentY = 50;
+                // Find staff involved for this sales order
+                const staffInvolved = StaffInvolved.filter(s =>
+                    isEqualNumber(s.So_Id, delivery.So_No)
+                );
+
+                // Get delivery items for this specific delivery
+                const deliveryItems = DeliveryItems.filter(item =>
+                    isEqualNumber(item.Delivery_Order_Id, delivery.Do_Id)
+                );
+
+                // Calculate totals
+                const totalOrderedQty = orderProducts.reduce(
+                    (sum, p) => sum + toNumber(p.Bill_Qty),
+                    0
+                );
+
+                const totalDeliveredQty = DeliveryItems.filter(item => {
+                    const itemDelivery = DeliveryData.find(d =>
+                        isEqualNumber(d.Do_Id, item.Delivery_Order_Id)
+                    );
+                    return itemDelivery && isEqualNumber(itemDelivery.So_No, delivery.So_No);
+                }).reduce(
+                    (sum, item) => sum + toNumber(item.Bill_Qty),
+                    0
+                );
+
+                const orderStatus = totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+
+                return {
+                    ...delivery,
+                    SalesOrderData: {
+                        ...relatedOrder,
+                        Products_List: orderProducts,
+                        Staff_Involved_List: staffInvolved,
+                        OrderStatus: orderStatus,
+                        TotalOrderedQty: totalOrderedQty,
+                        TotalDeliveredQty: totalDeliveredQty
+                    },
+                    DeliveryItems: deliveryItems,
+                    OrderStatus: orderStatus,
+                    uploadedFile: uploadedFileName ? {
+                        name: uploadedFileName,
+                        path: uploadedFilePath
+                    } : null
+                };
+            });
+
+            dataFound(res, processedData);
+
+        } catch (error) {
+            console.error('Error in getSalesOrderInvoice:', error);
+
+            // Clean up uploaded file if error occurred
+            if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
+                fs.unlinkSync(uploadedFilePath);
+            }
+
+            servError(error, res);
+        }
+    };
+
+
+    // const getSalesOrderInvoiceDetailsForPdf=async(req,res)=>{
+    //     try {
+    //         const { invoiceId } = req.params;
+    //         const { invoiceData, companyId, forceRegenerate } = req.body;
+
+    //         // Create uploads directory if it doesn't exist
+    //         const uploadDir = `uploads/${companyId}/invoices/`;
+    //         if (!fs.existsSync(uploadDir)) {
+    //             fs.mkdirSync(uploadDir, { recursive: true });
+    //         }
+
+    //         // Check if PDF already exists
+    //         const pdfFileName = `invoice_${invoiceId}_${Date.now()}.pdf`;
+    //         const pdfPath = path.join(uploadDir, pdfFileName);
+
+    //         // Create a new PDF document
+    //         const doc = new PDFDocument({ margin: 50 });
+
+    //         // Create write stream
+    //         const writeStream = fs.createWriteStream(pdfPath);
+    //         doc.pipe(writeStream);
+
+    //         // Add content to PDF
+    //         doc.fontSize(20).text('INVOICE', { align: 'center' });
+    //         doc.moveDown();
+
+    //         doc.fontSize(12).text(`Invoice Number: ${invoiceData.Do_Inv_No}`);
+    //         doc.text(`Date: ${new Date(invoiceData.Do_Date).toLocaleDateString()}`);
+    //         doc.text(`Customer: ${invoiceData.retailerNameGet || invoiceData.Retailer_Name}`);
+    //         doc.moveDown();
+
+    //         // Add invoice items table
+    //         if (invoiceData.stockDetails && invoiceData.stockDetails.length > 0) {
+    //             doc.fontSize(14).text('Items:', { underline: true });
+    //             doc.moveDown(0.5);
+
+    //             invoiceData.stockDetails.forEach((item, index) => {
+    //                 doc.text(`${index + 1}. ${item.Item_Name || 'Item'}: ${item.Bill_Qty || 0} x ₹${item.Item_Rate || 0} = ₹${(item.Bill_Qty || 0) * (item.Item_Rate || 0)}`);
+    //             });
+    //         }
+
+    //         doc.moveDown();
+    //         doc.fontSize(16).text(`Total: ₹${invoiceData.Total_Invoice_value || 0}`, { align: 'right' });
+
+    //         // Add footer
+    //         doc.moveDown(2);
+    //         doc.fontSize(10).text('Thank you for your business!', { align: 'center' });
+
+    //         // Finalize PDF
+    //         doc.end();
+
+    //         writeStream.on('finish', () => {
+    //             // Generate the URL for the PDF
+    //             const pdfUrl = `/uploads/${companyId}/invoices/${pdfFileName}`;
+    //             const fullUrl = `${req.protocol}://${req.get('host')}${pdfUrl}`;
+
+    //             // Get file stats
+    //             const stats = fs.statSync(pdfPath);
+
+    //             res.json({
+    //                 success: true,
+    //                 message: 'PDF generated successfully',
+    //                 data: {
+    //                     pdfUrl: fullUrl,
+    //                     fileName: pdfFileName,
+    //                     size: stats.size,
+    //                     path: pdfPath
+    //                 }
+    //             });
+    //         });
+
+    //         writeStream.on('error', (error) => {
+    //             console.error('PDF generation error:', error);
+    //             res.status(500).json({
+    //                 success: false,
+    //                 message: 'Failed to generate PDF'
+    //             });
+    //         });
+
+    //     } catch (error) {
+    //         console.error('PDF generation error:', error);
+    //         res.status(500).json({
+    //             success: false,
+    //             message: 'Failed to generate PDF'
+    //         });
+    //     }
+    // }
+
+
+
+    const getSalesOrderInvoiceDetailsForPdf = async (req, res) => {
+        try {
+            const invoiceId = req.params.invoiceId || req.body.invoiceId;
+            const { companyId, invoiceData } = req.body;
+
+            if (!invoiceId || !companyId || !invoiceData) {
+                return invalidInput(res, 'Invoice ID, company ID, and invoice data are required');
+            }
+
+
+            const uploadDir = path.join(__dirname, '..', 'uploads', String(companyId), 'invoices');
+
+            try {
+                await fs.mkdir(uploadDir, { recursive: true });
+            } catch (dirError) {
+                console.error('Error creating directory:', dirError);
+                return servError(dirError, res);
+            }
+
+
+            const sanitizedInvoiceId = invoiceId.replace(/[\/]/g, '_').replace(/[^a-zA-Z0-9-_]/g, '');
+            const pdfFileName = `${sanitizedInvoiceId}.pdf`;
+            const pdfPath = path.join(uploadDir, pdfFileName);
+
+            const existingFiles = await fs.readdir(uploadDir);
+            const existingPdf = existingFiles.find(file =>
+                file === pdfFileName || file.includes(sanitizedInvoiceId)
+            );
+
+            if (existingPdf) {
+                const existingPath = path.join(uploadDir, existingPdf);
+                const stats = await fs.stat(existingPath);
+
+                return dataFound(res, {
+                    pdfUrl: `${req.protocol}://${req.get('host')}/api/sales/downloadPdf/${encodeURIComponent(invoiceId)}`,
+                    fileName: existingPdf,
+                    size: stats.size,
+                    path: existingPath,
+                    existing: true,
+                    directUrl: `${req.protocol}://${req.get('host')}/api/sales/invoice/${encodeURIComponent(invoiceId)}.pdf`
+                });
+            }
+
+
+            const doc = new PDFDocument({
+                margin: 50,
+                size: 'A4',
+                info: {
+                    Title: `Invoice ${invoiceData.Do_Inv_No}`,
+                    Author: 'System',
+                    Subject: 'Invoice Document',
+                    Keywords: 'invoice, sales, order',
+                    CreationDate: new Date()
                 }
             });
-        }
-        
 
-        doc.moveTo(leftColumnX, currentY)
-           .lineTo(550, currentY)
-           .stroke();
-        
-        currentY += 20;
-        
 
-        const totalsX = 380;
-        
-        doc.fontSize(10)
-           .font('Helvetica')
-           .text('Subtotal:', totalsX, currentY)
-           .text(subtotal.toFixed(2), totalsX + 100, currentY);
-        
-        currentY += 20;
-        
-        if (invoiceData.CSGT_Total > 0) {
-            doc.text(`CGST (${invoiceData.CSGT_Percentage || 9}%):`, totalsX, currentY)
-               .text((invoiceData.CSGT_Total || 0).toFixed(2), totalsX + 100, currentY);
+            const writeStream = fsSync.createWriteStream(pdfPath);
+            doc.pipe(writeStream);
+
+
+            doc.fontSize(24)
+                .font('Helvetica-Bold')
+                .text('SALES INVOICE', { align: 'center' });
+
+            doc.moveDown();
+            doc.lineCap('butt')
+                .lineWidth(2)
+                .moveTo(50, doc.y)
+                .lineTo(550, doc.y)
+                .stroke();
+
+            doc.moveDown();
+
+
+            doc.fontSize(10)
+                .font('Helvetica')
+                .text('SM TRADERS', { align: 'right' })
+                .text('Address Line 1', { align: 'right' })
+                .text('Address Line 2', { align: 'right' })
+                .text('GSTIN:', { align: 'right' });
+
+            doc.moveDown(2);
+
+
+            const leftColumnX = 50;
+            const rightColumnX = 300;
+            let currentY = doc.y;
+
+
+            doc.fontSize(11)
+                .font('Helvetica-Bold')
+                .text('BILL TO:', leftColumnX, currentY);
+
+            doc.font('Helvetica')
+                .fontSize(10)
+                .text(invoiceData.retailerNameGet || invoiceData.Retailer_Name || 'Customer', leftColumnX, currentY + 20)
+                .text(invoiceData.Party_Mailing_Address || '-', leftColumnX, currentY + 35, { width: 230 })
+                .text(`GSTIN: ${invoiceData.GST_No || '-'}`, leftColumnX, currentY + 50);
+
+
+            doc.font('Helvetica-Bold')
+                .text('INVOICE DETAILS:', rightColumnX, currentY);
+
+            doc.font('Helvetica')
+                .text(`Invoice No: ${invoiceData.Do_Inv_No}`, rightColumnX, currentY + 20)
+                .text(`Date: ${new Date(invoiceData.Do_Date || new Date()).toLocaleDateString('en-GB')}`, rightColumnX, currentY + 35)
+                .text(`Order No: ${invoiceData.So_No || invoiceData.Do_No || 'N/A'}`, rightColumnX, currentY + 50);
+
+            currentY += 80;
+
+
+            doc.moveTo(leftColumnX, currentY)
+                .lineTo(550, currentY)
+                .stroke();
+
+            doc.fontSize(10)
+                .font('Helvetica-Bold')
+                .text('S.No', leftColumnX, currentY + 10)
+                .text('Product', leftColumnX + 40, currentY + 10)
+                .text('HSN/SAC', leftColumnX + 250, currentY + 10)
+                .text('Qty', leftColumnX + 320, currentY + 10)
+                .text('Rate', leftColumnX + 370, currentY + 10)
+                .text('Amount', leftColumnX + 430, currentY + 10);
+
+            currentY += 30;
+
+
+            let grandTotal = 0;
+            let subtotal = 0;
+
+            if (invoiceData.stockDetails && invoiceData.stockDetails.length > 0) {
+                invoiceData.stockDetails.forEach((item, index) => {
+                    const itemName = item.Item_Name || item.Product_Name || 'Item';
+                    const qty = Number(item.Bill_Qty) || 0;
+                    const rate = Number(item.Item_Rate) || 0;
+                    const amount = qty * rate;
+                    subtotal += amount;
+
+
+                    const displayName = itemName.length > 30 ?
+                        itemName.substring(0, 27) + '...' : itemName;
+
+                    doc.font('Helvetica')
+                        .fontSize(9)
+                        .text(`${index + 1}`, leftColumnX, currentY)
+                        .text(displayName, leftColumnX + 40, currentY)
+                        .text(item.HSN_Code || '-', leftColumnX + 250, currentY)
+                        .text(qty.toFixed(2), leftColumnX + 320, currentY)
+                        .text(rate.toFixed(2), leftColumnX + 370, currentY)
+                        .text(amount.toFixed(2), leftColumnX + 430, currentY);
+
+                    currentY += 20;
+
+
+                    if (currentY > 700) {
+                        doc.addPage();
+                        currentY = 50;
+                    }
+                });
+            }
+
+
+            doc.moveTo(leftColumnX, currentY)
+                .lineTo(550, currentY)
+                .stroke();
+
             currentY += 20;
-            grandTotal += invoiceData.CSGT_Total || 0;
-        }
-        
-        if (invoiceData.SGST_Total > 0) {
-            doc.text(`SGST (${invoiceData.SGST_Percentage || 9}%):`, totalsX, currentY)
-               .text((invoiceData.SGST_Total || 0).toFixed(2), totalsX + 100, currentY);
+
+
+            const totalsX = 380;
+
+            doc.fontSize(10)
+                .font('Helvetica')
+                .text('Subtotal:', totalsX, currentY)
+                .text(subtotal.toFixed(2), totalsX + 100, currentY);
+
             currentY += 20;
-            grandTotal += invoiceData.SGST_Total || 0;
+
+            if (invoiceData.CSGT_Total > 0) {
+                doc.text(`CGST (${invoiceData.CSGT_Percentage || 9}%):`, totalsX, currentY)
+                    .text((invoiceData.CSGT_Total || 0).toFixed(2), totalsX + 100, currentY);
+                currentY += 20;
+                grandTotal += invoiceData.CSGT_Total || 0;
+            }
+
+            if (invoiceData.SGST_Total > 0) {
+                doc.text(`SGST (${invoiceData.SGST_Percentage || 9}%):`, totalsX, currentY)
+                    .text((invoiceData.SGST_Total || 0).toFixed(2), totalsX + 100, currentY);
+                currentY += 20;
+                grandTotal += invoiceData.SGST_Total || 0;
+            }
+
+            if (invoiceData.IGST_Total > 0) {
+                doc.text(`IGST (${invoiceData.IGST_Percentage || 18}%):`, totalsX, currentY)
+                    .text((invoiceData.IGST_Total || 0).toFixed(2), totalsX + 100, currentY);
+                currentY += 20;
+                grandTotal += invoiceData.IGST_Total || 0;
+            }
+
+            if (invoiceData.Round_off) {
+                doc.text('Round Off:', totalsX, currentY)
+                    .text((invoiceData.Round_off || 0).toFixed(2), totalsX + 100, currentY);
+                currentY += 20;
+                grandTotal += invoiceData.Round_off || 0;
+            }
+
+            grandTotal += subtotal;
+
+
+            doc.moveTo(totalsX - 10, currentY)
+                .lineTo(totalsX + 150, currentY)
+                .stroke();
+
+            currentY += 10;
+
+            doc.fontSize(12)
+                .font('Helvetica-Bold')
+                .text('GRAND TOTAL:', totalsX, currentY)
+                .text(grandTotal.toFixed(2), totalsX + 100, currentY);
+
+            currentY += 30;
+
+
+            doc.fontSize(8)
+                .font('Helvetica')
+                .text('Thank you for your business!', { align: 'center' })
+                .text('For any queries, contact: +91 9944888054 | email@example.com', { align: 'center' })
+                .text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
+
+            // Add page numbers 
+            const pageCount = doc.bufferedPageRange().count;
+            // for (let i = 0; i < pageCount; i++) {
+            //     doc.switchToPage(i);
+            //     doc.fontSize(8)
+            //        .text(`Page ${i + 1} of ${pageCount}`, 50, 800, { align: 'center' });
+            // }
+
+
+            await new Promise((resolve, reject) => {
+                writeStream.on('finish', resolve);
+                writeStream.on('error', reject);
+                doc.end();
+            });
+
+
+            const stats = await fs.stat(pdfPath);
+
+
+            return dataFound(res, {
+
+                pdfUrl: `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${encodeURIComponent(pdfFileName.replace('.pdf', ''))}`,
+                fileName: pdfFileName,
+                size: stats.size,
+                generated: true
+            });
+
+        } catch (error) {
+            console.error('Error in getSalesOrderInvoiceDetailsForPdf:', error);
+            return servError(error, res);
         }
-        
-        if (invoiceData.IGST_Total > 0) {
-            doc.text(`IGST (${invoiceData.IGST_Percentage || 18}%):`, totalsX, currentY)
-               .text((invoiceData.IGST_Total || 0).toFixed(2), totalsX + 100, currentY);
-            currentY += 20;
-            grandTotal += invoiceData.IGST_Total || 0;
-        }
-        
-        if (invoiceData.Round_off) {
-            doc.text('Round Off:', totalsX, currentY)
-               .text((invoiceData.Round_off || 0).toFixed(2), totalsX + 100, currentY);
-            currentY += 20;
-            grandTotal += invoiceData.Round_off || 0;
-        }
-        
-        grandTotal += subtotal;
-        
-
-        doc.moveTo(totalsX - 10, currentY)
-           .lineTo(totalsX + 150, currentY)
-           .stroke();
-        
-        currentY += 10;
-        
-        doc.fontSize(12)
-           .font('Helvetica-Bold')
-           .text('GRAND TOTAL:', totalsX, currentY)
-           .text(grandTotal.toFixed(2), totalsX + 100, currentY);
-        
-        currentY += 30;
-        
-     
-        doc.fontSize(8)
-           .font('Helvetica')
-           .text('Thank you for your business!', { align: 'center' })
-           .text('For any queries, contact: +91 9944888054 | email@example.com', { align: 'center' })
-           .text(`Generated on: ${new Date().toLocaleString()}`, { align: 'center' });
-        
-        // Add page numbers 
-           const pageCount = doc.bufferedPageRange().count;
-        // for (let i = 0; i < pageCount; i++) {
-        //     doc.switchToPage(i);
-        //     doc.fontSize(8)
-        //        .text(`Page ${i + 1} of ${pageCount}`, 50, 800, { align: 'center' });
-        // }
-        
-      
-        await new Promise((resolve, reject) => {
-            writeStream.on('finish', resolve);
-            writeStream.on('error', reject);
-            doc.end();
-        });
-        
-
-        const stats = await fs.stat(pdfPath);
-        
-    
-return dataFound(res, {
-   
-    pdfUrl: `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${encodeURIComponent(pdfFileName.replace('.pdf', ''))}`,
-    fileName: pdfFileName,
-    size: stats.size,
-    generated: true
-});
-        
-    } catch (error) {
-        console.error('Error in getSalesOrderInvoiceDetailsForPdf:', error);
-        return servError(error, res);
-    }
-};
+    };
 
 
-const downloadGeneratedPdf = async (req, res) => {
-    try {
-        const { Do_Inv_No, download } = req.query;
+    const downloadGeneratedPdf = async (req, res) => {
+        try {
+            const { Do_Inv_No, download } = req.query;
 
-        if (!Do_Inv_No) {
-            return invalidInput(res, "Invoice number is required");
-        }
+            if (!Do_Inv_No) {
+                return invalidInput(res, "Invoice number is required");
+            }
 
-        const shouldDownload = download === "true";
-        const decodedInvoiceNo = Buffer.from(Do_Inv_No, "base64").toString("utf-8");
-        const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, "/").trim();
-        const companyId = process.env.COMPANY;
+            const shouldDownload = download === "true";
+            const decodedInvoiceNo = Buffer.from(Do_Inv_No, "base64").toString("utf-8");
+            const formattedInvoiceNo = decodedInvoiceNo.replace(/_/g, "/").trim();
+            const companyId = process.env.COMPANY;
 
-        const safeFileName = formattedInvoiceNo.replace(/\//g, "_");
-        const pdfFileName = `${safeFileName}.pdf`;
+            const safeFileName = formattedInvoiceNo.replace(/\//g, "_");
+            const pdfFileName = `${safeFileName}.pdf`;
 
-        const uploadDir = path.join(__dirname, "..", "uploads", String(companyId), "invoices");
-        const filePath = path.join(uploadDir, pdfFileName);
+            const uploadDir = path.join(__dirname, "..", "uploads", String(companyId), "invoices");
+            const filePath = path.join(uploadDir, pdfFileName);
 
-        if (!fsSync.existsSync(uploadDir)) {
-            fsSync.mkdirSync(uploadDir, { recursive: true });
-        }
+            if (!fsSync.existsSync(uploadDir)) {
+                fsSync.mkdirSync(uploadDir, { recursive: true });
+            }
 
-    
-        const deliveryOrderRequest = await new sql.Request()
-            .input("Do_Inv_No", sql.NVarChar, formattedInvoiceNo)
-            .query(`
+
+            const deliveryOrderRequest = await new sql.Request()
+                .input("Do_Inv_No", sql.NVarChar, formattedInvoiceNo)
+                .query(`
                 SELECT 
                     sdgi.*,
                     rm.Retailer_Name,
@@ -2778,16 +2777,16 @@ const downloadGeneratedPdf = async (req, res) => {
                 WHERE sdgi.Do_Inv_No = @Do_Inv_No 
             `);
 
-        if (deliveryOrderRequest.recordset.length === 0) {
-            return noData(res, `Invoice not found: ${formattedInvoiceNo}`);
-        }
+            if (deliveryOrderRequest.recordset.length === 0) {
+                return noData(res, `Invoice not found: ${formattedInvoiceNo}`);
+            }
 
-        const deliveryOrder = deliveryOrderRequest.recordset[0];
+            const deliveryOrder = deliveryOrderRequest.recordset[0];
 
-      
-        const stockRequest = await new sql.Request()
-            .input("Delivery_Order_Id", sql.Int, deliveryOrder.Do_Id)
-            .query(`
+
+            const stockRequest = await new sql.Request()
+                .input("Delivery_Order_Id", sql.Int, deliveryOrder.Do_Id)
+                .query(`
                 SELECT 
                     sdsi.*,
                     pm.Product_Name,
@@ -2798,11 +2797,11 @@ const downloadGeneratedPdf = async (req, res) => {
                 WHERE sdsi.Delivery_Order_Id = @Delivery_Order_Id
             `);
 
-        const stockDetails = stockRequest.recordset || [];
-          
-   const staffInfoRequest = await new sql.Request()
-    .input("Do_Id", sql.Int, deliveryOrder.Do_Id)
-    .query(`
+            const stockDetails = stockRequest.recordset || [];
+
+            const staffInfoRequest = await new sql.Request()
+                .input("Do_Id", sql.Int, deliveryOrder.Do_Id)
+                .query(`
         SELECT 
             stf.Emp_Id AS empId,
             stf.Emp_Type_Id AS empTypeId,
@@ -2814,639 +2813,639 @@ const downloadGeneratedPdf = async (req, res) => {
         WHERE stf.Do_Id = @Do_Id
     `);
 
-const staffDetails = staffInfoRequest.recordset || [];
+            const staffDetails = staffInfoRequest.recordset || [];
 
-const transportInfo = staffDetails.find(s => s.empTypeId === 2) || {};
+            const transportInfo = staffDetails.find(s => s.empTypeId === 2) || {};
 
-const brokerInfo = staffDetails.find(s => s.empType === 'Broker') || {};
+            const brokerInfo = staffDetails.find(s => s.empType === 'Broker') || {};
 
-const transportText = transportInfo.empName || '';
-const brokerText = brokerInfo.empName || '';
+            const transportText = transportInfo.empName || '';
+            const brokerText = brokerInfo.empName || '';
 
 
-        const doc = new PDFDocument({
-            margin: 50,
-            size: 'A4',
-            bufferPages: true
-        });
-
-        // const possibleTamilFonts = [
-        //     path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
-        //     path.join(__dirname, '..', 'fonts', 'latha.ttf'),
-        //     'C:/Windows/Fonts/latha.ttf',
-        //     'C:/Windows/Fonts/Nirmala.ttf'
-        // ];
-      const possibleTamilFonts = [
-            path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
-            path.join(__dirname, '..', 'fonts', 'latha.ttf'),
-            path.join(__dirname, '..', 'fonts', 'bamini.ttf'),
-            path.join(__dirname, '..', 'fonts', 'NotoSansTamilUI-Regular.ttf'),
-            'C:/Windows/Fonts/latha.ttf',
-            'C:/Windows/Fonts/bamini.ttf',
-            'C:/Windows/Fonts/NotoSansTamil-Regular.ttf',
-            'C:/Windows/Fonts/Nirmala.ttf',
-            'C:/Windows/Fonts/NirmalaB.ttf',
-            'C:/Windows/Fonts/kartika.ttf'
-        ];
-        let tamilFontRegistered = false;
-        for (const fontPath of possibleTamilFonts) {
-            try {
-                if (fsSync.existsSync(fontPath)) {
-                    doc.registerFont('Tamil', fontPath);
-                    tamilFontRegistered = true;
-                    break;
-                }
-            } catch (error) {
-                console.error(`Failed to register font from ${fontPath}:`, error);
-            }
-        }
-
-        if (!tamilFontRegistered) {
-            doc.registerFont('Tamil', 'Helvetica');
-        }
-
-        
-        if (!shouldDownload) {
-            res.setHeader("Content-Type", "application/pdf");
-            res.setHeader("Content-Disposition", `inline; filename="${pdfFileName}"`);
-            doc.pipe(res);
-        } else {
-            const writeStream = fsSync.createWriteStream(filePath);
-            doc.pipe(writeStream);
-        }
-
-    
-        const NumberFormat = (num) => {
-            if (num === undefined || num === null) return '0.00';
-            return Number(num).toFixed(2);
-        };
-
-        const RoundNumber = (num) => {
-            return Math.round(num * 100) / 100;
-        };
-
-        const Addition = (a, b) => {
-            return (Number(a) || 0) + (Number(b) || 0);
-        };
-
-        const Subraction = (a, b) => {
-            return (Number(a) || 0) - (Number(b) || 0);
-        };
-
-        const Multiplication = (a, b) => {
-            return (Number(a) || 0) * (Number(b) || 0);
-        };
-
-        const isEqualNumber = (a, b) => {
-            return Number(a) === Number(b);
-        };
-
-        const isGraterNumber = (a, b) => {
-            return Number(a) > Number(b);
-        };
-
-        const LocalDate = (date) => {
-            if (!date) return '';
-            const d = new Date(date);
-            return d.toLocaleDateString('en-GB');
-        };
-
-        const taxCalc = (method = 1, amount = 0, percentage = 0) => {
-            switch (method) {
-                case 0: 
-                    return RoundNumber(amount * (percentage / 100));
-                case 1: 
-                    return RoundNumber(amount - (amount * (100 / (100 + percentage))));
-                case 2: 
-                    return 0;
-                default:
-                    return 0;
-            }
-        };
-
-        const isExclusiveBill = isEqualNumber(deliveryOrder.GST_Inclusive, 0);
-        const isInclusive = isEqualNumber(deliveryOrder.GST_Inclusive, 1);
-        const isNotTaxableBill = isEqualNumber(deliveryOrder.GST_Inclusive, 2);
-        const IS_IGST = isEqualNumber(deliveryOrder.IS_IGST, 1);
-
-        const includedProducts = stockDetails.filter(item => isGraterNumber(item?.Bill_Qty, 0));
-
-        let totalValueBeforeTax = { TotalValue: 0, TotalTax: 0 };
-
-        includedProducts.forEach(item => {
-            const itemRate = RoundNumber(item?.Item_Rate);
-            const billQty = parseInt(item?.Bill_Qty) || 0;
-
-            if (isNotTaxableBill) {
-                totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, itemRate));
-                return;
-            }
-
-            const gstPercentage = IS_IGST ? (item?.Igst || 0) : Addition(item?.Sgst || 0, item?.Cgst || 0);
-
-            if (isInclusive) {
-                const itemTax = taxCalc(1, itemRate, gstPercentage);
-                const basePrice = Subraction(itemRate, itemTax);
-                totalValueBeforeTax.TotalTax = Addition(totalValueBeforeTax.TotalTax, Multiplication(billQty, itemTax));
-                totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, basePrice));
-            }
-            if (isExclusiveBill) {
-                const itemTax = taxCalc(0, itemRate, gstPercentage);
-                totalValueBeforeTax.TotalTax = Addition(totalValueBeforeTax.TotalTax, Multiplication(billQty, itemTax));
-                totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, itemRate));
-            }
-        });
-
-        const TaxData = includedProducts.reduce((data, item) => {
-            const HSNindex = data.findIndex(obj => obj.hsnCode == item.HSN_Code);
-
-            const {
-                Taxable_Amount, Cgst_Amo, Sgst_Amo, Igst_Amo, HSN_Code,
-                Cgst, Sgst, Igst,
-            } = item;
-
-            if (HSNindex !== -1) {
-                const prev = data[HSNindex];
-                const newValue = {
-                    ...prev,
-                    taxableValue: prev.taxableValue + Number(Taxable_Amount || 0),
-                    cgst: Addition(prev.cgst, Cgst_Amo),
-                    sgst: Addition(prev.sgst, Sgst_Amo),
-                    igst: Addition(prev.igst, Igst_Amo),
-                    totalTax: prev.totalTax + Number(IS_IGST ? (Igst_Amo || 0) : Addition(Cgst_Amo || 0, Sgst_Amo || 0)),
-                };
-
-                data[HSNindex] = newValue;
-                return data;
-            }
-
-            const newEntry = {
-                hsnCode: HSN_Code,
-                taxableValue: Number(Taxable_Amount || 0),
-                cgst: Number(Cgst_Amo || 0),
-                cgstPercentage: Number(Cgst || 0),
-                sgst: Number(Sgst_Amo || 0),
-                sgstPercentage: Number(Sgst || 0),
-                igst: Number(Igst_Amo || 0),
-                igstPercentage: Number(Igst || 0),
-                totalTax: IS_IGST ? Number(Igst_Amo || 0) : Addition(Cgst_Amo || 0, Sgst_Amo || 0),
-            };
-
-            return [...data, newEntry];
-        }, []);
-
-        const PAGE_HEIGHT = 842; 
-        const PAGE_BOTTOM_MARGIN = 50;
-        const FOOTER_SPACE = 80; 
-        
-
-        const checkPageBreak = (currentY, additionalSpace = 20) => {
-            if (currentY + additionalSpace > PAGE_HEIGHT - PAGE_BOTTOM_MARGIN - FOOTER_SPACE) {
-                doc.addPage();
-                return 50; 
-            }
-            return currentY;
-        };
-
-
-
-        doc.moveDown(1);
-
-        const leftColumnX = 50;
-        const rightColumnX = 250;
-        let currentY = doc.y;
-
-      
-        doc.fontSize(11)
-           .font('Helvetica-Bold')
-           .text(deliveryOrder.Company_Name, leftColumnX, currentY);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(`Address: ${deliveryOrder.Company_Address}`, leftColumnX, currentY + 15, { width: 250 });
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(`City: ${deliveryOrder.Region} - ${deliveryOrder.Pincode }`, leftColumnX, currentY + 25);
-
-        let gstinText = 'GSTIN / UIN: ';
-        if (deliveryOrder.Gst_Number || deliveryOrder.VAT_TIN_Number) {
-            if (deliveryOrder.Gst_Number) gstinText += deliveryOrder.Gst_Number;
-            if (deliveryOrder.Gst_Number && deliveryOrder.VAT_TIN_Number) gstinText += ' || ';
-            if (deliveryOrder.VAT_TIN_Number) gstinText += deliveryOrder.VAT_TIN_Number;
-        } else {
-            gstinText += 'Not Available';
-        }
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(gstinText, leftColumnX, currentY + 45);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(`State: ${deliveryOrder.Company_State || 'Tamilnadu'}`, leftColumnX, currentY + 55);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text('Code:', leftColumnX, currentY + 65);
-
-   
-        doc.font('Helvetica-Bold')
-           .fontSize(10)
-           .text('Buyer (Bill to)', leftColumnX, currentY + 85);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(deliveryOrder.Retailer_Name || '', leftColumnX, currentY + 98);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(`${deliveryOrder.Mobile_No || ''} - ${deliveryOrder.Party_Mailing_Address || ''}`, leftColumnX, currentY + 110, { width: 250 });
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(`${deliveryOrder.Reatailer_City || ''} - ${deliveryOrder.PinCode || ''}`, leftColumnX, currentY + 123);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(`GSTIN / UIN: ${deliveryOrder.GST_No || ''}`, leftColumnX, currentY + 137);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text(`State Name: ${deliveryOrder.StateGet || 'Tamilnadu'}`, leftColumnX, currentY + 152);
-
-        doc.font('Tamil')
-           .fontSize(9)
-           .text('Code:', leftColumnX, currentY + 165);
-             
-        
-
-
-       
-        const extraDetails = [
-            { labelOne: 'Invoice No', dataOne: deliveryOrder.Do_Inv_No, labelTwo: 'Dated', dataTwo: LocalDate(deliveryOrder.Do_Date) },
-            { labelOne: 'Delivery Note', dataOne: '', labelTwo: 'Mode/Terms of Payment', dataTwo: '' },
-            { labelOne: 'Reference No. & Date', dataOne: '', labelTwo: 'Other References', dataTwo:brokerText  },
-            { labelOne: 'Buyer\'s Order No', dataOne: '', labelTwo: 'Dated', dataTwo: '' },
-            { labelOne: 'Dispatch Doc No', dataOne: '', labelTwo: 'Delivery Note Date', dataTwo: '' },
-            { labelOne: 'Dispatched through', dataOne: transportText , labelTwo: 'Destination', dataTwo: '' },
-            { labelOne: 'Bill of Lading/LR-RR No', dataOne: '' , labelTwo: 'Motor Vehicle No', dataTwo:'' },
-        ];
-
-        let rightY = currentY + 15;
-        extraDetails.forEach(detail => {
-            doc.font('Tamil')
-               .fontSize(8)
-               .text(detail.labelOne, rightColumnX, rightY)
-               .text(`: ${detail.dataOne}`, rightColumnX + 80, rightY);
-            
-            doc.font('Tamil')
-               .fontSize(8)
-               .text(detail.labelTwo, rightColumnX + 160, rightY)
-               .text(`: ${detail.dataTwo}`, rightColumnX + 250, rightY);
-            
-            rightY += 15;
-        });
-
-        doc.font('Tamil')
-           .fontSize(8)
-           .text('Terms of Delivery', rightColumnX, rightY);
-
-        currentY = rightY + 65;
-        
-      
-        currentY = checkPageBreak(currentY, 50);
-
-
-        doc.moveTo(leftColumnX, currentY)
-           .lineTo(550, currentY)
-           .stroke();
-
-        doc.fontSize(9)
-           .font('Helvetica-Bold')
-           .text('Sno', leftColumnX, currentY + 10)
-           .text('Product', leftColumnX + 35, currentY + 10)
-           .text('HSN/SAC', leftColumnX + 180, currentY + 10)
-           .text('Quantity', leftColumnX + 250, currentY + 10)
-           .text('Rate', leftColumnX + 300, currentY + 10)
-           .text('Rate', leftColumnX + 340, currentY + 10)
-           .text('Amount', leftColumnX + 420, currentY + 10);
-
-   
-        let rateDesc = '';
-        if (isInclusive) rateDesc = '(Incl. of Tax)';
-        else if (isNotTaxableBill) rateDesc = '(Tax not applicable)';
-        else if (isExclusiveBill) rateDesc = '(Excl. of Tax)';
-
-        doc.fontSize(7)
-           .font('Tamil')
-           .text(rateDesc, leftColumnX + 335, currentY + 20);
-
-        currentY += 35;
-
-
-        if (includedProducts && includedProducts.length > 0) {
-            for (let index = 0; index < includedProducts.length; index++) {
-                const item = includedProducts[index];
-                
-         
-                currentY = checkPageBreak(currentY, 25);
-                
-                const qty = Number(item.Bill_Qty) || 0;
-                const itemRate = Number(item.Item_Rate) || 0;
-                const taxableAmount = Number(item.Taxable_Amount) || 0;
-                const productName = item.Product_Name || '-';
-                const unit = item.Units || 'Pcs';
-                
-        
-                const gstPercentage = IS_IGST ? (item?.Igst || 0) : Addition(item?.Sgst || 0, item?.Cgst || 0);
-                
- 
-                let rateWithoutTax = itemRate;
-                let rateWithTax = itemRate;
-                
-                if (isInclusive) {
-                    const itemTax = taxCalc(1, itemRate, gstPercentage);
-                    rateWithoutTax = Subraction(itemRate, itemTax);
-                    rateWithTax = itemRate;
-                } else if (isExclusiveBill) {
-                    const itemTax = taxCalc(0, itemRate, gstPercentage);
-                    rateWithoutTax = itemRate;
-                    rateWithTax = Addition(itemRate, itemTax);
-                }
-            
-                doc.font('Helvetica')
-                   .fontSize(8)
-                   .text(`${index + 1}`, leftColumnX, currentY);
-                
-                doc.font('Tamil')
-                   .text(productName, leftColumnX + 35, currentY, { width: 140 });
-                
-                doc.font('Helvetica')
-                   .text(item.HSN_Code || '-', leftColumnX + 180, currentY)  
-                   .text(`${NumberFormat(qty)}${unit ? ' (' + unit + ')' : ''}`, leftColumnX + 250, currentY)
-                   .text(NumberFormat(rateWithoutTax), leftColumnX + 305, currentY)
-                   .text(NumberFormat(rateWithTax), leftColumnX + 345, currentY)
-                   .text(NumberFormat(taxableAmount), leftColumnX + 425, currentY);
-                
-                currentY += 20;
-            }
-        }
-
-        doc.moveTo(leftColumnX, currentY)
-           .lineTo(550, currentY)
-           .stroke();
-
-        currentY += 20;
-
-    
-        currentY = checkPageBreak(currentY, 200);
-
-
-        doc.fontSize(9)
-           .font('Helvetica')
-           .text('Amount Chargeable (in words):', leftColumnX, currentY)
-           .text(`INR ${numberToWords(parseInt(deliveryOrder?.Total_Invoice_value || 0))} Only.`, leftColumnX + 150, currentY);
-
-        currentY += 25;
-
-       
-        const totalsX = 380;
-        const totalsValueX = 480;
-
-        doc.fontSize(9)
-           .font('Helvetica');
-
-
-        doc.text('Total Taxable Amount', totalsX - 150, currentY)
-           .text(NumberFormat(totalValueBeforeTax.TotalValue), totalsValueX, currentY, { align: 'right' });
-
-        currentY += 18;
-
-
-        if (!IS_IGST) {
-            doc.text('CGST', totalsX - 150, currentY)
-               .text(NumberFormat(deliveryOrder?.CSGT_Total || 0), totalsValueX, currentY, { align: 'right' });
-            currentY += 18;
-
-            doc.text('SGST', totalsX - 150, currentY)
-               .text(NumberFormat(deliveryOrder?.SGST_Total || 0), totalsValueX, currentY, { align: 'right' });
-            currentY += 18;
-        } else {
-            doc.text('IGST', totalsX - 150, currentY)
-               .text(NumberFormat(deliveryOrder?.IGST_Total || 0), totalsValueX, currentY, { align: 'right' });
-            currentY += 18;
-        }
-     
-        doc.text('Total Expences', totalsX - 150, currentY)
-           .text(NumberFormat(deliveryOrder?.Total_Expences  || 0), totalsValueX, currentY, { align: 'right' });
-
-        currentY += 18;
-
-        doc.text('Round Off', totalsX - 150, currentY)
-           .text(NumberFormat(deliveryOrder?.Round_off || 0), totalsValueX, currentY, { align: 'right' });
-
-        currentY += 18;
-
-   
-        doc.font('Helvetica-Bold')
-           .text('Total', totalsX - 150, currentY)
-           .text(NumberFormat(deliveryOrder?.Total_Invoice_value || 0), totalsValueX, currentY, { align: 'right' });
-
-        currentY += 30;
-
-   
-        doc.fontSize(9)
-           .font('Helvetica-Bold');
-
-    
-        doc.text('HSN / SAC', leftColumnX, currentY)
-           .text('Taxable Value', leftColumnX + 100, currentY);
-
-        if (IS_IGST) {
-            doc.text('IGST Tax', leftColumnX + 200, currentY)
-               .text('Total', leftColumnX + 350, currentY);
-        } else {
-            doc.text('Central Tax', leftColumnX + 200, currentY)
-               .text('State Tax', leftColumnX + 300, currentY)
-               .text('Total', leftColumnX + 400, currentY);
-        }
-
-        currentY += 15;
-
- 
-        if (IS_IGST) {
-            doc.text('Rate', leftColumnX + 180, currentY)
-               .text('Amount', leftColumnX + 230, currentY)
-               .text('Tax Amount', leftColumnX + 330, currentY);
-        } else {
-            doc.text('Rate', leftColumnX + 180, currentY)
-               .text('Amount', leftColumnX + 220, currentY)
-               .text('Rate', leftColumnX + 270, currentY)
-               .text('Amount', leftColumnX + 310, currentY)
-               .text('Tax Amount', leftColumnX + 370, currentY);
-        }
-
-        currentY += 10;
-        doc.moveTo(leftColumnX, currentY)
-           .lineTo(550, currentY)
-           .stroke();
-        currentY += 5;
-
-   
-        doc.font('Helvetica')
-           .fontSize(8);
-
-        TaxData.forEach((item) => {
-       
-            currentY = checkPageBreak(currentY, 20);
-            
-            doc.text(item.hsnCode || 'N/A', leftColumnX, currentY)
-               .text(NumberFormat(item.taxableValue), leftColumnX + 100, currentY);
-
-            if (IS_IGST) {
-                doc.text(NumberFormat(item.igstPercentage), leftColumnX + 180, currentY)
-                   .text(NumberFormat(item.igst), leftColumnX + 230, currentY)
-                   .text(NumberFormat(item.totalTax), leftColumnX + 330, currentY);
-            } else {
-                doc.text(NumberFormat(item.cgstPercentage), leftColumnX + 180, currentY)
-                   .text(NumberFormat(item.cgst), leftColumnX + 220, currentY)
-                   .text(NumberFormat(item.sgstPercentage), leftColumnX + 270, currentY)
-                   .text(NumberFormat(item.sgst), leftColumnX + 310, currentY)
-                   .text(NumberFormat(item.totalTax), leftColumnX + 370, currentY);
-            }
-            
-            currentY += 15;
-        });
-
-        currentY = checkPageBreak(currentY, 20);
-        
-        doc.font('Helvetica-Bold');
-
-        const hsnTotalTaxable = TaxData.reduce((sum, item) => sum + (item.taxableValue || 0), 0);
-        const hsnTotalCgst = TaxData.reduce((sum, item) => sum + (item.cgst || 0), 0);
-        const hsnTotalSgst = TaxData.reduce((sum, item) => sum + (item.sgst || 0), 0);
-        const hsnTotalIgst = TaxData.reduce((sum, item) => sum + (item.igst || 0), 0);
-        const hsnTotalTax = TaxData.reduce((sum, item) => sum + (item.totalTax || 0), 0);
-
-        doc.text('Total', leftColumnX, currentY)
-           .text(NumberFormat(hsnTotalTaxable), leftColumnX + 100, currentY);
-
-        if (IS_IGST) {
-            doc.text('', leftColumnX + 180, currentY)
-               .text(NumberFormat(hsnTotalIgst), leftColumnX + 230, currentY)
-               .text(NumberFormat(hsnTotalTax), leftColumnX + 330, currentY);
-        } else {
-            doc.text('', leftColumnX + 180, currentY)
-               .text(NumberFormat(hsnTotalCgst), leftColumnX + 220, currentY)
-               .text('', leftColumnX + 270, currentY)
-               .text(NumberFormat(hsnTotalSgst), leftColumnX + 310, currentY)
-               .text(NumberFormat(hsnTotalTax), leftColumnX + 370, currentY);
-        }
-
-        currentY += 20;
-
-        currentY = checkPageBreak(currentY, 30);
-        
-        doc.font('Helvetica')
-           .fontSize(9)
-           .font('Helvetica-Bold')
-           .text(`Tax Amount (in words) : INR ${numberToWords(parseInt(hsnTotalTax))} only.`, leftColumnX, currentY);
-
-        currentY += 30;
-
-     
-        doc.fontSize(8)
-           .text('This is a Computer Generated Invoice', { align: 'center' });
-
-        if (!shouldDownload) {
-   
-            if (currentY + 80 > PAGE_HEIGHT - PAGE_BOTTOM_MARGIN) {
-                doc.addPage();
-                currentY = 50;
-            }
-            
-            const buttonY = Math.min(currentY + 20, PAGE_HEIGHT - PAGE_BOTTOM_MARGIN - 40);
-            const buttonX = 200;
-            const buttonWidth = 200;
-            const buttonHeight = 30;
-
-            doc.save();
-            doc.roundedRect(buttonX, buttonY, buttonWidth, buttonHeight, 5)
-               .fillAndStroke('#007bff', '#0056b3');
-            doc.restore();
-
-            doc.fillColor('#ffffff')
-               .fontSize(11)
-               .font('Helvetica-Bold')
-               .text('⬇ DOWNLOAD INVOICE', buttonX + 20, buttonY + 9, {
-                   width: buttonWidth - 20,
-                   align: 'center'
-               });
-
-            doc.fillColor('#000000');
-            
-            const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${Do_Inv_No}&download=true`;
-            doc.link(buttonX, buttonY, buttonWidth, buttonHeight, downloadUrl);
-
-            doc.fontSize(7)
-               .font('Helvetica')
-               .fillColor('#666666')
-               .text('Click the button above to download this invoice', 50, buttonY + 38, {
-                   width: 500,
-                   align: 'center'
-               });
-
-            doc.fillColor('#000000');
-        }
-
-        doc.end();
-
-        if (shouldDownload) {
-            await new Promise((resolve) => {
-                setTimeout(resolve, 1000);
+            const doc = new PDFDocument({
+                margin: 50,
+                size: 'A4',
+                bufferPages: true
             });
 
-            if (fsSync.existsSync(filePath)) {
-                const stats = fsSync.statSync(filePath);
-                
-                res.setHeader('Content-Type', 'application/pdf');
-                res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
-                res.setHeader('Content-Length', stats.size);
-                
-                const readStream = fsSync.createReadStream(filePath);
-                readStream.pipe(res);
+            // const possibleTamilFonts = [
+            //     path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
+            //     path.join(__dirname, '..', 'fonts', 'latha.ttf'),
+            //     'C:/Windows/Fonts/latha.ttf',
+            //     'C:/Windows/Fonts/Nirmala.ttf'
+            // ];
+            const possibleTamilFonts = [
+                path.join(__dirname, '..', 'fonts', 'NotoSansTamil-Regular.ttf'),
+                path.join(__dirname, '..', 'fonts', 'latha.ttf'),
+                path.join(__dirname, '..', 'fonts', 'bamini.ttf'),
+                path.join(__dirname, '..', 'fonts', 'NotoSansTamilUI-Regular.ttf'),
+                'C:/Windows/Fonts/latha.ttf',
+                'C:/Windows/Fonts/bamini.ttf',
+                'C:/Windows/Fonts/NotoSansTamil-Regular.ttf',
+                'C:/Windows/Fonts/Nirmala.ttf',
+                'C:/Windows/Fonts/NirmalaB.ttf',
+                'C:/Windows/Fonts/kartika.ttf'
+            ];
+            let tamilFontRegistered = false;
+            for (const fontPath of possibleTamilFonts) {
+                try {
+                    if (fsSync.existsSync(fontPath)) {
+                        doc.registerFont('Tamil', fontPath);
+                        tamilFontRegistered = true;
+                        break;
+                    }
+                } catch (error) {
+                    console.error(`Failed to register font from ${fontPath}:`, error);
+                }
+            }
+
+            if (!tamilFontRegistered) {
+                doc.registerFont('Tamil', 'Helvetica');
+            }
+
+
+            if (!shouldDownload) {
+                res.setHeader("Content-Type", "application/pdf");
+                res.setHeader("Content-Disposition", `inline; filename="${pdfFileName}"`);
+                doc.pipe(res);
             } else {
-                return servError(new Error('File not found'), res);
+                const writeStream = fsSync.createWriteStream(filePath);
+                doc.pipe(writeStream);
+            }
+
+
+            const NumberFormat = (num) => {
+                if (num === undefined || num === null) return '0.00';
+                return Number(num).toFixed(2);
+            };
+
+            const RoundNumber = (num) => {
+                return Math.round(num * 100) / 100;
+            };
+
+            const Addition = (a, b) => {
+                return (Number(a) || 0) + (Number(b) || 0);
+            };
+
+            const Subraction = (a, b) => {
+                return (Number(a) || 0) - (Number(b) || 0);
+            };
+
+            const Multiplication = (a, b) => {
+                return (Number(a) || 0) * (Number(b) || 0);
+            };
+
+            const isEqualNumber = (a, b) => {
+                return Number(a) === Number(b);
+            };
+
+            const isGraterNumber = (a, b) => {
+                return Number(a) > Number(b);
+            };
+
+            const LocalDate = (date) => {
+                if (!date) return '';
+                const d = new Date(date);
+                return d.toLocaleDateString('en-GB');
+            };
+
+            const taxCalc = (method = 1, amount = 0, percentage = 0) => {
+                switch (method) {
+                    case 0:
+                        return RoundNumber(amount * (percentage / 100));
+                    case 1:
+                        return RoundNumber(amount - (amount * (100 / (100 + percentage))));
+                    case 2:
+                        return 0;
+                    default:
+                        return 0;
+                }
+            };
+
+            const isExclusiveBill = isEqualNumber(deliveryOrder.GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(deliveryOrder.GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(deliveryOrder.GST_Inclusive, 2);
+            const IS_IGST = isEqualNumber(deliveryOrder.IS_IGST, 1);
+
+            const includedProducts = stockDetails.filter(item => isGraterNumber(item?.Bill_Qty, 0));
+
+            let totalValueBeforeTax = { TotalValue: 0, TotalTax: 0 };
+
+            includedProducts.forEach(item => {
+                const itemRate = RoundNumber(item?.Item_Rate);
+                const billQty = parseInt(item?.Bill_Qty) || 0;
+
+                if (isNotTaxableBill) {
+                    totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, itemRate));
+                    return;
+                }
+
+                const gstPercentage = IS_IGST ? (item?.Igst || 0) : Addition(item?.Sgst || 0, item?.Cgst || 0);
+
+                if (isInclusive) {
+                    const itemTax = taxCalc(1, itemRate, gstPercentage);
+                    const basePrice = Subraction(itemRate, itemTax);
+                    totalValueBeforeTax.TotalTax = Addition(totalValueBeforeTax.TotalTax, Multiplication(billQty, itemTax));
+                    totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, basePrice));
+                }
+                if (isExclusiveBill) {
+                    const itemTax = taxCalc(0, itemRate, gstPercentage);
+                    totalValueBeforeTax.TotalTax = Addition(totalValueBeforeTax.TotalTax, Multiplication(billQty, itemTax));
+                    totalValueBeforeTax.TotalValue = Addition(totalValueBeforeTax.TotalValue, Multiplication(billQty, itemRate));
+                }
+            });
+
+            const TaxData = includedProducts.reduce((data, item) => {
+                const HSNindex = data.findIndex(obj => obj.hsnCode == item.HSN_Code);
+
+                const {
+                    Taxable_Amount, Cgst_Amo, Sgst_Amo, Igst_Amo, HSN_Code,
+                    Cgst, Sgst, Igst,
+                } = item;
+
+                if (HSNindex !== -1) {
+                    const prev = data[HSNindex];
+                    const newValue = {
+                        ...prev,
+                        taxableValue: prev.taxableValue + Number(Taxable_Amount || 0),
+                        cgst: Addition(prev.cgst, Cgst_Amo),
+                        sgst: Addition(prev.sgst, Sgst_Amo),
+                        igst: Addition(prev.igst, Igst_Amo),
+                        totalTax: prev.totalTax + Number(IS_IGST ? (Igst_Amo || 0) : Addition(Cgst_Amo || 0, Sgst_Amo || 0)),
+                    };
+
+                    data[HSNindex] = newValue;
+                    return data;
+                }
+
+                const newEntry = {
+                    hsnCode: HSN_Code,
+                    taxableValue: Number(Taxable_Amount || 0),
+                    cgst: Number(Cgst_Amo || 0),
+                    cgstPercentage: Number(Cgst || 0),
+                    sgst: Number(Sgst_Amo || 0),
+                    sgstPercentage: Number(Sgst || 0),
+                    igst: Number(Igst_Amo || 0),
+                    igstPercentage: Number(Igst || 0),
+                    totalTax: IS_IGST ? Number(Igst_Amo || 0) : Addition(Cgst_Amo || 0, Sgst_Amo || 0),
+                };
+
+                return [...data, newEntry];
+            }, []);
+
+            const PAGE_HEIGHT = 842;
+            const PAGE_BOTTOM_MARGIN = 50;
+            const FOOTER_SPACE = 80;
+
+
+            const checkPageBreak = (currentY, additionalSpace = 20) => {
+                if (currentY + additionalSpace > PAGE_HEIGHT - PAGE_BOTTOM_MARGIN - FOOTER_SPACE) {
+                    doc.addPage();
+                    return 50;
+                }
+                return currentY;
+            };
+
+
+
+            doc.moveDown(1);
+
+            const leftColumnX = 50;
+            const rightColumnX = 250;
+            let currentY = doc.y;
+
+
+            doc.fontSize(11)
+                .font('Helvetica-Bold')
+                .text(deliveryOrder.Company_Name, leftColumnX, currentY);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(`Address: ${deliveryOrder.Company_Address}`, leftColumnX, currentY + 15, { width: 250 });
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(`City: ${deliveryOrder.Region} - ${deliveryOrder.Pincode}`, leftColumnX, currentY + 25);
+
+            let gstinText = 'GSTIN / UIN: ';
+            if (deliveryOrder.Gst_Number || deliveryOrder.VAT_TIN_Number) {
+                if (deliveryOrder.Gst_Number) gstinText += deliveryOrder.Gst_Number;
+                if (deliveryOrder.Gst_Number && deliveryOrder.VAT_TIN_Number) gstinText += ' || ';
+                if (deliveryOrder.VAT_TIN_Number) gstinText += deliveryOrder.VAT_TIN_Number;
+            } else {
+                gstinText += 'Not Available';
+            }
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(gstinText, leftColumnX, currentY + 45);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(`State: ${deliveryOrder.Company_State || 'Tamilnadu'}`, leftColumnX, currentY + 55);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text('Code:', leftColumnX, currentY + 65);
+
+
+            doc.font('Helvetica-Bold')
+                .fontSize(10)
+                .text('Buyer (Bill to)', leftColumnX, currentY + 85);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(deliveryOrder.Retailer_Name || '', leftColumnX, currentY + 98);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(`${deliveryOrder.Mobile_No || ''} - ${deliveryOrder.Party_Mailing_Address || ''}`, leftColumnX, currentY + 110, { width: 250 });
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(`${deliveryOrder.Reatailer_City || ''} - ${deliveryOrder.PinCode || ''}`, leftColumnX, currentY + 123);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(`GSTIN / UIN: ${deliveryOrder.GST_No || ''}`, leftColumnX, currentY + 137);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text(`State Name: ${deliveryOrder.StateGet || 'Tamilnadu'}`, leftColumnX, currentY + 152);
+
+            doc.font('Tamil')
+                .fontSize(9)
+                .text('Code:', leftColumnX, currentY + 165);
+
+
+
+
+
+            const extraDetails = [
+                { labelOne: 'Invoice No', dataOne: deliveryOrder.Do_Inv_No, labelTwo: 'Dated', dataTwo: LocalDate(deliveryOrder.Do_Date) },
+                { labelOne: 'Delivery Note', dataOne: '', labelTwo: 'Mode/Terms of Payment', dataTwo: '' },
+                { labelOne: 'Reference No. & Date', dataOne: '', labelTwo: 'Other References', dataTwo: brokerText },
+                { labelOne: 'Buyer\'s Order No', dataOne: '', labelTwo: 'Dated', dataTwo: '' },
+                { labelOne: 'Dispatch Doc No', dataOne: '', labelTwo: 'Delivery Note Date', dataTwo: '' },
+                { labelOne: 'Dispatched through', dataOne: transportText, labelTwo: 'Destination', dataTwo: '' },
+                { labelOne: 'Bill of Lading/LR-RR No', dataOne: '', labelTwo: 'Motor Vehicle No', dataTwo: '' },
+            ];
+
+            let rightY = currentY + 15;
+            extraDetails.forEach(detail => {
+                doc.font('Tamil')
+                    .fontSize(8)
+                    .text(detail.labelOne, rightColumnX, rightY)
+                    .text(`: ${detail.dataOne}`, rightColumnX + 80, rightY);
+
+                doc.font('Tamil')
+                    .fontSize(8)
+                    .text(detail.labelTwo, rightColumnX + 160, rightY)
+                    .text(`: ${detail.dataTwo}`, rightColumnX + 250, rightY);
+
+                rightY += 15;
+            });
+
+            doc.font('Tamil')
+                .fontSize(8)
+                .text('Terms of Delivery', rightColumnX, rightY);
+
+            currentY = rightY + 65;
+
+
+            currentY = checkPageBreak(currentY, 50);
+
+
+            doc.moveTo(leftColumnX, currentY)
+                .lineTo(550, currentY)
+                .stroke();
+
+            doc.fontSize(9)
+                .font('Helvetica-Bold')
+                .text('Sno', leftColumnX, currentY + 10)
+                .text('Product', leftColumnX + 35, currentY + 10)
+                .text('HSN/SAC', leftColumnX + 180, currentY + 10)
+                .text('Quantity', leftColumnX + 250, currentY + 10)
+                .text('Rate', leftColumnX + 300, currentY + 10)
+                .text('Rate', leftColumnX + 340, currentY + 10)
+                .text('Amount', leftColumnX + 420, currentY + 10);
+
+
+            let rateDesc = '';
+            if (isInclusive) rateDesc = '(Incl. of Tax)';
+            else if (isNotTaxableBill) rateDesc = '(Tax not applicable)';
+            else if (isExclusiveBill) rateDesc = '(Excl. of Tax)';
+
+            doc.fontSize(7)
+                .font('Tamil')
+                .text(rateDesc, leftColumnX + 335, currentY + 20);
+
+            currentY += 35;
+
+
+            if (includedProducts && includedProducts.length > 0) {
+                for (let index = 0; index < includedProducts.length; index++) {
+                    const item = includedProducts[index];
+
+
+                    currentY = checkPageBreak(currentY, 25);
+
+                    const qty = Number(item.Bill_Qty) || 0;
+                    const itemRate = Number(item.Item_Rate) || 0;
+                    const taxableAmount = Number(item.Taxable_Amount) || 0;
+                    const productName = item.Product_Name || '-';
+                    const unit = item.Units || 'Pcs';
+
+
+                    const gstPercentage = IS_IGST ? (item?.Igst || 0) : Addition(item?.Sgst || 0, item?.Cgst || 0);
+
+
+                    let rateWithoutTax = itemRate;
+                    let rateWithTax = itemRate;
+
+                    if (isInclusive) {
+                        const itemTax = taxCalc(1, itemRate, gstPercentage);
+                        rateWithoutTax = Subraction(itemRate, itemTax);
+                        rateWithTax = itemRate;
+                    } else if (isExclusiveBill) {
+                        const itemTax = taxCalc(0, itemRate, gstPercentage);
+                        rateWithoutTax = itemRate;
+                        rateWithTax = Addition(itemRate, itemTax);
+                    }
+
+                    doc.font('Helvetica')
+                        .fontSize(8)
+                        .text(`${index + 1}`, leftColumnX, currentY);
+
+                    doc.font('Tamil')
+                        .text(productName, leftColumnX + 35, currentY, { width: 140 });
+
+                    doc.font('Helvetica')
+                        .text(item.HSN_Code || '-', leftColumnX + 180, currentY)
+                        .text(`${NumberFormat(qty)}${unit ? ' (' + unit + ')' : ''}`, leftColumnX + 250, currentY)
+                        .text(NumberFormat(rateWithoutTax), leftColumnX + 305, currentY)
+                        .text(NumberFormat(rateWithTax), leftColumnX + 345, currentY)
+                        .text(NumberFormat(taxableAmount), leftColumnX + 425, currentY);
+
+                    currentY += 20;
+                }
+            }
+
+            doc.moveTo(leftColumnX, currentY)
+                .lineTo(550, currentY)
+                .stroke();
+
+            currentY += 20;
+
+
+            currentY = checkPageBreak(currentY, 200);
+
+
+            doc.fontSize(9)
+                .font('Helvetica')
+                .text('Amount Chargeable (in words):', leftColumnX, currentY)
+                .text(`INR ${numberToWords(parseInt(deliveryOrder?.Total_Invoice_value || 0))} Only.`, leftColumnX + 150, currentY);
+
+            currentY += 25;
+
+
+            const totalsX = 380;
+            const totalsValueX = 480;
+
+            doc.fontSize(9)
+                .font('Helvetica');
+
+
+            doc.text('Total Taxable Amount', totalsX - 150, currentY)
+                .text(NumberFormat(totalValueBeforeTax.TotalValue), totalsValueX, currentY, { align: 'right' });
+
+            currentY += 18;
+
+
+            if (!IS_IGST) {
+                doc.text('CGST', totalsX - 150, currentY)
+                    .text(NumberFormat(deliveryOrder?.CSGT_Total || 0), totalsValueX, currentY, { align: 'right' });
+                currentY += 18;
+
+                doc.text('SGST', totalsX - 150, currentY)
+                    .text(NumberFormat(deliveryOrder?.SGST_Total || 0), totalsValueX, currentY, { align: 'right' });
+                currentY += 18;
+            } else {
+                doc.text('IGST', totalsX - 150, currentY)
+                    .text(NumberFormat(deliveryOrder?.IGST_Total || 0), totalsValueX, currentY, { align: 'right' });
+                currentY += 18;
+            }
+
+            doc.text('Total Expences', totalsX - 150, currentY)
+                .text(NumberFormat(deliveryOrder?.Total_Expences || 0), totalsValueX, currentY, { align: 'right' });
+
+            currentY += 18;
+
+            doc.text('Round Off', totalsX - 150, currentY)
+                .text(NumberFormat(deliveryOrder?.Round_off || 0), totalsValueX, currentY, { align: 'right' });
+
+            currentY += 18;
+
+
+            doc.font('Helvetica-Bold')
+                .text('Total', totalsX - 150, currentY)
+                .text(NumberFormat(deliveryOrder?.Total_Invoice_value || 0), totalsValueX, currentY, { align: 'right' });
+
+            currentY += 30;
+
+
+            doc.fontSize(9)
+                .font('Helvetica-Bold');
+
+
+            doc.text('HSN / SAC', leftColumnX, currentY)
+                .text('Taxable Value', leftColumnX + 100, currentY);
+
+            if (IS_IGST) {
+                doc.text('IGST Tax', leftColumnX + 200, currentY)
+                    .text('Total', leftColumnX + 350, currentY);
+            } else {
+                doc.text('Central Tax', leftColumnX + 200, currentY)
+                    .text('State Tax', leftColumnX + 300, currentY)
+                    .text('Total', leftColumnX + 400, currentY);
+            }
+
+            currentY += 15;
+
+
+            if (IS_IGST) {
+                doc.text('Rate', leftColumnX + 180, currentY)
+                    .text('Amount', leftColumnX + 230, currentY)
+                    .text('Tax Amount', leftColumnX + 330, currentY);
+            } else {
+                doc.text('Rate', leftColumnX + 180, currentY)
+                    .text('Amount', leftColumnX + 220, currentY)
+                    .text('Rate', leftColumnX + 270, currentY)
+                    .text('Amount', leftColumnX + 310, currentY)
+                    .text('Tax Amount', leftColumnX + 370, currentY);
+            }
+
+            currentY += 10;
+            doc.moveTo(leftColumnX, currentY)
+                .lineTo(550, currentY)
+                .stroke();
+            currentY += 5;
+
+
+            doc.font('Helvetica')
+                .fontSize(8);
+
+            TaxData.forEach((item) => {
+
+                currentY = checkPageBreak(currentY, 20);
+
+                doc.text(item.hsnCode || 'N/A', leftColumnX, currentY)
+                    .text(NumberFormat(item.taxableValue), leftColumnX + 100, currentY);
+
+                if (IS_IGST) {
+                    doc.text(NumberFormat(item.igstPercentage), leftColumnX + 180, currentY)
+                        .text(NumberFormat(item.igst), leftColumnX + 230, currentY)
+                        .text(NumberFormat(item.totalTax), leftColumnX + 330, currentY);
+                } else {
+                    doc.text(NumberFormat(item.cgstPercentage), leftColumnX + 180, currentY)
+                        .text(NumberFormat(item.cgst), leftColumnX + 220, currentY)
+                        .text(NumberFormat(item.sgstPercentage), leftColumnX + 270, currentY)
+                        .text(NumberFormat(item.sgst), leftColumnX + 310, currentY)
+                        .text(NumberFormat(item.totalTax), leftColumnX + 370, currentY);
+                }
+
+                currentY += 15;
+            });
+
+            currentY = checkPageBreak(currentY, 20);
+
+            doc.font('Helvetica-Bold');
+
+            const hsnTotalTaxable = TaxData.reduce((sum, item) => sum + (item.taxableValue || 0), 0);
+            const hsnTotalCgst = TaxData.reduce((sum, item) => sum + (item.cgst || 0), 0);
+            const hsnTotalSgst = TaxData.reduce((sum, item) => sum + (item.sgst || 0), 0);
+            const hsnTotalIgst = TaxData.reduce((sum, item) => sum + (item.igst || 0), 0);
+            const hsnTotalTax = TaxData.reduce((sum, item) => sum + (item.totalTax || 0), 0);
+
+            doc.text('Total', leftColumnX, currentY)
+                .text(NumberFormat(hsnTotalTaxable), leftColumnX + 100, currentY);
+
+            if (IS_IGST) {
+                doc.text('', leftColumnX + 180, currentY)
+                    .text(NumberFormat(hsnTotalIgst), leftColumnX + 230, currentY)
+                    .text(NumberFormat(hsnTotalTax), leftColumnX + 330, currentY);
+            } else {
+                doc.text('', leftColumnX + 180, currentY)
+                    .text(NumberFormat(hsnTotalCgst), leftColumnX + 220, currentY)
+                    .text('', leftColumnX + 270, currentY)
+                    .text(NumberFormat(hsnTotalSgst), leftColumnX + 310, currentY)
+                    .text(NumberFormat(hsnTotalTax), leftColumnX + 370, currentY);
+            }
+
+            currentY += 20;
+
+            currentY = checkPageBreak(currentY, 30);
+
+            doc.font('Helvetica')
+                .fontSize(9)
+                .font('Helvetica-Bold')
+                .text(`Tax Amount (in words) : INR ${numberToWords(parseInt(hsnTotalTax))} only.`, leftColumnX, currentY);
+
+            currentY += 30;
+
+
+            doc.fontSize(8)
+                .text('This is a Computer Generated Invoice', { align: 'center' });
+
+            if (!shouldDownload) {
+
+                if (currentY + 80 > PAGE_HEIGHT - PAGE_BOTTOM_MARGIN) {
+                    doc.addPage();
+                    currentY = 50;
+                }
+
+                const buttonY = Math.min(currentY + 20, PAGE_HEIGHT - PAGE_BOTTOM_MARGIN - 40);
+                const buttonX = 200;
+                const buttonWidth = 200;
+                const buttonHeight = 30;
+
+                doc.save();
+                doc.roundedRect(buttonX, buttonY, buttonWidth, buttonHeight, 5)
+                    .fillAndStroke('#007bff', '#0056b3');
+                doc.restore();
+
+                doc.fillColor('#ffffff')
+                    .fontSize(11)
+                    .font('Helvetica-Bold')
+                    .text('⬇ DOWNLOAD INVOICE', buttonX + 20, buttonY + 9, {
+                        width: buttonWidth - 20,
+                        align: 'center'
+                    });
+
+                doc.fillColor('#000000');
+
+                const downloadUrl = `${req.protocol}://${req.get('host')}/api/sales/downloadPdf?Do_Inv_No=${Do_Inv_No}&download=true`;
+                doc.link(buttonX, buttonY, buttonWidth, buttonHeight, downloadUrl);
+
+                doc.fontSize(7)
+                    .font('Helvetica')
+                    .fillColor('#666666')
+                    .text('Click the button above to download this invoice', 50, buttonY + 38, {
+                        width: 500,
+                        align: 'center'
+                    });
+
+                doc.fillColor('#000000');
+            }
+
+            doc.end();
+
+            if (shouldDownload) {
+                await new Promise((resolve) => {
+                    setTimeout(resolve, 1000);
+                });
+
+                if (fsSync.existsSync(filePath)) {
+                    const stats = fsSync.statSync(filePath);
+
+                    res.setHeader('Content-Type', 'application/pdf');
+                    res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
+                    res.setHeader('Content-Length', stats.size);
+
+                    const readStream = fsSync.createReadStream(filePath);
+                    readStream.pipe(res);
+                } else {
+                    return servError(new Error('File not found'), res);
+                }
+            }
+
+        } catch (error) {
+            console.error('PDF Generation Error:', error);
+            if (!res.headersSent) {
+                return servError(error, res);
             }
         }
+    };
 
-    } catch (error) {
-        console.error('PDF Generation Error:', error);
-        if (!res.headersSent) {
-            return servError(error, res);
-        }
-    }
-};
+    const getInvoiceDetails = async (req, res) => {
 
-const getInvoiceDetails = async (req, res) => {
-  
-          try {
-              const {  Do_Inv_No } = req.query;
+        try {
+            const { Do_Inv_No } = req.query;
 
-              const getCurrespondingAccount = new sql.Request()
-                  .query(`
+            const getCurrespondingAccount = new sql.Request()
+                .query(`
                       SELECT Acc_Id, AC_Reason 
                       FROM tbl_Default_AC_Master 
                       WHERE 
                           Type = 'DEFAULT' 
                           AND Acc_Id IS NOT NULL;
                   `);
-      
-              const expData = (await getCurrespondingAccount).recordset;
-      
-              const request = new sql.Request()
-                  .input('Do_Inv_No', Do_Inv_No)
-                  .query(`
+
+            const expData = (await getCurrespondingAccount).recordset;
+
+            const request = new sql.Request()
+                .input('Do_Inv_No', Do_Inv_No)
+                .query(`
                       -- declaring table variable
                       DECLARE @FilteredInvoice TABLE (Do_Id INT);
                       
@@ -3559,90 +3558,90 @@ const getInvoiceDetails = async (req, res) => {
                           alteredTable = 'tbl_Sales_Delivery_Gen_Info' 
                           AND alteredRowId IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
                   `);
-      
-              const result = await request;
-      
-              const SalesGeneralInfo = toArray(result.recordsets[0]);
-              const Products_List = toArray(result.recordsets[1]);
-              const Expence_Array = toArray(result.recordsets[2]);
-              const Staffs_Array = toArray(result.recordsets[3]);
-              const Alteration_History = toArray(result.recordsets[4]);
-      
-       
-      
-              if (SalesGeneralInfo.length > 0) {
-                  const resData = SalesGeneralInfo.map(row => ({
-                      ...row,
-                      Products_List: Products_List.filter(
-                          fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
-                      ),
-                      Expence_Array: Expence_Array.filter(
-                          fil => isEqualNumber(fil.Do_Id, row.Do_Id)
-                      ),
-                      Staffs_Array: Staffs_Array.filter(
-                          fil => isEqualNumber(fil.Do_Id, row.Do_Id)
-                      ),
-                      alterationHistory: Alteration_History.filter(
-                          fil => isEqualNumber(fil.alteredRowId, row.Do_Id)
-                      )
-                  }));
-              
-                    dataFound(res, resData);
-              } else {
-                    noData(res)
-              }
-      
-          } catch (error) {
-                servError(error,res)
-          }
-      };
 
-function numberToWords(num) {
-    if (num === 0) return 'Zero';
-    
-    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-                  'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
-                  'Seventeen', 'Eighteen', 'Nineteen'];
-    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    
-    const numToWords = (n) => {
-        if (n < 20) return ones[n];
-        if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
-        if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + numToWords(n % 100) : '');
-        if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
-        if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
-        return numToWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + numToWords(n % 10000000) : '');
+            const result = await request;
+
+            const SalesGeneralInfo = toArray(result.recordsets[0]);
+            const Products_List = toArray(result.recordsets[1]);
+            const Expence_Array = toArray(result.recordsets[2]);
+            const Staffs_Array = toArray(result.recordsets[3]);
+            const Alteration_History = toArray(result.recordsets[4]);
+
+
+
+            if (SalesGeneralInfo.length > 0) {
+                const resData = SalesGeneralInfo.map(row => ({
+                    ...row,
+                    Products_List: Products_List.filter(
+                        fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
+                    ),
+                    Expence_Array: Expence_Array.filter(
+                        fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                    ),
+                    Staffs_Array: Staffs_Array.filter(
+                        fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                    ),
+                    alterationHistory: Alteration_History.filter(
+                        fil => isEqualNumber(fil.alteredRowId, row.Do_Id)
+                    )
+                }));
+
+                dataFound(res, resData);
+            } else {
+                noData(res)
+            }
+
+        } catch (error) {
+            servError(error, res)
+        }
     };
-    
-    return numToWords(num);
-}
+
+    function numberToWords(num) {
+        if (num === 0) return 'Zero';
+
+        const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+            'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+            'Seventeen', 'Eighteen', 'Nineteen'];
+        const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        const numToWords = (n) => {
+            if (n < 20) return ones[n];
+            if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+            if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + numToWords(n % 100) : '');
+            if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
+            if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
+            return numToWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + numToWords(n % 10000000) : '');
+        };
+
+        return numToWords(num);
+    }
 
 
 
     const salesInvoiceWhatsapp = async (req, res) => {
-  const { generalInfo, stockInfo } = req.body;
-  let transaction;
+        const { generalInfo, stockInfo } = req.body;
+        let transaction;
 
-  try {
-    transaction = new sql.Transaction();
-    await transaction.begin();
+        try {
+            transaction = new sql.Transaction();
+            await transaction.begin();
 
 
-    const maxPreIdRequest = new sql.Request(transaction);
-    const maxPreIdResult = await maxPreIdRequest.query(`
+            const maxPreIdRequest = new sql.Request(transaction);
+            const maxPreIdResult = await maxPreIdRequest.query(`
       SELECT ISNULL(MAX(Pre_Ord_Id), 0) + 1 AS NextId 
       FROM [dbo].[tbl_Sales_Whats_up_Order_Gen_Info]
     `);
-    const preOrderId = maxPreIdResult.recordset[0].NextId;
+            const preOrderId = maxPreIdResult.recordset[0].NextId;
 
-    const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
-    if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
-    const So_Id = So_Id_Get.MaxId;
+            const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
+            if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
+            const So_Id = So_Id_Get.MaxId;
 
-    const So_Date = generalInfo.So_Date;
-    const So_Year_Master = await new sql.Request(transaction)
-      .input('So_Date', So_Date)
-      .query(`
+            const So_Date = generalInfo.So_Date;
+            const So_Year_Master = await new sql.Request(transaction)
+                .input('So_Date', So_Date)
+                .query(`
         SELECT Id AS Year_Id, Year_Desc
         FROM tbl_Year_Master
         WHERE 
@@ -3650,24 +3649,24 @@ function numberToWords(num) {
           AND Fin_End_Date >= @So_Date
       `);
 
-    if (So_Year_Master.recordset.length === 0) throw new Error('Year_Id not found');
-    const { Year_Id, Year_Desc } = So_Year_Master.recordset[0];
+            if (So_Year_Master.recordset.length === 0) throw new Error('Year_Id not found');
+            const { Year_Id, Year_Desc } = So_Year_Master.recordset[0];
 
-    const voucherData = await new sql.Request(transaction)
-      .input('Voucher_Type', 0) 
-      .query(`
+            const voucherData = await new sql.Request(transaction)
+                .input('Voucher_Type', 0)
+                .query(`
         SELECT Voucher_Code 
         FROM tbl_Voucher_Type 
         WHERE Vocher_Type_Id = @Voucher_Type
       `);
 
-    const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
-    if (!VoucherCode) throw new Error('Failed to fetch Voucher Code for Voucher_Type_Id = 0');
+            const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
+            if (!VoucherCode) throw new Error('Failed to fetch Voucher Code for Voucher_Type_Id = 0');
 
-    const So_Branch_Inv_Id_Result = await new sql.Request(transaction)
-      .input('So_Year', Year_Id)
-      .input('Voucher_Type', 0)
-      .query(`
+            const So_Branch_Inv_Id_Result = await new sql.Request(transaction)
+                .input('So_Year', Year_Id)
+                .input('Voucher_Type', 0)
+                .query(`
         SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
         FROM tbl_Sales_Order_Gen_Info
         WHERE 
@@ -3675,94 +3674,94 @@ function numberToWords(num) {
           AND VoucherType = @Voucher_Type
       `);
 
-    const So_Branch_Inv_Id = Number(So_Branch_Inv_Id_Result.recordset[0]?.So_Branch_Inv_Id || 0) + 1;
-    if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
-
-  
-    const createPadString = (num, length) => {
-      return num.toString().padStart(length, '0');
-    };
-    
-    const So_Inv_No = `${VoucherCode}/${createPadString(So_Branch_Inv_Id, 6)}/${Year_Desc}`;
+            const So_Branch_Inv_Id = Number(So_Branch_Inv_Id_Result.recordset[0]?.So_Branch_Inv_Id || 0) + 1;
+            if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
 
 
-    const productsData = (await getProducts()).dataArray;
+            const createPadString = (num, length) => {
+                return num.toString().padStart(length, '0');
+            };
 
-    
-    const GST_Inclusive = generalInfo.GST_Inclusive || 1; 
-    const IS_IGST = generalInfo.IS_IGST || 0;
-    
-    const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
-    const isInclusive = isEqualNumber(GST_Inclusive, 1);
-    const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
-    const isIGST = isEqualNumber(IS_IGST, 1);
-    const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-
-   
-    const Total_Invoice_value = RoundNumber(stockInfo.reduce((acc, item) => {
-      const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
-      const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
-      const Amount = Multiplication(billQty, itemRate);
-
-      if (isNotTaxableBill) return Addition(acc, Amount);
-
-      const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
-      const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-
-      if (isInclusive) {
-        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-      } else {
-        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-      }
-    }, 0));
+            const So_Inv_No = `${VoucherCode}/${createPadString(So_Branch_Inv_Id, 6)}/${Year_Desc}`;
 
 
-    const totalValueBeforeTax = stockInfo.reduce((acc, item) => {
-      const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
-      const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
-      const Amount = Multiplication(billQty, itemRate);
+            const productsData = (await getProducts()).dataArray;
 
-      if (isNotTaxableBill) return {
-        TotalValue: Addition(acc.TotalValue, Amount),
-        TotalTax: 0
-      };
 
-      const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
-      const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+            const GST_Inclusive = generalInfo.GST_Inclusive || 1;
+            const IS_IGST = generalInfo.IS_IGST || 0;
 
-      const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-      const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
-      const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+            const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
 
-      return {
-        TotalValue, TotalTax
-      };
-    }, {
-      TotalValue: 0,
-      TotalTax: 0
-    });
 
-    const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
-    const Final_Total_Invoice_value = Math.round(Total_Invoice_value);
+            const Total_Invoice_value = RoundNumber(stockInfo.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
+                const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
+                const Amount = Multiplication(billQty, itemRate);
 
-    
-    const whatsappGenRequest = new sql.Request(transaction)
-      .input('Pre_Ord_Id', sql.Int, preOrderId)
-      .input('Ord_Date', sql.DateTime, generalInfo.So_Date)
-      .input('Customer_Name', sql.NVarChar, generalInfo.Customer_Name)
-      .input('Custome_Id', sql.Int, generalInfo.Retailer_Id)
-      .input('Broker_Name', sql.NVarChar, generalInfo.Broker_Name || '')
-      .input('Broker_Id', sql.Int, generalInfo.Broker_Id )
-      .input('Transporter_Name', sql.NVarChar, generalInfo.Transporter_Name || '')
-      .input('Transporter_Id', sql.Int, generalInfo.Transporter_Id)
-      .input('Ord_Mobile_No', sql.NVarChar, generalInfo.Ord_Mobile_No)
-      .input('Total_Invoice_value', sql.Decimal(18,2), Final_Total_Invoice_value)
-      .input('Shipp_Address', sql.NVarChar, generalInfo.Shipp_Address || '')
-      .input('Deliv_Address', sql.NVarChar, generalInfo.Deliv_Address || '')
-      .input('Rematks', sql.NVarChar, generalInfo.Rematks || '')
-      .input('Created_on', sql.DateTime, generalInfo.Created_on);
+                if (isNotTaxableBill) return Addition(acc, Amount);
 
-    await whatsappGenRequest.query(`
+                const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                if (isInclusive) {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                } else {
+                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                }
+            }, 0));
+
+
+            const totalValueBeforeTax = stockInfo.reduce((acc, item) => {
+                const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
+                const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
+                const Amount = Multiplication(billQty, itemRate);
+
+                if (isNotTaxableBill) return {
+                    TotalValue: Addition(acc.TotalValue, Amount),
+                    TotalTax: 0
+                };
+
+                const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
+                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+                return {
+                    TotalValue, TotalTax
+                };
+            }, {
+                TotalValue: 0,
+                TotalTax: 0
+            });
+
+            const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
+            const Final_Total_Invoice_value = Math.round(Total_Invoice_value);
+
+
+            const whatsappGenRequest = new sql.Request(transaction)
+                .input('Pre_Ord_Id', sql.Int, preOrderId)
+                .input('Ord_Date', sql.DateTime, generalInfo.So_Date)
+                .input('Customer_Name', sql.NVarChar, generalInfo.Customer_Name)
+                .input('Custome_Id', sql.Int, generalInfo.Retailer_Id)
+                .input('Broker_Name', sql.NVarChar, generalInfo.Broker_Name || '')
+                .input('Broker_Id', sql.Int, generalInfo.Broker_Id)
+                .input('Transporter_Name', sql.NVarChar, generalInfo.Transporter_Name || '')
+                .input('Transporter_Id', sql.Int, generalInfo.Transporter_Id)
+                .input('Ord_Mobile_No', sql.NVarChar, generalInfo.Ord_Mobile_No)
+                .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
+                .input('Shipp_Address', sql.NVarChar, generalInfo.Shipp_Address || '')
+                .input('Deliv_Address', sql.NVarChar, generalInfo.Deliv_Address || '')
+                .input('Rematks', sql.NVarChar, generalInfo.Rematks || '')
+                .input('Created_on', sql.DateTime, generalInfo.Created_on);
+
+            await whatsappGenRequest.query(`
       INSERT INTO [dbo].[tbl_Sales_Whats_up_Order_Gen_Info] 
       (Pre_Ord_Id, Ord_Date, Customer_Name, Custome_Id, Broker_Name, Broker_Id, 
        Transporter_Name, Transporter_Id, Ord_Mobile_No, Total_Invoice_value, 
@@ -3774,48 +3773,48 @@ function numberToWords(num) {
       );
     `);
 
-    const mainGenRequest = new sql.Request(transaction)
-  
-      .input('So_Id', sql.Int, So_Id)
-      .input('So_Inv_No', sql.NVarChar, So_Inv_No)
-      .input('So_Year', sql.Int, Year_Id)
-      .input('Pre_Id', sql.Int, preOrderId)
-      .input('So_Branch_Inv_Id', sql.Int, So_Branch_Inv_Id)
-      .input('So_Date', sql.Date, So_Date)
-      
-   
-      .input('Retailer_Id', sql.Int, generalInfo.Retailer_Id)
-      .input('Sales_Person_Id', sql.Int, generalInfo.Sales_Person_Id || 0)
-      .input('Branch_Id', sql.Int, generalInfo.Branch_Id || 1)
-      
-  
-      .input('VoucherType', sql.Int, 0) 
-      .input('GST_Inclusive', sql.Int, GST_Inclusive)
-      .input('IS_IGST', sql.Int, isIGST ? 1 : 0)
-      .input('CSGT_Total', sql.Decimal(18,2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-      .input('SGST_Total', sql.Decimal(18,2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-      .input('IGST_Total', sql.Decimal(18,2), isIGST ? totalValueBeforeTax.TotalTax : 0)
-      .input('Round_off', sql.Decimal(18,2), Round_off)
-      .input('Total_Before_Tax', sql.Decimal(18,2), totalValueBeforeTax.TotalValue)
-      .input('Total_Tax', sql.Decimal(18,2), totalValueBeforeTax.TotalTax)
-      .input('Total_Invoice_value', sql.Decimal(18,2), Final_Total_Invoice_value)
-      
-  
-      .input('Narration', sql.NVarChar, generalInfo.Rematks || '')
-      .input('isConverted', sql.Int, 0)
-      .input('Cancel_status', sql.Int, 1)
-      
+            const mainGenRequest = new sql.Request(transaction)
 
-      .input('Created_by', sql.Int, generalInfo.Created_by || 0)
-      .input('Altered_by', sql.Int, '')
-      .input('Created_on', sql.DateTime, generalInfo.Created_on)
-      .input('Alterd_on', sql.DateTime, generalInfo.Created_on)
-      .input('Trans_Type', sql.NVarChar, 'INSERT')
-      .input('Alter_Id', sql.Int, Math.floor(Math.random() * 999999))
-      .input('Approved_By', sql.Int, null)
-      .input('Approve_Status', sql.Int, 0);
+                .input('So_Id', sql.Int, So_Id)
+                .input('So_Inv_No', sql.NVarChar, So_Inv_No)
+                .input('So_Year', sql.Int, Year_Id)
+                .input('Pre_Id', sql.Int, preOrderId)
+                .input('So_Branch_Inv_Id', sql.Int, So_Branch_Inv_Id)
+                .input('So_Date', sql.Date, So_Date)
 
-    await mainGenRequest.query(`
+
+                .input('Retailer_Id', sql.Int, generalInfo.Retailer_Id)
+                .input('Sales_Person_Id', sql.Int, generalInfo.Sales_Person_Id || 0)
+                .input('Branch_Id', sql.Int, generalInfo.Branch_Id || 1)
+
+
+                .input('VoucherType', sql.Int, 0)
+                .input('GST_Inclusive', sql.Int, GST_Inclusive)
+                .input('IS_IGST', sql.Int, isIGST ? 1 : 0)
+                .input('CSGT_Total', sql.Decimal(18, 2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
+                .input('SGST_Total', sql.Decimal(18, 2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
+                .input('IGST_Total', sql.Decimal(18, 2), isIGST ? totalValueBeforeTax.TotalTax : 0)
+                .input('Round_off', sql.Decimal(18, 2), Round_off)
+                .input('Total_Before_Tax', sql.Decimal(18, 2), totalValueBeforeTax.TotalValue)
+                .input('Total_Tax', sql.Decimal(18, 2), totalValueBeforeTax.TotalTax)
+                .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
+
+
+                .input('Narration', sql.NVarChar, generalInfo.Rematks || '')
+                .input('isConverted', sql.Int, 0)
+                .input('Cancel_status', sql.Int, 1)
+
+
+                .input('Created_by', sql.Int, generalInfo.Created_by || 0)
+                .input('Altered_by', sql.Int, '')
+                .input('Created_on', sql.DateTime, generalInfo.Created_on)
+                .input('Alterd_on', sql.DateTime, generalInfo.Created_on)
+                .input('Trans_Type', sql.NVarChar, 'INSERT')
+                .input('Alter_Id', sql.Int, Math.floor(Math.random() * 999999))
+                .input('Approved_By', sql.Int, null)
+                .input('Approve_Status', sql.Int, 0);
+
+            await mainGenRequest.query(`
       INSERT INTO [dbo].[tbl_Sales_Order_Gen_Info] 
       (So_Id, So_Inv_No, So_Year, Pre_Id, So_Branch_Inv_Id, So_Date,
        Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, GST_Inclusive, IS_IGST,
@@ -3833,38 +3832,38 @@ function numberToWords(num) {
       );
     `);
 
-    if (stockInfo && stockInfo.length > 0) {
-      for (let i = 0; i < stockInfo.length; i++) {
-        const item = stockInfo[i];
-        
-        const productDetails = findProductDetails(productsData, item.Item_Id || item.Product_Id);
-        const gstPercentage = isIGST ? productDetails.Igst_P : productDetails.Gst_P;
-        
-        const Bill_Qty = Number(item.Bill_Qty || item.Quantity || 0);
-        const Item_Rate = RoundNumber(item.Item_Rate || item.Price || 0);
-        const Amount = Multiplication(Bill_Qty, Item_Rate);
-        
-        const Taxble = gstPercentage > 0 ? 1 : 0;
-        
-        const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
-        const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
-        
-        const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
-        const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
-        const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
-        const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
-        const Sgst_Amo = Cgst_Amo;
-        
-        const whatsappStockRequest = new sql.Request(transaction)
-          .input('Pre_Ord_Id', sql.Int, preOrderId)
-          .input('S_No', sql.Int, i + 1)
-          .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
-          .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
-          .input('Bill_Qty', sql.Decimal(18,2), Bill_Qty)
-          .input('Rate', sql.Decimal(18,2), Item_Rate)
-          .input('Amount', sql.Decimal(18,2), Amount);
+            if (stockInfo && stockInfo.length > 0) {
+                for (let i = 0; i < stockInfo.length; i++) {
+                    const item = stockInfo[i];
 
-        await whatsappStockRequest.query(`
+                    const productDetails = findProductDetails(productsData, item.Item_Id || item.Product_Id);
+                    const gstPercentage = isIGST ? productDetails.Igst_P : productDetails.Gst_P;
+
+                    const Bill_Qty = Number(item.Bill_Qty || item.Quantity || 0);
+                    const Item_Rate = RoundNumber(item.Item_Rate || item.Price || 0);
+                    const Amount = Multiplication(Bill_Qty, Item_Rate);
+
+                    const Taxble = gstPercentage > 0 ? 1 : 0;
+
+                    const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                    const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                    const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+                    const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+                    const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+                    const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
+                    const Sgst_Amo = Cgst_Amo;
+
+                    const whatsappStockRequest = new sql.Request(transaction)
+                        .input('Pre_Ord_Id', sql.Int, preOrderId)
+                        .input('S_No', sql.Int, i + 1)
+                        .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
+                        .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
+                        .input('Bill_Qty', sql.Decimal(18, 2), Bill_Qty)
+                        .input('Rate', sql.Decimal(18, 2), Item_Rate)
+                        .input('Amount', sql.Decimal(18, 2), Amount);
+
+                    await whatsappStockRequest.query(`
           INSERT INTO [dbo].[tbl_Sales_Whats_up_Order_Stock_Info]
           (Pre_Ord_Id, S_No, Item_Id, Unit_Id, Bill_Qty, Rate, Amount)
           VALUES (
@@ -3872,35 +3871,35 @@ function numberToWords(num) {
           );
         `);
 
-        const mainStockRequest = new sql.Request(transaction)
-          .input('So_Date', sql.Date, So_Date)
-          .input('Sales_Order_Id', sql.Int, So_Id)
-          .input('S_No', sql.Int, i + 1)
-          .input('Pre_Id', sql.Int, preOrderId)
-          .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
-          .input('Bill_Qty', sql.Decimal(18,2), Bill_Qty)
-          .input('Taxable_Rate', sql.Decimal(18,2), itemRateGst.base_amount)
-          .input('Item_Rate', sql.Decimal(18,2), Item_Rate)
-          .input('Amount', sql.Decimal(18,2), Amount)
-          .input('Free_Qty', sql.Decimal(18,2), 0)
-          .input('Total_Qty', sql.Decimal(18,2), Bill_Qty)
-          .input('Taxble', sql.Decimal(18,2), Taxble)
-          .input('HSN_Code', sql.NVarChar, productDetails.HSN_Code || '210690')
-          .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
-          .input('Unit_Name', sql.NVarChar, item.Unit_Name || 'QTY')
-          .input('Taxable_Amount', sql.Decimal(18,2), gstInfo.base_amount)
-          .input('Tax_Rate', sql.Decimal(18,2), gstPercentage)
-          .input('Cgst', sql.Decimal(18,2), cgstPer)
-          .input('Cgst_Amo', sql.Decimal(18,2), Cgst_Amo)
-          .input('Sgst', sql.Decimal(18,2), cgstPer)
-          .input('Sgst_Amo', sql.Decimal(18,2), Sgst_Amo)
-          .input('Igst', sql.Decimal(18,2), igstPer)
-          .input('Igst_Amo', sql.Decimal(18,2), Igst_Amo)
-          .input('Final_Amo', sql.Decimal(18,2), gstInfo.with_tax)
-          .input('Created_on', sql.DateTime, generalInfo.Created_on)
-          .input('GoDown_Id', sql.Int, item.GoDown_Id || null);
+                    const mainStockRequest = new sql.Request(transaction)
+                        .input('So_Date', sql.Date, So_Date)
+                        .input('Sales_Order_Id', sql.Int, So_Id)
+                        .input('S_No', sql.Int, i + 1)
+                        .input('Pre_Id', sql.Int, preOrderId)
+                        .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
+                        .input('Bill_Qty', sql.Decimal(18, 2), Bill_Qty)
+                        .input('Taxable_Rate', sql.Decimal(18, 2), itemRateGst.base_amount)
+                        .input('Item_Rate', sql.Decimal(18, 2), Item_Rate)
+                        .input('Amount', sql.Decimal(18, 2), Amount)
+                        .input('Free_Qty', sql.Decimal(18, 2), 0)
+                        .input('Total_Qty', sql.Decimal(18, 2), Bill_Qty)
+                        .input('Taxble', sql.Decimal(18, 2), Taxble)
+                        .input('HSN_Code', sql.NVarChar, productDetails.HSN_Code || '210690')
+                        .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
+                        .input('Unit_Name', sql.NVarChar, item.Unit_Name || 'QTY')
+                        .input('Taxable_Amount', sql.Decimal(18, 2), gstInfo.base_amount)
+                        .input('Tax_Rate', sql.Decimal(18, 2), gstPercentage)
+                        .input('Cgst', sql.Decimal(18, 2), cgstPer)
+                        .input('Cgst_Amo', sql.Decimal(18, 2), Cgst_Amo)
+                        .input('Sgst', sql.Decimal(18, 2), cgstPer)
+                        .input('Sgst_Amo', sql.Decimal(18, 2), Sgst_Amo)
+                        .input('Igst', sql.Decimal(18, 2), igstPer)
+                        .input('Igst_Amo', sql.Decimal(18, 2), Igst_Amo)
+                        .input('Final_Amo', sql.Decimal(18, 2), gstInfo.with_tax)
+                        .input('Created_on', sql.DateTime, generalInfo.Created_on)
+                        .input('GoDown_Id', sql.Int, item.GoDown_Id || null);
 
-        await mainStockRequest.query(`
+                    await mainStockRequest.query(`
           INSERT INTO [dbo].[tbl_Sales_Order_Stock_Info]
           (So_Date, Sales_Order_Id, S_No, Pre_Id, Item_Id, Bill_Qty, Taxable_Rate,
            Item_Rate, Amount, Free_Qty, Total_Qty, Taxble, HSN_Code, Unit_Id,
@@ -3913,31 +3912,31 @@ function numberToWords(num) {
             @Igst, @Igst_Amo, @Final_Amo, @Created_on, @GoDown_Id
           );
         `);
-      }
-    }
+                }
+            }
 
-    if (generalInfo.Staff_Involved_List && generalInfo.Staff_Involved_List.length > 0) {
-      for (const staff of generalInfo.Staff_Involved_List) {
-        await new sql.Request(transaction)
-          .input('So_Id', sql.Int, So_Id)
-          .input('Involved_Emp_Id', sql.Int, staff?.Involved_Emp_Id)
-          .input('Cost_Center_Type_Id', sql.Int, staff?.Cost_Center_Type_Id)
-          .query(`
+            if (generalInfo.Staff_Involved_List && generalInfo.Staff_Involved_List.length > 0) {
+                for (const staff of generalInfo.Staff_Involved_List) {
+                    await new sql.Request(transaction)
+                        .input('So_Id', sql.Int, So_Id)
+                        .input('Involved_Emp_Id', sql.Int, staff?.Involved_Emp_Id)
+                        .input('Cost_Center_Type_Id', sql.Int, staff?.Cost_Center_Type_Id)
+                        .query(`
             INSERT INTO tbl_Sales_Order_Staff_Info (
               So_Id, Involved_Emp_Id, Cost_Center_Type_Id
             ) VALUES (
               @So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
             );
           `);
-      }
-    }
+                }
+            }
 
-    await transaction.commit();
+            await transaction.commit();
 
-    const whatsappFetchRequest = new sql.Request()
-      .input('Pre_Ord_Id', sql.Int, preOrderId);
+            const whatsappFetchRequest = new sql.Request()
+                .input('Pre_Ord_Id', sql.Int, preOrderId);
 
-    const whatsappResult = await whatsappFetchRequest.query(`
+            const whatsappResult = await whatsappFetchRequest.query(`
       SELECT 
         g.*,
         s.S_No,
@@ -3952,9 +3951,9 @@ function numberToWords(num) {
       ORDER BY s.S_No;
     `);
 
-    const getCreatedSaleOrder = new sql.Request()
-      .input('So_Id', So_Id)
-      .query(`
+            const getCreatedSaleOrder = new sql.Request()
+                .input('So_Id', So_Id)
+                .query(`
         -- general info
         SELECT 
             so.*, 
@@ -3998,66 +3997,66 @@ function numberToWords(num) {
         WHERE sosi.So_Id = @So_Id;
       `);
 
-    const createdSaleOrder = await getCreatedSaleOrder;
+            const createdSaleOrder = await getCreatedSaleOrder;
 
-   
-    const processedData = {
-      success: true,
-      message: "Order created successfully in all tables",
-      data: {
-      
-        whatsapp: {
-          Pre_Ord_Id: preOrderId,
-          generalInfo: generalInfo,
-          stockInfo: stockInfo,
-          insertedData: whatsappResult.recordset
-        },
 
-        mainOrder: {
-          So_Id: So_Id,
-          So_Inv_No: So_Inv_No,
-          So_Year: Year_Id,
-          So_Branch_Inv_Id: So_Branch_Inv_Id,
-          VoucherType: 0,
-          VoucherCode: VoucherCode,
-          generalInfo: (createdSaleOrder.recordsets[0]) ? createdSaleOrder.recordsets[0] : {},
-          productDetails: toArray(createdSaleOrder.recordsets[1]),
-          staffInvolved: toArray(createdSaleOrder.recordsets[2])
-        },
-        totalAmount: Final_Total_Invoice_value,
-        totalItems: stockInfo.length,
-        taxSummary: {
-          totalBeforeTax: totalValueBeforeTax.TotalValue,
-          totalTax: totalValueBeforeTax.TotalTax,
-          cgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
-          sgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
-          igst: isIGST ? totalValueBeforeTax.TotalTax : 0,
-          roundOff: Round_off
+            const processedData = {
+                success: true,
+                message: "Order created successfully in all tables",
+                data: {
+
+                    whatsapp: {
+                        Pre_Ord_Id: preOrderId,
+                        generalInfo: generalInfo,
+                        stockInfo: stockInfo,
+                        insertedData: whatsappResult.recordset
+                    },
+
+                    mainOrder: {
+                        So_Id: So_Id,
+                        So_Inv_No: So_Inv_No,
+                        So_Year: Year_Id,
+                        So_Branch_Inv_Id: So_Branch_Inv_Id,
+                        VoucherType: 0,
+                        VoucherCode: VoucherCode,
+                        generalInfo: (createdSaleOrder.recordsets[0]) ? createdSaleOrder.recordsets[0] : {},
+                        productDetails: toArray(createdSaleOrder.recordsets[1]),
+                        staffInvolved: toArray(createdSaleOrder.recordsets[2])
+                    },
+                    totalAmount: Final_Total_Invoice_value,
+                    totalItems: stockInfo.length,
+                    taxSummary: {
+                        totalBeforeTax: totalValueBeforeTax.TotalValue,
+                        totalTax: totalValueBeforeTax.TotalTax,
+                        cgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
+                        sgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
+                        igst: isIGST ? totalValueBeforeTax.TotalTax : 0,
+                        roundOff: Round_off
+                    }
+                }
+            };
+
+            return res.status(200).json(processedData);
+
+        } catch (error) {
+            console.error('Error in salesInvoiceWhatsapp:', error);
+
+
+            if (transaction && transaction._aborted === false) {
+                try {
+                    await transaction.rollback();
+                } catch (rollbackError) {
+                    console.error('Error rolling back transaction:', rollbackError);
+                }
+            }
+
+            return res.status(500).json({
+                success: false,
+                message: error.message || "Failed to create order",
+                error: error.toString()
+            });
         }
-      }
     };
-
-    return res.status(200).json(processedData);
-
-  } catch (error) {
-    console.error('Error in salesInvoiceWhatsapp:', error);
-    
-  
-    if (transaction && transaction._aborted === false) {
-      try {
-        await transaction.rollback();
-      } catch (rollbackError) {
-        console.error('Error rolling back transaction:', rollbackError);
-      }
-    }
-    
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to create order",
-      error: error.toString()
-    });
-  }
-};
 
 
 

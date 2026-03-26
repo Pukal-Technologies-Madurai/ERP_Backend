@@ -142,7 +142,13 @@ export const getCreditNote = async (req, res) => {
                 LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = stf.Emp_Id
                 LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = stf.Emp_Type_Id
                 WHERE stf.CR_Id IN (SELECT DISTINCT CR_Id FROM @FilteredInvoice);
-            `);
+            -- Alteration History
+                SELECT ah.*, u.Name AS alterByGet 
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                WHERE 
+                    alteredTable = 'tbl_Credit_Note_Gen_Info' 
+                    AND alteredRowId IN (SELECT DISTINCT CR_Id FROM @FilteredInvoice);`);
 
         const result = await request;
 
@@ -150,13 +156,15 @@ export const getCreditNote = async (req, res) => {
         const Products_List = toArray(result.recordsets[1]);
         const Expence_Array = toArray(result.recordsets[2]);
         const Staffs_Array = toArray(result.recordsets[3]);
+        const alterHistory = toArray(result.recordsets[4]);
 
         if (GeneralInfo.length > 0) {
             const resData = GeneralInfo.map(row => ({
                 ...row,
                 Products_List: Products_List.filter(fil => isEqualNumber(fil.CR_Id, row.CR_Id)),
                 Expence_Array: Expence_Array.filter(fil => isEqualNumber(fil.CR_Id, row.CR_Id)),
-                Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.CR_Id, row.CR_Id))
+                Staffs_Array: Staffs_Array.filter(fil => isEqualNumber(fil.CR_Id, row.CR_Id)),
+                alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, row.CR_Id))
             }));
             dataFound(res, resData);
         } else {
@@ -640,7 +648,7 @@ export const createCreditNote = async (req, res) => {
 }
 
 export const updateCreditNote = async (req, res) => {
-    const transaction = req.transaction || new sql.Transaction();
+    const transaction = req.transaction;
 
     try {
         const {
@@ -729,8 +737,6 @@ export const updateCreditNote = async (req, res) => {
         const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
         const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
         const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
-
-        if (!req.transaction) await transaction.begin();
 
         const request = new sql.Request(transaction)
             .input('CR_Id', sql.Int, CR_Id)
@@ -988,7 +994,7 @@ export const updateCreditNote = async (req, res) => {
             }
         }
 
-        if (!req.transaction) await transaction.commit();
+        await transaction.commit();
 
         success(res, 'Credit Note updated successfully!')
     } catch (e) {

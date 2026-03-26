@@ -690,7 +690,7 @@ const salesNewApi = async (req, res) => {
         const numberColumn = ['Sal_Id', 'Credit_Days', 'Invoiceamount'];
 
         const result = await request;
-        const [generalInfo, StockInfo, expencess, broker, transporter] = result.recordsets;
+        const [generalInfo, StockInfo, expencess] = result.recordsets;
 
         const genNullDef = nullDefender(generalInfo, numberColumn)
 
@@ -698,8 +698,6 @@ const salesNewApi = async (req, res) => {
             ...info,
             ALLINVENTORYENTRIES: StockInfo.filter(stock => isEqualNumber(stock.Sal_Id, info.Sal_Id)),
             LEDGERENTRIES: expencess.filter(exp => isEqualNumber(exp.Sal_Id, info.Sal_Id)),
-            Other_Reference: broker.find(br => isEqualNumber(br.Sal_Id, info.Sal_Id)) || '',
-            Dispatched_Through: transporter.find(tr => isEqualNumber(tr.Sal_Id, info.Sal_Id)) || '',
         }));
 
         dataFound(res, { Sales: creditNote })

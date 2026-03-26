@@ -4,6 +4,131 @@ import { checkIsNumber, createPadString, filterableText, isEqualNumber, ISOStrin
 
 const StockManagement = () => {
 
+    const getProcessingDetails = async (req, res) => {
+        try {
+            const Fromdate = req.body?.Fromdate ? ISOString(req.body.Fromdate) : ISOString();
+            const Todate = req.body?.Todate ? ISOString(req.body.Todate) : ISOString();
+            const { filterItems = [] } = req.body;
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('filterItems', toArray(filterItems).map(item => toNumber(item)).join(', '))
+                .query(`
+                    DECLARE @itemFilterTable TABLE (itemId INT);
+                    -- inserting items
+                    INSERT INTO @itemFilterTable (itemId)
+                    SELECT TRY_CAST(value AS INT) AS Product_Id
+                    FROM STRING_SPLIT(@filterItems, ',')
+                    WHERE TRY_CAST(value AS INT) IS NOT NULL;
+                    -- other final filters
+                    DECLARE @processingFilters TABLE (PR_Id INT);
+                    -- inserting final filter data
+                    INSERT INTO @processingFilters (PR_Id)
+                    SELECT pgi.PR_Id
+                    FROM tbl_Processing_Gen_Info AS pgi
+                    LEFT JOIN tbl_Processing_Source_Details AS s
+                    ON s.PR_Id = pgi.PR_Id
+                    LEFT JOIN tbl_Processing_Destin_Details AS d
+                    ON d.PR_Id = pgi.PR_Id
+                    WHERE 
+                    	pgi.Process_date BETWEEN @Fromdate AND @Todate
+                    	${toArray(filterItems).length > 0 ? `
+                        AND (
+                    		s.Sour_Item_Id IN (SELECT DISTINCT itemId FROM @itemFilterTable)
+                    		OR d.Dest_Item_Id IN (SELECT DISTINCT itemId FROM @itemFilterTable)
+                    	) ` : ''}
+                    -- processing general info
+                    SELECT 
+                    	pgi.*,
+                    	br.BranchName,
+                    	v.Voucher_Type AS VoucherTypeGet,
+                    	g.Godown_Name AS GodownNameGet
+                    FROM tbl_Processing_Gen_Info AS pgi
+                    LEFT JOIN tbl_Branch_Master AS br
+                        ON br.BranchId = pgi.Branch_Id
+                    LEFT JOIN tbl_Voucher_Type AS v
+                        ON v.Vocher_Type_Id = pgi.VoucherType
+                    LEFT JOIN tbl_Godown_Master AS g
+                        ON g.Godown_Id = pgi.Godownlocation
+                    WHERE pgi.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters)
+                    ORDER BY pgi.Process_date DESC;
+                    -- source details
+                    SELECT s.*,
+                        p.Product_Name,
+                        g.Godown_Name
+                    FROM tbl_Processing_Source_Details AS s
+                    LEFT JOIN tbl_Product_Master AS p
+                        ON s.Sour_Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Godown_Master AS g
+                        ON s.Sour_Goodown_Id = g.Godown_Id
+                    WHERE s.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+                    -- destination details
+                    SELECT d.*,
+                        p.Product_Name,
+                        g.Godown_Name
+                    FROM tbl_Processing_Destin_Details AS d
+                    LEFT JOIN tbl_Product_Master AS p
+                        ON d.Dest_Item_Id = p.Product_Id
+                    LEFT JOIN tbl_Godown_Master AS g
+                        ON d.Dest_Goodown_Id = g.Godown_Id
+                    WHERE d.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+                    -- staff details
+                    SELECT st.*,
+                        cc.Cost_Center_Name AS EmpNameGet,
+                        cct.Cost_Category AS EmpTypeGet
+                    FROM tbl_Processing_Staff_Involved AS st
+                    LEFT JOIN tbl_ERP_Cost_Center AS cc
+                        ON cc.Cost_Center_Id = st.Staff_Id
+                    LEFT JOIN tbl_ERP_Cost_Category as cct
+                        ON cct.Cost_Category_Id = st.Staff_Type_Id
+                    WHERE st.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+                    -- alteration history
+                    SELECT ah.*, u.Name AS alterByGet 
+                    FROM tbl_Alteration_History AS ah
+                    LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                    WHERE 
+                        alteredTable = 'tbl_Processing_Gen_Info' 
+                        AND alteredRowId IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+                `);
+
+            const result = await request;
+
+            const generalInfo = toArray(result.recordsets[0]);
+            const sourceInfo = toArray(result.recordsets[1]);
+            const destinationInfo = toArray(result.recordsets[2]);
+            const staffInfo = toArray(result.recordsets[3]);
+            const alterHistory = toArray(result.recordsets[4]);
+
+            if (result.recordsets[0].length > 0) {
+
+                const extractedData = generalInfo.map(o => ({
+                    ...o,
+                    SourceDetails: sourceInfo.filter(
+                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                    ),
+                    DestinationDetails: destinationInfo.filter(
+                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                    ),
+                    StaffsDetails: staffInfo.filter(
+                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                    ),
+                    alterHistoryDetails: alterHistory.filter(
+                        fil => isEqualNumber(fil.alteredRowId, o.PR_Id)
+                    )
+                }));
+
+                dataFound(res, extractedData);
+
+            } else {
+                noData(res);
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
     const createStockProcessing = async (req, res) => {
         const transaction = new sql.Transaction();
 
@@ -694,120 +819,6 @@ const StockManagement = () => {
         }
     }
 
-    const getProcessingDetails = async (req, res) => {
-        try {
-            const Fromdate = req.body?.Fromdate ? ISOString(req.body.Fromdate) : ISOString();
-            const Todate = req.body?.Todate ? ISOString(req.body.Todate) : ISOString();
-            const { filterItems = [] } = req.body;
-
-            const request = new sql.Request()
-                .input('Fromdate', Fromdate)
-                .input('Todate', Todate)
-                .input('filterItems', toArray(filterItems).map(item => toNumber(item)).join(', '))
-                .query(`
-                    DECLARE @itemFilterTable TABLE (itemId INT);
-                    -- inserting items
-                    INSERT INTO @itemFilterTable (itemId)
-                    SELECT TRY_CAST(value AS INT) AS Product_Id
-                    FROM STRING_SPLIT(@filterItems, ',')
-                    WHERE TRY_CAST(value AS INT) IS NOT NULL;
-                    -- other final filters
-                    DECLARE @processingFilters TABLE (PR_Id INT);
-                    -- inserting final filter data
-                    INSERT INTO @processingFilters (PR_Id)
-                    SELECT pgi.PR_Id
-                    FROM tbl_Processing_Gen_Info AS pgi
-                    LEFT JOIN tbl_Processing_Source_Details AS s
-                    ON s.PR_Id = pgi.PR_Id
-                    LEFT JOIN tbl_Processing_Destin_Details AS d
-                    ON d.PR_Id = pgi.PR_Id
-                    WHERE 
-                    	pgi.Process_date BETWEEN @Fromdate AND @Todate
-                    	${toArray(filterItems).length > 0 ? `
-                        AND (
-                    		s.Sour_Item_Id IN (SELECT DISTINCT itemId FROM @itemFilterTable)
-                    		OR d.Dest_Item_Id IN (SELECT DISTINCT itemId FROM @itemFilterTable)
-                    	) ` : ''}
-                    -- processing general info
-                    SELECT 
-                    	pgi.*,
-                    	br.BranchName,
-                    	v.Voucher_Type AS VoucherTypeGet,
-                    	g.Godown_Name AS GodownNameGet
-                    FROM tbl_Processing_Gen_Info AS pgi
-                    LEFT JOIN tbl_Branch_Master AS br
-                        ON br.BranchId = pgi.Branch_Id
-                    LEFT JOIN tbl_Voucher_Type AS v
-                        ON v.Vocher_Type_Id = pgi.VoucherType
-                    LEFT JOIN tbl_Godown_Master AS g
-                        ON g.Godown_Id = pgi.Godownlocation
-                    WHERE pgi.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters)
-                    ORDER BY pgi.Process_date DESC;
-                    -- source details
-                    SELECT s.*,
-                        p.Product_Name,
-                        g.Godown_Name
-                    FROM tbl_Processing_Source_Details AS s
-                    LEFT JOIN tbl_Product_Master AS p
-                        ON s.Sour_Item_Id = p.Product_Id
-                    LEFT JOIN tbl_Godown_Master AS g
-                        ON s.Sour_Goodown_Id = g.Godown_Id
-                    WHERE s.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
-                    -- destination details
-                    SELECT d.*,
-                        p.Product_Name,
-                        g.Godown_Name
-                    FROM tbl_Processing_Destin_Details AS d
-                    LEFT JOIN tbl_Product_Master AS p
-                        ON d.Dest_Item_Id = p.Product_Id
-                    LEFT JOIN tbl_Godown_Master AS g
-                        ON d.Dest_Goodown_Id = g.Godown_Id
-                    WHERE d.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
-                    -- staff details
-                    SELECT st.*,
-                        cc.Cost_Center_Name AS EmpNameGet,
-                        cct.Cost_Category AS EmpTypeGet
-                    FROM tbl_Processing_Staff_Involved AS st
-                    LEFT JOIN tbl_ERP_Cost_Center AS cc
-                        ON cc.Cost_Center_Id = st.Staff_Id
-                    LEFT JOIN tbl_ERP_Cost_Category as cct
-                        ON cct.Cost_Category_Id = st.Staff_Type_Id
-                    WHERE st.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
-                `);
-
-            const result = await request;
-
-            const generalInfo = toArray(result.recordsets[0]);
-            const sourceInfo = toArray(result.recordsets[1]);
-            const destinationInfo = toArray(result.recordsets[2]);
-            const staffInfo = toArray(result.recordsets[3]);
-
-            if (result.recordsets[0].length > 0) {
-
-                const extractedData = generalInfo.map(o => ({
-                    ...o,
-                    SourceDetails: sourceInfo.filter(
-                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
-                    ),
-                    DestinationDetails: destinationInfo.filter(
-                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
-                    ),
-                    StaffsDetails: staffInfo.filter(
-                        fil => isEqualNumber(fil.PR_Id, o.PR_Id)
-                    )
-                }));
-
-                dataFound(res, extractedData);
-
-            } else {
-                noData(res);
-            }
-
-        } catch (e) {
-            servError(e, res);
-        }
-    };
-
     const getItemsUsedInProcessing = async (req, res) => {
         try {
             const request = new sql.Request()
@@ -838,10 +849,10 @@ const StockManagement = () => {
     }
 
     return {
+        getProcessingDetails,
         createStockProcessing,
         updateStockProcessing,
         deleteStockProcessing,
-        getProcessingDetails,
         getItemsUsedInProcessing,
     }
 }

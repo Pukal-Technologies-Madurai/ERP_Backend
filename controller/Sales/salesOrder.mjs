@@ -822,6 +822,17 @@ const SaleOrder = () => {
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
             );
+            /* ================================ 
+                STEP 7 : ALTERATION HISTORY
+            ================================= */
+            SELECT 
+                ah.*,
+                u.Name AS alterByGet
+            FROM tbl_Alteration_History AS ah
+            LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+            WHERE 
+                alteredTable = 'tbl_Sales_Order_Gen_Info' 
+                AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
         `);
 
             const [
@@ -829,7 +840,8 @@ const SaleOrder = () => {
                 ProductDetails,
                 StaffInvolved,
                 DeliveryData,
-                DeliveryItems
+                DeliveryItems,
+                AlterHistory
             ] = result.recordsets.map(toArray);
 
             if (!OrderData.length) return noData(res);
@@ -857,6 +869,10 @@ const SaleOrder = () => {
                 const status =
                     totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
 
+                const alterHistory = AlterHistory.filter(ah =>
+                    isEqualNumber(ah.alteredRowId, order.So_Id)
+                );
+
                 return {
                     ...order,
                     OrderStatus: status,
@@ -875,7 +891,8 @@ const SaleOrder = () => {
                                 ...p,
                                 ProductImageUrl: getImage("products", p.Product_Image_Name)
                             }))
-                    }))
+                    })),
+                    alterHistoryDetails: alterHistory
                 };
             });
 

@@ -52,6 +52,21 @@ const ReceiptMaster = () => {
                 .input('createdBy', createdBy)
                 .input('status', status)
                 .query(`
+                    -- FILTER TABLE
+                    DECLARE @FilteredReceipts TABLE (receipt_id INT);
+                    INSERT INTO @FilteredReceipts (receipt_id)
+                    SELECT receipt_id
+                    FROM tbl_Receipt_General_Info
+                    WHERE 
+                        receipt_date BETWEEN @Fromdate AND @Todate
+                        ${checkIsNumber(voucher) ? ' AND receipt_voucher_type_id = @voucher ' : ''}
+                        ${checkIsNumber(debit) ? ' AND debit_ledger = @debit ' : ''}
+                        ${checkIsNumber(credit) ? ' AND credit_ledger = @credit ' : ''}
+                        ${checkIsNumber(receipt_type) ? ' AND receipt_bill_type = @receipt_type ' : ''}
+                        ${checkIsNumber(createdBy) ? ' AND created_by = @createdBy ' : ''}
+                        ${transaction_type ? ' AND transaction_type = @transaction_type ' : ''}
+                        ${checkIsNumber(Branch_Id) ? ' AND Branch_Id = @Branch_Id ' : ''}
+                        ${checkIsNumber(status) ? ' AND status = @status ' : ''}
                     SELECT 
                         rgi.*,
                         vt.Voucher_Type,
@@ -91,23 +106,28 @@ const ReceiptMaster = () => {
                     LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
                     LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = rgi.credit_ledger
                     LEFT JOIN tbl_Users AS  u ON u.UserId = rgi.created_by
-                    WHERE
-                        rgi.receipt_date BETWEEN @Fromdate AND @Todate
-                        ${checkIsNumber(voucher) ? ' AND rgi.receipt_voucher_type_id = @voucher ' : ''}
-                        ${checkIsNumber(Branch_Id) ? ' AND vt.Branch_Id = @Branch_Id ' : ''}
-                        ${checkIsNumber(debit) ? ' AND rgi.debit_ledger = @debit ' : ''}
-                        ${checkIsNumber(credit) ? ' AND rgi.credit_ledger = @credit ' : ''}
-                        ${checkIsNumber(receipt_type) ? ' AND rgi.receipt_bill_type = @receipt_type ' : ''}
-                        ${checkIsNumber(createdBy) ? ' AND rgi.created_by = @createdBy ' : ''}
-                        ${transaction_type ? ' AND rgi.transaction_type = @transaction_type ' : ''}
-                        ${checkIsNumber(status) ? ' AND rgi.status = @status ' : ''}
+                    WHERE rgi.receipt_id IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)
                     ORDER BY 
-                        rgi.receipt_date DESC, rgi.created_on DESC;`
+                        rgi.receipt_date DESC, rgi.created_on DESC;
+                    -- Alteration History
+                    SELECT ah.*, u.Name AS alterByGet 
+                    FROM tbl_Alteration_History AS ah
+                    LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                    WHERE 
+                        alteredTable = 'tbl_Receipt_General_Info' 
+                        AND alteredRowId IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)`
                 );
 
             const result = await request;
 
-            sentData(res, result.recordset)
+            const [receipts, alterHistory] = result.recordsets;
+
+            const receiptsMap = receipts.map(receipt => ({
+                ...receipt,
+                alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, receipt.receipt_id))
+            }))
+
+            sentData(res, receiptsMap)
         } catch (e) {
             servError(e, res);
         }

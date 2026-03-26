@@ -50,6 +50,19 @@ const PaymentMaster = () => {
                 .input('createdBy', createdBy)
                 .input('status', status)
                 .query(`
+                    -- FILTER TABLE
+                    DECLARE @FilteredPayments TABLE (pay_id INT);
+                    INSERT INTO @FilteredPayments (pay_id)
+                    SELECT pay_id
+                    FROM tbl_Payment_General_Info
+                    WHERE 
+                        payment_date BETWEEN @Fromdate AND @Todate
+                        ${checkIsNumber(voucher) ? ' AND payment_voucher_type_id = @voucher ' : ''}
+                        ${checkIsNumber(debit) ? ' AND debit_ledger = @debit ' : ''}
+                        ${checkIsNumber(credit) ? ' AND credit_ledger = @credit ' : ''}
+                        ${checkIsNumber(payment_type) ? ' AND pay_bill_type = @payment_type ' : ''}
+                        ${checkIsNumber(createdBy) ? ' AND created_by = @createdBy ' : ''}
+                        ${checkIsNumber(status) ? ' AND status = @status ' : ''}
                     SELECT 
                     	pgi.*,
                     	vt.Voucher_Type,
@@ -83,21 +96,28 @@ const PaymentMaster = () => {
                     LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
                     LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
                     LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
-                    WHERE
-                        pgi.payment_date BETWEEN @Fromdate AND @Todate
-                        ${checkIsNumber(voucher) ? ' AND pgi.payment_voucher_type_id = @voucher ' : ''}
-                        ${checkIsNumber(debit) ? ' AND pgi.debit_ledger = @debit ' : ''}
-                        ${checkIsNumber(credit) ? ' AND pgi.credit_ledger = @credit ' : ''}
-                        ${checkIsNumber(payment_type) ? ' AND pgi.pay_bill_type = @payment_type ' : ''}
-                        ${checkIsNumber(createdBy) ? ' AND pgi.created_by = @createdBy ' : ''}
-                        ${checkIsNumber(status) ? ' AND pgi.status = @status ' : ''}
+                    WHERE pgi.pay_id IN (SELECT DISTINCT pay_id FROM @FilteredPayments)
                     ORDER BY 
-                        pgi.payment_date DESC, pgi.created_on DESC;`
+                        pgi.payment_date DESC, pgi.created_on DESC;
+                    -- Alteration History
+                    SELECT ah.*, u.Name AS alterByGet 
+                    FROM tbl_Alteration_History AS ah
+                    LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                    WHERE 
+                        alteredTable = 'tbl_Payment_General_Info' 
+                        AND alteredRowId IN (SELECT DISTINCT pay_id FROM @FilteredPayments)`
                 );
 
             const result = await request;
 
-            sentData(res, result.recordset)
+            const [payments, alterHistory] = result.recordsets;
+
+            const paymentsMap = payments.map(payment => ({
+                ...payment,
+                alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, payment.pay_id))
+            }))
+
+            sentData(res, paymentsMap)
         } catch (e) {
             servError(e, res);
         }

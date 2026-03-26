@@ -1059,6 +1059,15 @@ const PurchaseInvoice = () => {
                         ON em.Acc_Id = exp.Expense_Id
                     WHERE 
                         exp.PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase);
+                    -------------------------Alteration History--------------------------
+                    SELECT 
+                        ah.*,
+                        u.Name AS alterByGet
+                    FROM tbl_Alteration_History AS ah
+                    LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                    WHERE 
+                        alteredTable = 'tbl_Purchase_Order_Inv_Gen_Info' 
+                        AND alteredRowId IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase);
                     `
                 );
 
@@ -1069,6 +1078,7 @@ const PurchaseInvoice = () => {
             const Staff_List = toArray(result.recordsets[2]);
             const FromPurchseOrder = toArray(result.recordsets[3]);
             const Expence_List = toArray(result.recordsets[4]);
+            const AlterHistory = toArray(result.recordsets[5]);
 
             if (PurchaseInfo.length > 0) {
                 const finalResult = PurchaseInfo.map(p => ({
@@ -1079,7 +1089,8 @@ const PurchaseInvoice = () => {
                     })),
                     Staff_List: Staff_List.filter(stf => isEqualNumber(stf.PIN_Id, p.PIN_Id)),
                     Expence_Array: Expence_List.filter(exp => isEqualNumber(exp.PIN_Id, p.PIN_Id)),
-                    isFromPurchaseOrder: toNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.Order_Id) !== 0
+                    isFromPurchaseOrder: toNumber(FromPurchseOrder.find(pin => isEqualNumber(pin.PIN_Id, p.PIN_Id))?.Order_Id) !== 0,
+                    alterHistoryDetails: AlterHistory.filter(ah => isEqualNumber(ah.alteredRowId, p.PIN_Id))
                 }));
                 dataFound(res, finalResult);
             } else {

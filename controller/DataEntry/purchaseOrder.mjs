@@ -81,14 +81,23 @@ const PurchaseOrderDataEntry = () => {
                         mp.dataType
                     FROM tbl_PurchaseOrderParameterDetails AS param
                     LEFT JOIN tbl_Module_Parameters AS mp ON mp.numID = param.ParameterId
-                    WHERE param.OrderId IN (SELECT Sno FROM @FilteredOrders);`
+                    WHERE param.OrderId IN (SELECT Sno FROM @FilteredOrders);
+                    -------------------------Alteration History--------------------------
+                    SELECT 
+                        ah.*,
+                        u.Name AS alterByGet
+                    FROM tbl_Alteration_History AS ah
+                    LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                    WHERE 
+                        alteredTable = 'tbl_PurchaseOrderGeneralDetails' 
+                        AND alteredRowId IN (SELECT DISTINCT Sno FROM @FilteredOrders);`
                 );
 
             const result = await request;
 
             const [
-                generalInfo, productDetails, deliveryDetails,
-                transporterDetails, Staffdetails, invoicedOrders, itemParameters
+                generalInfo, productDetails, deliveryDetails, transporterDetails,
+                Staffdetails, invoicedOrders, itemParameters, AlterHistory
             ] = result.recordsets;
 
             if (generalInfo.length > 0) {
@@ -101,7 +110,8 @@ const PurchaseOrderDataEntry = () => {
                     })),
                     DeliveryDetails: deliveryDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
                     TranspoterDetails: transporterDetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
-                    StaffDetails: Staffdetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno))
+                    StaffDetails: Staffdetails.filter(fil => isEqualNumber(fil.OrderId, o.Sno)),
+                    alterHistoryDetails: AlterHistory.filter(ah => isEqualNumber(ah.alteredRowId, o.Sno))
                 }));
 
                 const productWiseStatus = extractedData.map(o => ({

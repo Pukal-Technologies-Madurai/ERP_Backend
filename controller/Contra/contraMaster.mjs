@@ -21,6 +21,19 @@ const getContra = async (req, res) => {
             .input("DebitAccount", debit)
             .input("CreditAccount", credit)
             .query(`
+                -- FILTER TABLE
+                DECLARE @FilteredVoucher TABLE (ContraAutoId uniqueidentifier);
+                INSERT INTO @FilteredVoucher (ContraAutoId)
+                SELECT ContraAutoId
+                FROM tbl_Contra_General_Info
+                WHERE 
+                	ContraDate BETWEEN @Fromdate AND @Todate 
+                    ${checkIsNumber(branch) ? ` AND BranchId = @BranchId ` : ''}
+                    ${checkIsNumber(voucher) ? ` AND VoucherType = @VoucherType ` : ''}
+                    ${checkIsNumber(status) ? ` AND ContraStatus = @ContraStatus ` : ''}
+                    ${checkIsNumber(createdBy) ? ` AND CreatedBy = @CreatedBy ` : ''}
+                    ${checkIsNumber(debit) ? ` AND DebitAccount = @DebitAccount ` : ''}
+                    ${checkIsNumber(credit) ? ` AND CreditAccount = @CreditAccount ` : ''}
                 SELECT 
                 	con.*,
                 	COALESCE(deb.Account_name, 'Not found') AS DebitAccountGet,
@@ -32,20 +45,27 @@ const getContra = async (req, res) => {
                 LEFT JOIN tbl_Account_Master AS cre ON cre.Acc_Id = con.CreditAccount
                 LEFT JOIN tbl_Branch_Master AS br ON br.BranchId = con.BranchId
                 LEFT JOIN tbl_Voucher_Type AS vou ON vou.Vocher_Type_Id = con.VoucherType
+                WHERE con.ContraAutoId IN (SELECT DISTINCT ContraAutoId FROM @FilteredVoucher)
+                ORDER BY con.ContraDate DESC
+                -- Alteration History
+                SELECT ah.*, u.Name AS alterByGet 
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
                 WHERE 
-                	ContraDate BETWEEN @Fromdate AND @Todate 
-                    ${checkIsNumber(branch) ? ` AND con.BranchId = @BranchId ` : ''}
-                    ${checkIsNumber(voucher) ? ` AND con.VoucherType = @VoucherType ` : ''}
-                    ${checkIsNumber(status) ? ` AND con.ContraStatus = @ContraStatus ` : ''}
-                    ${checkIsNumber(createdBy) ? ` AND con.CreatedBy = @CreatedBy ` : ''}
-                    ${checkIsNumber(debit) ? ` AND con.DebitAccount = @DebitAccount ` : ''}
-                    ${checkIsNumber(credit) ? ` AND con.CreditAccount = @CreditAccount ` : ''}
-                ORDER BY con.ContraDate DESC;`
+                    alteredTable = 'tbl_Contra_General_Info' 
+                    AND alteredRowId IN (SELECT DISTINCT ContraAutoId FROM @FilteredVoucher);`
             );
 
         const result = await request;
 
-        sentData(res, result.recordset)
+        const [contra, alterHistory] = result.recordsets;
+
+        const contraMap = contra.map(con => ({
+            ...con,
+            alterHistoryDetails: alterHistory.filter(ah => ah.alteredRowId === con.ContraAutoId)
+        }))
+
+        sentData(res, contraMap)
 
     } catch (e) {
         servError(e, res);

@@ -254,7 +254,7 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
                     sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
                     sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
-                    sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                    sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value, sdgi.Delivery_Person_Id,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
                     sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
                     ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
@@ -271,7 +271,7 @@ export const getSalesInvoice = async (req, res) => {
                 LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Users AS delBy ON delBy.UserId = sdgi.Delivery_Person_Id
+                LEFT JOIN tbl_ERP_Cost_Center AS delBy ON delBy.Cost_Center_Id = sdgi.Delivery_Person_Id
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No
                 LEFT JOIN tbl_Users AS salPer ON salPer.UserId = sogi.Sales_Person_Id
@@ -327,7 +327,6 @@ export const getSalesInvoice = async (req, res) => {
             );
 
         const result = await request;
-        console.log(result)
 
         const SalesGeneralInfo = toArray(result.recordsets[0]);
         const Products_List = toArray(result.recordsets[1]);
@@ -365,7 +364,7 @@ export const getSalesInvoice = async (req, res) => {
 export const getSalesInvoiceById = async (req, res) => {
     try {
         const { Do_Id, Do_Inv_No, Retailer_Id } = req.query;
-        
+
         const getCurrespondingAccount = new sql.Request()
             .query(`
                 SELECT Acc_Id, AC_Reason 
@@ -505,12 +504,6 @@ export const getSalesInvoiceById = async (req, res) => {
         const Staffs_Array = toArray(result.recordsets[3]);
         const Alteration_History = toArray(result.recordsets[4]);
 
-        console.log('SalesGeneralInfo count:', SalesGeneralInfo.length);
-        console.log('Products_List count:', Products_List.length);
-        console.log('Expence_Array count:', Expence_Array.length);
-        console.log('Staffs_Array count:', Staffs_Array.length);
-        console.log('Alteration_History count:', Alteration_History.length);
-
         if (SalesGeneralInfo.length > 0) {
             const resData = SalesGeneralInfo.map(row => ({
                 ...row,
@@ -527,13 +520,13 @@ export const getSalesInvoiceById = async (req, res) => {
                     fil => isEqualNumber(fil.alteredRowId, row.Do_Id)
                 )
             }));
-              dataFound(res, resData);
+            dataFound(res, resData);
         } else {
-              noData(res)
+            noData(res)
         }
 
     } catch (error) {
-          servError(error,res)
+        servError(error, res)
     }
 };
 
