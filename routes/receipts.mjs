@@ -51,4 +51,9 @@ ReceiptsRouter.get('/outStandingAbove',receiptReport.getOutstadingAbove)
 ReceiptsRouter.get('/outstandingOver',receiptReport.getoutstandingOver)
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 
+
+
+ReceiptsRouter.post('/syncSelectedWithReceipt',receiptMaster.syncSelectedWithReceipt)
+
+
 export default ReceiptsRouter;

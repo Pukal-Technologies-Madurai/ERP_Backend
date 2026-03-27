@@ -56,4 +56,7 @@ PaymentRouter.get('/token', bankStatement.getToken);
 PaymentRouter.post('/syncStatement',bankStatement.syncStatement)
 PaymentRouter.get('/getBankStatement',bankStatement.getBankStatement)
 
+PaymentRouter.post('/getStatementFromBuffer',bankStatement.getStatementFromBuffer)
+PaymentRouter.post('/syncSelectedWithPayment',bankStatement.syncSelectedWithPayment)
+
 export default PaymentRouter;

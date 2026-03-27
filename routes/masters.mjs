@@ -346,4 +346,6 @@ MastersRouter.get('/voucherGroups', voucherGroup.getVoucherGroup);
 MastersRouter.post('/voucherGroups', voucherGroup.createVoucherGroup);
 MastersRouter.put('/voucherGroups', voucherGroup.updateVoucherGroup);
 
+MastersRouter.get('/accountNo', defaultBanks.getAccountNumber);
+
 export default MastersRouter;
