@@ -264,7 +264,7 @@ export const getSalesInvoice = async (req, res) => {
                     COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                     COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
                     COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
-                    COALESCE(delBy.Name, 'unknown') AS Delivery_Person_Name,
+                    COALESCE(delBy.Cost_Center_Name, 'unknown') AS Delivery_Person_Name,
                     COALESCE(salPer.Name, 'unknown') AS Sales_Person_Name
                 FROM 
                     tbl_Sales_Delivery_Gen_Info AS sdgi

@@ -56,17 +56,18 @@ const ReceiptMaster = () => {
                     DECLARE @FilteredReceipts TABLE (receipt_id INT);
                     INSERT INTO @FilteredReceipts (receipt_id)
                     SELECT receipt_id
-                    FROM tbl_Receipt_General_Info
+                    FROM tbl_Receipt_General_Info AS rgi
+                    LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = rgi.receipt_voucher_type_id
                     WHERE 
-                        receipt_date BETWEEN @Fromdate AND @Todate
-                        ${checkIsNumber(voucher) ? ' AND receipt_voucher_type_id = @voucher ' : ''}
-                        ${checkIsNumber(debit) ? ' AND debit_ledger = @debit ' : ''}
-                        ${checkIsNumber(credit) ? ' AND credit_ledger = @credit ' : ''}
-                        ${checkIsNumber(receipt_type) ? ' AND receipt_bill_type = @receipt_type ' : ''}
-                        ${checkIsNumber(createdBy) ? ' AND created_by = @createdBy ' : ''}
-                        ${transaction_type ? ' AND transaction_type = @transaction_type ' : ''}
-                        ${checkIsNumber(Branch_Id) ? ' AND Branch_Id = @Branch_Id ' : ''}
-                        ${checkIsNumber(status) ? ' AND status = @status ' : ''}
+                        rgi.receipt_date BETWEEN @Fromdate AND @Todate
+                        ${checkIsNumber(voucher) ? ' AND rgi.receipt_voucher_type_id = @voucher ' : ''}
+                        ${checkIsNumber(debit) ? ' AND rgi.debit_ledger = @debit ' : ''}
+                        ${checkIsNumber(credit) ? ' AND rgi.credit_ledger = @credit ' : ''}
+                        ${checkIsNumber(receipt_type) ? ' AND rgi.receipt_bill_type = @receipt_type ' : ''}
+                        ${checkIsNumber(createdBy) ? ' AND rgi.created_by = @createdBy ' : ''}
+                        ${transaction_type ? ' AND rgi.transaction_type = @transaction_type ' : ''}
+                        ${checkIsNumber(Branch_Id) ? ' AND vt.Branch_Id = @Branch_Id ' : ''}
+                        ${checkIsNumber(status) ? ' AND rgi.status = @status ' : ''}
                     SELECT 
                         rgi.*,
                         vt.Voucher_Type,

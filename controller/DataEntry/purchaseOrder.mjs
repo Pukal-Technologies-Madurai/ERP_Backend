@@ -270,13 +270,14 @@ const PurchaseOrderDataEntry = () => {
                     .input('Units', item?.Units)
                     .input('Rate', Number(item?.Rate))
                     .input('DeliveryLocation', item?.DeliveryLocation)
+                    .input('freightCharges', Number(item?.freightCharges) || 0)
                     // .input('Discount', Number(item?.Discount))
                     // .input('QualityCondition', item?.QualityCondition)
                     .query(`
                         INSERT INTO tbl_PurchaseOrderItemDetails (
-                            Sno, OrderId, ItemId, ItemName, Weight, Units, Rate, DeliveryLocation
+                            Sno, OrderId, ItemId, ItemName, Weight, Units, Rate, DeliveryLocation, freightCharges
                         ) VALUES (
-                            @Sno, @OrderId, @ItemId, @ItemName, @Weight, @Units, @Rate, @DeliveryLocation
+                            @Sno, @OrderId, @ItemId, @ItemName, @Weight, @Units, @Rate, @DeliveryLocation, @freightCharges
                         )
                     `);
 
@@ -473,11 +474,12 @@ const PurchaseOrderDataEntry = () => {
                     .input('DeliveryLocation', item?.DeliveryLocation)
                     .input('Discount', Number(item?.Discount))
                     .input('QualityCondition', item?.QualityCondition)
+                    .input('freightCharges', Number(item?.freightCharges) || 0)
                     .query(`
                         INSERT INTO tbl_PurchaseOrderItemDetails (
-                            Sno, OrderId, ItemId, ItemName, Weight, Units, Rate, DeliveryLocation, Discount, QualityCondition
+                            Sno, OrderId, ItemId, ItemName, Weight, Units, Rate, DeliveryLocation, Discount, QualityCondition, freightCharges
                         ) VALUES (
-                            @Sno, @OrderId, @ItemId, @ItemName, @Weight, @Units, @Rate, @DeliveryLocation, @Discount, @QualityCondition
+                            @Sno, @OrderId, @ItemId, @ItemName, @Weight, @Units, @Rate, @DeliveryLocation, @Discount, @QualityCondition, @freightCharges
                         )
                     `);
 
