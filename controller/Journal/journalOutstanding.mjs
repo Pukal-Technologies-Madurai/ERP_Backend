@@ -105,14 +105,14 @@ export const paymentFilterQuery = `
 `;
 
 export const journalFilterQuery = `
-    DECLARE @filteredJournal TABLE (voucherId INT, voucherNumber NVARCHAR(20), DrCr NVARCHAR(5));
-    INSERT INTO @filteredJournal (voucherId, voucherNumber, DrCr)
-    SELECT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
-    FROM tbl_Journal_Entries_Info AS jei
-    JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
-    WHERE 
-        jgi.JournalStatus <> 0
-        AND jei.Acc_Id = @Acc_Id;
+DECLARE @filteredJournal TABLE (voucherId INT, voucherNumber NVARCHAR(20), DrCr NVARCHAR(5));
+INSERT INTO @filteredJournal (voucherId, voucherNumber, DrCr)
+SELECT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
+FROM tbl_Journal_Entries_Info AS jei
+JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
+WHERE 
+    jgi.JournalStatus <> 0
+    AND jei.Acc_Id = @Acc_Id;
 `;
 
 export const creditNoteFilterQuery = `
@@ -483,78 +483,78 @@ export const getPaymentOutstanding = (JournalAutoId) => `
 `;
 
 export const getJournalOutstanding = (JournalAutoId) => `
-    SELECT * FROM (
+SELECT * FROM (
+    SELECT 
+        jgi.JournalId			 AS voucherId,
+        jgi.JournalVoucherNo	 AS voucherNumber,
+        jgi.JournalDate          AS eventDate,
+        jei.Acc_Id		         AS Acc_Id,
+        jei.Amount		         AS totalValue,
+        'JOURNAL'                AS dataSource,
+        'JOURNAL'                AS actualSource,
+        COALESCE(rp.againstAmount, 0) + COALESCE(pb.againstAmount, 0) AS againstAmount,
+        COALESCE(jr1.Amount, 0) + COALESCE(jr2.Amount, 0) AS journalAdjustment,
+        jei.DrCr                 AS accountSide,
+        jgi.JournalVoucherNo     AS BillRefNo
+    FROM @filteredJournal fj
+    JOIN tbl_Journal_General_Info jgi ON fj.voucherId = jgi.JournalId AND fj.voucherNumber = jgi.JournalVoucherNo
+    JOIN tbl_Journal_Entries_Info jei ON jgi.JournalAutoId = jei.JournalAutoId AND fj.DrCr = jei.DrCr AND jei.Acc_Id = @Acc_Id
+    LEFT JOIN (
         SELECT 
-            jgi.JournalId			 AS voucherId,
-            jgi.JournalVoucherNo	 AS voucherNumber,
-            jgi.JournalDate          AS eventDate,
-            jei.Acc_Id		         AS Acc_Id,
-            jei.Amount		         AS totalValue,
-            'JOURNAL'                AS dataSource,
-            'JOURNAL'                AS actualSource,
-            COALESCE(rp.againstAmount, 0) + COALESCE(pb.againstAmount, 0) AS againstAmount,
-            COALESCE(jr1.Amount, 0) + COALESCE(jr2.Amount, 0) AS journalAdjustment,
-            jei.DrCr                 AS accountSide,
-            jgi.JournalVoucherNo     AS BillRefNo
-        FROM @filteredJournal fj
-        JOIN tbl_Journal_General_Info jgi ON fj.voucherId = jgi.JournalId AND fj.voucherNumber = jgi.JournalVoucherNo
-        JOIN tbl_Journal_Entries_Info jei ON jgi.JournalAutoId = jei.JournalAutoId AND fj.DrCr = jei.DrCr AND jei.Acc_Id = @Acc_Id
-        LEFT JOIN (
-            SELECT 
-                rbi.bill_id,
-                rbi.bill_name,
-                SUM(rbi.Credit_Amo) AS againstAmount
-            FROM tbl_Receipt_Bill_Info rbi
-            JOIN tbl_Receipt_General_Info rgi ON rgi.receipt_id = rbi.receipt_id
-            JOIN @filteredJournal fil ON fil.voucherId = rbi.bill_id AND fil.voucherNumber = rbi.bill_name AND fil.DrCr = 'Cr'
-            WHERE rgi.status <> 0
-            GROUP BY rbi.bill_id, rbi.bill_name
-        ) rp ON rp.bill_id = jgi.JournalId AND rp.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Cr'
-        LEFT JOIN (
-            SELECT 
-                pb.pay_bill_id,
-                pb.bill_name,
-                SUM(pb.Debit_Amo) AS againstAmount
-            FROM tbl_Payment_Bill_Info pb
-            JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
-            JOIN @filteredJournal fil ON fil.voucherId = pb.pay_bill_id AND fil.voucherNumber = pb.bill_name AND fil.DrCr = 'Dr'
-            WHERE pgi.status <> 0
-            GROUP BY pb.pay_bill_id, pb.bill_name
-        ) pb ON pb.pay_bill_id = jgi.JournalId AND pb.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Dr'
-        LEFT JOIN (
-            SELECT 
-                jr.RefId,
-                jr.RefNo,
-                je.DrCr,
-                SUM(jr.Amount) AS Amount
-            FROM dbo.tbl_Journal_Bill_Reference jr
-            JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
-            JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-            JOIN @filteredJournal fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = jr.RefNo /* and fil.DrCr mapped by reverse logic */
-            WHERE 
-                jh.JournalStatus <> 0
-                AND je.Acc_Id = @Acc_Id
-                AND jr.RefType = 'JOURNAL'
-                /* we must match where the offset reverses the original DrCr */
-                AND fil.DrCr = CASE WHEN je.DrCr = 'Dr' THEN 'Cr' ELSE 'Dr' END
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
-            GROUP BY jr.RefId, jr.RefNo, je.DrCr
-        ) jr1 ON 
-            jr1.RefId = jgi.JournalId AND 
-            jr1.RefNo = jgi.JournalVoucherNo AND 
-            jr1.DrCr = CASE WHEN jei.DrCr = 'Dr' THEN 'Cr' ELSE 'Dr' END
-        LEFT JOIN (
-            SELECT 
-                jbr.JournalAutoId,
-                jbr.LineId,
-                jbr.Acc_Id,
-                jbr.DrCr,
-                SUM(jbr.Amount) AS Amount
-            FROM dbo.tbl_Journal_Bill_Reference jbr
-            WHERE 1=1 ${JournalAutoId ? " AND jbr.JournalAutoId <> @JournalAutoId " : ""}
-            GROUP BY jbr.JournalAutoId, jbr.LineId, jbr.Acc_Id, jbr.DrCr
-        ) jr2 ON jr2.JournalAutoId = jei.JournalAutoId AND jr2.LineId = jei.LineId AND jr2.Acc_Id = jei.Acc_Id AND jr2.DrCr = jei.DrCr
-    ) JO WHERE JO.totalValue > JO.againstAmount + JO.journalAdjustment
+            rbi.bill_id,
+            rbi.bill_name,
+            SUM(rbi.Credit_Amo) AS againstAmount
+        FROM tbl_Receipt_Bill_Info rbi
+        JOIN tbl_Receipt_General_Info rgi ON rgi.receipt_id = rbi.receipt_id
+        JOIN @filteredJournal fil ON fil.voucherId = rbi.bill_id AND fil.voucherNumber = rbi.bill_name AND fil.DrCr = 'Cr'
+        WHERE rgi.status <> 0
+        GROUP BY rbi.bill_id, rbi.bill_name
+    ) rp ON rp.bill_id = jgi.JournalId AND rp.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Cr'
+    LEFT JOIN (
+        SELECT 
+            pb.pay_bill_id,
+            pb.bill_name,
+            SUM(pb.Debit_Amo) AS againstAmount
+        FROM tbl_Payment_Bill_Info pb
+        JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
+        JOIN @filteredJournal fil ON fil.voucherId = pb.pay_bill_id AND fil.voucherNumber = pb.bill_name AND fil.DrCr = 'Dr'
+        WHERE pgi.status <> 0
+        GROUP BY pb.pay_bill_id, pb.bill_name
+    ) pb ON pb.pay_bill_id = jgi.JournalId AND pb.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Dr'
+    LEFT JOIN (
+        SELECT 
+            jr.RefId,
+            jr.RefNo,
+            je.DrCr,
+            SUM(jr.Amount) AS Amount
+        FROM dbo.tbl_Journal_Bill_Reference jr
+        JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+        JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
+        JOIN @filteredJournal fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = jr.RefNo /* and fil.DrCr mapped by reverse logic */
+        WHERE 
+            jh.JournalStatus <> 0
+            AND je.Acc_Id = @Acc_Id
+            AND jr.RefType = 'JOURNAL'
+            /* we must match where the offset reverses the original DrCr */
+            AND fil.DrCr = CASE WHEN je.DrCr = 'Dr' THEN 'Cr' ELSE 'Dr' END
+            ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
+        GROUP BY jr.RefId, jr.RefNo, je.DrCr
+    ) jr1 ON 
+        jr1.RefId = jgi.JournalId AND 
+        jr1.RefNo = jgi.JournalVoucherNo AND 
+        jr1.DrCr = CASE WHEN jei.DrCr = 'Dr' THEN 'Cr' ELSE 'Dr' END
+    LEFT JOIN (
+        SELECT 
+            jbr.JournalAutoId,
+            jbr.LineId,
+            jbr.Acc_Id,
+            jbr.DrCr,
+            SUM(jbr.Amount) AS Amount
+        FROM dbo.tbl_Journal_Bill_Reference jbr
+        WHERE 1=1 ${JournalAutoId ? " AND jbr.JournalAutoId <> @JournalAutoId " : ""}
+        GROUP BY jbr.JournalAutoId, jbr.LineId, jbr.Acc_Id, jbr.DrCr
+    ) jr2 ON jr2.JournalAutoId = jei.JournalAutoId AND jr2.LineId = jei.LineId AND jr2.Acc_Id = jei.Acc_Id AND jr2.DrCr = jei.DrCr
+) JO WHERE JO.totalValue > JO.againstAmount + JO.journalAdjustment
 `;
 
 export const getCreditNoteOutstanding = (JournalAutoId) => `

@@ -70,6 +70,19 @@ export const getDebitNote = async (req, res) => {
         const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
         const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
 
+        const getCurrespondingAccount = new sql.Request()
+            .query(`
+                SELECT Acc_Id, AC_Reason 
+                FROM tbl_Default_AC_Master 
+                WHERE 
+                    Type = 'DEFAULT' 
+                    AND Acc_Id IS NOT NULL;`
+            );
+
+        const expData = (await getCurrespondingAccount).recordset;
+
+        const excludeList = expData.map(exp => exp.Acc_Id).join(', ');
+
         const request = new sql.Request()
             .input('Fromdate', Fromdate)
             .input('Todate', Todate)
@@ -131,7 +144,9 @@ export const getDebitNote = async (req, res) => {
                     END AS Expence_Value
                 FROM tbl_Debit_Note_Expence_Info AS exp
                 LEFT JOIN tbl_Account_Master AS em ON em.Acc_Id = exp.Expense_Id
-                WHERE exp.DB_Id IN (SELECT DISTINCT DB_Id FROM @FilteredInvoice);
+                WHERE 
+                    exp.DB_Id IN (SELECT DISTINCT DB_Id FROM @FilteredInvoice)
+                    AND exp.Expense_Id NOT IN (${excludeList});
                 SELECT 
                     stf.*,
                     e.Cost_Center_Name AS Emp_Name,
