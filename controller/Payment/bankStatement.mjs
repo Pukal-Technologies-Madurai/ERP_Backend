@@ -47,7 +47,8 @@ const saveConvertedKey = (pkcs8Key) => {
 const loadPublicKeyFromCert = async () => {
   // const certPath = path.resolve('../../BANK_STATEMENT/certs/tmbank2025.crt');
   // const certPath = path.resolve('./certs/tmbank2025.crt');
-  const certPath = path.resolve(__dirname, '../../certs/tmbank2025.crt');
+  // const certPath = path.resolve(__dirname, '../../certs/tmbank2025.crt');
+   const certPath = path.resolve(__dirname, '../../certs/tmbank2026.crt');
   if (!fs.existsSync(certPath)) throw new Error(`Certificate not found at ${certPath}`);
   const certPem = fs.readFileSync(certPath, 'utf8').trim();
   const publicKeyObject = createPublicKey(certPem);
