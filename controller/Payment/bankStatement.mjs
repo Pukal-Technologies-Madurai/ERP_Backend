@@ -47,8 +47,7 @@ const saveConvertedKey = (pkcs8Key) => {
 const loadPublicKeyFromCert = async () => {
   // const certPath = path.resolve('../../BANK_STATEMENT/certs/tmbank2025.crt');
   // const certPath = path.resolve('./certs/tmbank2025.crt');
-  // const certPath = path.resolve(__dirname, '../../certs/tmbank2025.crt');
-   const certPath = path.resolve(__dirname, '../../certs/tmbank2026.crt');
+  const certPath = path.resolve(__dirname, '../../certs/tmbank2026.crt');
   if (!fs.existsSync(certPath)) throw new Error(`Certificate not found at ${certPath}`);
   const certPem = fs.readFileSync(certPath, 'utf8').trim();
   const publicKeyObject = createPublicKey(certPem);
@@ -139,7 +138,7 @@ const getToken = async () => {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
-  console.log("res",res)
+ 
 
   if (!res.ok) throw new Error(`Token API failed (${res.status})`);
   const data = await res.json();
@@ -151,7 +150,7 @@ const getToken = async () => {
 
 const fetchStatement = async (req, res) => {
   try {
-    const {  startDate, endDate } = req.body;
+    const {  acc_No,startDate, endDate } = req.body;
     if ( !startDate || !endDate) return invalidInput(res, 'Missing required fields');
 
 
@@ -240,15 +239,18 @@ const decryptEndpoint = async (req, res) => {
 };
 
 
+
+
 const syncStatement = async (req, res) => {
   let transaction;
   try {
-    const {  startDate, endDate } = req.body;
-    if ( !startDate || !endDate)
+    const { startDate, endDate, accountNo } = req.body;
+
+    if (!startDate || !endDate)
       return invalidInput(res, 'Missing required fields');
 
     const accessToken = await getToken();
-    const accountNo='002530350870041'
+    const account_No = accountNo;
     const encryptedRequest = await JWEEncrypt({ accountNo, startDate, endDate });
 
     const SERVICE_URL =
@@ -263,7 +265,6 @@ const syncStatement = async (req, res) => {
       },
       body: JSON.stringify({ Request: encryptedRequest }),
     });
-    
 
     const text = await apiRes.text();
     if (!apiRes.ok) return invalidInput(res, `TMB API failed: ${apiRes.status}: ${text}`);
@@ -286,81 +287,112 @@ const syncStatement = async (req, res) => {
 
     let insertedCount = 0;
     let skippedCount = 0;
+    let skippedTransactions = [];
 
-    for (let txn of transactions) {
-      const {
-        tranDate,
-        valDate,
-        chequeNum = '',
-        tranParticulars = '',
-        tranType = '',
-        amount = '',
-        refno = '',
-        acctBal = '',
-      } = txn;
+    
+    const pool = await sql.connect();
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
 
-      if (!tranDate) {
-        skippedCount++;
-        continue;
+    try {
+      for (let txn of transactions) {
+        const {
+          tranDate,
+          valDate,
+          chequeNum = '',
+          tranParticulars = '',
+          tranType = '',
+          amount = '',
+          refno = '',
+          acctBal = '',
+        } = txn;
+
+        if (!tranDate) {
+          skippedCount++;
+          skippedTransactions.push({ ...txn, reason: 'Missing tranDate' });
+          continue;
+        }
+
+        
+        const checkRequest = new sql.Request(transaction);
+        checkRequest.input('TranDate', tranDate);
+        checkRequest.input('ValDate', valDate || tranDate); 
+        checkRequest.input('TranParticulars', tranParticulars);
+        checkRequest.input('Amount', amount);
+        checkRequest.input('TranType', tranType);
+        checkRequest.input('Refno', refno);
+        checkRequest.input('AcctBal', acctBal);
+        checkRequest.input('AccountNo', account_No);
+
+        const checkQuery = `
+          SELECT COUNT(*) as count 
+          FROM tbl_Bank_Transactions 
+          WHERE TranDate = @TranDate 
+          AND ValDate = @ValDate
+          AND TranParticulars = @TranParticulars 
+          AND Amount = @Amount 
+          AND TranType = @TranType
+          AND Refno = @Refno
+          AND AcctBal = @AcctBal
+          AND AccountNo = @AccountNo
+        `;
+
+        const checkResult = await checkRequest.query(checkQuery);
+
+        if (checkResult.recordset[0].count > 0) {
+          skippedCount++;
+          skippedTransactions.push({ ...txn, reason: 'Already exists in database' });
+          continue;
+        }
+
+        
+        const idRequest = new sql.Request(transaction);
+        const maxIdResult = await idRequest.query('SELECT ISNULL(MAX(Id), 0) + 1 as NextId FROM tbl_Bank_Transactions');
+        const nextId = maxIdResult.recordset[0].NextId;
+
+        
+        const insertRequest = new sql.Request(transaction);
+        insertRequest.input('Id', nextId);
+        insertRequest.input('TranDate', tranDate);
+        insertRequest.input('ValDate', valDate);
+        insertRequest.input('ChequeNum', chequeNum);
+        insertRequest.input('TranParticulars', tranParticulars);
+        insertRequest.input('TranType', tranType);
+        insertRequest.input('Amount', amount);
+        insertRequest.input('Refno', refno);
+        insertRequest.input('AcctBal', acctBal);
+        insertRequest.input('Created_at', new Date());
+        insertRequest.input('AccountNo', account_No);
+        
+        const insertQuery = `
+          INSERT INTO tbl_Bank_Transactions
+          (Id, TranDate, ValDate, ChequeNum, TranParticulars, TranType, Amount, Refno, AcctBal, Created_at, AccountNo)
+          VALUES (@Id, @TranDate, @ValDate, @ChequeNum, @TranParticulars, @TranType, @Amount, @Refno, @AcctBal, @Created_at, @AccountNo)
+        `;
+
+        await insertRequest.query(insertQuery);
+        insertedCount++;
       }
 
+      
+      await transaction.commit();
 
-      const checkRequest = new sql.Request();
-      checkRequest.input('TranDate', tranDate);
-      checkRequest.input('TranParticulars', tranParticulars);
-      checkRequest.input('Amount', amount);
-      checkRequest.input('TranType', tranType);
+      dataFound(res, {
+        success: true,
+        message: `Statement data synced successfully`,
+        inserted: insertedCount,
+        skipped: skippedCount,
+        totalProcessed: transactions.length,
+        skippedDetails: skippedTransactions.length > 0 ? skippedTransactions : undefined
+      });
 
-      const checkQuery = `
-        SELECT COUNT(*) as count 
-        FROM tbl_Bank_Transactions 
-        WHERE TranDate = @TranDate 
-        AND TranParticulars = @TranParticulars 
-        AND Amount = @Amount 
-        AND TranType = @TranType
-      `;
-
-      const checkResult = await checkRequest.query(checkQuery);
-
-      if (checkResult.recordset[0].count > 0) {
-        skippedCount++;
-        continue;
+    } catch (err) {
+     
+      if (transaction) {
+        await transaction.rollback();
       }
-
-
-      const idRequest = new sql.Request();
-      const maxIdResult = await idRequest.query('SELECT ISNULL(MAX(Id), 0) + 1 as NextId FROM tbl_Bank_Transactions');
-      const nextId = maxIdResult.recordset[0].NextId;
-
-
-      const insertRequest = new sql.Request();
-      insertRequest.input('Id', nextId);
-      insertRequest.input('TranDate', tranDate);
-      insertRequest.input('ValDate', valDate);
-      insertRequest.input('ChequeNum', chequeNum);
-      insertRequest.input('TranParticulars', tranParticulars);
-      insertRequest.input('TranType', tranType);
-      insertRequest.input('Amount', amount);
-      insertRequest.input('Refno', refno);
-      insertRequest.input('AcctBal', acctBal);
-      insertRequest.input('Created_at', new Date());
-
-      const insertQuery = `
-        INSERT INTO tbl_Bank_Transactions
-        (Id, TranDate, ValDate, ChequeNum, TranParticulars, TranType, Amount, Refno, AcctBal, Created_at)
-        VALUES (@Id, @TranDate, @ValDate, @ChequeNum, @TranParticulars, @TranType, @Amount, @Refno, @AcctBal, @Created_at)
-      `;
-
-      await insertRequest.query(insertQuery);
-      insertedCount++;
+      throw err;
     }
-
-    dataFound(res, {
-      message: `Statement data synced successfully`,
-      inserted: insertedCount,
-      skipped: skippedCount,
-      totalProcessed: transactions.length
-    });
 
   } catch (err) {
     console.error('Sync statement error:', err);
@@ -684,7 +716,6 @@ const syncSelectedWithPayment=async(req,res)=>{
     }
 };
 
-
 export default {
   fetchStatement,
   decrypt: decryptEndpoint,
@@ -692,8 +723,8 @@ export default {
   getToken: getTokenEndpoint,
   syncStatement,
   getBankStatement,
-  syncSelectedWithPayment,
-  getStatementFromBuffer
+  getStatementFromBuffer,
+  syncSelectedWithPayment
 };
 
 
