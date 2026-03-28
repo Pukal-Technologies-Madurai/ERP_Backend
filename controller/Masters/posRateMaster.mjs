@@ -657,6 +657,55 @@ const posBranchController = () => {
         }
     };
 
+  const getPosRateMasterForWhatsapp = async (req, res) => {
+    try {
+        const request = new sql.Request();
+
+        const dateQuery = `SELECT TOP 1 Rate_Date FROM tbl_Pos_Rate_Master ORDER BY Rate_Date DESC`;
+        const resultOfDate = await request.query(dateQuery);
+
+        if (resultOfDate.recordset.length === 0) {
+            return noData(res);
+        }
+
+      
+        const latestDate = resultOfDate.recordset[0].Rate_Date;
+
+      
+        request.input('latestDate', sql.DateTime, latestDate);
+
+        const query = `
+            SELECT 
+                rm.Id, 
+                rm.Rate_Date, 
+                rm.Pos_Brand_Id, 
+                rm.Item_Id, 
+                rm.Rate,
+                rm.Max_Rate, 
+                pb.POS_Brand_Name, 
+                pm.Product_Name, 
+                pm.Short_Name, 
+                pm.isActive AS Is_Active_Decative
+            FROM tbl_Pos_Rate_Master rm
+            LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
+            LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
+            WHERE rm.Rate_Date = @latestDate
+            ORDER BY pm.isActive DESC
+        `;
+
+        const result = await request.query(query);
+
+        if (result.recordset.length > 0) {
+            return dataFound(res, result.recordset);
+        } else {
+            return noData(res);
+        }
+
+    } catch (e) {
+        return servError(e, res);
+    }
+};
+
     return {
 
         getPosRateMaster,
@@ -667,7 +716,8 @@ const posBranchController = () => {
         postbulkExport,
         valuesSync,
         posProductSync,
-        posProductList
+        posProductList,
+        getPosRateMasterForWhatsapp
     }
 }
 
