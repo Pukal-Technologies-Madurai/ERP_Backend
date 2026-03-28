@@ -348,4 +348,6 @@ MastersRouter.put('/voucherGroups', voucherGroup.updateVoucherGroup);
 
 MastersRouter.get('/accountNo', defaultBanks.getAccountNumber);
 
+MastersRouter.get('/rateDetails',posRateMaster.getPosRateMasterForWhatsapp)
+
 export default MastersRouter;
