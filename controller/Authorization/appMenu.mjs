@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { dataFound, failed, invalidInput, servError, success } from '../../res.mjs';
-import { isEqualNumber } from '../../helper_functions.mjs';
+import { isEqualNumber, isValidNumber, stringCompare } from '../../helper_functions.mjs';
 import { getUserBasedRights, getUserIdByAuth, getUserMenuRights, getUserTypeBasedRights } from '../../middleware/miniAPIs.mjs';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -19,10 +19,11 @@ const buildRoutesTree = (routes, parentId = null) => {
 const appMenu = () => {
 
     const newAppMenu = async (req, res) => {
-        const Auth = req.header('Authorization');
-
         try {
+            const { MenuName, MenuId } = req.query;
+            const Auth = req.header('Authorization');
             const userRights = await getUserMenuRights(Auth);
+
 
             if (Array.isArray(userRights)) {
                 const activeMenus = userRights.filter(menu => isEqualNumber(menu.is_active, 1));
@@ -49,7 +50,13 @@ const appMenu = () => {
                     SubRoutes: buildRoutesTree(subRoutings, main.id)
                 }));
 
-                dataFound(res, menuStrucre, 'data Found', { subRoutings, nestedRoutes })
+                const filteredMenu = MenuName
+                    ? menuStrucre.filter(menu => stringCompare(menu.name, MenuName))
+                    : isValidNumber(MenuId)
+                        ? menuStrucre.filter(menu => isEqualNumber(menu.id, MenuId))
+                        : menuStrucre;
+
+                dataFound(res, filteredMenu, 'data Found', { subRoutings, nestedRoutes })
             } else {
                 failed(res);
             }
