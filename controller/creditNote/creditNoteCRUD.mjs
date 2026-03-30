@@ -544,8 +544,8 @@ export const createCreditNote = async (req, res) => {
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
             for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                 const exp = Expence_Array[expInd];
-                const Expence_Value_DR = toNumber(exp?.Expence_Value) < 0 ? Math.abs(toNumber(exp?.Expence_Value)) : 0;
-                const Expence_Value_CR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? Math.abs(toNumber(exp?.Expence_Value)) : 0;
 
                 const request = new sql.Request(transaction)
                     .input('CR_Id', CR_Id)
@@ -605,8 +605,8 @@ export const createCreditNote = async (req, res) => {
                 const numValue = Number(Value);
                 const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
 
-                const Expence_Value_DR = numValue < 0 ? Math.abs(numValue) : 0;
-                const Expence_Value_CR = numValue >= 0 ? numValue : 0;
+                const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
 
                 const request = new sql.Request(transaction)
                     .input('CR_Id', CR_Id)

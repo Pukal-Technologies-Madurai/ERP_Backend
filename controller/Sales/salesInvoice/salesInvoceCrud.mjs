@@ -699,7 +699,6 @@ export const getLastSalesInvoiceByRetailerId = async (req, res) => {
     }
 };
 
-
 export const createSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
 
