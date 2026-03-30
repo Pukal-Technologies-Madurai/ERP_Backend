@@ -297,13 +297,86 @@ const LoginController = () => {
         }
     };
 
+
+    const getUserTypeAuth = async (req, res) => {
+    try {
+        const { username } = req.body;
+        
+        if (!username || !username.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Username is required"
+            });
+        }
+
+
+        const userQuery = `
+            SELECT 
+              *
+            FROM tbl_Users 
+            WHERE UserName = @username 
+                AND UDel_Flag = 0
+        `;
+        
+        const userRequest = new sql.Request();
+        userRequest.input('username', sql.VarChar, username);
+        const userResult = await userRequest.query(userQuery);
+        
+          if (userResult.recordset.length > 0) {
+            const user = userResult.recordset[0];
+            
+             return res.status(200).json({
+                  
+                    step:2,
+                    requirePassword: true,
+                    success: true,
+                    message: 'User Details Found',
+                });
+           
+            
+         
+            } else {
+                
+                  const ledgerQuery = `
+                  SELECT *
+            FROM tbl_Ledger_LoL lol
+            WHERE lol.A1 = @username  `;
+        
+        const ledgerRequest = new sql.Request();
+        ledgerRequest.input('username', username);
+        const ledgerResult = await ledgerRequest.query(ledgerQuery);
+        
+        if (ledgerResult.recordset.length > 0) {
+            const customer = ledgerResult.recordset[0];
+         
+             return res.status(200).json({
+                    customer,
+                    step:4,
+                    requirePassword: false,
+                    success: true,
+                    message: 'Ledger Details Found',
+                });
+           
+      }
+                
+        
+        
+       
+    }
+        
+    } catch (error) {
+        console.error("Error in getUserTypeAuth:", error);
+        return servError(error, res);
+    }
+};
+
     return {
         getAccountsInUserPortal,
         globalLogin,
         login,
         getUserByAuth,
-        mobileApplogin
-
+        mobileApplogin,
+        getUserTypeAuth
     }
 }
 

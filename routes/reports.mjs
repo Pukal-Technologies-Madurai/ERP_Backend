@@ -189,4 +189,6 @@ ReportRouter.get('/externalAPI/SaleOrderReportItem', SaleOrderReportItem);
 ReportRouter.get('/externalAPI/PurchaseOrderReport', PurchaseOrderReport);
 ReportRouter.get('/externalAPI/PurchaseOrderReportItem', PurchaseOrderItemReport)
 
+ReportRouter.get('/externalAPI/StockValueGraph', StockValueGraph);
+
 export default ReportRouter;

@@ -40,4 +40,6 @@ AuthorizationRouter.post('/moduleConfiguration', postModuleConfiguration);
 AuthorizationRouter.put('/moduleConfiguration', putModuleConfiguration);
 
 
+AuthorizationRouter.post('/getUserTypeAuth',LoginController.getUserTypeAuth)
+
 export default AuthorizationRouter;
