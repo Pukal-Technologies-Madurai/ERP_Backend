@@ -20,7 +20,8 @@ JournalRouter.put(
 
 JournalRouter.get('/filtersValues', journalDependency.getFilterValues);
 JournalRouter.get('/accountPendingReference', journalDependency.getAccountPendingReference);
-JournalRouter.get('/accounts', journalDependency.getJournalAccounts)
+JournalRouter.get('/accounts', journalDependency.getJournalAccounts);
+JournalRouter.get('/groupOutstandings', journalDependency.groupOutstandings);
 
 
 export default JournalRouter;

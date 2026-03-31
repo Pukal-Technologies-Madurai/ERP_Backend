@@ -190,8 +190,27 @@ const getJournalAccounts = async (req, res) => {
     }
 }
 
+const groupOutstandings = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? req.query?.Fromdate : ISOString();
+        const Todate = req.query?.Todate ? req.query?.Todate : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .execute(`Transaction_Group_Reort_VW`);
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 export default {
     getFilterValues,
     getAccountPendingReference,
-    getJournalAccounts
+    getJournalAccounts,
+    groupOutstandings
 }
