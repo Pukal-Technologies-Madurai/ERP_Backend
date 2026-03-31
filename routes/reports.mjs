@@ -17,7 +17,7 @@ import templateMobile from '../controller/Reports/templateMobile.mjs';
 import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
     onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport
-  } from '../controller/Reports/externalAPI.mjs';
+ ,StockValueGraph } from '../controller/Reports/externalAPI.mjs';
 
 
 const ReportRouter = express.Router();
