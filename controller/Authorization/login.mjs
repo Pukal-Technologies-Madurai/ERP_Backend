@@ -347,7 +347,7 @@ const LoginController = () => {
         const ledgerResult = await ledgerRequest.query(ledgerQuery);
         
         if (ledgerResult.recordset.length > 0) {
-            const customer = ledgerResult.recordset[0];
+            const customer = ledgerResult.recordset;
          
              return res.status(200).json({
                     customer,

@@ -3653,7 +3653,7 @@ ORDER BY llos.Pro_Id;
             const { Year_Id, Year_Desc } = So_Year_Master.recordset[0];
 
             const voucherData = await new sql.Request(transaction)
-                .input('Voucher_Type', 0)
+                .input('Voucher_Type', 200)
                 .query(`
         SELECT Voucher_Code 
         FROM tbl_Voucher_Type 
@@ -3665,7 +3665,7 @@ ORDER BY llos.Pro_Id;
 
             const So_Branch_Inv_Id_Result = await new sql.Request(transaction)
                 .input('So_Year', Year_Id)
-                .input('Voucher_Type', 0)
+                .input('Voucher_Type', 200)
                 .query(`
         SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
         FROM tbl_Sales_Order_Gen_Info
@@ -3788,7 +3788,7 @@ ORDER BY llos.Pro_Id;
                 .input('Branch_Id', sql.Int, generalInfo.Branch_Id || 1)
 
 
-                .input('VoucherType', sql.Int, 0)
+                .input('VoucherType', sql.Int, 200)
                 .input('GST_Inclusive', sql.Int, GST_Inclusive)
                 .input('IS_IGST', sql.Int, isIGST ? 1 : 0)
                 .input('CSGT_Total', sql.Decimal(18, 2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
