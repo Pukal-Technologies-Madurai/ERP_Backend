@@ -49,12 +49,19 @@ const externalAPI = async (req, res) => {
         DynamicDB.input('Todate', req.query.Todate);
 
         const result = await DynamicDB.execute('Online_Sales_API');
-        if (result.recordset.length > 0) {
-            const sales = JSON.parse(result.recordset[0]?.SALES)
-            dataFound(res, sales)
-        } else {
-            noData(res)
-        }
+        const [generalInfo, StockInfo, expencess] = result.recordsets;
+
+        const numberColumn = ['Sal_Id', 'Credit_Days', 'Invoiceamount'];
+
+        const genNullDef = nullDefender(generalInfo, numberColumn)
+
+        const creditNote = genNullDef.map(info => ({
+            ...info,
+            ALLINVENTORYENTRIES: StockInfo.filter(stock => isEqualNumber(stock.Sal_Id, info.Sal_Id)),
+            LEDGERENTRIES: expencess.filter(exp => isEqualNumber(exp.Sal_Id, info.Sal_Id)),
+        }));
+
+        dataFound(res, { Sales: creditNote })
     } catch (e) {
         servError(e, res)
     }
@@ -271,20 +278,20 @@ const tallyAdminSaleAPI = async (req, res) => {
             .input('Todate', req.query.Todate)
             .execute('Online_Sales_Admin_API')
 
+        const numberColumn = ['Sal_Id', 'Credit_Days', 'Invoiceamount'];
+
         const result = await request;
-        if (result.recordset.length > 0) {
+        const [generalInfo, StockInfo, expencess] = result.recordsets;
 
-            const sales = JSON.parse(result.recordset[0]?.SALES)
-            dataFound(res, sales)
-            // dataFound(res, sales.map(sale => ({
-            //     ...sale,
-            //     ALLINVENTORYENTRIES: JSON.parse(sale.ALLINVENTORYENTRIES),
-            //     LEDGERENTRIES: JSON.parse(sale.LEDGERENTRIES),
-            // })));
+        const genNullDef = nullDefender(generalInfo, numberColumn)
 
-        } else {
-            noData(res)
-        }
+        const creditNote = genNullDef.map(info => ({
+            ...info,
+            ALLINVENTORYENTRIES: StockInfo.filter(stock => isEqualNumber(stock.Sal_Id, info.Sal_Id)),
+            LEDGERENTRIES: expencess.filter(exp => isEqualNumber(exp.Sal_Id, info.Sal_Id)),
+        }));
+
+        dataFound(res, { Sales: creditNote })
     } catch (e) {
         servError(e, res)
     }
@@ -457,20 +464,20 @@ const tallySalesUpdateAPI = async (req, res) => {
             .input('Todate', req.query.Todate)
             .execute('Online_Sales_Update_API')
 
+        const numberColumn = ['Sal_Id', 'Credit_Days', 'Invoiceamount'];
+
         const result = await request;
-        if (result.recordset.length > 0) {
+        const [generalInfo, StockInfo, expencess] = result.recordsets;
 
-            const sales = JSON.parse(result.recordset[0]?.SALES)
-            dataFound(res, sales)
-            // dataFound(res, sales.map(sale => ({
-            //     ...sale,
-            //     ALLINVENTORYENTRIES: JSON.parse(sale.ALLINVENTORYENTRIES),
-            //     LEDGERENTRIES: JSON.parse(sale.LEDGERENTRIES),
-            // })));
+        const genNullDef = nullDefender(generalInfo, numberColumn)
 
-        } else {
-            noData(res)
-        }
+        const creditNote = genNullDef.map(info => ({
+            ...info,
+            ALLINVENTORYENTRIES: StockInfo.filter(stock => isEqualNumber(stock.Sal_Id, info.Sal_Id)),
+            LEDGERENTRIES: expencess.filter(exp => isEqualNumber(exp.Sal_Id, info.Sal_Id)),
+        }));
+
+        dataFound(res, { Sales: creditNote })
     } catch (e) {
         servError(e, res)
     }

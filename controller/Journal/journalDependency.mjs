@@ -208,9 +208,30 @@ const groupOutstandings = async (req, res) => {
     }
 }
 
+const partyOutstanding = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? req.query?.Fromdate : ISOString();
+        const Todate = req.query?.Todate ? req.query?.Todate : ISOString();
+        const Group_Id = toNumber(req.query?.Group_Id);
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .input('Group_Id', sql.BigInt, Group_Id)
+            .execute(`Transaction_Debtors_Creditors_Report_Group_VW`);
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 export default {
     getFilterValues,
-    getAccountPendingReference,
+    getAccountPendingReference, 
     getJournalAccounts,
-    groupOutstandings
+    groupOutstandings,
+    partyOutstanding
 }
