@@ -537,11 +537,11 @@ const getStatementFromBuffer = async (req, res) => {
   }
 };
 
-const syncSelectedWithPayment=async(req,res)=>{
-  const transaction = new sql.Transaction();
+const syncSelectedWithPayment = async (req, res) => {
+    const transaction = new sql.Transaction();
     
     try {
-        const { Acc,transactions, paymentDetails } = req.body;
+        const { Acc, transactions, paymentDetails } = req.body;
 
         if (!paymentDetails.pay_bill_type || !paymentDetails.payment_voucher_type_id)
             throw new Error('Missing required payment details');
@@ -554,9 +554,9 @@ const syncSelectedWithPayment=async(req,res)=>{
         await transaction.begin();
 
         const payment_date = paymentDetails.payment_date ? ISOString(paymentDetails.payment_date) : ISOString();
-        const currentUser  = req.user?.UserId || 1;
-        const  creditLedger=Acc.Acc_Id;
-        const  creditLedgerName=Acc.Account_name;
+        const currentUser = req.user?.UserId || 1;
+        const creditLedger = Acc.Acc_Id;
+        const creditLedgerName = Acc.Account_name;
 
        
         const get_year_id = await transaction.request()
@@ -579,139 +579,194 @@ const syncSelectedWithPayment=async(req,res)=>{
         if (voucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
         const Voucher_Code = voucherCodeGet.recordset[0]?.Voucher_Code || '';
 
-        
+      
         const maxIdsGet = await transaction.request()
             .input('Year_Id', Year_Id)
             .input('payment_voucher_type_id', paymentDetails.payment_voucher_type_id)
             .query(`
                 SELECT
-                    (SELECT COALESCE(MAX(pay_id),  0) FROM tbl_Payment_General_Info) AS MaxPaymentId,
+                    (SELECT COALESCE(MAX(pay_id), 0) FROM tbl_Payment_General_Info) AS MaxPaymentId,
                     (SELECT COALESCE(MAX(payment_sno), 0) FROM tbl_Payment_General_Info
                      WHERE year_id = @Year_Id 
-                       AND payment_voucher_type_id = @payment_voucher_type_id)   AS MaxPaymentSno
+                       AND payment_voucher_type_id = @payment_voucher_type_id) AS MaxPaymentSno
             `);
 
-        
         let nextPaymentId  = Number(maxIdsGet.recordset[0].MaxPaymentId)  + 1;
         let nextPaymentSno = Number(maxIdsGet.recordset[0].MaxPaymentSno) + 1;
 
+        const insertedPayments = [];
 
-        const insertedReceipts = [];
-
-        
+      
         for (const txn of transactions) {
-
 
             const parseAmount = (amountStr) => {
                 if (!amountStr) return 0;
                 const cleaned = String(amountStr)
-                    .replace('Rs.', '')   
-                    .replace('CR', '')    
-                    .replace('DR', '')   
+                    .replace('Rs.', '')
+                    .replace('CR', '')
+                    .replace('DR', '')
                     .trim();
                 return parseFloat(cleaned) || 0;
             };
-
         
+            const Id = txn.Id;
+        
+     
+            if (!Id) {
+                console.warn(`Skipping transaction — no Id: ${txn.TranParticulars}`);
+                continue;
+            }
+        
+            
+            const existingCheck = await transaction.request()
+                .input('Id', Id)
+                .query(`
+                    SELECT COUNT(1) AS ExistsCount 
+                    FROM tbl_Bank_Activity 
+                    WHERE Id = @Id
+                `);
+        
+            const alreadyExists = Number(existingCheck.recordset[0].ExistsCount) > 0;
+        
+            if (alreadyExists) {
+                console.log(`Transaction already processed: ${Id}`);
+                continue;   
+            }
+        
+        
+            const pay_id           = nextPaymentId++;   
+            const payment_sno          = nextPaymentSno++;  
+            const payment_invoice_no = `${Voucher_Code}/${createPadString(payment_sno, 6)}/${Year_Desc}`;
+            const Alter_Id         = randomNumber(6, 8);
+            const txn_date         = txn.TranDate ? ISOString(txn.TranDate) : payment_date;
+            const debit_amount     = parseAmount(txn.Amount);
+            const txn_check_no     = txn.ChequeNum || paymentDetails.check_no || null;
+            const txn_check_date   = txn.ChequeNum ? txn_date : (paymentDetails.check_date || null);
+            const txn_remarks      = [txn.TranParticulars, paymentDetails.remarks].filter(Boolean).join(' | ');
+            const ledgerId         = txn.ledgerDetails?.debit_ledger;
+            const ledgerName       = txn.ledgerDetails?.debit_ledger_name;
+            const selectedInvoices = txn.ledgerDetails?.selectedInvoices || [];
 
-              const Id = txn.Id;
+            
+            await transaction.request()
+                .input('pay_id',                   pay_id)
+                .input('year_id',                  Year_Id)
+                .input('payment_sno',              payment_sno)
+                .input('payment_invoice_no',       payment_invoice_no)
+                .input('payment_voucher_type_id',  paymentDetails.payment_voucher_type_id)
+                .input('payment_date',             txn_date)
+                .input('pay_bill_type',            paymentDetails.pay_bill_type)
+                .input('debit_ledger',             ledgerId)
+                .input('debit_ledger_name',        ledgerName || '')
+                .input('debit_amount',             debit_amount)
+                .input('credit_ledger',            creditLedger)
+                .input('credit_ledger_name',       creditLedgerName)
+                .input('credit_amount',            debit_amount)
+                .input('transaction_type',         paymentDetails.transaction_type || '')
+                .input('remarks',                  txn_remarks)
+                .input('check_no',                 txn_check_no)
+                .input('check_date',               txn_check_date)
+                .input('bank_name',                paymentDetails.bank_name || null)
+                .input('bank_date',                txn_date)
+                .input('status',                   paymentDetails.status || '1')
+                .input('created_by',               currentUser)
+                .input('Alter_Id',                 Alter_Id)
+                .query(`
+                    INSERT INTO tbl_Payment_General_Info (
+                        pay_id, year_id, payment_sno, payment_invoice_no,
+                        payment_voucher_type_id, payment_date, pay_bill_type,
+                        debit_ledger, debit_ledger_name, debit_amount,
+                        credit_ledger, credit_ledger_name, credit_amount,
+                        check_no, check_date, bank_name, bank_date,
+                        transaction_type, remarks,
+                        status, created_by, created_on
+                        , Alter_Id
+                    ) VALUES (
+                        @pay_id, @year_id, @payment_sno, @payment_invoice_no,
+                        @payment_voucher_type_id, @payment_date, @pay_bill_type,
+                        @debit_ledger, @debit_ledger_name, @debit_amount,
+                        @credit_ledger, @credit_ledger_name, @credit_amount,
+                        @check_no, @check_date, @bank_name, @bank_date,
+                        @transaction_type, @remarks,
+                        @status, @created_by, GETDATE(),
+                        @Alter_Id
+                    )
+                `);
+        
+          
+            await transaction.request()
+                .input('Id',     Id)
+                .input('pay_id', pay_id)
+                .query(`
+                    INSERT INTO tbl_Bank_Activity (Id, receipt_id, pay_id)
+                    VALUES (@Id, NULL, @pay_id)
+                `);
 
-              if (!Id) {
-                  console.warn(`Skipping transaction — no Id: ${txn.TranParticulars}`);
-                  continue;
-              }
-  
-             
-              const existingCheck = await transaction.request()
-                  .input('Id', Id)
-                  .query(`
-                      SELECT COUNT(1) AS ExistsCount
-                      FROM tbl_Bank_Activity
-                      WHERE Id = @Id
-                  `);
-  
-              const alreadyExists = Number(existingCheck.recordset[0].ExistsCount) > 0;
-  
-              if (alreadyExists) {
-           
-                  continue; 
-              }
-  
-             
-              const payment_id         = nextPaymentId++;   
-              const payment_sno        = nextPaymentSno++;
-              const payment_invoice_no = `${Voucher_Code}/${createPadString(payment_sno, 6)}/${Year_Desc}`;
-              const Alter_Id           = randomNumber(6, 8);
-              const txn_date           = txn.TranDate ? ISOString(txn.TranDate) : payment_date;
-              const debit_amount       = parseAmount(txn.Amount);
-              const txn_check_no       = txn.ChequeNum || paymentDetails.check_no  || null;
-              const txn_check_date     = txn.ChequeNum ? txn_date : (paymentDetails.check_date || null);
-              const txn_remarks        = [txn.TranParticulars, paymentDetails.remarks].filter(Boolean).join(' | ');
-  
-              
-              await transaction.request()
-                  .input('pay_id',                  payment_id)
-                  .input('year_id',                 Year_Id)
-                  .input('payment_voucher_type_id', paymentDetails.payment_voucher_type_id)
-                  .input('payment_sno',             payment_sno)
-                  .input('payment_invoice_no',      payment_invoice_no)
-                  .input('payment_date',            txn_date)
-                  .input('pay_bill_type',           paymentDetails.pay_bill_type)
-                  .input('credit_ledger',           creditLedger)
-                  .input('credit_ledger_name',      creditLedgerName)
-                  .input('credit_amount',           debit_amount)
-                  .input('debit_ledger',            paymentDetails.debit_ledger      || 0)
-                  .input('debit_ledger_name',       paymentDetails.debit_ledger_name || '')
-                  .input('debit_amount',            0)
-                  .input('transaction_type',        paymentDetails.transaction_type  || '')
-                  .input('remarks',                 txn_remarks)
-                  .input('check_no',                txn_check_no)
-                  .input('check_date',              txn_check_date)
-                  .input('bank_name',               paymentDetails.bank_name         || null)
-                  .input('bank_date',               txn_date)
-                  .input('status',                  paymentDetails.status            || '1')
-                  .input('created_by',              currentUser)
-                  .input('Alter_Id',                Alter_Id)
-                  .query(`
-                      INSERT INTO tbl_Payment_General_Info (
-                          pay_id, year_id, payment_voucher_type_id, payment_sno,
-                          payment_invoice_no, payment_date, pay_bill_type,
-                          credit_ledger, credit_ledger_name, credit_amount,
-                          debit_ledger,  debit_ledger_name,  debit_amount,
-                          check_no, check_date, bank_name, bank_date,
-                          transaction_type, remarks,
-                          status, created_by, created_on, Alter_Id
-                      ) VALUES (
-                          @pay_id, @year_id, @payment_voucher_type_id, @payment_sno,
-                          @payment_invoice_no, @payment_date, @pay_bill_type,
-                          @credit_ledger, @credit_ledger_name, @credit_amount,
-                          @debit_ledger,  @debit_ledger_name,  @debit_amount,
-                          @check_no, @check_date, @bank_name, @bank_date,
-                          @transaction_type, @remarks,
-                          @status, @created_by, GETDATE(), @Alter_Id
-                      )
-                  `);
-  
-             
-              await transaction.request()
-                  .input('Id',     Id)
-                  .input('pay_id', payment_id)
-                  .query(`
-                      INSERT INTO tbl_Bank_Activity (Id, receipt_id, pay_id)
-                      VALUES (@Id, NULL, @pay_id)
-                  `);
-          }
-    
+            
+            if (selectedInvoices && selectedInvoices.length > 0) {
+                for (const invoice of selectedInvoices) {
+                    try {
+                        const pay_bill_id = invoice.voucherId;
+                        const bill_name = invoice.BillRefNo || invoice.voucherNumber || '';
+                        const bill_amount = invoice.totalValue || 0;
+                        const dataSource = invoice.dataSource || 'GENERAL';
+                        const journalBillType = dataSource;
+
+                       
+                        await transaction.request()
+                            .input('payment_id',           pay_id)
+                            .input('payment_no',       payment_invoice_no)
+                            .input('payment_date',     txn_date)
+                            .input('bill_type',    paymentDetails.pay_bill_type)
+                            .input('DR_CR_Acc_Id',     ledgerId) 
+                            .input('pay_bill_id',          pay_bill_id)
+                            .input('bill_name',        bill_name)
+                            .input('JournalBillType',  journalBillType)
+                            .input('bill_amount',      bill_amount)
+                            .input('Debit_Amo',        bill_amount) 
+                            .input('Credit_Amo',       0) 
+                            .input('created_by',       currentUser)
+                            .query(`
+                                INSERT INTO tbl_Payment_Bill_Info (
+                                    payment_id, payment_no, payment_date, bill_type,
+                                    DR_CR_Acc_Id, pay_bill_id, bill_name, JournalBillType,
+                                    bill_amount, Debit_Amo, Credit_Amo, created_on
+                                ) VALUES (
+                                    @payment_id, @payment_no, @payment_date, @bill_type,
+                                    @DR_CR_Acc_Id, @pay_bill_id, @bill_name, @JournalBillType,
+                                    @bill_amount, @Debit_Amo, @Credit_Amo, GETDATE()
+                                )
+                            `);
+
+                    
+
+                    } catch (billError) {
+                        console.error(`Error inserting bill info for invoice ${invoice.BillRefNo}:`, billError);
+                     
+                        throw billError; 
+                    }
+                }
+            }
+
+            insertedPayments.push({
+                pay_id,
+                payment_invoice_no,
+                amount: debit_amount,
+                invoiceCount: selectedInvoices.length
+            });
+        }
 
         await transaction.commit();
 
-       
-
-        return success(res, `receipt(s) processed successfully`);
+        return success(res, {
+            message: `${insertedPayments.length} payment(s) processed successfully`,
+            payments: insertedPayments,
+            totalInvoicesLinked: insertedPayments.reduce((sum, p) => sum + p.invoiceCount, 0)
+        });
 
     } catch (error) {
         try { await transaction.rollback(); } catch (_) {}
-        console.error('Error in syncSelectedWithReceipt:', error);
+        console.error('Error in syncSelectedWithPayment:', error);
         return servError(error, res);
     }
 };
