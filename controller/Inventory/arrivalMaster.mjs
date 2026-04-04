@@ -53,13 +53,26 @@ const ArrivalMaster = () => {
                         ${ProductId ? ' AND td.Product_Id = @ProductId ' : ''}
                         ${converted ? ' AND ttc.Arrival_Id IS NOT NULL ' : ''}
                         ${notConverted ? ' AND ttc.Arrival_Id IS NULL ' : ''}
-                        `
+                    -- alter history
+                    SELECT ah.*, u.Name AS alterByGet 
+                    FROM tbl_Alteration_History AS ah
+                    LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                    WHERE 
+                        alteredTable = 'tbl_Trip_Arrival' 
+                        AND alteredRowId IN (SELECT Arr_Id FROM tbl_Trip_Arrival WHERE Arrival_Date BETWEEN @Fromdate AND @Todate)`
                 );
 
             const result = await request;
 
-            if (result.recordset.length > 0) {
-                dataFound(res, result.recordset)
+            const [arrival, alterHistory] = result.recordsets;
+
+            const arrivalWithHistory = arrival.map(item => ({
+                ...item,
+                alterationHistory: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, item.Arr_Id))
+            }))
+
+            if (arrivalWithHistory.length > 0) {
+                dataFound(res, arrivalWithHistory)
             } else {
                 noData(res)
             }
@@ -142,6 +155,8 @@ const ArrivalMaster = () => {
     }
 
     const editArrivalEntry = async (req, res) => {
+        const transaction = req.transaction;
+
         try {
             const {
                 Arr_Id, Batch_No, From_Location, To_Location, Concern, BillNo, BatchLocation, Arrival_Date,
@@ -154,7 +169,7 @@ const ArrivalMaster = () => {
                 return invalidInput(res, 'Product is required');
             }
 
-            const request = new sql.Request()
+            const request = new sql.Request(transaction)
                 .input('Arr_Id', Arr_Id)
                 .input('Arrival_Date', Arrival_Date ? ISOString(Arrival_Date) : ISOString())
                 // .input('Batch_No', Batch_No)
@@ -213,12 +228,17 @@ const ArrivalMaster = () => {
 
             const result = await request;
 
+            await transaction.commit();
+
             if (result.rowsAffected[0] > 0) {
                 success(res, 'Arrival Saved');
             } else {
                 failed(res, 'Failed to save')
             }
         } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
             servError(e, res);
         }
     }

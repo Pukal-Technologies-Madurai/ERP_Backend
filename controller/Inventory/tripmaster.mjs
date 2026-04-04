@@ -167,7 +167,7 @@ const tripActivities = () => {
                     Products_List: JSON.parse(o?.Products_List),
                     Employees_Involved: JSON.parse(o?.Employees_Involved),
                     ConvertedPurchaseOrders: JSON.parse(o?.ConvertedPurchaseOrders),
-                    alterHistoryDetails: JSON.parse(o?.Alteration_History)
+                    Alteration_History: JSON.parse(o?.Alteration_History)
                 }));
 
                 dataFound(res, parsed);

@@ -27,7 +27,10 @@ const voucherType = () => {
 				    	vt.Alter_By,
 				    	ub.Name updatedByGet,
 				    	vt.Alter_Time,
-                        COALESCE(vt.deleteFlag, 0) AS isDeleted
+                        COALESCE(vt.deleteFlag, 0) AS isDeleted,
+                        COALESCE(vt.crLimit, 0) AS crLimit,
+                        COALESCE(vt.drLimit, 0) AS drLimit,
+                        vt.tallyModule
                     FROM tbl_Voucher_Type vt
                     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = vt.Branch_Id
 				    LEFT JOIN tbl_Users AS cb ON cb.UserId = vt.Created_By
@@ -60,7 +63,9 @@ const voucherType = () => {
                         vt.Voucher_Type label,
                         vt.Voucher_Code code,
                         vt.Branch_Id branchId,
-                        vt.Type type
+                        vt.Type type,
+                        COALESCE(vt.crLimit, 0) AS crLimit,
+                        COALESCE(vt.drLimit, 0) AS drLimit,
                     FROM tbl_Voucher_Type vt
                     WHERE 
 				    	vt.Vocher_Type_Id IS NOT NULL
@@ -79,7 +84,7 @@ const voucherType = () => {
 
     const addVoucherType = async (req, res) => {
 
-        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync, status, GodownId } = req.body;
+        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync, status, GodownId, crLimit, drLimit, tallyModule } = req.body;
 
         if (!Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
             return invalidInput(res, 'Voucher_Type and Branch_Id,Voucher_Code are required');
@@ -120,13 +125,18 @@ const voucherType = () => {
                 .input('tally_sync', tally_sync)
                 .input('status', status)
                 .input('GodownId', GodownId)
+                .input('crLimit', crLimit ?? null)
+                .input('drLimit', drLimit ?? null)
+                .input('tallyModule', tallyModule ?? null)
                 .query(`
                     INSERT INTO tbl_Voucher_Type (
                         Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_Id, 
-                        Created_By, Created_Time, tally_sync, deleteFlag, GodownId
+                        Created_By, Created_Time, tally_sync, deleteFlag, GodownId,
+                        crLimit, drLimit, tallyModule
                     ) VALUES (
                         @Vocher_Type_Id, @Voucher_Type, @Voucher_Code, @Branch_Id, @Type, @Alter_Id, 
-                        @Created_By, @Created_Time, @tally_sync, @status, @GodownId
+                        @Created_By, @Created_Time, @tally_sync, @status, @GodownId,
+                        @crLimit, @drLimit, @tallyModule
                     );`
                 );
 
@@ -145,7 +155,7 @@ const voucherType = () => {
 
     const editVoucherType = async (req, res) => {
 
-        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync, status, GodownId } = req.body;
+        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync, status, GodownId, crLimit, drLimit, tallyModule } = req.body;
 
         if (!checkIsNumber(Vocher_Type_Id) ||
             !Voucher_Type ||
@@ -171,6 +181,9 @@ const voucherType = () => {
                 .input('tally_sync', tallySync)
                 .input('deleteFlag', status)
                 .input('GodownId', GodownId)
+                .input('crLimit', crLimit ?? null)
+                .input('drLimit', drLimit ?? null)
+                .input('tallyModule', tallyModule ?? null)
                 .query(`
                 UPDATE tbl_Voucher_Type 
                 SET 
@@ -183,7 +196,10 @@ const voucherType = () => {
                     Alter_Time = @Alter_Time,
                     tally_sync = @tally_sync,
                     deleteFlag = @deleteFlag,
-                    GodownId = @GodownId
+                    GodownId = @GodownId,
+                    crLimit = @crLimit,
+                    drLimit = @drLimit,
+                    tallyModule = @tallyModule
                 WHERE Vocher_Type_Id = @Vocher_Type_Id
             `);
 

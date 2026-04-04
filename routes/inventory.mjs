@@ -44,7 +44,16 @@ inventoryRouter.get('/tripSheet/arrivalEntry', arrivalMaster.getArrivalEntry);
 inventoryRouter.get('/tripSheet/arrivalEntry/filters', arrivalMaster.getArrivalFilters);
 inventoryRouter.post('/tripSheet/arrivalEntry/bulk', arrivalMaster.addBulkArrivalEntry);
 inventoryRouter.post('/tripSheet/arrivalEntry', arrivalMaster.addArrivalEntry);
-inventoryRouter.put('/tripSheet/arrivalEntry', arrivalMaster.editArrivalEntry);
+inventoryRouter.put(
+    '/tripSheet/arrivalEntry', 
+    alterHistory({
+        alteredTable: 'tbl_Trip_Arrival',
+        rowIdField: 'Arr_Id',
+        userField: 'Updated_By',
+        reason: 'Alter_Reason',
+    }),
+    arrivalMaster.editArrivalEntry
+);
 // inventoryRouter.put('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
 // inventoryRouter.delete('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
 

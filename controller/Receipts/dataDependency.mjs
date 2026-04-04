@@ -1150,17 +1150,20 @@ const ReceiptDataDependency = () => {
                         COALESCE(a.Acc_Id, 0) AS value, 
                         COALESCE(r.Retailer_Name, a.Account_name) AS label
                     FROM tbl_Retailers_Master AS r 
-                    LEFT JOIN tbl_Account_Master AS a ON r.ERP_Id = a.ERP_Id
-                    WHERE r.Retailer_Id IN (
-                    	SELECT DISTINCT Retailer_Id
-                    	FROM tbl_Sales_Delivery_Gen_Info
-                    ) OR a.Acc_Id IN (
-                    	SELECT DISTINCT Retailer_id
-                    	FROM tbl_Ledger_Opening_Balance
-                    ) OR a.Acc_Id IN (
-						SELECT DISTINCT debit_ledger
-						FROM tbl_Payment_General_Info
+                    JOIN tbl_Account_Master AS a ON r.Ac_Id = a.Acc_Id
+                    WHERE (
+						r.Retailer_Id IN (
+                    		SELECT DISTINCT Retailer_Id
+                    		FROM tbl_Sales_Delivery_Gen_Info
+						) OR a.Acc_Id IN (
+                    		SELECT DISTINCT Retailer_id
+                    		FROM tbl_Ledger_Opening_Balance
+						) OR a.Acc_Id IN (
+							SELECT DISTINCT debit_ledger
+							FROM tbl_Payment_General_Info
+						)
 					)
+					AND a.Acc_Id <> 0 AND r.Ac_Id <> 0 
                     ORDER BY a.Account_name;`
                 );
 

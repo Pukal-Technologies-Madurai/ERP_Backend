@@ -230,7 +230,7 @@ const ReceiptMaster = () => {
                 .input('credit_amount', credit_amount)
                 .input('debit_ledger', debit_ledger)
                 .input('debit_ledger_name', debit_ledger_name)
-                .input('debit_amount', 0)
+                .input('debit_amount', credit_amount)
                 .input('transaction_type', transaction_type)
                 .input('remarks', remarks)
                 .input('check_no', check_no ? check_no : null)
@@ -333,8 +333,8 @@ const ReceiptMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 credit_amount, altered_by,
-                check_no, check_date, bank_name, 
-                bank_date, is_new_ref, 
+                check_no, check_date, bank_name,
+                bank_date, is_new_ref,
                 is_journal_type = 0, transaction_type = ''
             } = req.body;
 
@@ -630,54 +630,53 @@ const ReceiptMaster = () => {
         }
     };
 
-
     const syncSelectedWithReceipt = async (req, res) => {
-    const transaction = new sql.Transaction();
-    
-    try {
-        const { Acc,transactions, receiptDetails } = req.body;
+        const transaction = new sql.Transaction();
 
-        if (!receiptDetails.receipt_bill_type || !receiptDetails.receipt_voucher_type_id)
-            throw new Error('Missing required receipt details');
-        if (!Acc)
-            throw new Error('Missing required Debit details');
+        try {
+            const { Acc, transactions, receiptDetails } = req.body;
 
-        if (!transactions || transactions.length === 0)
-            throw new Error('No transactions selected');
+            if (!receiptDetails.receipt_bill_type || !receiptDetails.receipt_voucher_type_id)
+                throw new Error('Missing required receipt details');
+            if (!Acc)
+                throw new Error('Missing required Debit details');
 
-        await transaction.begin();
+            if (!transactions || transactions.length === 0)
+                throw new Error('No transactions selected');
 
-        const receipt_date = receiptDetails.receipt_date ? ISOString(receiptDetails.receipt_date) : ISOString();
-        const currentUser  = req.user?.UserId || 1;
-        const  debitLeger=Acc.Acc_Id;
-        const  dbitLedgerName=Acc.Account_name;
+            await transaction.begin();
 
-       
-        const get_year_id = await transaction.request()
-            .input('receipt_date', receipt_date)
-            .query(`
+            const receipt_date = receiptDetails.receipt_date ? ISOString(receiptDetails.receipt_date) : ISOString();
+            const currentUser = req.user?.UserId || 1;
+            const debitLeger = Acc.Acc_Id;
+            const dbitLedgerName = Acc.Account_name;
+
+
+            const get_year_id = await transaction.request()
+                .input('receipt_date', receipt_date)
+                .query(`
                 SELECT Id AS Year_Id, Year_Desc
                 FROM tbl_Year_Master
                 WHERE Fin_Start_Date <= @receipt_date
                   AND Fin_End_Date   >= @receipt_date
             `);
 
-        if (get_year_id.recordset.length === 0) throw new Error('Year_Id not found');
-        const { Year_Id, Year_Desc } = get_year_id.recordset[0];
+            if (get_year_id.recordset.length === 0) throw new Error('Year_Id not found');
+            const { Year_Id, Year_Desc } = get_year_id.recordset[0];
 
-        
-        const voucherCodeGet = await transaction.request()
-            .input('Vocher_Type_Id', receiptDetails.receipt_voucher_type_id)
-            .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Vocher_Type_Id`);
 
-        if (voucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
-        const Voucher_Code = voucherCodeGet.recordset[0]?.Voucher_Code || '';
+            const voucherCodeGet = await transaction.request()
+                .input('Vocher_Type_Id', receiptDetails.receipt_voucher_type_id)
+                .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Vocher_Type_Id`);
 
-        
-        const maxIdsGet = await transaction.request()
-            .input('Year_Id', Year_Id)
-            .input('receipt_voucher_type_id', receiptDetails.receipt_voucher_type_id)
-            .query(`
+            if (voucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
+            const Voucher_Code = voucherCodeGet.recordset[0]?.Voucher_Code || '';
+
+
+            const maxIdsGet = await transaction.request()
+                .input('Year_Id', Year_Id)
+                .input('receipt_voucher_type_id', receiptDetails.receipt_voucher_type_id)
+                .query(`
                 SELECT
                     (SELECT COALESCE(MAX(receipt_id),  0) FROM tbl_Receipt_General_Info) AS MaxReceiptId,
                     (SELECT COALESCE(MAX(receipt_sno), 0) FROM tbl_Receipt_General_Info
@@ -685,89 +684,89 @@ const ReceiptMaster = () => {
                        AND receipt_voucher_type_id = @receipt_voucher_type_id)            AS MaxReceiptSno
             `);
 
-        
-        let nextReceiptId  = Number(maxIdsGet.recordset[0].MaxReceiptId)  + 1;
-        let nextReceiptSno = Number(maxIdsGet.recordset[0].MaxReceiptSno) + 1;
+
+            let nextReceiptId = Number(maxIdsGet.recordset[0].MaxReceiptId) + 1;
+            let nextReceiptSno = Number(maxIdsGet.recordset[0].MaxReceiptSno) + 1;
 
 
-        const insertedReceipts = [];
+            const insertedReceipts = [];
 
-        
 
-        for (const txn of transactions) {
 
-            const parseAmount = (amountStr) => {
-                if (!amountStr) return 0;
-                const cleaned = String(amountStr)
-                    .replace('Rs.', '')
-                    .replace('CR', '')
-                    .replace('DR', '')
-                    .trim();
-                return parseFloat(cleaned) || 0;
-            };
-        
-            const Id = txn.Id;
-        
-         
-            if (!Id) {
-                console.warn(`Skipping transaction — no Id: ${txn.TranParticulars}`);
-                continue;
-            }
-        
-            
-            const existingCheck = await transaction.request()
-                .input('Id', Id)
-                .query(`
+            for (const txn of transactions) {
+
+                const parseAmount = (amountStr) => {
+                    if (!amountStr) return 0;
+                    const cleaned = String(amountStr)
+                        .replace('Rs.', '')
+                        .replace('CR', '')
+                        .replace('DR', '')
+                        .trim();
+                    return parseFloat(cleaned) || 0;
+                };
+
+                const Id = txn.Id;
+
+
+                if (!Id) {
+                    console.warn(`Skipping transaction — no Id: ${txn.TranParticulars}`);
+                    continue;
+                }
+
+
+                const existingCheck = await transaction.request()
+                    .input('Id', Id)
+                    .query(`
                     SELECT COUNT(1) AS ExistsCount 
                     FROM tbl_Bank_Activity 
                     WHERE Id = @Id
                 `);
-        
-            const alreadyExists = Number(existingCheck.recordset[0].ExistsCount) > 0;
-        
-            if (alreadyExists) {
-              
-                continue;   
-            }
-        
-          
-            const receipt_id         = nextReceiptId++;   
-            const receipt_sno        = nextReceiptSno++;  
-            const receipt_invoice_no = `${Voucher_Code}/${createPadString(receipt_sno, 6)}/${Year_Desc}`;
-            const Alter_Id           = randomNumber(6, 8);
-            const txn_date           = txn.TranDate ? ISOString(txn.TranDate) : receipt_date;
-            const credit_amount      = parseAmount(txn.Amount);
-            const txn_check_no       = txn.ChequeNum || receiptDetails.check_no  || null;
-            const txn_check_date     = txn.ChequeNum ? txn_date : (receiptDetails.check_date || null);
-            const txn_remarks        = [txn.TranParticulars, receiptDetails.remarks].filter(Boolean).join(' | ');
-        
 
-            await transaction.request()
-                .input('receipt_id',              receipt_id)
-                .input('year_id',                 Year_Id)
-                .input('receipt_sno',             receipt_sno)
-                .input('receipt_invoice_no',      receipt_invoice_no)
-                .input('receipt_voucher_type_id', receiptDetails.receipt_voucher_type_id)
-                .input('receipt_date',            txn_date)
-                .input('receipt_bill_type',       receiptDetails.receipt_bill_type)
-                .input('credit_ledger',           receiptDetails.credit_ledger      || 0)
-                .input('credit_ledger_name',      receiptDetails.credit_ledger_name || '')
-                .input('credit_amount',           credit_amount)
-                .input('debit_ledger',            debitLeger)
-                .input('debit_ledger_name',       dbitLedgerName)
-                .input('debit_amount',            0)
-                .input('transaction_type',        receiptDetails.transaction_type   || '')
-                .input('remarks',                 txn_remarks)
-                .input('check_no',                txn_check_no)
-                .input('check_date',              txn_check_date)
-                .input('bank_name',               receiptDetails.bank_name          || null)
-                .input('bank_date',               txn_date)
-                .input('status',                  receiptDetails.status             || '1')
-                .input('created_by',              currentUser)
-                .input('is_new_ref',              0)
-                .input('is_journal_type',         0)
-                .input('Alter_Id',                Alter_Id)
-                .query(`
+                const alreadyExists = Number(existingCheck.recordset[0].ExistsCount) > 0;
+
+                if (alreadyExists) {
+
+                    continue;
+                }
+
+
+                const receipt_id = nextReceiptId++;
+                const receipt_sno = nextReceiptSno++;
+                const receipt_invoice_no = `${Voucher_Code}/${createPadString(receipt_sno, 6)}/${Year_Desc}`;
+                const Alter_Id = randomNumber(6, 8);
+                const txn_date = txn.TranDate ? ISOString(txn.TranDate) : receipt_date;
+                const credit_amount = parseAmount(txn.Amount);
+                const txn_check_no = txn.ChequeNum || receiptDetails.check_no || null;
+                const txn_check_date = txn.ChequeNum ? txn_date : (receiptDetails.check_date || null);
+                const txn_remarks = [txn.TranParticulars, receiptDetails.remarks].filter(Boolean).join(' | ');
+
+
+                await transaction.request()
+                    .input('receipt_id', receipt_id)
+                    .input('year_id', Year_Id)
+                    .input('receipt_sno', receipt_sno)
+                    .input('receipt_invoice_no', receipt_invoice_no)
+                    .input('receipt_voucher_type_id', receiptDetails.receipt_voucher_type_id)
+                    .input('receipt_date', txn_date)
+                    .input('receipt_bill_type', receiptDetails.receipt_bill_type)
+                    .input('credit_ledger', receiptDetails.credit_ledger || 0)
+                    .input('credit_ledger_name', receiptDetails.credit_ledger_name || '')
+                    .input('credit_amount', credit_amount)
+                    .input('debit_ledger', debitLeger)
+                    .input('debit_ledger_name', dbitLedgerName)
+                    .input('debit_amount', 0)
+                    .input('transaction_type', receiptDetails.transaction_type || '')
+                    .input('remarks', txn_remarks)
+                    .input('check_no', txn_check_no)
+                    .input('check_date', txn_check_date)
+                    .input('bank_name', receiptDetails.bank_name || null)
+                    .input('bank_date', txn_date)
+                    .input('status', receiptDetails.status || '1')
+                    .input('created_by', currentUser)
+                    .input('is_new_ref', 0)
+                    .input('is_journal_type', 0)
+                    .input('Alter_Id', Alter_Id)
+                    .query(`
                     INSERT INTO tbl_Receipt_General_Info (
                         receipt_id, year_id, receipt_sno, receipt_invoice_no,
                         receipt_voucher_type_id, receipt_date, receipt_bill_type,
@@ -788,29 +787,29 @@ const ReceiptMaster = () => {
                         @is_new_ref, @is_journal_type, @Alter_Id
                     )
                 `);
-        
-            
-            await transaction.request()
-                .input('Id',         Id)
-                .input('receipt_id', receipt_id)
-                .query(`
+
+
+                await transaction.request()
+                    .input('Id', Id)
+                    .input('receipt_id', receipt_id)
+                    .query(`
                     INSERT INTO tbl_Bank_Activity (Id, receipt_id, pay_id)
                     VALUES (@Id, @receipt_id, NULL)
                 `);
+            }
+
+            await transaction.commit();
+
+
+
+            return success(res, `receipt(s) processed successfully`);
+
+        } catch (error) {
+            try { await transaction.rollback(); } catch (_) { }
+            console.error('Error in syncSelectedWithReceipt:', error);
+            return servError(error, res);
         }
-
-        await transaction.commit();
-
-       
-
-        return success(res, `receipt(s) processed successfully`);
-
-    } catch (error) {
-        try { await transaction.rollback(); } catch (_) {}
-        console.error('Error in syncSelectedWithReceipt:', error);
-        return servError(error, res);
-    }
-};
+    };
 
     return {
         getReceipts,
