@@ -44,12 +44,14 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                     gen.Created_on,
                     ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
                     CONVERT(DATETIME, gen.Created_on) AS createdOn,
-                    gen.Narration
+                    gen.Narration,
+                     COALESCE(cb.Name, 'unknown') AS Created_BY_Name
                 FROM tbl_Sales_Delivery_Gen_Info AS gen
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
                 LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = gen.Created_by
                 WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY Do_Id;
             -- involved staffs
