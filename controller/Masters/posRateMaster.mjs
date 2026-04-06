@@ -679,16 +679,18 @@ const posBranchController = () => {
                 rm.Id, 
                 rm.Rate_Date, 
                 rm.Pos_Brand_Id, 
-                rm.Item_Id, 
+                rm.Item_Id,		
                 rm.Rate,
                 rm.Max_Rate, 
                 pb.POS_Brand_Name, 
                 pm.Product_Name, 
                 pm.Short_Name, 
-                pm.isActive AS Is_Active_Decative
+                pm.isActive AS Is_Active_Decative,
+				slo.Item_Name_Modified
             FROM tbl_Pos_Rate_Master rm
             LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
             LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
+			LEFT JOIN tbl_Stock_LOS slo ON slo.Pro_Id=pm.Product_Id
             WHERE rm.Rate_Date = @latestDate
             ORDER BY pm.isActive DESC
         `;
