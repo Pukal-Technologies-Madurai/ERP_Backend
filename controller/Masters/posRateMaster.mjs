@@ -675,7 +675,7 @@ const posBranchController = () => {
         request.input('latestDate', sql.DateTime, latestDate);
 
         const query = `
-            SELECT 
+             SELECT 
                 rm.Id, 
                 rm.Rate_Date, 
                 rm.Pos_Brand_Id, 
@@ -692,7 +692,7 @@ const posBranchController = () => {
             LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
 			LEFT JOIN tbl_Stock_LOS slo ON slo.Pro_Id=pm.Product_Id
             WHERE rm.Rate_Date = @latestDate
-            ORDER BY pm.isActive DESC
+             ORDER BY pm.Product_Name asc
         `;
 
         const result = await request.query(query);
