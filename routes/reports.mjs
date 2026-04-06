@@ -18,7 +18,7 @@ import { createReportColumnGroupingState, getReportColumnGroupingState } from '.
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
     onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport
  ,StockValueGraph } from '../controller/Reports/externalAPI.mjs';
-
+import { MenuSettings, executeSP, saveReportSettings, getReportList, getReportEditData, updateReportSettings, getReportsByParent, executeReportByTemplate } from '../controller/Reports/reportsettings.mjs';
 
 const ReportRouter = express.Router();
 
@@ -190,5 +190,14 @@ ReportRouter.get('/externalAPI/PurchaseOrderReport', PurchaseOrderReport);
 ReportRouter.get('/externalAPI/PurchaseOrderReportItem', PurchaseOrderItemReport)
 
 ReportRouter.get('/externalAPI/StockValueGraph', StockValueGraph);
+
+ReportRouter.get('/settings/MenuSettings', MenuSettings);
+ReportRouter.post('/settings/executeSP', executeSP );
+ReportRouter.post('/settings/saveReport', saveReportSettings);
+ReportRouter.get('/settings/reportList', getReportList);
+ReportRouter.get('/settings/editreport', getReportEditData);
+ReportRouter.put('/settings/updatereport', updateReportSettings);
+ReportRouter.get('/settings/byParent', getReportsByParent);
+ReportRouter.get('settings/getreport', executeReportByTemplate);
 
 export default ReportRouter;
