@@ -43,14 +43,13 @@ const StockManagement = () => {
                     	pgi.*,
                     	br.BranchName,
                     	v.Voucher_Type AS VoucherTypeGet,
-                    	g.Godown_Name AS GodownNameGet
+                    	g.Godown_Name AS GodownNameGet,
+                        cb.Name AS createdByGet
                     FROM tbl_Processing_Gen_Info AS pgi
-                    LEFT JOIN tbl_Branch_Master AS br
-                        ON br.BranchId = pgi.Branch_Id
-                    LEFT JOIN tbl_Voucher_Type AS v
-                        ON v.Vocher_Type_Id = pgi.VoucherType
-                    LEFT JOIN tbl_Godown_Master AS g
-                        ON g.Godown_Id = pgi.Godownlocation
+                    LEFT JOIN tbl_Branch_Master AS br ON br.BranchId = pgi.Branch_Id
+                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pgi.VoucherType
+                    LEFT JOIN tbl_Godown_Master AS g ON g.Godown_Id = pgi.Godownlocation
+                    LEFT JOIN tbl_Users AS cb ON cb.UserId = pgi.Created_By
                     WHERE pgi.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters)
                     ORDER BY pgi.Process_date DESC;
                     -- source details

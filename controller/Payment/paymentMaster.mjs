@@ -68,6 +68,7 @@ const PaymentMaster = () => {
                     	vt.Voucher_Type,
                     	debAcc.Account_name AS DebitAccountGet,
                     	creAcc.Account_name AS CreditAccountGet,
+                        cb.Name AS getCreatedBy,
                     	(
                     		SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
                     		FROM tbl_Receipt_Bill_Info AS rbi
@@ -96,6 +97,7 @@ const PaymentMaster = () => {
                     LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
                     LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
                     LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
+                    LEFT JOIN tbl_Users AS cb ON cb.UserId = pgi.created_by
                     WHERE pgi.pay_id IN (SELECT DISTINCT pay_id FROM @FilteredPayments)
                     ORDER BY 
                         pgi.payment_date DESC, pgi.created_on DESC;
@@ -438,13 +440,13 @@ const PaymentMaster = () => {
         let transactionBegun = false;
 
         try {
-            
+
             const { payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
-            
+
             if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
-            
+
             const isPurchasePayment = isEqualNumber(bill_type, 1);
-            
+
             const calcTotalDebitAmount = (bill_id) => {
                 return toArray(CostingDetails).filter(
                     fil => isEqualNumber(bill_id, fil.pay_bill_id)
@@ -544,22 +546,22 @@ const PaymentMaster = () => {
     }
 
     const getPaymentMobile = async (req, res) => {
-    try {
-        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
-        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
-        const { voucher, debit, credit, payment_type, createdBy, status, Branch_Id } = req.query;
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+            const { voucher, debit, credit, payment_type, createdBy, status, Branch_Id } = req.query;
 
-        const request = new sql.Request()
-            .input('Fromdate', Fromdate)
-            .input('Todate', Todate)
-            .input('voucher', voucher)
-            .input('debit', debit)
-            .input('credit', credit)
-            .input('payment_type', payment_type)
-            .input('createdBy', createdBy)
-            .input('status', status)
-            .input('Branch_Id', Branch_Id)
-            .query(`
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('voucher', voucher)
+                .input('debit', debit)
+                .input('credit', credit)
+                .input('payment_type', payment_type)
+                .input('createdBy', createdBy)
+                .input('status', status)
+                .input('Branch_Id', Branch_Id)
+                .query(`
                 SELECT 
                     pgi.*,
                     vt.Voucher_Type,
@@ -607,13 +609,13 @@ const PaymentMaster = () => {
                     pgi.payment_date DESC, pgi.created_on DESC;
             `);
 
-        const result = await request;
+            const result = await request;
 
-        sentData(res, result.recordset);
-    } catch (e) {
-        servError(e, res);
-    }
-};
+            sentData(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    };
 
     return {
         getPayments,
