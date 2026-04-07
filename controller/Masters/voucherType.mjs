@@ -17,6 +17,7 @@ const voucherType = () => {
                         vt.Voucher_Code,
                         vt.Branch_Id,
                         vt.Type,
+                        vt.tally_sync,
                         vt.tally_sync AS tallySync, 
                         vt.GodownId,  
                         g.Godown_Name AS godownNameGet,
@@ -27,6 +28,7 @@ const voucherType = () => {
 				    	vt.Alter_By,
 				    	ub.Name updatedByGet,
 				    	vt.Alter_Time,
+                        vt.deleteFlag,
                         COALESCE(vt.deleteFlag, 0) AS isDeleted,
                         COALESCE(vt.crLimit, 0) AS crLimit,
                         COALESCE(vt.drLimit, 0) AS drLimit,
@@ -84,31 +86,30 @@ const voucherType = () => {
 
     const addVoucherType = async (req, res) => {
 
-        const { Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, tallySync, status, GodownId, crLimit, drLimit, tallyModule } = req.body;
+        const { 
+            Voucher_Type, Voucher_Code, Branch_Id, Type, Created_By, 
+            GodownId, crLimit, drLimit, tallyModule 
+        } = req.body;
+
+        const tally_sync = req.body.tally_sync ?? req.body.tallySync ?? 0;
+        const status = req.body.status ?? req.body.isDeleted ?? req.body.deleteFlag ?? 0;
 
         if (!Voucher_Type || !checkIsNumber(Branch_Id) || !Type || !Voucher_Code) {
             return invalidInput(res, 'Voucher_Type and Branch_Id,Voucher_Code are required');
         }
-
-        // Convert frontend boolean → DB value (0=Yes,1=No)
-        const tally_sync = (tallySync == true || tallySync == "true") ? 0 : 1;
 
         try {
             const voucherType = (await new sql.Request()
                 .query(`SELECT Voucher_Type, Branch_Id FROM tbl_Voucher_Type`)).recordset;
 
             for (const voucher of voucherType) {
-                if (
-                    filterableText(voucher.Voucher_Type) === filterableText(Voucher_Type) &&
-                    isEqualNumber(voucher.Branch_Id, Branch_Id)
-                ) {
+                if (filterableText(voucher.Voucher_Type) === filterableText(Voucher_Type)) {
                     return failed(res, 'This Voucher Type already exists');
                 }
             }
 
-            const maxIdResult = await new sql.Request().query(`
-            SELECT ISNULL(MAX(Vocher_Type_Id), 0) + 1 AS Vocher_Type_Id FROM tbl_Voucher_Type
-        `);
+            const maxIdResult = await new sql.Request()
+                .query(`SELECT ISNULL(MAX(Vocher_Type_Id), 0) + 1 AS Vocher_Type_Id FROM tbl_Voucher_Type`);
 
             const Voucher_Type_Id = maxIdResult.recordset[0].Vocher_Type_Id;
 
@@ -123,7 +124,7 @@ const voucherType = () => {
                 .input('Created_By', Created_By)
                 .input('Created_Time', new Date())
                 .input('tally_sync', tally_sync)
-                .input('status', status)
+                .input('deleteFlag', status)
                 .input('GodownId', GodownId)
                 .input('crLimit', crLimit ?? null)
                 .input('drLimit', drLimit ?? null)
@@ -135,7 +136,7 @@ const voucherType = () => {
                         crLimit, drLimit, tallyModule
                     ) VALUES (
                         @Vocher_Type_Id, @Voucher_Type, @Voucher_Code, @Branch_Id, @Type, @Alter_Id, 
-                        @Created_By, @Created_Time, @tally_sync, @status, @GodownId,
+                        @Created_By, @Created_Time, @tally_sync, @deleteFlag, @GodownId,
                         @crLimit, @drLimit, @tallyModule
                     );`
                 );
@@ -155,7 +156,10 @@ const voucherType = () => {
 
     const editVoucherType = async (req, res) => {
 
-        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, tallySync, status, GodownId, crLimit, drLimit, tallyModule } = req.body;
+        const { Vocher_Type_Id, Voucher_Type, Voucher_Code, Branch_Id, Type, Alter_By, GodownId, crLimit, drLimit, tallyModule } = req.body;
+
+        const tallySync = req.body.tally_sync ?? req.body.tallySync ?? 0;
+        const deleteFlag = req.body.status ?? req.body.isDeleted ?? req.body.deleteFlag ?? 0;
 
         if (!checkIsNumber(Vocher_Type_Id) ||
             !Voucher_Type ||
@@ -179,7 +183,7 @@ const voucherType = () => {
                 .input('Alter_By', Alter_By)
                 .input('Alter_Time', new Date())
                 .input('tally_sync', tallySync)
-                .input('deleteFlag', status)
+                .input('deleteFlag', deleteFlag)
                 .input('GodownId', GodownId)
                 .input('crLimit', crLimit ?? null)
                 .input('drLimit', drLimit ?? null)
