@@ -350,4 +350,13 @@ MastersRouter.get('/accountNo', defaultBanks.getAccountNumber);
 
 MastersRouter.get('/rateDetails',posRateMaster.getPosRateMasterForWhatsapp)
 
+
+
+
+MastersRouter.post('/stockGroup',baseGroup.stockGroup);
+MastersRouter.post('/stockItemGroup',baseGroup.stockItemGroup);
+MastersRouter.post('/stockItemGroupList',baseGroup.stockItemGroupList)
+MastersRouter.get('/stockGroupGet',baseGroup.stockGroupGet)
+MastersRouter.post('/arrivalList',baseGroup.arrivalList)
+
 export default MastersRouter;
