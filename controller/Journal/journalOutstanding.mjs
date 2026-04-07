@@ -111,8 +111,9 @@ SELECT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
 FROM tbl_Journal_Entries_Info AS jei
 JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
 WHERE 
-    jgi.JournalStatus <> 0
-    AND jei.Acc_Id = @Acc_Id;
+	jgi.JournalDate >= @OB_Date --'OJS/000358/25-26'
+    AND jei.Acc_Id = @Acc_Id
+    AND jgi.JournalStatus <> 0;
 `;
 
 export const creditNoteFilterQuery = `
@@ -513,10 +514,10 @@ SELECT * FROM (
             SUM(rbi.Credit_Amo) AS againstAmount
         FROM tbl_Receipt_Bill_Info rbi
         JOIN tbl_Receipt_General_Info rgi ON rgi.receipt_id = rbi.receipt_id
-        JOIN @filteredJournal fil ON fil.voucherId = rbi.bill_id AND fil.voucherNumber = rbi.bill_name AND fil.DrCr = 'Cr'
+        JOIN @filteredJournal fil ON fil.voucherId = rbi.bill_id AND fil.voucherNumber = rbi.bill_name AND fil.DrCr = 'Dr'
         WHERE rgi.status <> 0
         GROUP BY rbi.bill_id, rbi.bill_name
-    ) rp ON rp.bill_id = jgi.JournalId AND rp.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Cr'
+    ) rp ON rp.bill_id = jgi.JournalId AND rp.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Dr'
     LEFT JOIN (
         SELECT 
             pb.pay_bill_id,
@@ -524,10 +525,10 @@ SELECT * FROM (
             SUM(pb.Debit_Amo) AS againstAmount
         FROM tbl_Payment_Bill_Info pb
         JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
-        JOIN @filteredJournal fil ON fil.voucherId = pb.pay_bill_id AND fil.voucherNumber = pb.bill_name AND fil.DrCr = 'Dr'
+        JOIN @filteredJournal fil ON fil.voucherId = pb.pay_bill_id AND fil.voucherNumber = pb.bill_name AND fil.DrCr = 'Cr'
         WHERE pgi.status <> 0
         GROUP BY pb.pay_bill_id, pb.bill_name
-    ) pb ON pb.pay_bill_id = jgi.JournalId AND pb.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Dr'
+    ) pb ON pb.pay_bill_id = jgi.JournalId AND pb.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Cr'
     LEFT JOIN (
         SELECT 
             jr.RefId,

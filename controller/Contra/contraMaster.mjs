@@ -39,12 +39,14 @@ const getContra = async (req, res) => {
                 	COALESCE(deb.Account_name, 'Not found') AS DebitAccountGet,
                 	COALESCE(cre.Account_name, 'Not found') AS CreditAccountGet,
                 	COALESCE(br.BranchName , 'Not found') AS BranchGet,
-                	COALESCE(vou.Voucher_Type, 'Not found') AS VoucherTypeGet
+                	COALESCE(vou.Voucher_Type, 'Not found') AS VoucherTypeGet,
+                    COALESCE(cb.Name, 'Not found') AS createdByGet
                 FROM tbl_Contra_General_Info AS con
                 LEFT JOIN tbl_Account_Master AS deb ON deb.Acc_Id = con.DebitAccount
                 LEFT JOIN tbl_Account_Master AS cre ON cre.Acc_Id = con.CreditAccount
                 LEFT JOIN tbl_Branch_Master AS br ON br.BranchId = con.BranchId
                 LEFT JOIN tbl_Voucher_Type AS vou ON vou.Vocher_Type_Id = con.VoucherType
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = con.CreatedBy
                 WHERE con.ContraAutoId IN (SELECT DISTINCT ContraAutoId FROM @FilteredVoucher)
                 ORDER BY con.ContraDate DESC
                 -- Alteration History

@@ -36,7 +36,8 @@ const ArrivalMaster = () => {
                             SELECT TOP (1) 1
                             FROM tbl_Purchase_Order_Inv_Stock_Info 
                             WHERE DeliveryId = td.Arr_Id
-                        ), 0) AS ConvertedAsInvoice
+                        ), 0) AS ConvertedAsInvoice,
+                        COALESCE(cb.Name, 'Not found') AS createdByGet
                     FROM tbl_Trip_Arrival AS td
                     LEFT JOIN tbl_Product_Master AS pm
                         ON pm.Product_Id = td.Product_Id
@@ -46,6 +47,7 @@ const ArrivalMaster = () => {
                         ON gm_to.Godown_Id = td.To_Location
                     LEFT JOIN tbl_Trip_Details AS ttc
                         ON ttc.Arrival_Id =  td.Arr_Id
+                    LEFT JOIN tbl_Users AS cb ON cb.UserId = td.Created_By
                     WHERE 
 		                td.Arrival_Date BETWEEN @Fromdate AND @Todate
                         ${FromGodown ? ' AND td.From_Location = @FromGodown ' : ''}

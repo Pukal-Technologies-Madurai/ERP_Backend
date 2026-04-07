@@ -26,10 +26,12 @@ const PurchaseOrderDataEntry = () => {
                     SELECT 
                         pgi.*,
                         COALESCE(lol.Ledger_Name, 'Not found') AS Ledger_Name,
-                        COALESCE(lol.Party_District, 'Not found') AS Party_District
+                        COALESCE(lol.Party_District, 'Not found') AS Party_District,
+                        COALESCE(cb.Name, 'Not found') AS createdByGet
                     FROM tbl_PurchaseOrderGeneralDetails AS pgi
                     LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = pgi.PartyId
                     LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ledger_Tally_Id = r.ERP_Id
+                    LEFT JOIN tbl_Users AS cb ON cb.UserId = pgi.CreatedBy
                     WHERE pgi.Sno IN (SELECT Sno FROM @FilteredOrders);
                     -------------------------Stock Details---------------------------
                     SELECT 
