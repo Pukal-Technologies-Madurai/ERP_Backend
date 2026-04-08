@@ -1030,17 +1030,17 @@ const DeliveryOrder = () => {
         }
     }
 
-  const getDeliveryorder = async (req, res) => {
-        const { Retailer_Id, Delivery_Status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Sales_Person_Id,Branch_Id } = req.query;
+    const getDeliveryorder = async (req, res) => {
+        const { Retailer_Id, Delivery_Status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Sales_Person_Id, Branch_Id } = req.query;
 
         try {
 
             const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
             const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-   const deliveryStatus =
-            Delivery_Status !== undefined && Delivery_Status !== ""
-                ? Number(Delivery_Status)
-                : undefined;
+            const deliveryStatus =
+                Delivery_Status !== undefined && Delivery_Status !== ""
+                    ? Number(Delivery_Status)
+                    : undefined;
             let query = `
                         WITH SALES_DETAILS AS (
                          SELECT
@@ -1133,12 +1133,12 @@ const DeliveryOrder = () => {
             if (Area_Id) {
                 query += ` AND rm.Area_Id = @Area_Id`;
             }
-          if (Branch_Id) {
+            if (Branch_Id) {
                 query += ` AND so.Branch_Id = @Branch_Id`;
             }
-           if (deliveryStatus !== undefined) {
-            query += ` AND so.Delivery_Status = @Delivery_Status`;
-        }
+            if (deliveryStatus !== undefined) {
+                query += ` AND so.Delivery_Status = @Delivery_Status`;
+            }
 
             query += ` ORDER BY so.Do_Id DESC`;
 
@@ -1152,9 +1152,9 @@ const DeliveryOrder = () => {
             request.input('Route_Id', sql.Int, Route_Id);
             request.input('Area_Id', sql.Int, Area_Id);
             request.input('Branch_Id', sql.Int, Branch_Id);
-               if (deliveryStatus !== undefined) {
-            request.input('Delivery_Status', sql.Int, deliveryStatus);
-        }
+            if (deliveryStatus !== undefined) {
+                request.input('Delivery_Status', sql.Int, deliveryStatus);
+            }
 
             const result = await request.query(query);
 
@@ -1317,40 +1317,40 @@ const DeliveryOrder = () => {
     //     }
     // }
 
-const editmobileApi = async (req, res) => {
-    const transaction = new sql.Transaction();
+    const editmobileApi = async (req, res) => {
+        const transaction = new sql.Transaction();
 
-    try {
-        const {
-            Do_Id, Retailer_Id, Delivery_Person_Id,
-            Delivery_Status, Delivery_Time, Delivery_Location, 
-            Delivery_Latitude, Delivery_Longitude, Payment_Mode,GoDown_Id,
-            Payment_Status, Payment_Ref_No, Altered_by, Altered_on,Cancel_status,
-            Product_Array,
-            Branch_Id, Narration, GST_Inclusive = 1, IS_IGST = 0
-        } = req.body;
+        try {
+            const {
+                Do_Id, Retailer_Id, Delivery_Person_Id,
+                Delivery_Status, Delivery_Time, Delivery_Location,
+                Delivery_Latitude, Delivery_Longitude, Payment_Mode, GoDown_Id,
+                Payment_Status, Payment_Ref_No, Altered_by, Altered_on, Cancel_status,
+                Product_Array,
+                Branch_Id, Narration, GST_Inclusive = 1, IS_IGST = 0
+            } = req.body;
 
-        const Do_Date = ISOString(req?.body?.Do_Date);
-        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
-        const isInclusive = isEqualNumber(GST_Inclusive, 1);
-        const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
-        const isIGST = isEqualNumber(IS_IGST, 1);
-        const taxType = isNotTaxableBill
-            ? "zerotax"
-            : isInclusive
-                ? "remove"
-                : "add";
+            const Do_Date = ISOString(req?.body?.Do_Date);
+            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+            const taxType = isNotTaxableBill
+                ? "zerotax"
+                : isInclusive
+                    ? "remove"
+                    : "add";
 
-        if (!checkIsNumber(Do_Id) || !checkIsNumber(Delivery_Person_Id)) {
-            return invalidInput(res, 'Do_Id, Delivery_Person_Id is Required');
-        }
+            if (!checkIsNumber(Do_Id) || !checkIsNumber(Delivery_Person_Id)) {
+                return invalidInput(res, 'Do_Id, Delivery_Person_Id is Required');
+            }
 
-        await transaction.begin();
+            await transaction.begin();
 
-     
-        const originalStockRequest = new sql.Request(transaction)
-            .input('doid', Do_Id)
-            .query(`
+
+            const originalStockRequest = new sql.Request(transaction)
+                .input('doid', Do_Id)
+                .query(`
                 SELECT 
                    *
                 FROM tbl_Sales_Delivery_Stock_Info 
@@ -1358,104 +1358,104 @@ const editmobileApi = async (req, res) => {
                 ORDER BY S_No
             `);
 
-        const originalStockResult = await originalStockRequest;
-        const originalStockItems = originalStockResult.recordset;
+            const originalStockResult = await originalStockRequest;
+            const originalStockItems = originalStockResult.recordset;
 
-        
-        const returnItems = [];
-        
-        if (Product_Array && Product_Array.length > 0) {
-            for (const originalItem of originalStockItems) {
-                const updatedItem = Product_Array.find(item => 
-                    Number(item.Item_Id) === Number(originalItem.Item_Id)
-                );
 
-                if (updatedItem) {
-                    const originalQty = Number(originalItem.Bill_Qty);
-                    const updatedQty = Number(updatedItem.Bill_Qty);
-                    
-                   
-                    if (updatedQty < originalQty) {
-                        const returnQty = originalQty - updatedQty;
-                        const returnRatio = returnQty / originalQty;
-                        
+            const returnItems = [];
+
+            if (Product_Array && Product_Array.length > 0) {
+                for (const originalItem of originalStockItems) {
+                    const updatedItem = Product_Array.find(item =>
+                        Number(item.Item_Id) === Number(originalItem.Item_Id)
+                    );
+
+                    if (updatedItem) {
+                        const originalQty = Number(originalItem.Bill_Qty);
+                        const updatedQty = Number(updatedItem.Bill_Qty);
+
+
+                        if (updatedQty < originalQty) {
+                            const returnQty = originalQty - updatedQty;
+                            const returnRatio = returnQty / originalQty;
+
+                            const returnItem = {
+                                ...originalItem,
+                                Return_Qty: returnQty,
+                                Return_Amount: RoundNumber(Number(originalItem.Amount) * returnRatio),
+                                Return_Taxable_Amount: RoundNumber(Number(originalItem.Taxable_Amount) * returnRatio),
+                                Return_Cgst_Amo: RoundNumber(Number(originalItem.Cgst_Amo) * returnRatio),
+                                Return_Sgst_Amo: RoundNumber(Number(originalItem.Sgst_Amo) * returnRatio),
+                                Return_Igst_Amo: RoundNumber(Number(originalItem.Igst_Amo) * returnRatio),
+                                Return_Final_Amo: RoundNumber(Number(originalItem.Final_Amo) * returnRatio),
+                                Original_S_No: originalItem.S_No,
+                                Item_Rate: originalItem.Item_Rate,
+                                Taxable_Rate: originalItem.Taxable_Rate,
+                                Tax_Rate: originalItem.Tax_Rate,
+                                Cgst: originalItem.Cgst,
+                                Sgst: originalItem.Sgst,
+                                Igst: originalItem.Igst
+                            };
+
+                            returnItems.push(returnItem);
+                        }
+                    } else {
+
                         const returnItem = {
                             ...originalItem,
-                            Return_Qty: returnQty,
-                            Return_Amount: RoundNumber(Number(originalItem.Amount) * returnRatio),
-                            Return_Taxable_Amount: RoundNumber(Number(originalItem.Taxable_Amount) * returnRatio),
-                            Return_Cgst_Amo: RoundNumber(Number(originalItem.Cgst_Amo) * returnRatio),
-                            Return_Sgst_Amo: RoundNumber(Number(originalItem.Sgst_Amo) * returnRatio),
-                            Return_Igst_Amo: RoundNumber(Number(originalItem.Igst_Amo) * returnRatio),
-                            Return_Final_Amo: RoundNumber(Number(originalItem.Final_Amo) * returnRatio),
-                            Original_S_No: originalItem.S_No,
-                            Item_Rate: originalItem.Item_Rate,
-                            Taxable_Rate: originalItem.Taxable_Rate,
-                            Tax_Rate: originalItem.Tax_Rate,
-                            Cgst: originalItem.Cgst,
-                            Sgst: originalItem.Sgst,
-                            Igst: originalItem.Igst
+                            Return_Qty: Number(originalItem.Bill_Qty),
+                            Return_Amount: Number(originalItem.Amount),
+                            Return_Taxable_Amount: Number(originalItem.Taxable_Amount),
+                            Return_Cgst_Amo: Number(originalItem.Cgst_Amo),
+                            Return_Sgst_Amo: Number(originalItem.Sgst_Amo),
+                            Return_Igst_Amo: Number(originalItem.Igst_Amo),
+                            Return_Final_Amo: Number(originalItem.Final_Amo),
+                            Original_S_No: originalItem.S_No
                         };
-                        
+
                         returnItems.push(returnItem);
                     }
-                } else {
-              
-                    const returnItem = {
-                        ...originalItem,
-                        Return_Qty: Number(originalItem.Bill_Qty),
-                        Return_Amount: Number(originalItem.Amount),
-                        Return_Taxable_Amount: Number(originalItem.Taxable_Amount),
-                        Return_Cgst_Amo: Number(originalItem.Cgst_Amo),
-                        Return_Sgst_Amo: Number(originalItem.Sgst_Amo),
-                        Return_Igst_Amo: Number(originalItem.Igst_Amo),
-                        Return_Final_Amo: Number(originalItem.Final_Amo),
-                        Original_S_No: originalItem.S_No
-                    };
-                    
-                    returnItems.push(returnItem);
                 }
-            }
 
-           
-            if (returnItems.length > 0) {
-                for (let i = 0; i < returnItems.length; i++) {
-                    const returnItem = returnItems[i];
-                    
-                    await new sql.Request(transaction)
-                        .input("Ret_Date", new Date())
-                        .input("Delivery_Order_Id", Do_Id)
-                        .input("GoDown_Id", returnItem.GoDown_Id)
-                        .input("S_No", i + 1)
-                        .input("Item_Id", returnItem.Item_Id)
-                        .input("Bill_Qty", returnItem.Return_Qty)
-                        .input("Act_Qty", returnItem.Return_Qty)
-                        .input("Alt_Act_Qty", returnItem.Return_Qty)
-                        .input("Taxable_Rate", returnItem.Taxable_Rate)
-                        .input("Item_Rate", returnItem.Item_Rate)
-                        .input("Amount", returnItem.Return_Amount)
-                        .input("Free_Qty", 0)
-                        .input("Total_Qty", returnItem.Return_Qty)
-                        .input("Taxble", returnItem.Taxble)
-                        .input("HSN_Code", returnItem.HSN_Code)
-                        .input("Unit_Id", returnItem.Unit_Id)
-                        .input("Unit_Name", returnItem.Unit_Name)
-                        .input("Act_unit_Id", returnItem.Act_unit_Id)
-                        .input("Alt_Act_Unit_Id", returnItem.Alt_Act_Unit_Id)
-                        .input("Taxable_Amount", returnItem.Return_Taxable_Amount)
-                        .input("Tax_Rate", returnItem.Tax_Rate)
-                        .input("Cgst", returnItem.Cgst)
-                        .input("Cgst_Amo", returnItem.Return_Cgst_Amo)
-                        .input("Sgst", returnItem.Sgst)
-                        .input("Sgst_Amo", returnItem.Return_Sgst_Amo)
-                        .input("Igst", returnItem.Igst)
-                        .input("Igst_Amo", returnItem.Return_Igst_Amo)
-                        .input("Final_Amo", returnItem.Return_Final_Amo)
-                        .input("Created_by", Altered_by)
-                        .input("Altered_by", Altered_by)
-                        .input("Created_on", new Date())
-                        .input("Alterd_on", new Date())
-                        .query(`
+
+                if (returnItems.length > 0) {
+                    for (let i = 0; i < returnItems.length; i++) {
+                        const returnItem = returnItems[i];
+
+                        await new sql.Request(transaction)
+                            .input("Ret_Date", new Date())
+                            .input("Delivery_Order_Id", Do_Id)
+                            .input("GoDown_Id", returnItem.GoDown_Id)
+                            .input("S_No", i + 1)
+                            .input("Item_Id", returnItem.Item_Id)
+                            .input("Bill_Qty", returnItem.Return_Qty)
+                            .input("Act_Qty", returnItem.Return_Qty)
+                            .input("Alt_Act_Qty", returnItem.Return_Qty)
+                            .input("Taxable_Rate", returnItem.Taxable_Rate)
+                            .input("Item_Rate", returnItem.Item_Rate)
+                            .input("Amount", returnItem.Return_Amount)
+                            .input("Free_Qty", 0)
+                            .input("Total_Qty", returnItem.Return_Qty)
+                            .input("Taxble", returnItem.Taxble)
+                            .input("HSN_Code", returnItem.HSN_Code)
+                            .input("Unit_Id", returnItem.Unit_Id)
+                            .input("Unit_Name", returnItem.Unit_Name)
+                            .input("Act_unit_Id", returnItem.Act_unit_Id)
+                            .input("Alt_Act_Unit_Id", returnItem.Alt_Act_Unit_Id)
+                            .input("Taxable_Amount", returnItem.Return_Taxable_Amount)
+                            .input("Tax_Rate", returnItem.Tax_Rate)
+                            .input("Cgst", returnItem.Cgst)
+                            .input("Cgst_Amo", returnItem.Return_Cgst_Amo)
+                            .input("Sgst", returnItem.Sgst)
+                            .input("Sgst_Amo", returnItem.Return_Sgst_Amo)
+                            .input("Igst", returnItem.Igst)
+                            .input("Igst_Amo", returnItem.Return_Igst_Amo)
+                            .input("Final_Amo", returnItem.Return_Final_Amo)
+                            .input("Created_by", Altered_by)
+                            .input("Altered_by", Altered_by)
+                            .input("Created_on", new Date())
+                            .input("Alterd_on", new Date())
+                            .query(`
                             INSERT INTO tbl_Sales_Return_Stock_Info (
                                 Ret_Date, Delivery_Order_Id, GoDown_Id, S_No, Item_Id, 
                                 Bill_Qty, Act_Qty, Alt_Act_Qty, Taxable_Rate, Item_Rate, Amount, 
@@ -1472,110 +1472,110 @@ const editmobileApi = async (req, res) => {
                                 @Created_by, @Altered_by, @Created_on, @Alterd_on
                             );
                         `);
-                }
-            }
-        }
-
-      
-        if (Product_Array && Product_Array.length > 0) {
-            const productsData = (await getProducts()).dataArray;
-            const Alter_Id = Math.floor(Math.random() * 999999);
-
-            let Total_Invoice_value = 0;
-            let Total_Before_Tax = 0;
-            let Total_Tax = 0;
-            let CSGT_Total = 0;
-            let SGST_Total = 0;
-            let IGST_Total = 0;
-            let Round_off = 0;
-            let totalCGST = 0;
-            let totalSGST = 0;
-            let totalIGST = 0;
-
-            
-            for (const item of Product_Array) {
-                const product = findProductDetails(productsData, item.Item_Id);
-                if (!product) continue;
-
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
-                const gstPercentage = isIGST ? product.Igst_P : product.Gst_P;
-
-                if (isNotTaxableBill) {
-                    Total_Before_Tax = Addition(Total_Before_Tax, Amount);
-                    Total_Invoice_value = Addition(Total_Invoice_value, Amount);
-                    continue;
-                }
-
-                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
-
-                Total_Before_Tax = Addition(Total_Before_Tax, gstInfo.base_amount);
-                Total_Tax = Addition(Total_Tax, gstInfo.tax_amount);
-                Total_Invoice_value = Addition(Total_Invoice_value, gstInfo.with_tax);
-
-                if (isIGST) {
-                    IGST_Total = Addition(IGST_Total, gstInfo.tax_amount);
-                    totalIGST = Addition(totalIGST, gstInfo.tax_amount);
-                } else {
-                    const halfTax = gstInfo.tax_amount / 2;
-                    CSGT_Total = Addition(CSGT_Total, halfTax);
-                    SGST_Total = Addition(SGST_Total, halfTax);
-                    totalCGST = Addition(totalCGST, halfTax);
-                    totalSGST = Addition(totalSGST, halfTax);
+                    }
                 }
             }
 
-            Total_Invoice_value = RoundNumber(Total_Invoice_value);
-            Round_off = RoundNumber(
-                Math.round(Total_Invoice_value) - Total_Invoice_value
-            );
-            Total_Invoice_value = Math.round(Total_Invoice_value);
 
-            const Total_Expences = isNotTaxableBill
-                ? Round_off
-                : Addition(Addition(Addition(CSGT_Total, SGST_Total), IGST_Total), Round_off);
+            if (Product_Array && Product_Array.length > 0) {
+                const productsData = (await getProducts()).dataArray;
+                const Alter_Id = Math.floor(Math.random() * 999999);
 
-            
-            await new sql.Request(transaction)
-                .input("Do_Id", sql.Int, Do_Id)
-                .query(`DELETE FROM tbl_Sales_Delivery_Stock_Info WHERE Delivery_Order_Id = @Do_Id`);
+                let Total_Invoice_value = 0;
+                let Total_Before_Tax = 0;
+                let Total_Tax = 0;
+                let CSGT_Total = 0;
+                let SGST_Total = 0;
+                let IGST_Total = 0;
+                let Round_off = 0;
+                let totalCGST = 0;
+                let totalSGST = 0;
+                let totalIGST = 0;
 
-            await new sql.Request(transaction)
-                .input("Do_Id", sql.Int, Do_Id)
-                .query(`DELETE FROM tbl_Sales_Delivery_Expence_Info WHERE Do_Id = @Do_Id`);
 
-           
-            await new sql.Request(transaction)
-                .input("doid", Do_Id)
-                .input("date", Do_Date)
-                .input("retailer", Retailer_Id)
-                .input("branch", Branch_Id)
-                .input("GST_Inclusive", GST_Inclusive)
-                .input("CSGT_Total", CSGT_Total)
-                .input("SGST_Total", SGST_Total)
-                .input("IGST_Total", IGST_Total)
-                .input("IS_IGST", isIGST ? 1 : 0)
-                .input("Total_Expences", Total_Expences)
-                .input("roundoff", Round_off)
-                .input("totalinvoice", Total_Invoice_value)
-                .input("Total_Before_Tax", Total_Before_Tax)
-                .input("Total_Tax", Total_Tax)
-                .input("narration", Narration)
-                .input("alterby", Altered_by)
-                .input("Alter_Id", Alter_Id)
-                .input("alteron", new Date())
-                .input("deliveryperson", Delivery_Person_Id)
-                .input("deliverystatus", Delivery_Status)
-                .input("deliveryTime", Delivery_Time)
-                .input("deliveryLocation", Delivery_Location)
-                .input("deliverylatitude", Delivery_Latitude)
-                .input("deliverylongitute", Delivery_Longitude)
-                .input("Cancel_status",Cancel_status)
-                .input("paymentMode", Payment_Mode)
-                .input("paymentStatus", Payment_Status)
-                .input("paymentrefno", Payment_Ref_No)
-                .input("Trans_Type", "UPDATE").query(`
+                for (const item of Product_Array) {
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    if (!product) continue;
+
+                    const itemRate = RoundNumber(item?.Item_Rate);
+                    const billQty = RoundNumber(item?.Bill_Qty);
+                    const Amount = Multiplication(billQty, itemRate);
+                    const gstPercentage = isIGST ? product.Igst_P : product.Gst_P;
+
+                    if (isNotTaxableBill) {
+                        Total_Before_Tax = Addition(Total_Before_Tax, Amount);
+                        Total_Invoice_value = Addition(Total_Invoice_value, Amount);
+                        continue;
+                    }
+
+                    const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                    Total_Before_Tax = Addition(Total_Before_Tax, gstInfo.base_amount);
+                    Total_Tax = Addition(Total_Tax, gstInfo.tax_amount);
+                    Total_Invoice_value = Addition(Total_Invoice_value, gstInfo.with_tax);
+
+                    if (isIGST) {
+                        IGST_Total = Addition(IGST_Total, gstInfo.tax_amount);
+                        totalIGST = Addition(totalIGST, gstInfo.tax_amount);
+                    } else {
+                        const halfTax = gstInfo.tax_amount / 2;
+                        CSGT_Total = Addition(CSGT_Total, halfTax);
+                        SGST_Total = Addition(SGST_Total, halfTax);
+                        totalCGST = Addition(totalCGST, halfTax);
+                        totalSGST = Addition(totalSGST, halfTax);
+                    }
+                }
+
+                Total_Invoice_value = RoundNumber(Total_Invoice_value);
+                Round_off = RoundNumber(
+                    Math.round(Total_Invoice_value) - Total_Invoice_value
+                );
+                Total_Invoice_value = Math.round(Total_Invoice_value);
+
+                const Total_Expences = isNotTaxableBill
+                    ? Round_off
+                    : Addition(Addition(Addition(CSGT_Total, SGST_Total), IGST_Total), Round_off);
+
+
+                await new sql.Request(transaction)
+                    .input("Do_Id", sql.Int, Do_Id)
+                    .query(`DELETE FROM tbl_Sales_Delivery_Stock_Info WHERE Delivery_Order_Id = @Do_Id`);
+
+                await new sql.Request(transaction)
+                    .input("Do_Id", sql.Int, Do_Id)
+                    .query(`DELETE FROM tbl_Sales_Delivery_Expence_Info WHERE Do_Id = @Do_Id`);
+
+
+                await new sql.Request(transaction)
+                    .input("doid", Do_Id)
+                    .input("date", Do_Date)
+                    .input("retailer", Retailer_Id)
+                    .input("branch", Branch_Id)
+                    .input("GST_Inclusive", GST_Inclusive)
+                    .input("CSGT_Total", CSGT_Total)
+                    .input("SGST_Total", SGST_Total)
+                    .input("IGST_Total", IGST_Total)
+                    .input("IS_IGST", isIGST ? 1 : 0)
+                    .input("Total_Expences", Total_Expences)
+                    .input("roundoff", Round_off)
+                    .input("totalinvoice", Total_Invoice_value)
+                    .input("Total_Before_Tax", Total_Before_Tax)
+                    .input("Total_Tax", Total_Tax)
+                    .input("narration", Narration)
+                    .input("alterby", Altered_by)
+                    .input("Alter_Id", Alter_Id)
+                    .input("alteron", new Date())
+                    .input("deliveryperson", Delivery_Person_Id)
+                    .input("deliverystatus", Delivery_Status)
+                    .input("deliveryTime", Delivery_Time)
+                    .input("deliveryLocation", Delivery_Location)
+                    .input("deliverylatitude", Delivery_Latitude)
+                    .input("deliverylongitute", Delivery_Longitude)
+                    .input("Cancel_status", Cancel_status)
+                    .input("paymentMode", Payment_Mode)
+                    .input("paymentStatus", Payment_Status)
+                    .input("paymentrefno", Payment_Ref_No)
+                    .input("Trans_Type", "UPDATE").query(`
                 UPDATE tbl_Sales_Delivery_Gen_Info
                 SET
                     Do_Date = @date,
@@ -1607,49 +1607,49 @@ const editmobileApi = async (req, res) => {
                     Alterd_on = @alteron,
                     Trans_Type = @Trans_Type
                 WHERE Do_Id = @doid;`
-                );
+                    );
 
-            
-            for (let i = 0; i < Product_Array.length; i++) {
-                const product = Product_Array[i];
-                const productDetails = findProductDetails(productsData, product.Item_Id);
-                if (!productDetails) continue;
 
-                const gstPercentage = isIGST ? productDetails.Igst_P : productDetails.Gst_P;
-                const Taxble = gstPercentage > 0 ? 1 : 0;
-                const Bill_Qty = Number(product.Bill_Qty);
-                const Item_Rate = RoundNumber(product.Item_Rate);
-                const Amount = Multiplication(Bill_Qty, Item_Rate);
+                for (let i = 0; i < Product_Array.length; i++) {
+                    const product = Product_Array[i];
+                    const productDetails = findProductDetails(productsData, product.Item_Id);
+                    if (!productDetails) continue;
 
-                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
-                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+                    const gstPercentage = isIGST ? productDetails.Igst_P : productDetails.Gst_P;
+                    const Taxble = gstPercentage > 0 ? 1 : 0;
+                    const Bill_Qty = Number(product.Bill_Qty);
+                    const Item_Rate = RoundNumber(product.Item_Rate);
+                    const Amount = Multiplication(Bill_Qty, Item_Rate);
 
-                await new sql.Request(transaction)
-                    .input("Do_Date", Do_Date ? Do_Date : new Date())
-                    .input("Delivery_Order_Id", Do_Id)
-                    .input("S_No", i + 1)
-                    .input("Item_Id", product.Item_Id)
-                    .input("Bill_Qty", Bill_Qty)
-                    .input("Item_Rate", Item_Rate)
-                    .input("Amount", Amount)
-                    .input("Free_Qty", 0)
-                    .input("Total_Qty", Bill_Qty)
-                    .input("Taxble", Taxble)
-                    .input("Taxable_Rate", itemRateGst.base_amount)
-                    .input("HSN_Code", productDetails.HSN_Code)
-                    .input("GoDown_Id", product.GoDown_Id)
-                    .input("Unit_Id", product.UOM ?? "")
-                    .input("Unit_Name", product.Units ?? "")
-                    .input("Taxable_Amount", gstInfo.base_amount)
-                    .input("Tax_Rate", gstPercentage)
-                    .input("Cgst", !isNotTaxableBill && !isIGST ? gstInfo.cgst_per : 0)
-                    .input("Cgst_Amo", !isNotTaxableBill && !isIGST ? gstInfo.cgst_amount : 0)
-                    .input("Sgst", !isNotTaxableBill && !isIGST ? gstInfo.cgst_per : 0)
-                    .input("Sgst_Amo", !isNotTaxableBill && !isIGST ? gstInfo.cgst_amount : 0)
-                    .input("Igst", !isNotTaxableBill && isIGST ? gstInfo.igst_per : 0)
-                    .input("Igst_Amo", !isNotTaxableBill && isIGST ? gstInfo.igst_amount : 0)
-                    .input("Final_Amo", gstInfo.with_tax)
-                    .input("Created_on", new Date()).query(`
+                    const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                    const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+
+                    await new sql.Request(transaction)
+                        .input("Do_Date", Do_Date ? Do_Date : new Date())
+                        .input("Delivery_Order_Id", Do_Id)
+                        .input("S_No", i + 1)
+                        .input("Item_Id", product.Item_Id)
+                        .input("Bill_Qty", Bill_Qty)
+                        .input("Item_Rate", Item_Rate)
+                        .input("Amount", Amount)
+                        .input("Free_Qty", 0)
+                        .input("Total_Qty", Bill_Qty)
+                        .input("Taxble", Taxble)
+                        .input("Taxable_Rate", itemRateGst.base_amount)
+                        .input("HSN_Code", productDetails.HSN_Code)
+                        .input("GoDown_Id", product.GoDown_Id)
+                        .input("Unit_Id", product.UOM ?? "")
+                        .input("Unit_Name", product.Units ?? "")
+                        .input("Taxable_Amount", gstInfo.base_amount)
+                        .input("Tax_Rate", gstPercentage)
+                        .input("Cgst", !isNotTaxableBill && !isIGST ? gstInfo.cgst_per : 0)
+                        .input("Cgst_Amo", !isNotTaxableBill && !isIGST ? gstInfo.cgst_amount : 0)
+                        .input("Sgst", !isNotTaxableBill && !isIGST ? gstInfo.cgst_per : 0)
+                        .input("Sgst_Amo", !isNotTaxableBill && !isIGST ? gstInfo.cgst_amount : 0)
+                        .input("Igst", !isNotTaxableBill && isIGST ? gstInfo.igst_per : 0)
+                        .input("Igst_Amo", !isNotTaxableBill && isIGST ? gstInfo.igst_amount : 0)
+                        .input("Final_Amo", gstInfo.with_tax)
+                        .input("Created_on", new Date()).query(`
                     INSERT INTO tbl_Sales_Delivery_Stock_Info (
                         Do_Date, Delivery_Order_Id, S_No, Item_Id, Bill_Qty, Item_Rate, Amount, 
                         Free_Qty, Total_Qty, GoDown_Id, Taxble, Taxable_Rate, HSN_Code, 
@@ -1662,130 +1662,130 @@ const editmobileApi = async (req, res) => {
                         @Sgst, @Sgst_Amo, @Igst, @Igst_Amo, @Final_Amo, @Created_on
                     );
                 `);
-            }
+                }
 
 
-            const expenseEntries = [];
-            if (!isNotTaxableBill) {
-                if (!isIGST) {
-                    if (totalCGST > 0) {
+                const expenseEntries = [];
+                if (!isNotTaxableBill) {
+                    if (!isIGST) {
+                        if (totalCGST > 0) {
+                            expenseEntries.push({
+                                type: "CGST",
+                                amount: totalCGST,
+                                isCredit: false,
+                            });
+                        }
+                        if (totalSGST > 0) {
+                            expenseEntries.push({
+                                type: "SGST",
+                                amount: totalSGST,
+                                isCredit: false,
+                            });
+                        }
+                    } else if (totalIGST > 0) {
                         expenseEntries.push({
-                            type: "CGST",
-                            amount: totalCGST,
+                            type: "IGST",
+                            amount: totalIGST,
                             isCredit: false,
                         });
                     }
-                    if (totalSGST > 0) {
-                        expenseEntries.push({
-                            type: "SGST",
-                            amount: totalSGST,
-                            isCredit: false,
-                        });
-                    }
-                } else if (totalIGST > 0) {
+                }
+
+                if (Round_off !== 0) {
                     expenseEntries.push({
-                        type: "IGST",
-                        amount: totalIGST,
-                        isCredit: false,
+                        type: "ROUNDOFF",
+                        amount: Math.abs(Round_off),
+                        isCredit: Round_off < 0,
                     });
                 }
-            }
 
-            if (Round_off !== 0) {
-                expenseEntries.push({
-                    type: "ROUNDOFF",
-                    amount: Math.abs(Round_off),
-                    isCredit: Round_off < 0,
-                });
-            }
-
-            const defaultAccounts = await new sql.Request(transaction).query(`
+                const defaultAccounts = await new sql.Request(transaction).query(`
                 SELECT Acc_Id, AC_Reason 
                 FROM tbl_Default_AC_Master 
                 WHERE AC_Reason IN ('CGST', 'SGST', 'IGST', 'ROUNDOFF', 'GST', 'TAX', 'ROUND')
             `);
 
-            const accountMap = {};
-            defaultAccounts.recordset.forEach((account) => {
-                const reason = (account.AC_Reason || "").toUpperCase();
-                accountMap[reason] = account.Acc_Id;
-            });
+                const accountMap = {};
+                defaultAccounts.recordset.forEach((account) => {
+                    const reason = (account.AC_Reason || "").toUpperCase();
+                    accountMap[reason] = account.Acc_Id;
+                });
 
-            for (let i = 0; i < expenseEntries.length; i++) {
-                const expense = expenseEntries[i];
-                let accountId = accountMap[expense.type];
+                for (let i = 0; i < expenseEntries.length; i++) {
+                    const expense = expenseEntries[i];
+                    let accountId = accountMap[expense.type];
 
-                if (!accountId) {
-                    if (expense.type === "CGST" || expense.type === "SGST" || expense.type === "IGST") {
-                        accountId = accountMap["GST"] || accountMap["TAX"];
-                    } else if (expense.type === "ROUNDOFF") {
-                        accountId = accountMap["ROUND"];
+                    if (!accountId) {
+                        if (expense.type === "CGST" || expense.type === "SGST" || expense.type === "IGST") {
+                            accountId = accountMap["GST"] || accountMap["TAX"];
+                        } else if (expense.type === "ROUNDOFF") {
+                            accountId = accountMap["ROUND"];
+                        }
+                    }
+
+                    if (!accountId) {
+                        console.error(`No account mapping found for ${expense.type}`);
+                        continue;
+                    }
+
+                    if (expense.type === "ROUNDOFF") {
+                        const amount = Round_off;
+                        const isCredit = Round_off < 0;
+
+                        await new sql.Request(transaction)
+                            .input("Do_Id", sql.Int, Do_Id)
+                            .input("Sno", sql.Int, i + 1)
+                            .input("Expense_Id", sql.Int, accountId)
+                            .input("Expence_Value_Dr", sql.Decimal(18, 2), isCredit ? 0 : amount)
+                            .input("Expence_Value_Cr", sql.Decimal(18, 2), isCredit ? amount : 0).query(`
+                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                                Do_Id, Sno, Expense_Id, Expence_Value_Dr, Expence_Value_Cr
+                            ) VALUES (
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_Dr, @Expence_Value_Cr
+                            );`
+                            );
+                    } else {
+                        await new sql.Request(transaction)
+                            .input("Do_Id", sql.Int, Do_Id)
+                            .input("Sno", sql.Int, i + 1)
+                            .input("Expense_Id", sql.Int, accountId)
+                            .input("Expence_Value_Dr", sql.Decimal(18, 2), expense.amount)
+                            .input("Expence_Value_Cr", sql.Decimal(18, 2), 0).query(`
+                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                                Do_Id, Sno, Expense_Id, Expence_Value_Dr, Expence_Value_Cr
+                            ) VALUES (
+                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_Dr, @Expence_Value_Cr
+                            );`
+                            );
                     }
                 }
 
-                if (!accountId) {
-                    console.error(`No account mapping found for ${expense.type}`);
-                    continue;
-                }
+                await transaction.commit();
 
-                if (expense.type === "ROUNDOFF") {
-                    const amount = Round_off;
-                    const isCredit = Round_off < 0;
-
-                    await new sql.Request(transaction)
-                        .input("Do_Id", sql.Int, Do_Id)
-                        .input("Sno", sql.Int, i + 1)
-                        .input("Expense_Id", sql.Int, accountId)
-                        .input("Expence_Value_Dr", sql.Decimal(18, 2), isCredit ? 0 : amount)
-                        .input("Expence_Value_Cr", sql.Decimal(18, 2), isCredit ? amount : 0).query(`
-                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                                Do_Id, Sno, Expense_Id, Expence_Value_Dr, Expence_Value_Cr
-                            ) VALUES (
-                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_Dr, @Expence_Value_Cr
-                            );`
-                        );
+                if (returnItems.length > 0) {
+                    success(res, "Delivery order updated successfully with return records created");
                 } else {
-                    await new sql.Request(transaction)
-                        .input("Do_Id", sql.Int, Do_Id)
-                        .input("Sno", sql.Int, i + 1)
-                        .input("Expense_Id", sql.Int, accountId)
-                        .input("Expence_Value_Dr", sql.Decimal(18, 2), expense.amount)
-                        .input("Expence_Value_Cr", sql.Decimal(18, 2), 0).query(`
-                            INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                                Do_Id, Sno, Expense_Id, Expence_Value_Dr, Expence_Value_Cr
-                            ) VALUES (
-                                @Do_Id, @Sno, @Expense_Id, @Expence_Value_Dr, @Expence_Value_Cr
-                            );`
-                        );
+                    success(res, "Delivery order updated successfully");
                 }
-            }
 
-            await transaction.commit();
-            
-            if (returnItems.length > 0) {
-                success(res, "Delivery order updated successfully with return records created");
             } else {
-                success(res, "Delivery order updated successfully");
-            }
 
-        } else {
-    
-            await new sql.Request(transaction)
-                .input('doid', Do_Id)
-                .input('deliveryperson', Delivery_Person_Id)
-                .input('deliverystatus', Delivery_Status)
-                .input('deliveryTime', Delivery_Time)
-                .input('deliveryLocation', Delivery_Location)
-                .input('deliverylatitude', Delivery_Latitude)
-                .input('deliverylongitute', Delivery_Longitude)
-                .input('paymentMode', Payment_Mode)
-                .input('paymentStatus', Payment_Status)
-                .input('paymentrefno', Payment_Ref_No)
-                .input('Cancel_status',Cancel_status)
-                .input('Altered_by', Altered_by)
-                .input('Alterd_on', new Date())
-                .input('Trans_Type', 'UPDATE')
-                .query(`
+                await new sql.Request(transaction)
+                    .input('doid', Do_Id)
+                    .input('deliveryperson', Delivery_Person_Id)
+                    .input('deliverystatus', Delivery_Status)
+                    .input('deliveryTime', Delivery_Time)
+                    .input('deliveryLocation', Delivery_Location)
+                    .input('deliverylatitude', Delivery_Latitude)
+                    .input('deliverylongitute', Delivery_Longitude)
+                    .input('paymentMode', Payment_Mode)
+                    .input('paymentStatus', Payment_Status)
+                    .input('paymentrefno', Payment_Ref_No)
+                    .input('Cancel_status', Cancel_status)
+                    .input('Altered_by', Altered_by)
+                    .input('Alterd_on', new Date())
+                    .input('Trans_Type', 'UPDATE')
+                    .query(`
                     UPDATE tbl_Sales_Delivery_Gen_Info
                     SET
                         Delivery_Person_Id = @deliveryperson,
@@ -1804,17 +1804,17 @@ const editmobileApi = async (req, res) => {
                     WHERE Do_Id = @doid;
                 `);
 
-            await transaction.commit();
-            success(res, 'Delivery information updated successfully!');
-        }
+                await transaction.commit();
+                success(res, 'Delivery information updated successfully!');
+            }
 
-    } catch (e) {
-        if (transaction._aborted === false) {
-            await transaction.rollback();
+        } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
+            servError(e, res);
         }
-        servError(e, res);
-    }
-};
+    };
 
 
 
@@ -1837,8 +1837,8 @@ const editmobileApi = async (req, res) => {
             Created_By,
             TripStatus,
             GST_Inclusive = 1,
-            BillType='SALES',
-            VoucherType=-1,
+            BillType = 'SALES',
+            VoucherType = -1,
             IS_IGST = 0,
             Delivery_Person_Id,
             Delivery_Location
@@ -1871,7 +1871,7 @@ const editmobileApi = async (req, res) => {
 
             if (!checkIsNumber(Trip_Id)) throw new Error('Failed to get Trip Id');
 
-   
+
 
             // const Trip_No = Number((await new sql.Request()
             //     .input('Trip_Date', Trip_Date)
@@ -1886,26 +1886,26 @@ const editmobileApi = async (req, res) => {
             // if (!checkIsNumber(Trip_No)) throw new Error('Failed to get Trip_No');
 
 
-   let finalTripNo;
-        
-       
-        if (Trip_No && Trip_No !== '') {
-        
-            
-            finalTripNo = Trip_No; 
-        } else {
-     
-            const maxTripNo = Number((await new sql.Request()
-                .input('Trip_Date', Trip_Date)
-                .query(`
+            let finalTripNo;
+
+
+            if (Trip_No && Trip_No !== '') {
+
+
+                finalTripNo = Trip_No;
+            } else {
+
+                const maxTripNo = Number((await new sql.Request()
+                    .input('Trip_Date', Trip_Date)
+                    .query(`
                     SELECT COALESCE(MAX(Trip_No), 0) AS MaxId
                     FROM tbl_Trip_Master    
                     WHERE Trip_Date = @Trip_Date
                 `))?.recordset[0]?.MaxId) + 1;
 
-            if (!checkIsNumber(maxTripNo)) throw new Error('Failed to generate Trip_No');
-            finalTripNo = maxTripNo;
-        }
+                if (!checkIsNumber(maxTripNo)) throw new Error('Failed to generate Trip_No');
+                finalTripNo = maxTripNo;
+            }
 
 
 
@@ -1937,13 +1937,13 @@ const editmobileApi = async (req, res) => {
             const recordCount = countResult.recordset[0].RecordCount;
             const T_No = recordCount + 1;
             let Trip_Number;
-            if(Trip_No !=''){
-                Trip_Number=Trip_No
+            if (Trip_No != '') {
+                Trip_Number = Trip_No
             }
             else {
-                Trip_Number=T_No
+                Trip_Number = T_No
             }
-           
+
             if (!checkIsNumber(T_No)) throw new Error('Failed to get T_No');
 
             const BranchCodeGet = await new sql.Request()
@@ -1990,7 +1990,7 @@ const editmobileApi = async (req, res) => {
                 .input('Vehicle_No', Vehicle_No)
                 .input('TripStatus', TripStatus)
                 .input('StartTime', StartTime)
-                 .input('Trip_No', finalTripNo) // Use the determined Trip_No
+                .input('Trip_No', finalTripNo) // Use the determined Trip_No
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
                 .input('Created_By', Created_By)
                 .input('Created_At', new Date())
@@ -2073,252 +2073,252 @@ const editmobileApi = async (req, res) => {
         }
     };
 
-//      const deliveryTripsheetList = async (req, res) => {
-//     try {
-//         const FromDate = ISOString(req.query.Fromdate);
-//         const ToDate = ISOString(req.query.Todate);
+    //      const deliveryTripsheetList = async (req, res) => {
+    //     try {
+    //         const FromDate = ISOString(req.query.Fromdate);
+    //         const ToDate = ISOString(req.query.Todate);
 
-//         const { Branch_Id,Delivery_Person_Id } = req.query;
+    //         const { Branch_Id,Delivery_Person_Id } = req.query;
 
-//         if (!FromDate || !ToDate) {
-//             return invalidInput(res, 'Select StartDate & EndDate');
-//         }
+    //         if (!FromDate || !ToDate) {
+    //             return invalidInput(res, 'Select StartDate & EndDate');
+    //         }
 
-//         let query = `WITH TRIP_MASTER AS (
-//     SELECT
-//         tr.Trip_Id,
-//         tr.Challan_No,
-//         tr.EndTime,
-//         tr.StartTime,
-//         tr.Trip_Date,
-//         tr.Trip_EN_KM,
-//         tr.Trip_No,
-//         tr.Trip_ST_KM,
-//         tr.Trip_Tot_Kms,
-//         tr.Vehicle_No,
-//         tr.Branch_Id,
-//         tr.BillType,
-//         tr.VoucherType,
-//         tr.TR_INV_ID,
-//         bm.BranchName
-//     FROM tbl_Trip_Master tr
-//     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
-//     WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate AND tr.BillType = 'SALES'`;
+    //         let query = `WITH TRIP_MASTER AS (
+    //     SELECT
+    //         tr.Trip_Id,
+    //         tr.Challan_No,
+    //         tr.EndTime,
+    //         tr.StartTime,
+    //         tr.Trip_Date,
+    //         tr.Trip_EN_KM,
+    //         tr.Trip_No,
+    //         tr.Trip_ST_KM,
+    //         tr.Trip_Tot_Kms,
+    //         tr.Vehicle_No,
+    //         tr.Branch_Id,
+    //         tr.BillType,
+    //         tr.VoucherType,
+    //         tr.TR_INV_ID,
+    //         bm.BranchName
+    //     FROM tbl_Trip_Master tr
+    //     LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = tr.Branch_Id
+    //     WHERE tr.Trip_Date BETWEEN @FromDate AND @ToDate AND tr.BillType = 'SALES'`;
 
-//         // Add Branch_Id condition if provided
-//         if (Branch_Id) {
-//             query += ` AND tr.Branch_Id = @Branch_Id`;
-//         }
+    //         // Add Branch_Id condition if provided
+    //         if (Branch_Id) {
+    //             query += ` AND tr.Branch_Id = @Branch_Id`;
+    //         }
 
-//         query += `),
-// TRIP_DETAILS AS (
-//     SELECT DISTINCT
-//         td.Trip_Id,
-//         td.Delivery_Id,
-//         sgi.Do_Id,
-//         sgi.So_No,
-//         sgi.Total_Before_Tax,
-//         sgi.Total_Invoice_Value,
-//         sgi.SGST_Total,
-//         sgi.CSGT_Total,
-//         sgi.IGST_Total,
-//         sgi.Delivery_Person_Id,
-//         sgi.Delivery_Status,
-//         sgi.Cancel_status,
-//         sgi.Total_Tax,
-//         sgi.Created_by,
-//         sgi.Altered_by,
-//         sgi.Do_Date AS Delivery_Do_Date,  
-//         sogi.So_Id AS Sales_Order_Id,  
-//         sogi.Retailer_Id AS Order_Retailer_Id  
-//     FROM tbl_Trip_Details AS td
-//     LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi ON sgi.Do_Id = td.Delivery_Id
-//     LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sgi.So_No
-//      WHERE 1 = 1
-//       ${Delivery_Person_Id ? 'AND sgi.Delivery_Person_Id = @Delivery_Person_Id' : ''}
-// ),
-// TRIP_EMPLOYEES AS (
-//     SELECT
-//         te.Trip_Id,
-//         te.Involved_Emp_Id,
-//         e.Cost_Center_Name AS Emp_Name,
-//         cc.Cost_Category,
-//         cc.Cost_Category_Id
-//     FROM tbl_Trip_Employees AS te
-//     LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = te.Involved_Emp_Id
-//     LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
-// )
-// SELECT
-//     tm.Trip_Id,
-//     tm.Challan_No,
-//     tm.EndTime,
-//     tm.StartTime,
-//     tm.Trip_Date,
-//     tm.Trip_EN_KM,
-//     tm.Trip_No,
-//     tm.Trip_ST_KM,
-//     tm.Trip_Tot_Kms,
-//     tm.Vehicle_No,
-//     tm.Branch_Id, 
-//     tm.TR_INV_ID,
-//     tm.BillType,
-//     tm.VoucherType,
+    //         query += `),
+    // TRIP_DETAILS AS (
+    //     SELECT DISTINCT
+    //         td.Trip_Id,
+    //         td.Delivery_Id,
+    //         sgi.Do_Id,
+    //         sgi.So_No,
+    //         sgi.Total_Before_Tax,
+    //         sgi.Total_Invoice_Value,
+    //         sgi.SGST_Total,
+    //         sgi.CSGT_Total,
+    //         sgi.IGST_Total,
+    //         sgi.Delivery_Person_Id,
+    //         sgi.Delivery_Status,
+    //         sgi.Cancel_status,
+    //         sgi.Total_Tax,
+    //         sgi.Created_by,
+    //         sgi.Altered_by,
+    //         sgi.Do_Date AS Delivery_Do_Date,  
+    //         sogi.So_Id AS Sales_Order_Id,  
+    //         sogi.Retailer_Id AS Order_Retailer_Id  
+    //     FROM tbl_Trip_Details AS td
+    //     LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi ON sgi.Do_Id = td.Delivery_Id
+    //     LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sgi.So_No
+    //      WHERE 1 = 1
+    //       ${Delivery_Person_Id ? 'AND sgi.Delivery_Person_Id = @Delivery_Person_Id' : ''}
+    // ),
+    // TRIP_EMPLOYEES AS (
+    //     SELECT
+    //         te.Trip_Id,
+    //         te.Involved_Emp_Id,
+    //         e.Cost_Center_Name AS Emp_Name,
+    //         cc.Cost_Category,
+    //         cc.Cost_Category_Id
+    //     FROM tbl_Trip_Employees AS te
+    //     LEFT JOIN tbl_ERP_Cost_Center AS e ON e.Cost_Center_Id = te.Involved_Emp_Id
+    //     LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+    // )
+    // SELECT
+    //     tm.Trip_Id,
+    //     tm.Challan_No,
+    //     tm.EndTime,
+    //     tm.StartTime,
+    //     tm.Trip_Date,
+    //     tm.Trip_EN_KM,
+    //     tm.Trip_No,
+    //     tm.Trip_ST_KM,
+    //     tm.Trip_Tot_Kms,
+    //     tm.Vehicle_No,
+    //     tm.Branch_Id, 
+    //     tm.TR_INV_ID,
+    //     tm.BillType,
+    //     tm.VoucherType,
 
-//     (SELECT MIN(td.Delivery_Do_Date) 
-//      FROM TRIP_DETAILS AS td 
-//      WHERE td.Trip_Id = tm.Trip_Id) AS DO_Date,
+    //     (SELECT MIN(td.Delivery_Do_Date) 
+    //      FROM TRIP_DETAILS AS td 
+    //      WHERE td.Trip_Id = tm.Trip_Id) AS DO_Date,
 
-//     COALESCE((  
-//         SELECT DISTINCT
-//             td.Delivery_Id,
-//             td.Do_Id,
-//             td.So_No,
-//             td.Total_Before_Tax,
-//             td.Total_Invoice_Value,
-//             td.SGST_Total,
-//             td.CSGT_Total,
-//             td.IGST_Total,
-//             td.Delivery_Person_Id,
-//             ecc.Cost_Center_Name,
-//             ecc.User_Id,
-//             us.Name,
-//             td.Delivery_Status,
-//             td.Cancel_status,
-//             td.Total_Tax,
-//             td.Created_by,
-//             td.Altered_by,
-//             td.Sales_Order_Id,
-//             td.Order_Retailer_Id,
-//             ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,  
-//             ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
-//             ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
-//             ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
-//             ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
-//             ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
-//             ISNULL(sgi.Collected_By, '') AS Collected_By,
-//             ISNULL(sgi.Collected_Status, '') AS Collected_Status,
-//             sgi.Payment_Status
-//         FROM TRIP_DETAILS AS td
-//         LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
-//         LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
-//         LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id  
-//         WHERE td.Trip_Id = tm.Trip_Id
-//         FOR JSON PATH
-//     ), '[]') AS Trip_Details,
+    //     COALESCE((  
+    //         SELECT DISTINCT
+    //             td.Delivery_Id,
+    //             td.Do_Id,
+    //             td.So_No,
+    //             td.Total_Before_Tax,
+    //             td.Total_Invoice_Value,
+    //             td.SGST_Total,
+    //             td.CSGT_Total,
+    //             td.IGST_Total,
+    //             td.Delivery_Person_Id,
+    //             ecc.Cost_Center_Name,
+    //             ecc.User_Id,
+    //             us.Name,
+    //             td.Delivery_Status,
+    //             td.Cancel_status,
+    //             td.Total_Tax,
+    //             td.Created_by,
+    //             td.Altered_by,
+    //             td.Sales_Order_Id,
+    //             td.Order_Retailer_Id,
+    //             ISNULL(sgi.Delivery_Time, '') AS Delivery_Time,  
+    //             ISNULL(sgi.Payment_Mode, '') AS Payment_Mode,
+    //             ISNULL(sgi.Payment_Ref_No, '') AS Payment_Ref_No,
+    //             ISNULL(sgi.Delivery_Location, '') AS Delivery_Location,
+    //             ISNULL(sgi.Delivery_Latitude, 0) AS Delivery_Latitude,
+    //             ISNULL(sgi.Delivery_Longitude, 0) AS Delivery_Longitude,
+    //             ISNULL(sgi.Collected_By, '') AS Collected_By,
+    //             ISNULL(sgi.Collected_Status, '') AS Collected_Status,
+    //             sgi.Payment_Status
+    //         FROM TRIP_DETAILS AS td
+    //         LEFT JOIN tbl_ERP_Cost_Center ecc ON ecc.Cost_Center_Id = td.Delivery_Person_Id
+    //         LEFT JOIN tbl_Users us ON us.UserId = ecc.User_Id  
+    //         LEFT JOIN tbl_Sales_Delivery_Gen_Info sgi ON sgi.Do_Id = td.Delivery_Id  
+    //         WHERE td.Trip_Id = tm.Trip_Id
+    //         FOR JSON PATH
+    //     ), '[]') AS Trip_Details,
 
-//     COALESCE((  
-//     SELECT
-//         sgi.Do_Id,
-//         sgi.So_No,
-//         rm.Retailer_Name,
-//         sgi.Do_Date AS Product_Do_Date, 
+    //     COALESCE((  
+    //     SELECT
+    //         sgi.Do_Id,
+    //         sgi.So_No,
+    //         rm.Retailer_Name,
+    //         sgi.Do_Date AS Product_Do_Date, 
 
-//         (SELECT
-//             sdsi.*,
-//             sgi2.Do_Inv_No,
-//             pm.Product_Name,
-//             pm.Product_Image_Name,
-//             tm.BranchName AS Branch,  
-//             rm2.Retailer_Name,  
-//             rm2.Latitude,
-//             rm2.Longitude,
-//            -- ssi.*,
-//             (SELECT
-//                 ssi.Id,
-//                 ssi.Do_Id,
-//                 ssi.Emp_Id,
-//                 ecc.Cost_Center_Name AS Emp_Name,
-//                 ssi.Emp_Type_Id,
-//                 et.Cost_Category AS Emp_Type_Name
-//             FROM tbl_Sales_Delivery_Staff_Info AS ssi
-//             LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
-//             LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
-//             WHERE ssi.Do_Id = sgi2.Do_Id
-//             FOR JSON PATH
-//             ) AS Delivery_Staff
-//         FROM tbl_Sales_Delivery_Stock_Info AS sdsi
-//         LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sdsi.Item_Id
-//         LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
-//         LEFT JOIN tbl_Retailers_Master AS rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
-//         LEFT JOIN tbl_Sales_Delivery_Staff_Info AS ssi ON ssi.Do_Id = sgi2.Do_Id
-      
-//     --    LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
-       
-//       --  LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
-     
-//         WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
-//         FOR JSON PATH
-//         ) AS Products_List
-//     FROM tbl_Sales_Delivery_Gen_Info AS sgi
-//     LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sgi.Retailer_Id
-//     WHERE sgi.Do_Id IN (SELECT td.Delivery_Id FROM TRIP_DETAILS td WHERE td.Trip_Id = tm.Trip_Id)
-//     FOR JSON PATH
-// ), '[]') AS Product_Array,
+    //         (SELECT
+    //             sdsi.*,
+    //             sgi2.Do_Inv_No,
+    //             pm.Product_Name,
+    //             pm.Product_Image_Name,
+    //             tm.BranchName AS Branch,  
+    //             rm2.Retailer_Name,  
+    //             rm2.Latitude,
+    //             rm2.Longitude,
+    //            -- ssi.*,
+    //             (SELECT
+    //                 ssi.Id,
+    //                 ssi.Do_Id,
+    //                 ssi.Emp_Id,
+    //                 ecc.Cost_Center_Name AS Emp_Name,
+    //                 ssi.Emp_Type_Id,
+    //                 et.Cost_Category AS Emp_Type_Name
+    //             FROM tbl_Sales_Delivery_Staff_Info AS ssi
+    //             LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
+    //             LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
+    //             WHERE ssi.Do_Id = sgi2.Do_Id
+    //             FOR JSON PATH
+    //             ) AS Delivery_Staff
+    //         FROM tbl_Sales_Delivery_Stock_Info AS sdsi
+    //         LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sdsi.Item_Id
+    //         LEFT JOIN tbl_Sales_Delivery_Gen_Info AS sgi2 ON sgi2.Do_Id = sdsi.Delivery_Order_Id
+    //         LEFT JOIN tbl_Retailers_Master AS rm2 ON rm2.Retailer_Id = sgi2.Retailer_Id
+    //         LEFT JOIN tbl_Sales_Delivery_Staff_Info AS ssi ON ssi.Do_Id = sgi2.Do_Id
 
-//     COALESCE((  
-//         SELECT
-//             te.Involved_Emp_Id,
-//             te.Emp_Name,
-//             te.Cost_Category,
-//             te.Cost_Category_Id AS Cost_Center_Type_Id
-//         FROM TRIP_EMPLOYEES AS te
-//         WHERE te.Trip_Id = tm.Trip_Id
-//         FOR JSON PATH
-//     ), '[]') AS Employees_Involved
-// FROM TRIP_MASTER AS tm`;
+    //     --    LEFT JOIN tbl_ERP_Cost_Center AS ecc ON ecc.Cost_Center_Id = ssi.Emp_Id
 
-//         const request = new sql.Request();
-//         request.input('FromDate', sql.Date, FromDate);
-//         request.input('ToDate', sql.Date, ToDate);
-    
-//         if (Branch_Id) {
-//             request.input('Branch_Id', sql.Int, Branch_Id);
-//         }
-//          if (Delivery_Person_Id) {
-//             request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
-//         }
+    //       --  LEFT JOIN tbl_ERP_Cost_Category AS et ON et.Cost_Category_Id = ssi.Emp_Type_Id
+
+    //         WHERE sdsi.Delivery_Order_Id = sgi.Do_Id
+    //         FOR JSON PATH
+    //         ) AS Products_List
+    //     FROM tbl_Sales_Delivery_Gen_Info AS sgi
+    //     LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = sgi.Retailer_Id
+    //     WHERE sgi.Do_Id IN (SELECT td.Delivery_Id FROM TRIP_DETAILS td WHERE td.Trip_Id = tm.Trip_Id)
+    //     FOR JSON PATH
+    // ), '[]') AS Product_Array,
+
+    //     COALESCE((  
+    //         SELECT
+    //             te.Involved_Emp_Id,
+    //             te.Emp_Name,
+    //             te.Cost_Category,
+    //             te.Cost_Category_Id AS Cost_Center_Type_Id
+    //         FROM TRIP_EMPLOYEES AS te
+    //         WHERE te.Trip_Id = tm.Trip_Id
+    //         FOR JSON PATH
+    //     ), '[]') AS Employees_Involved
+    // FROM TRIP_MASTER AS tm`;
+
+    //         const request = new sql.Request();
+    //         request.input('FromDate', sql.Date, FromDate);
+    //         request.input('ToDate', sql.Date, ToDate);
+
+    //         if (Branch_Id) {
+    //             request.input('Branch_Id', sql.Int, Branch_Id);
+    //         }
+    //          if (Delivery_Person_Id) {
+    //             request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
+    //         }
 
 
-//         const result = await request.query(query);
+    //         const result = await request.query(query);
 
-//         if (result.recordset && Array.isArray(result.recordset) && result.recordset.length > 0) {
-//             const parsed = result.recordset.map(o => ({
-//                 ...o,
-//                 Product_Array: o?.Product_Array ? JSON.parse(o.Product_Array) : [],
-//                 Trip_Details: o?.Trip_Details ? JSON.parse(o.Trip_Details) : [],
-//                 Employees_Involved: o?.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
-//             }));
+    //         if (result.recordset && Array.isArray(result.recordset) && result.recordset.length > 0) {
+    //             const parsed = result.recordset.map(o => ({
+    //                 ...o,
+    //                 Product_Array: o?.Product_Array ? JSON.parse(o.Product_Array) : [],
+    //                 Trip_Details: o?.Trip_Details ? JSON.parse(o.Trip_Details) : [],
+    //                 Employees_Involved: o?.Employees_Involved ? JSON.parse(o.Employees_Involved) : []
+    //             }));
 
-//             dataFound(res, parsed);
-//         } else {
-//             noData(res);
-//         }
+    //             dataFound(res, parsed);
+    //         } else {
+    //             noData(res);
+    //         }
 
-//     } catch (e) {
-//         servError(e, res);
-//     }
-// };
+    //     } catch (e) {
+    //         servError(e, res);
+    //     }
+    // };
 
-const deliveryTripsheetList = async (req, res) => {
-    try {
-        const { Fromdate, Todate, Branch_Id, User_Id, Delivery_Person_Id } = req.query;
+    const deliveryTripsheetList = async (req, res) => {
+        try {
+            const { Fromdate, Todate, Branch_Id, User_Id, Delivery_Person_Id } = req.query;
 
-        if (!Fromdate || !Todate) {
-            return invalidInput(res, 'Select StartDate & EndDate');
-        }
+            if (!Fromdate || !Todate) {
+                return invalidInput(res, 'Select StartDate & EndDate');
+            }
 
-        const FromDate = new Date(Fromdate);
-        const ToDate = new Date(Todate);
-        
-        if (isNaN(FromDate.getTime()) || isNaN(ToDate.getTime())) {
-            return invalidInput(res, 'Invalid date format');
-        }
+            const FromDate = new Date(Fromdate);
+            const ToDate = new Date(Todate);
 
-        const branchIdNum = Branch_Id ? parseInt(Branch_Id, 10) : null;
-        const deliveryPersonIdNum = Delivery_Person_Id ? parseInt(Delivery_Person_Id, 10) : null;
+            if (isNaN(FromDate.getTime()) || isNaN(ToDate.getTime())) {
+                return invalidInput(res, 'Invalid date format');
+            }
 
-    
-        let tripMasterQuery = `
+            const branchIdNum = Branch_Id ? parseInt(Branch_Id, 10) : null;
+            const deliveryPersonIdNum = Delivery_Person_Id ? parseInt(Delivery_Person_Id, 10) : null;
+
+
+            let tripMasterQuery = `
            SELECT
                tr.Trip_Id,
                tr.Challan_No,
@@ -2344,24 +2344,24 @@ const deliveryTripsheetList = async (req, res) => {
             AND tr.BillType = 'SALES'
 `;
 
-        const conditions = [];
-        if (branchIdNum && !isNaN(branchIdNum)) {
-            conditions.push(`AND tr.Branch_Id = @Branch_Id`);
-        }
-        if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
-            conditions.push(`AND EXISTS (
+            const conditions = [];
+            if (branchIdNum && !isNaN(branchIdNum)) {
+                conditions.push(`AND tr.Branch_Id = @Branch_Id`);
+            }
+            if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
+                conditions.push(`AND EXISTS (
                 SELECT 1 FROM tbl_Trip_Details td2
                 INNER JOIN tbl_Sales_Delivery_Gen_Info sgi2 ON TRY_CAST(sgi2.Do_Id AS INT) = TRY_CAST(td2.Delivery_Id AS INT)
                 WHERE td2.Trip_Id = tr.Trip_Id 
                 AND TRY_CAST(sgi2.Delivery_Person_Id AS INT) = @Delivery_Person_Id
             )`);
-        }
+            }
 
-        if (conditions.length > 0) {
-            tripMasterQuery += ' ' + conditions.join(' ');
-        }
+            if (conditions.length > 0) {
+                tripMasterQuery += ' ' + conditions.join(' ');
+            }
 
-        tripMasterQuery += `
+            tripMasterQuery += `
                    GROUP BY 
                        tr.Trip_Id, tr.Challan_No, tr.EndTime, tr.StartTime, tr.Trip_Date,
                        tr.Trip_EN_KM, tr.Trip_No, tr.Trip_ST_KM, tr.Trip_Tot_Kms,
@@ -2370,30 +2370,30 @@ const deliveryTripsheetList = async (req, res) => {
                    ORDER BY tr.Trip_Date DESC
                      `;
 
-        const request = new sql.Request();
-        request.input('FromDate', sql.Date, FromDate);
-        request.input('ToDate', sql.Date, ToDate);
-        
-        if (branchIdNum && !isNaN(branchIdNum)) {
-            request.input('Branch_Id', sql.Int, branchIdNum);
-        }
-        if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
-            request.input('Delivery_Person_Id', sql.Int, deliveryPersonIdNum);
-        }
+            const request = new sql.Request();
+            request.input('FromDate', sql.Date, FromDate);
+            request.input('ToDate', sql.Date, ToDate);
 
-        const tripMasterResult = await request.query(tripMasterQuery);
-        
-        if (!tripMasterResult.recordset?.length) {
-            return noData(res);
-        }
+            if (branchIdNum && !isNaN(branchIdNum)) {
+                request.input('Branch_Id', sql.Int, branchIdNum);
+            }
+            if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
+                request.input('Delivery_Person_Id', sql.Int, deliveryPersonIdNum);
+            }
 
-        const tripIds = tripMasterResult.recordset.map(t => t.Trip_Id);
-        if (tripIds.length === 0) {
-            return noData(res);
-        }
+            const tripMasterResult = await request.query(tripMasterQuery);
 
-       
-        const tripDetailsQuery = `
+            if (!tripMasterResult.recordset?.length) {
+                return noData(res);
+            }
+
+            const tripIds = tripMasterResult.recordset.map(t => t.Trip_Id);
+            if (tripIds.length === 0) {
+                return noData(res);
+            }
+
+
+            const tripDetailsQuery = `
                SELECT DISTINCT
                    td.Trip_Id,
                    td.Delivery_Id,
@@ -2436,46 +2436,46 @@ const deliveryTripsheetList = async (req, res) => {
                WHERE td.Trip_Id IN (${tripIds.map((_, i) => `@TripId${i}`).join(',')})
                `;
 
-        const detailsRequest = new sql.Request();
-        tripIds.forEach((id, i) => {
-            detailsRequest.input(`TripId${i}`, sql.Int, id);
-        });
-        
-        let tripDetailsResult;
-        if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
-            const newQuery = tripDetailsQuery + ` AND TRY_CAST(sgi.Delivery_Person_Id AS INT) = @Delivery_Person_Id`;
-            detailsRequest.input('Delivery_Person_Id', sql.Int, deliveryPersonIdNum);
-            tripDetailsResult = await detailsRequest.query(newQuery);
-        } else {
-            tripDetailsResult = await detailsRequest.query(tripDetailsQuery);
-        }
-
-        return await processResults(tripDetailsResult);
-
-        async function processResults(tripDetailsResult) {
-            const tripDetailsMap = {};
-            const deliveryIds = [];
-            
-            tripDetailsResult.recordset.forEach(detail => {
-                const tripId = detail.Trip_Id;
-                if (!tripDetailsMap[tripId]) {
-                    tripDetailsMap[tripId] = [];
-                }
-                tripDetailsMap[tripId].push(detail);
-                
-                if (detail.Do_Id && !deliveryIds.includes(detail.Do_Id)) {
-                    deliveryIds.push(detail.Do_Id);
-                }
+            const detailsRequest = new sql.Request();
+            tripIds.forEach((id, i) => {
+                detailsRequest.input(`TripId${i}`, sql.Int, id);
             });
 
-           
-            let productMap = {};
-            let staffMap = {};
-            let deliveryInvoiceMap = {}; 
-            
-            if (deliveryIds.length > 0) {
-     
-                const productsQuery = `
+            let tripDetailsResult;
+            if (deliveryPersonIdNum && !isNaN(deliveryPersonIdNum)) {
+                const newQuery = tripDetailsQuery + ` AND TRY_CAST(sgi.Delivery_Person_Id AS INT) = @Delivery_Person_Id`;
+                detailsRequest.input('Delivery_Person_Id', sql.Int, deliveryPersonIdNum);
+                tripDetailsResult = await detailsRequest.query(newQuery);
+            } else {
+                tripDetailsResult = await detailsRequest.query(tripDetailsQuery);
+            }
+
+            return await processResults(tripDetailsResult);
+
+            async function processResults(tripDetailsResult) {
+                const tripDetailsMap = {};
+                const deliveryIds = [];
+
+                tripDetailsResult.recordset.forEach(detail => {
+                    const tripId = detail.Trip_Id;
+                    if (!tripDetailsMap[tripId]) {
+                        tripDetailsMap[tripId] = [];
+                    }
+                    tripDetailsMap[tripId].push(detail);
+
+                    if (detail.Do_Id && !deliveryIds.includes(detail.Do_Id)) {
+                        deliveryIds.push(detail.Do_Id);
+                    }
+                });
+
+
+                let productMap = {};
+                let staffMap = {};
+                let deliveryInvoiceMap = {};
+
+                if (deliveryIds.length > 0) {
+
+                    const productsQuery = `
                SELECT DISTINCT
                    TRY_CAST(sdsi.Delivery_Order_Id AS INT) AS Do_Id,
                    sdsi.S_No,
@@ -2543,24 +2543,24 @@ const deliveryTripsheetList = async (req, res) => {
                ORDER BY TRY_CAST(sdsi.Delivery_Order_Id AS INT), sdsi.S_No
                `;
 
-                const productsRequest = new sql.Request();
-                deliveryIds.forEach((id, i) => {
-                    productsRequest.input(`DeliveryId${i}`, sql.Int, id);
-                });
+                    const productsRequest = new sql.Request();
+                    deliveryIds.forEach((id, i) => {
+                        productsRequest.input(`DeliveryId${i}`, sql.Int, id);
+                    });
 
-                const productsResult = await productsRequest.query(productsQuery);
-                
-                productMap = {};
-                productsResult.recordset.forEach(product => {
-                    const doId = product.Do_Id;
-                    if (!productMap[doId]) {
-                        productMap[doId] = [];
-                    }
-                    productMap[doId].push(product);
-                });
+                    const productsResult = await productsRequest.query(productsQuery);
 
-       
-                                        const staffQuery = `
+                    productMap = {};
+                    productsResult.recordset.forEach(product => {
+                        const doId = product.Do_Id;
+                        if (!productMap[doId]) {
+                            productMap[doId] = [];
+                        }
+                        productMap[doId].push(product);
+                    });
+
+
+                    const staffQuery = `
                         SELECT
                             ssi.Id,
                             TRY_CAST(ssi.Do_Id AS INT) AS Do_Id,
@@ -2574,25 +2574,25 @@ const deliveryTripsheetList = async (req, res) => {
                         WHERE TRY_CAST(ssi.Do_Id AS INT) IN (${deliveryIds.map((_, i) => `@StaffDoId${i}`).join(',')})
                         `;
 
-                const staffRequest = new sql.Request();
-                deliveryIds.forEach((id, i) => {
-                    staffRequest.input(`StaffDoId${i}`, sql.Int, id);
-                });
+                    const staffRequest = new sql.Request();
+                    deliveryIds.forEach((id, i) => {
+                        staffRequest.input(`StaffDoId${i}`, sql.Int, id);
+                    });
 
-                const staffResult = await staffRequest.query(staffQuery);
-                
-                staffMap = {};
-                staffResult.recordset.forEach(staff => {
-                    const doId = staff.Do_Id;
-                    if (!staffMap[doId]) {
-                        staffMap[doId] = [];
-                    }
-                    staffMap[doId].push(staff);
-                });
-            }
+                    const staffResult = await staffRequest.query(staffQuery);
 
-            
-            const employeesQuery = `
+                    staffMap = {};
+                    staffResult.recordset.forEach(staff => {
+                        const doId = staff.Do_Id;
+                        if (!staffMap[doId]) {
+                            staffMap[doId] = [];
+                        }
+                        staffMap[doId].push(staff);
+                    });
+                }
+
+
+                const employeesQuery = `
                             SELECT
                                 te.Trip_Id,
                                 te.Involved_Emp_Id,
@@ -2605,156 +2605,156 @@ const deliveryTripsheetList = async (req, res) => {
                             WHERE te.Trip_Id IN (${tripIds.map((_, i) => `@EmpTripId${i}`).join(',')})
                             `;
 
-            const empRequest = new sql.Request();
-            tripIds.forEach((id, i) => {
-                empRequest.input(`EmpTripId${i}`, sql.Int, id);
-            });
-
-            const employeesResult = await empRequest.query(employeesQuery);
-            
-            const employeesMap = {};
-            employeesResult.recordset.forEach(emp => {
-                const tripId = emp.Trip_Id;
-                if (!employeesMap[tripId]) {
-                    employeesMap[tripId] = [];
-                }
-                employeesMap[tripId].push({
-                    Involved_Emp_Id: emp.Involved_Emp_Id,
-                    Emp_Name: emp.Emp_Name,
-                    Cost_Category: emp.Cost_Category,
-                    Cost_Center_Type_Id: emp.Cost_Center_Type_Id
+                const empRequest = new sql.Request();
+                tripIds.forEach((id, i) => {
+                    empRequest.input(`EmpTripId${i}`, sql.Int, id);
                 });
-            });
 
-          
-            const finalData = tripMasterResult.recordset.map(trip => {
-                const tripId = trip.Trip_Id;
-                const details = tripDetailsMap[tripId] || [];
-                
-               
-                const formattedTripDetails = details.map(detail => {
-                    return {
-                        Delivery_Id: detail.Delivery_Id,
-                        Do_Id: detail.Do_Id,
-                        So_No: detail.So_No,
-                        So_Date:details.So_Date,
-                        Ledger_Name:detail.Ledger_Name,
-                        Total_Before_Tax: detail.Total_Before_Tax,
-                        Total_Invoice_Value: detail.Total_Invoice_Value,
-                        SGST_Total: detail.SGST_Total,
-                        CSGT_Total: detail.CSGT_Total,
-                        IGST_Total: detail.IGST_Total,
-                        Delivery_Person_Id: detail.Delivery_Person_Id,
-                        Delivery_Status: detail.Delivery_Status,
-                        Cancel_status: detail.Cancel_status,
-                        Total_Tax: detail.Total_Tax,
-                        Created_by: detail.Created_by,
-                        Altered_by: detail.Altered_by,
-                        Cost_Center_Name: detail.Cost_Center_Name,
-                        Delivery_Time: detail.Delivery_Time,
-                        Payment_Mode: detail.Payment_Mode,
-                        Payment_Ref_No: detail.Payment_Ref_No,
-                        Delivery_Location: detail.Delivery_Location,
-                        Delivery_Latitude: detail.Delivery_Latitude,
-                        Delivery_Longitude: detail.Delivery_Longitude,
-                        Collected_By: detail.Collected_By,
-                        Collected_Status: detail.Collected_Status,
-                        Payment_Status: detail.Payment_Status
-                    };
-                });
-                
-                
-                const sortedDetails = [...details].sort((a, b) => {
-           
-                    const invoiceA = a.Do_Inv_No || '';
-                    const invoiceB = b.Do_Inv_No || '';
-                    
-             
-                    const numA = extractInvoiceNumber(invoiceA);
-                    const numB = extractInvoiceNumber(invoiceB);
-                    
-                    if (numA !== null && numB !== null) {
-                        return numA - numB;
+                const employeesResult = await empRequest.query(employeesQuery);
+
+                const employeesMap = {};
+                employeesResult.recordset.forEach(emp => {
+                    const tripId = emp.Trip_Id;
+                    if (!employeesMap[tripId]) {
+                        employeesMap[tripId] = [];
                     }
-                    
-               
-                    return invoiceA.localeCompare(invoiceB);
+                    employeesMap[tripId].push({
+                        Involved_Emp_Id: emp.Involved_Emp_Id,
+                        Emp_Name: emp.Emp_Name,
+                        Cost_Category: emp.Cost_Category,
+                        Cost_Center_Type_Id: emp.Cost_Center_Type_Id
+                    });
                 });
-                
-                const productArray = sortedDetails.map(detail => {
-                    const doId = detail.Do_Id;
-                    const products = productMap[doId] || [];
-                    
-                    const formattedProducts = products.map(product => {
-                      
-                        const { Do_Id, ...productWithoutDoId } = product;
+
+
+                const finalData = tripMasterResult.recordset.map(trip => {
+                    const tripId = trip.Trip_Id;
+                    const details = tripDetailsMap[tripId] || [];
+
+
+                    const formattedTripDetails = details.map(detail => {
                         return {
-                            ...productWithoutDoId,
-                            Delivery_Staff: staffMap[doId] || []
+                            Delivery_Id: detail.Delivery_Id,
+                            Do_Id: detail.Do_Id,
+                            So_No: detail.So_No,
+                            So_Date: details.So_Date,
+                            Ledger_Name: detail.Ledger_Name,
+                            Total_Before_Tax: detail.Total_Before_Tax,
+                            Total_Invoice_Value: detail.Total_Invoice_Value,
+                            SGST_Total: detail.SGST_Total,
+                            CSGT_Total: detail.CSGT_Total,
+                            IGST_Total: detail.IGST_Total,
+                            Delivery_Person_Id: detail.Delivery_Person_Id,
+                            Delivery_Status: detail.Delivery_Status,
+                            Cancel_status: detail.Cancel_status,
+                            Total_Tax: detail.Total_Tax,
+                            Created_by: detail.Created_by,
+                            Altered_by: detail.Altered_by,
+                            Cost_Center_Name: detail.Cost_Center_Name,
+                            Delivery_Time: detail.Delivery_Time,
+                            Payment_Mode: detail.Payment_Mode,
+                            Payment_Ref_No: detail.Payment_Ref_No,
+                            Delivery_Location: detail.Delivery_Location,
+                            Delivery_Latitude: detail.Delivery_Latitude,
+                            Delivery_Longitude: detail.Delivery_Longitude,
+                            Collected_By: detail.Collected_By,
+                            Collected_Status: detail.Collected_Status,
+                            Payment_Status: detail.Payment_Status
                         };
                     });
-                    
+
+
+                    const sortedDetails = [...details].sort((a, b) => {
+
+                        const invoiceA = a.Do_Inv_No || '';
+                        const invoiceB = b.Do_Inv_No || '';
+
+
+                        const numA = extractInvoiceNumber(invoiceA);
+                        const numB = extractInvoiceNumber(invoiceB);
+
+                        if (numA !== null && numB !== null) {
+                            return numA - numB;
+                        }
+
+
+                        return invoiceA.localeCompare(invoiceB);
+                    });
+
+                    const productArray = sortedDetails.map(detail => {
+                        const doId = detail.Do_Id;
+                        const products = productMap[doId] || [];
+
+                        const formattedProducts = products.map(product => {
+
+                            const { Do_Id, ...productWithoutDoId } = product;
+                            return {
+                                ...productWithoutDoId,
+                                Delivery_Staff: staffMap[doId] || []
+                            };
+                        });
+
+                        return {
+                            Do_Id: detail.Do_Id,
+                            So_No: detail.So_No,
+                            Retailer_Name: detail.Cost_Center_Name || 'N/A',
+                            Product_Do_Date: detail.Delivery_Do_Date,
+                            So_Date: detail.So_Date,
+                            Products_List: formattedProducts
+                        };
+                    });
+
                     return {
-                        Do_Id: detail.Do_Id,
-                        So_No: detail.So_No,
-                        Retailer_Name: detail.Cost_Center_Name || 'N/A',
-                        Product_Do_Date: detail.Delivery_Do_Date,
-                        So_Date:detail.So_Date,
-                        Products_List: formattedProducts
+                        Trip_Id: trip.Trip_Id,
+                        Challan_No: trip.Challan_No,
+                        EndTime: trip.EndTime,
+                        StartTime: trip.StartTime,
+                        Trip_Date: trip.Trip_Date,
+                        Trip_EN_KM: trip.Trip_EN_KM,
+                        Trip_No: trip.Trip_No,
+                        Trip_ST_KM: trip.Trip_ST_KM,
+                        Trip_Tot_Kms: trip.Trip_Tot_Kms,
+                        Vehicle_No: trip.Vehicle_No,
+                        Branch_Id: trip.Branch_Id,
+                        BillType: trip.BillType,
+                        VoucherType: trip.VoucherType,
+                        TR_INV_ID: trip.TR_INV_ID,
+                        BranchName: trip.BranchName,
+                        DO_Date: trip.DO_Date,
+                        Trip_Details: formattedTripDetails,
+                        Product_Array: productArray,
+                        Employees_Involved: employeesMap[tripId] || []
                     };
                 });
 
-                return {
-                    Trip_Id: trip.Trip_Id,
-                    Challan_No: trip.Challan_No,
-                    EndTime: trip.EndTime,
-                    StartTime: trip.StartTime,
-                    Trip_Date: trip.Trip_Date,
-                    Trip_EN_KM: trip.Trip_EN_KM,
-                    Trip_No: trip.Trip_No,
-                    Trip_ST_KM: trip.Trip_ST_KM,
-                    Trip_Tot_Kms: trip.Trip_Tot_Kms,
-                    Vehicle_No: trip.Vehicle_No,
-                    Branch_Id: trip.Branch_Id,
-                    BillType: trip.BillType,
-                    VoucherType: trip.VoucherType,
-                    TR_INV_ID: trip.TR_INV_ID,
-                    BranchName: trip.BranchName,
-                    DO_Date: trip.DO_Date,
-                    Trip_Details: formattedTripDetails,
-                    Product_Array: productArray,
-                    Employees_Involved: employeesMap[tripId] || []
-                };
-            });
-
-            dataFound(res, finalData);
-        }
-
-    } catch (e) {
-        console.error('Delivery Tripsheet Error:', e);
-        servError(e, res);
-    }
-};
-
-
-function extractInvoiceNumber(invoiceNo) {
-    if (!invoiceNo) return null;
-    
-   
-    const matches = invoiceNo.match(/\d+/g);
-    if (matches && matches.length > 0) {
-   
-        let longestNum = 0;
-        matches.forEach(match => {
-            const num = parseInt(match, 10);
-            if (!isNaN(num) && num > longestNum) {
-                longestNum = num;
+                dataFound(res, finalData);
             }
-        });
-        return longestNum;
+
+        } catch (e) {
+            console.error('Delivery Tripsheet Error:', e);
+            servError(e, res);
+        }
+    };
+
+
+    function extractInvoiceNumber(invoiceNo) {
+        if (!invoiceNo) return null;
+
+
+        const matches = invoiceNo.match(/\d+/g);
+        if (matches && matches.length > 0) {
+
+            let longestNum = 0;
+            matches.forEach(match => {
+                const num = parseInt(match, 10);
+                if (!isNaN(num) && num > longestNum) {
+                    longestNum = num;
+                }
+            });
+            return longestNum;
+        }
+        return null;
     }
-    return null;
-}
 
 
     const updateDeliveryOrderTrip = async (req, res) => {
@@ -3226,266 +3226,266 @@ function extractInvoiceNumber(invoiceNo) {
         }
     };
 
-// const getDeliveryDetailsListing = async (req, res) => {
-//     const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Item, Godown, Retailer } = req.query;
+    // const getDeliveryDetailsListing = async (req, res) => {
+    //     const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Item, Godown, Retailer } = req.query;
 
-//     const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+    //     const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
 
-//     try {
-//         let query = `
-//         WITH DELIVERY_DETAILS AS (
-//             SELECT
-//                 oi.*,
-//                 pm.Product_Id,
-//                 COALESCE(pm.Product_Name, '') AS Product_Name,
-//                 COALESCE(pm.Product_Image_Name, '') AS Product_Image_Name,
-//                 COALESCE(u.Units, '') AS UOM,
-//                 COALESCE(b.Brand_Name, '') AS BrandGet
-//             FROM tbl_Sales_Delivery_Stock_Info AS oi
-//             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-//             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-//             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-//             LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = oi.Godown_Id
-//             WHERE
-//                 CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
-//                 AND
-//                 CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
-//         ),
-//         DELIVERY_STAFF AS (
-//             SELECT
-//                 dsi.Do_Id,
-//                 dsi.Emp_Id,
-//                 dsi.Emp_Type_Id,
-//                 ecc.Cost_Category,
-//                 ecc.Cost_Category_Id,
-//                 COALESCE(e.Cost_Center_Name, '') AS Staff_Name
-//             FROM tbl_Sales_Delivery_Staff_Info dsi
-//             LEFT JOIN tbl_Erp_Cost_Category ecc ON ecc.Cost_Category_Id = dsi.Emp_Type_Id
-//             LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = dsi.Emp_Id
-//             -- LEFT JOIN tbl_Users u ON u.UserId = dsi.Emp_Id
-//         ),
-//         DELIVERY_ALL_STAFF AS (
-//             SELECT
-//               ds.*
-//             FROM DELIVERY_STAFF ds
-//         )
-//         SELECT 
-//             sdgi.*,
-//             COALESCE(rm.Retailer_Name, '') AS Retailer_Name,
-//             COALESCE(sp.Name, '') AS Sales_Person_Name,
-//             COALESCE(bm.BranchName, '') AS Branch_Name,
-//             COALESCE(cb.Name, '') AS Created_BY_Name,
-//             COALESCE(rmt.Route_Name, '') AS RouteName,
-//             COALESCE(am.Area_Name, '') AS AreaName,
-//             COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
-        
-//             COALESCE((
-//                 SELECT Top 1 ds.Emp_Id 
-//                 FROM DELIVERY_STAFF ds 
-//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
-//             ), 0) AS Broker_Id,
-//             COALESCE((
-//                 SELECT TOP 1 ds.Staff_Name 
-//                 FROM DELIVERY_STAFF ds 
-//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
-//             ), '') AS Broker_Name,
-           
-//             COALESCE((
-//                 SELECT TOP 1 ds.Emp_Id 
-//                 FROM DELIVERY_STAFF ds 
-//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
-//             ), 0) AS Transporter_Id,
-//             COALESCE((
-//                 SELECT TOP 1 ds.Staff_Name 
-//                 FROM DELIVERY_STAFF ds 
-//                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
-//             ), '') AS Transporter_Name,
-           
-//             COALESCE((
-//                 SELECT 
-//                    ds.*
-//                 FROM DELIVERY_ALL_STAFF ds
-//                 WHERE ds.Do_Id = sdgi.Do_Id
-//                 ORDER BY ds.Cost_Category, ds.Staff_Name
-//                 FOR JSON PATH
-//             ), '[]') AS All_Staff_Details,
-//             -- Products list
-//             COALESCE((
-//                 SELECT 
-//                     sd.*,
-//                     sdgi.Do_Inv_No,
-//                     COALESCE(rm.Retailer_Name, '') AS Retailer_Name
-//                 FROM DELIVERY_DETAILS AS sd
-//                 WHERE sd.Delivery_Order_Id = sdgi.Do_Id
-//                 FOR JSON PATH
-//             ), '[]') AS Products_List
-//         FROM 
-//             tbl_Sales_Delivery_Gen_Info AS sdgi
-//         LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No 
-//         LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
-//         LEFT JOIN tbl_Users AS sp ON sp.UserId = sogi.Sales_Person_Id 
-//         LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
-//         LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-//         LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
-//         LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
-//         WHERE 
-//             CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
-//             AND
-//             CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
-//             AND NOT EXISTS (
-//                 SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
-//             )`;
+    //     try {
+    //         let query = `
+    //         WITH DELIVERY_DETAILS AS (
+    //             SELECT
+    //                 oi.*,
+    //                 pm.Product_Id,
+    //                 COALESCE(pm.Product_Name, '') AS Product_Name,
+    //                 COALESCE(pm.Product_Image_Name, '') AS Product_Image_Name,
+    //                 COALESCE(u.Units, '') AS UOM,
+    //                 COALESCE(b.Brand_Name, '') AS BrandGet
+    //             FROM tbl_Sales_Delivery_Stock_Info AS oi
+    //             LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+    //             LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+    //             LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+    //             LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = oi.Godown_Id
+    //             WHERE
+    //                 CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
+    //                 AND
+    //                 CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
+    //         ),
+    //         DELIVERY_STAFF AS (
+    //             SELECT
+    //                 dsi.Do_Id,
+    //                 dsi.Emp_Id,
+    //                 dsi.Emp_Type_Id,
+    //                 ecc.Cost_Category,
+    //                 ecc.Cost_Category_Id,
+    //                 COALESCE(e.Cost_Center_Name, '') AS Staff_Name
+    //             FROM tbl_Sales_Delivery_Staff_Info dsi
+    //             LEFT JOIN tbl_Erp_Cost_Category ecc ON ecc.Cost_Category_Id = dsi.Emp_Type_Id
+    //             LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = dsi.Emp_Id
+    //             -- LEFT JOIN tbl_Users u ON u.UserId = dsi.Emp_Id
+    //         ),
+    //         DELIVERY_ALL_STAFF AS (
+    //             SELECT
+    //               ds.*
+    //             FROM DELIVERY_STAFF ds
+    //         )
+    //         SELECT 
+    //             sdgi.*,
+    //             COALESCE(rm.Retailer_Name, '') AS Retailer_Name,
+    //             COALESCE(sp.Name, '') AS Sales_Person_Name,
+    //             COALESCE(bm.BranchName, '') AS Branch_Name,
+    //             COALESCE(cb.Name, '') AS Created_BY_Name,
+    //             COALESCE(rmt.Route_Name, '') AS RouteName,
+    //             COALESCE(am.Area_Name, '') AS AreaName,
+    //             COALESCE(sdgi.Total_Invoice_Value, 0) AS Total_Invoice_Value,
 
-//         const request = new sql.Request();
-//         request.input('from', Fromdate);
-//         request.input('to', Todate);
+    //             COALESCE((
+    //                 SELECT Top 1 ds.Emp_Id 
+    //                 FROM DELIVERY_STAFF ds 
+    //                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+    //             ), 0) AS Broker_Id,
+    //             COALESCE((
+    //                 SELECT TOP 1 ds.Staff_Name 
+    //                 FROM DELIVERY_STAFF ds 
+    //                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'BROKER'
+    //             ), '') AS Broker_Name,
 
-//         const parseArrayParam = (param) => {
-//             if (!param) return [];
-//             if (Array.isArray(param)) return param;
-//             if (typeof param === 'string') return param.split(',').filter(item => item.trim() !== '');
-//             return [param];
-//         };
+    //             COALESCE((
+    //                 SELECT TOP 1 ds.Emp_Id 
+    //                 FROM DELIVERY_STAFF ds 
+    //                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+    //             ), 0) AS Transporter_Id,
+    //             COALESCE((
+    //                 SELECT TOP 1 ds.Staff_Name 
+    //                 FROM DELIVERY_STAFF ds 
+    //                 WHERE ds.Do_Id = sdgi.Do_Id AND ds.Cost_Category = 'TRANSPORT'
+    //             ), '') AS Transporter_Name,
 
-//         const retailerTypes = parseArrayParam(Retailer);
-//         const voucherTypes = parseArrayParam(VoucherType);
-//         const brokers = parseArrayParam(Broker);
-//         const transporters = parseArrayParam(Transporter);
-//         const items = parseArrayParam(Item);
+    //             COALESCE((
+    //                 SELECT 
+    //                    ds.*
+    //                 FROM DELIVERY_ALL_STAFF ds
+    //                 WHERE ds.Do_Id = sdgi.Do_Id
+    //                 ORDER BY ds.Cost_Category, ds.Staff_Name
+    //                 FOR JSON PATH
+    //             ), '[]') AS All_Staff_Details,
+    //             -- Products list
+    //             COALESCE((
+    //                 SELECT 
+    //                     sd.*,
+    //                     sdgi.Do_Inv_No,
+    //                     COALESCE(rm.Retailer_Name, '') AS Retailer_Name
+    //                 FROM DELIVERY_DETAILS AS sd
+    //                 WHERE sd.Delivery_Order_Id = sdgi.Do_Id
+    //                 FOR JSON PATH
+    //             ), '[]') AS Products_List
+    //         FROM 
+    //             tbl_Sales_Delivery_Gen_Info AS sdgi
+    //         LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No 
+    //         LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+    //         LEFT JOIN tbl_Users AS sp ON sp.UserId = sogi.Sales_Person_Id 
+    //         LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
+    //         LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+    //         LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
+    //         LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+    //         WHERE 
+    //             CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
+    //             AND
+    //             CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
+    //             AND NOT EXISTS (
+    //                 SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
+    //             )`;
 
-//         if (checkIsNumber(Sales_Person_Id)) {
-//             query += ` AND sogi.Sales_Person_Id = @salesPerson`;
-//             request.input('salesPerson', sql.Int, parseInt(Sales_Person_Id));
-//         }
-        
-//         if (voucherTypes.length > 0) {
-//             query += ` AND sdgi.Voucher_Type IN (${voucherTypes.map((_, index) => `@VoucherType${index}`).join(', ')})`;
-//             voucherTypes.forEach((voucherType, index) => {
-//                 request.input(`VoucherType${index}`, sql.VarChar, voucherType);
-//             });
-//         }
-        
-//         if (Branch && Branch !== '') {
-//             query += ` AND sdgi.Branch_Id = @Branch`;
-//             request.input('Branch', sql.Int, parseInt(Branch));
-//         }
+    //         const request = new sql.Request();
+    //         request.input('from', Fromdate);
+    //         request.input('to', Todate);
 
-//         if (retailerTypes.length > 0) {
-//             query += ` AND sdgi.Retailer_Id IN (${retailerTypes.map((_, index) => `@Retailer${index}`).join(', ')})`;
-//             retailerTypes.forEach((retailer, index) => {
-//                 request.input(`Retailer${index}`, sql.Int, parseInt(retailer));
-//             });
-//         }
-        
-//         if (brokers.length > 0) {
-//             query += ` AND EXISTS (
-//                 SELECT 1 FROM DELIVERY_STAFF ds 
-//                 WHERE ds.Do_Id = sdgi.Do_Id 
-//                 AND ds.Cost_Category = 'BROKER' 
-//                 AND ds.Emp_Id IN (${brokers.map((_, index) => `@Broker${index}`).join(', ')})
-//             )`;
-//             brokers.forEach((broker, index) => {
-//                 request.input(`Broker${index}`, sql.Int, parseInt(broker));
-//             });
-//         }
+    //         const parseArrayParam = (param) => {
+    //             if (!param) return [];
+    //             if (Array.isArray(param)) return param;
+    //             if (typeof param === 'string') return param.split(',').filter(item => item.trim() !== '');
+    //             return [param];
+    //         };
 
-//         if (transporters.length > 0) {
-//             query += ` AND EXISTS (
-//                 SELECT 1 FROM DELIVERY_STAFF ds 
-//                 WHERE ds.Do_Id = sdgi.Do_Id 
-//                 AND ds.Cost_Category = 'TRANSPORT' 
-//                 AND ds.Emp_Id IN (${transporters.map((_, index) => `@Transporter${index}`).join(', ')})
-//             )`;
-//             transporters.forEach((transporter, index) => {
-//                 request.input(`Transporter${index}`, sql.Int, parseInt(transporter));
-//             });
-//         }
+    //         const retailerTypes = parseArrayParam(Retailer);
+    //         const voucherTypes = parseArrayParam(VoucherType);
+    //         const brokers = parseArrayParam(Broker);
+    //         const transporters = parseArrayParam(Transporter);
+    //         const items = parseArrayParam(Item);
 
-//         if (items.length > 0) {
-//             query += ` AND EXISTS (
-//                 SELECT 1 FROM DELIVERY_DETAILS dd 
-//                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
-//                 AND dd.Product_Id IN (${items.map((_, index) => `@Item${index}`).join(', ')})
-//             )`;
-//             items.forEach((item, index) => {
-//                 request.input(`Item${index}`, sql.Int, parseInt(item));
-//             });
-//         }
+    //         if (checkIsNumber(Sales_Person_Id)) {
+    //             query += ` AND sogi.Sales_Person_Id = @salesPerson`;
+    //             request.input('salesPerson', sql.Int, parseInt(Sales_Person_Id));
+    //         }
 
-//         if (Godown && Godown !== '') {
-//             query += ` AND EXISTS (
-//                 SELECT 1 FROM DELIVERY_DETAILS dd 
-//                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
-//                 AND dd.Godown_Id = @Godown
-//             )`;
-//             request.input('Godown', sql.Int, parseInt(Godown));
-//         }
+    //         if (voucherTypes.length > 0) {
+    //             query += ` AND sdgi.Voucher_Type IN (${voucherTypes.map((_, index) => `@VoucherType${index}`).join(', ')})`;
+    //             voucherTypes.forEach((voucherType, index) => {
+    //                 request.input(`VoucherType${index}`, sql.VarChar, voucherType);
+    //             });
+    //         }
 
-//         query += ` ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
+    //         if (Branch && Branch !== '') {
+    //             query += ` AND sdgi.Branch_Id = @Branch`;
+    //             request.input('Branch', sql.Int, parseInt(Branch));
+    //         }
 
-//         const result = await request.query(query);
+    //         if (retailerTypes.length > 0) {
+    //             query += ` AND sdgi.Retailer_Id IN (${retailerTypes.map((_, index) => `@Retailer${index}`).join(', ')})`;
+    //             retailerTypes.forEach((retailer, index) => {
+    //                 request.input(`Retailer${index}`, sql.Int, parseInt(retailer));
+    //             });
+    //         }
 
-//         if (result.recordset.length > 0) {
-//             const parsed = result.recordset.map(o => {
-//                 // Parse Products_List
-//                 let productsList = o.Products_List;
-//                 if (typeof productsList === 'string') {
-//                     try {
-//                         productsList = JSON.parse(productsList);
-//                     } catch (e) {
-//                         console.error('Error parsing Products_List:', e);
-//                         productsList = [];
-//                     }
-//                 }
-                
-//                 // Parse All_Staff_Details - CORRECTION: Parse only once
-//                 let allStaffDetails = o.All_Staff_Details;
-//                 if (typeof allStaffDetails === 'string') {
-//                     try {
-//                         allStaffDetails = JSON.parse(allStaffDetails);
-//                     } catch (e) {
-//                         console.error('Error parsing All_Staff_Details:', e);
-//                         allStaffDetails = [];
-//                     }
-//                 }
-                
-//                 // Return with consistent naming
-//                 return {
-//                     ...o,
-//                     Products_List: productsList,
-//                     // Use only one field for staff details - remove duplicates
-//                     All_Staff_Details: allStaffDetails
-//                 };
-//             });
-            
-//             const withImage = parsed.map(o => ({
-//                 ...o,
-//                 Products_List: o?.Products_List?.map(product => ({
-//                     ...product,
-//                     ProductImageUrl: getImage('products', product?.Product_Image_Name)
-//                 })) || [],
-//                 // Ensure Staff_Involved is consistent
-//                 Staff_Involved: o.All_Staff_Details // Or keep as All_Staff_Details based on your preference
-//             }));
-            
-//             dataFound(res, withImage);
-//         } else {
-//             noData(res);
-//         }
-//     } catch (e) {
-//         servError(e, res);
-//     }
-// };
+    //         if (brokers.length > 0) {
+    //             query += ` AND EXISTS (
+    //                 SELECT 1 FROM DELIVERY_STAFF ds 
+    //                 WHERE ds.Do_Id = sdgi.Do_Id 
+    //                 AND ds.Cost_Category = 'BROKER' 
+    //                 AND ds.Emp_Id IN (${brokers.map((_, index) => `@Broker${index}`).join(', ')})
+    //             )`;
+    //             brokers.forEach((broker, index) => {
+    //                 request.input(`Broker${index}`, sql.Int, parseInt(broker));
+    //             });
+    //         }
 
+    //         if (transporters.length > 0) {
+    //             query += ` AND EXISTS (
+    //                 SELECT 1 FROM DELIVERY_STAFF ds 
+    //                 WHERE ds.Do_Id = sdgi.Do_Id 
+    //                 AND ds.Cost_Category = 'TRANSPORT' 
+    //                 AND ds.Emp_Id IN (${transporters.map((_, index) => `@Transporter${index}`).join(', ')})
+    //             )`;
+    //             transporters.forEach((transporter, index) => {
+    //                 request.input(`Transporter${index}`, sql.Int, parseInt(transporter));
+    //             });
+    //         }
 
-const getDeliveryDetailsListing = async (req, res) => {
-    const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Loadman, Item, Godown, Retailer } = req.query;
+    //         if (items.length > 0) {
+    //             query += ` AND EXISTS (
+    //                 SELECT 1 FROM DELIVERY_DETAILS dd 
+    //                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
+    //                 AND dd.Product_Id IN (${items.map((_, index) => `@Item${index}`).join(', ')})
+    //             )`;
+    //             items.forEach((item, index) => {
+    //                 request.input(`Item${index}`, sql.Int, parseInt(item));
+    //             });
+    //         }
+
+    //         if (Godown && Godown !== '') {
+    //             query += ` AND EXISTS (
+    //                 SELECT 1 FROM DELIVERY_DETAILS dd 
+    //                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
+    //                 AND dd.Godown_Id = @Godown
+    //             )`;
+    //             request.input('Godown', sql.Int, parseInt(Godown));
+    //         }
+
+    //         query += ` ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
+
+    //         const result = await request.query(query);
+
+    //         if (result.recordset.length > 0) {
+    //             const parsed = result.recordset.map(o => {
+    //                 // Parse Products_List
+    //                 let productsList = o.Products_List;
+    //                 if (typeof productsList === 'string') {
+    //                     try {
+    //                         productsList = JSON.parse(productsList);
+    //                     } catch (e) {
+    //                         console.error('Error parsing Products_List:', e);
+    //                         productsList = [];
+    //                     }
+    //                 }
+
+    //                 // Parse All_Staff_Details - CORRECTION: Parse only once
+    //                 let allStaffDetails = o.All_Staff_Details;
+    //                 if (typeof allStaffDetails === 'string') {
+    //                     try {
+    //                         allStaffDetails = JSON.parse(allStaffDetails);
+    //                     } catch (e) {
+    //                         console.error('Error parsing All_Staff_Details:', e);
+    //                         allStaffDetails = [];
+    //                     }
+    //                 }
+
+    //                 // Return with consistent naming
+    //                 return {
+    //                     ...o,
+    //                     Products_List: productsList,
+    //                     // Use only one field for staff details - remove duplicates
+    //                     All_Staff_Details: allStaffDetails
+    //                 };
+    //             });
+
+    //             const withImage = parsed.map(o => ({
+    //                 ...o,
+    //                 Products_List: o?.Products_List?.map(product => ({
+    //                     ...product,
+    //                     ProductImageUrl: getImage('products', product?.Product_Image_Name)
+    //                 })) || [],
+    //                 // Ensure Staff_Involved is consistent
+    //                 Staff_Involved: o.All_Staff_Details // Or keep as All_Staff_Details based on your preference
+    //             }));
+
+    //             dataFound(res, withImage);
+    //         } else {
+    //             noData(res);
+    //         }
+    //     } catch (e) {
+    //         servError(e, res);
+    //     }
+    // };
 
 
-    const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+    const getDeliveryDetailsListing = async (req, res) => {
+        const { Sales_Person_Id, VoucherType, Branch, Broker, Transporter, Loadman, Item, Godown, Retailer } = req.query;
 
-    try {
-        let query = `
+
+        const Fromdate = ISOString(req.query.Fromdate), Todate = ISOString(req.query.Todate);
+
+        try {
+            let query = `
      WITH DELIVERY_DETAILS AS (
     SELECT
         oi.*,
@@ -3626,164 +3626,164 @@ WHERE
   --  )
    `
 
-        const request = new sql.Request();
-        request.input('from', Fromdate);
-        request.input('to', Todate);
+            const request = new sql.Request();
+            request.input('from', Fromdate);
+            request.input('to', Todate);
 
-        const parseArrayParam = (param) => {
-            if (!param) return [];
-            if (Array.isArray(param)) return param;
-            if (typeof param === 'string') return param.split(',').filter(item => item.trim() !== '');
-            return [param];
-        };
+            const parseArrayParam = (param) => {
+                if (!param) return [];
+                if (Array.isArray(param)) return param;
+                if (typeof param === 'string') return param.split(',').filter(item => item.trim() !== '');
+                return [param];
+            };
 
-        const retailerTypes = parseArrayParam(Retailer);
-        const voucherTypes = parseArrayParam(VoucherType);
-        const brokers = parseArrayParam(Broker);
-        const transporters = parseArrayParam(Transporter);
-        const loadmen = parseArrayParam(Loadman);  // Changed from LoadMan to Loadman
-        const items = parseArrayParam(Item);
+            const retailerTypes = parseArrayParam(Retailer);
+            const voucherTypes = parseArrayParam(VoucherType);
+            const brokers = parseArrayParam(Broker);
+            const transporters = parseArrayParam(Transporter);
+            const loadmen = parseArrayParam(Loadman);  // Changed from LoadMan to Loadman
+            const items = parseArrayParam(Item);
 
-        if (checkIsNumber(Sales_Person_Id)) {
-            query += ` AND sogi.Sales_Person_Id = @salesPerson`;
-            request.input('salesPerson', sql.Int, parseInt(Sales_Person_Id));
-        }
-        
-        if (voucherTypes.length > 0) {
-            query += ` AND sdgi.Voucher_Type IN (${voucherTypes.map((_, index) => `@VoucherType${index}`).join(', ')})`;
-            voucherTypes.forEach((voucherType, index) => {
-                request.input(`VoucherType${index}`, sql.VarChar, voucherType);
-            });
-        }
-        
-        if (Branch && Branch !== '') {
-            query += ` AND sdgi.Branch_Id = @Branch`;
-            request.input('Branch', sql.Int, parseInt(Branch));
-        }
+            if (checkIsNumber(Sales_Person_Id)) {
+                query += ` AND sogi.Sales_Person_Id = @salesPerson`;
+                request.input('salesPerson', sql.Int, parseInt(Sales_Person_Id));
+            }
 
-        if (retailerTypes.length > 0) {
-            query += ` AND sdgi.Retailer_Id IN (${retailerTypes.map((_, index) => `@Retailer${index}`).join(', ')})`;
-            retailerTypes.forEach((retailer, index) => {
-                request.input(`Retailer${index}`, sql.Int, parseInt(retailer));
-            });
-        }
-        
-        if (brokers.length > 0) {
-            query += ` AND EXISTS (
+            if (voucherTypes.length > 0) {
+                query += ` AND sdgi.Voucher_Type IN (${voucherTypes.map((_, index) => `@VoucherType${index}`).join(', ')})`;
+                voucherTypes.forEach((voucherType, index) => {
+                    request.input(`VoucherType${index}`, sql.VarChar, voucherType);
+                });
+            }
+
+            if (Branch && Branch !== '') {
+                query += ` AND sdgi.Branch_Id = @Branch`;
+                request.input('Branch', sql.Int, parseInt(Branch));
+            }
+
+            if (retailerTypes.length > 0) {
+                query += ` AND sdgi.Retailer_Id IN (${retailerTypes.map((_, index) => `@Retailer${index}`).join(', ')})`;
+                retailerTypes.forEach((retailer, index) => {
+                    request.input(`Retailer${index}`, sql.Int, parseInt(retailer));
+                });
+            }
+
+            if (brokers.length > 0) {
+                query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id 
                 AND ds.Cost_Category_Id = 3  -- Broker
                 AND ds.Emp_Id IN (${brokers.map((_, index) => `@Broker${index}`).join(', ')})
             )`;
-            brokers.forEach((broker, index) => {
-                request.input(`Broker${index}`, sql.Int, parseInt(broker));
-            });
-        }
+                brokers.forEach((broker, index) => {
+                    request.input(`Broker${index}`, sql.Int, parseInt(broker));
+                });
+            }
 
-        if (transporters.length > 0) {
-            query += ` AND EXISTS (
+            if (transporters.length > 0) {
+                query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id 
                 AND ds.Cost_Category_Id = 2  -- Transport
                 AND ds.Emp_Id IN (${transporters.map((_, index) => `@Transporter${index}`).join(', ')})
             )`;
-            transporters.forEach((transporter, index) => {
-                request.input(`Transporter${index}`, sql.Int, parseInt(transporter));
-            });
-        }
+                transporters.forEach((transporter, index) => {
+                    request.input(`Transporter${index}`, sql.Int, parseInt(transporter));
+                });
+            }
 
-        if (loadmen.length > 0) { 
-            query += ` AND EXISTS (
+            if (loadmen.length > 0) {
+                query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_STAFF ds 
                 WHERE ds.Do_Id = sdgi.Do_Id 
                 AND ds.Cost_Category_Id = 4  -- Load Man
                 AND ds.Emp_Id IN (${loadmen.map((_, index) => `@LoadMan${index}`).join(', ')})
             )`;
-            loadmen.forEach((loadman, index) => {
-                request.input(`LoadMan${index}`, sql.Int, parseInt(loadman));
-            });
-        }
+                loadmen.forEach((loadman, index) => {
+                    request.input(`LoadMan${index}`, sql.Int, parseInt(loadman));
+                });
+            }
 
-        if (items.length > 0) {
-            query += ` AND EXISTS (
+            if (items.length > 0) {
+                query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_DETAILS dd 
                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
                 AND dd.Product_Id IN (${items.map((_, index) => `@Item${index}`).join(', ')})
             )`;
-            items.forEach((item, index) => {
-                request.input(`Item${index}`, sql.Int, parseInt(item));
-            });
-        }
+                items.forEach((item, index) => {
+                    request.input(`Item${index}`, sql.Int, parseInt(item));
+                });
+            }
 
-        if (Godown && Godown !== '') {
-            query += ` AND EXISTS (
+            if (Godown && Godown !== '') {
+                query += ` AND EXISTS (
                 SELECT 1 FROM DELIVERY_DETAILS dd 
                 WHERE dd.Delivery_Order_Id = sdgi.Do_Id 
                 AND dd.Godown_Id = @Godown
             )`;
-            request.input('Godown', sql.Int, parseInt(Godown));
-        }
+                request.input('Godown', sql.Int, parseInt(Godown));
+            }
 
-        query += ` ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
+            query += ` ORDER BY CONVERT(DATETIME, sdgi.Do_Id) DESC`;
 
 
-        const result = await request.query(query);
+            const result = await request.query(query);
 
-        if (result.recordset.length > 0) {
-            const parsed = result.recordset.map(o => {
-              
-                let productsList = o.Products_List;
-                if (typeof productsList === 'string') {
-                    try {
-                        productsList = JSON.parse(productsList);
-                    } catch (e) {
-                        console.error('Error parsing Products_List:', e);
-                        productsList = [];
+            if (result.recordset.length > 0) {
+                const parsed = result.recordset.map(o => {
+
+                    let productsList = o.Products_List;
+                    if (typeof productsList === 'string') {
+                        try {
+                            productsList = JSON.parse(productsList);
+                        } catch (e) {
+                            console.error('Error parsing Products_List:', e);
+                            productsList = [];
+                        }
                     }
-                }
-                
-  
-                let allStaffDetails = o.All_Staff_Details;
-                if (typeof allStaffDetails === 'string') {
-                    try {
-                        allStaffDetails = JSON.parse(allStaffDetails);
-                    } catch (e) {
-                        console.error('Error parsing All_Staff_Details:', e);
-                        allStaffDetails = [];
+
+
+                    let allStaffDetails = o.All_Staff_Details;
+                    if (typeof allStaffDetails === 'string') {
+                        try {
+                            allStaffDetails = JSON.parse(allStaffDetails);
+                        } catch (e) {
+                            console.error('Error parsing All_Staff_Details:', e);
+                            allStaffDetails = [];
+                        }
                     }
-                }
-                
-               
-                return {
+
+
+                    return {
+                        ...o,
+                        Products_List: productsList,
+                        All_Staff_Details: allStaffDetails
+                    };
+                });
+
+                const withImage = parsed.map(o => ({
                     ...o,
-                    Products_List: productsList,
-                    All_Staff_Details: allStaffDetails
-                };
-            });
-            
-            const withImage = parsed.map(o => ({
-                ...o,
-                Products_List: o?.Products_List?.map(product => ({
-                    ...product,
-                    ProductImageUrl: getImage('products', product?.Product_Image_Name)
-                })) || [],
-               
-                Staff_Involved: o.All_Staff_Details 
-            }));
-            
-            dataFound(res, withImage);
-        } else {
-            noData(res);
+                    Products_List: o?.Products_List?.map(product => ({
+                        ...product,
+                        ProductImageUrl: getImage('products', product?.Product_Image_Name)
+                    })) || [],
+
+                    Staff_Involved: o.All_Staff_Details
+                }));
+
+                dataFound(res, withImage);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
         }
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    };
 
 
 
 
-const tripDetails = async (req, res) => {
+    const tripDetails = async (req, res) => {
         const { Trip_Id } = req.body;
 
         if (!Trip_Id) {
@@ -3928,8 +3928,8 @@ const tripDetails = async (req, res) => {
         }
     };
 
-       const getDeliveryorderList = async (req, res) => {
-        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id,Branch_Id } = req.query;
+    const getDeliveryorderList = async (req, res) => {
+        const { Retailer_Id, Cancel_status, Created_by, Delivery_Person_Id, Route_Id, Area_Id, Branch_Id } = req.query;
 
         try {
 
@@ -4015,7 +4015,7 @@ const tripDetails = async (req, res) => {
                         WHERE CAST(so.Do_Date AS DATE) BETWEEN @from AND @to
                                   `;
 
-          
+
             if (Retailer_Id) {
                 query += ` AND so.Retailer_Id = @retailer`;
             }
@@ -4031,7 +4031,7 @@ const tripDetails = async (req, res) => {
             if (Area_Id) {
                 query += ` AND rm.Area_Id = @Area_Id`;
             }
-             if (Branch_Id) {
+            if (Branch_Id) {
                 query += ` AND so.Branch_Id = @Branch_Id`;
             }
 
@@ -4046,7 +4046,7 @@ const tripDetails = async (req, res) => {
             request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
             request.input('Route_Id', sql.Int, Route_Id);
             request.input('Area_Id', sql.Int, Area_Id);
-              request.input('Branch_Id', Branch_Id);
+            request.input('Branch_Id', Branch_Id);
 
             const result = await request.query(query);
 
@@ -4075,22 +4075,22 @@ const tripDetails = async (req, res) => {
 
 
     const getDeliveryorderListMobile = async (req, res) => {
-    const { 
-        Retailer_Id, 
-        Cancel_status, 
-        Created_by, 
-        Delivery_Person_Id, 
-        Route_Id, 
-        Area_Id, 
-        Branch_Id,
-        Fromdate,
-        Todate
-    } = req.query;
+        const {
+            Retailer_Id,
+            Cancel_status,
+            Created_by,
+            Delivery_Person_Id,
+            Route_Id,
+            Area_Id,
+            Branch_Id,
+            Fromdate,
+            Todate
+        } = req.query;
 
-    try {
-     const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        try {
+            const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
             const toDate = Todate ? ISOString(Todate) : ISOString();
-        let query = `              
+            let query = `              
            WITH SALES_DETAILS AS (
                             SELECT
                                 oi.*,
@@ -4164,75 +4164,76 @@ const tripDetails = async (req, res) => {
             WHERE CAST(so.Do_Date AS DATE) BETWEEN @from AND @to
         `;
 
-       
-        const conditions = [];
-        
-        if (Retailer_Id) {
-            conditions.push(`so.Retailer_Id = @retailer`);
-        }
-        if (Created_by) {
-            conditions.push(`so.Created_by = @creater`);
-        }
-        if (Delivery_Person_Id) {
-            conditions.push(`erpUser.UserId = @Delivery_Person_Id`);
-        }
-        if (Route_Id) {
-            conditions.push(`rmt.Route_Id = @Route_Id`);
-        }
-        if (Area_Id) {
-            conditions.push(`rm.Area_Id = @Area_Id`);
-        }
-        if (Branch_Id) {
-            conditions.push(`so.Branch_Id = @Branch_Id`);
-        }
-        if (Cancel_status !== undefined) {
-            conditions.push(`so.Cancel_status = @cancel`);
-        }
 
-        if (conditions.length > 0) {
-            query += ` AND ${conditions.join(' AND ')}`;
+            const conditions = [];
+
+            if (Retailer_Id) {
+                conditions.push(`so.Retailer_Id = @retailer`);
+            }
+            if (Created_by) {
+                conditions.push(`so.Created_by = @creater`);
+            }
+            if (Delivery_Person_Id) {
+                conditions.push(`erpUser.UserId = @Delivery_Person_Id`);
+            }
+            if (Route_Id) {
+                conditions.push(`rmt.Route_Id = @Route_Id`);
+            }
+            if (Area_Id) {
+                conditions.push(`rm.Area_Id = @Area_Id`);
+            }
+            if (Branch_Id) {
+                conditions.push(`so.Branch_Id = @Branch_Id`);
+            }
+            if (Cancel_status !== undefined) {
+                conditions.push(`so.Cancel_status = @cancel`);
+            }
+
+            if (conditions.length > 0) {
+                query += ` AND ${conditions.join(' AND ')}`;
+            }
+
+            query += ` ORDER BY so.Do_Id DESC`;
+
+            const request = new sql.Request();
+
+
+            request.input('from', sql.Date, fromDate);
+            request.input('to', sql.Date, toDate);
+
+            if (Retailer_Id) request.input('retailer', sql.Int, Retailer_Id);
+            if (Created_by) request.input('creater', sql.Int, Created_by);
+            if (Delivery_Person_Id) request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
+            if (Route_Id) request.input('Route_Id', sql.Int, Route_Id);
+            if (Area_Id) request.input('Area_Id', sql.Int, Area_Id);
+            if (Branch_Id) request.input('Branch_Id', sql.Int, Branch_Id);
+            if (Cancel_status !== undefined) request.input('cancel', sql.Bit, Cancel_status);
+
+            const result = await request.query(query);
+
+            if (result.recordset.length > 0) {
+                const parsed = result.recordset.map(o => ({
+                    ...o,
+                    Products_List: o?.Products_List ? JSON.parse(o.Products_List) : []
+                }));
+
+                const withImage = parsed.map(o => ({
+                    ...o,
+                    Products_List: Array.isArray(o.Products_List) ? o.Products_List.map(product => ({
+                        ...product,
+                        ProductImageUrl: getImage('products', product?.Product_Image_Name)
+                    })) : []
+                }));
+
+                dataFound(res, withImage);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
         }
-
-        query += ` ORDER BY so.Do_Id DESC`;
-
-        const request = new sql.Request();
-        
-        
-        request.input('from', sql.Date, fromDate);
-        request.input('to', sql.Date, toDate);
-        
-        if (Retailer_Id) request.input('retailer', sql.Int, Retailer_Id);
-        if (Created_by) request.input('creater', sql.Int, Created_by);
-        if (Delivery_Person_Id) request.input('Delivery_Person_Id', sql.Int, Delivery_Person_Id);
-        if (Route_Id) request.input('Route_Id', sql.Int, Route_Id);
-        if (Area_Id) request.input('Area_Id', sql.Int, Area_Id);
-        if (Branch_Id) request.input('Branch_Id', sql.Int, Branch_Id);
-        if (Cancel_status !== undefined) request.input('cancel', sql.Bit, Cancel_status);
-
-        const result = await request.query(query);
-
-        if (result.recordset.length > 0) {
-            const parsed = result.recordset.map(o => ({
-                ...o,
-                Products_List: o?.Products_List ? JSON.parse(o.Products_List) : []
-            }));
-            
-            const withImage = parsed.map(o => ({
-                ...o,
-                Products_List: Array.isArray(o.Products_List) ? o.Products_List.map(product => ({
-                    ...product,
-                    ProductImageUrl: getImage('products', product?.Product_Image_Name)
-                })) : []
-            }));
-            
-            dataFound(res, withImage);
-        } else {
-            noData(res);
-        }
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    };
+    
     return {
         salesDeliveryCreation,
         getSaleOrder,

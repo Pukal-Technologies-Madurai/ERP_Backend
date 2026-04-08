@@ -462,7 +462,9 @@ const editJournal = async (req, res) => {
     } catch (e) {
         try {
             if (tx._aborted !== true) await tx.rollback();
-        } catch { }
+        } catch (err) { 
+            console.log(err);
+        }
         return servError(e, res);
     }
 };
