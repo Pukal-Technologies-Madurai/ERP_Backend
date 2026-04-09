@@ -8,6 +8,7 @@ import arrivalMaster from '../controller/Inventory/arrivalMaster.mjs';
 import batchProcess from '../controller/Inventory/batchProcess.mjs';
 import inventoryReport from '../controller/Inventory/reports.mjs';
 import { alterHistory } from '../middleware/alterHistory.mjs';
+import rateValues from '../controller/Inventory/rateValues.mjs';
 
 const inventoryRouter = express.Router();
 
@@ -99,5 +100,23 @@ inventoryRouter.get('/getStockAdjustments',inventoryReport.getStockAdjustment)
 inventoryRouter.post('/getStockAdjustments',inventoryReport.createStockJournalAdjustment)
 inventoryRouter.put('/getStockAdjustments',inventoryReport.updateStockJournalAdjustment)
 
+
+
+
+inventoryRouter.post('/stockGroup',rateValues.stockGroup);
+inventoryRouter.post('/stockItemGroup',rateValues.stockItemGroup);
+inventoryRouter.post('/stockItemGroupList',rateValues.stockItemGroupList)
+inventoryRouter.put('/updateProcessingRates', rateValues.updateProcessingRates);
+inventoryRouter.put('/updateOverAllGroupUpdate',rateValues.updateOverAllGroupUpdate);
+
+inventoryRouter.get('/stockGroupGet',rateValues.stockGroupGet)
+inventoryRouter.post('/arrivalList',rateValues.arrivalList)
+
+inventoryRouter.put('/updateArrivalList',rateValues.updateArrivalList)
+inventoryRouter.post('/stockValueSync',rateValues.getStockValueReport)
+inventoryRouter.post('/stockValueErp',rateValues.getStockValueDetails)
+
+
+inventoryRouter.post('/getStockValueSummaryAlt',rateValues.getStockValueSummaryAlt )
 
 export default inventoryRouter;
