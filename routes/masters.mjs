@@ -353,10 +353,16 @@ MastersRouter.get('/rateDetails',posRateMaster.getPosRateMasterForWhatsapp)
 
 
 
-MastersRouter.post('/stockGroup',baseGroup.stockGroup);
-MastersRouter.post('/stockItemGroup',baseGroup.stockItemGroup);
-MastersRouter.post('/stockItemGroupList',baseGroup.stockItemGroupList)
-MastersRouter.get('/stockGroupGet',baseGroup.stockGroupGet)
-MastersRouter.post('/arrivalList',baseGroup.arrivalList)
+// MastersRouter.post('/stockGroup',baseGroup.stockGroup);
+// MastersRouter.post('/stockItemGroup',baseGroup.stockItemGroup);
+// MastersRouter.post('/stockItemGroupList',baseGroup.stockItemGroupList)
+// MastersRouter.put('/updateProcessingRates', baseGroup.updateProcessingRates);
+// MastersRouter.put('/updateOverAllGroupUpdate',baseGroup.updateOverAllGroupUpdate);
+
+// MastersRouter.get('/stockGroupGet',baseGroup.stockGroupGet)
+// MastersRouter.post('/arrivalList',baseGroup.arrivalList)
+
+// MastersRouter.put('/updateArrivalList',baseGroup.updateArrivalList)
+
 
 export default MastersRouter;
