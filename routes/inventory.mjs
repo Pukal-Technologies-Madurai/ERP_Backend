@@ -116,4 +116,7 @@ inventoryRouter.put('/updateArrivalList',rateValues.updateArrivalList)
 inventoryRouter.post('/stockValueSync',rateValues.getStockValueReport)
 inventoryRouter.post('/stockValueErp',rateValues.getStockValueDetails)
 
+
+inventoryRouter.post('/getStockValueSummaryAlt',rateValues.getStockValueSummaryAlt )
+
 export default inventoryRouter;
