@@ -1001,7 +1001,7 @@ const getStockValueDetails = async (req, res) => {
 
         const request = new sql.Request();
 
-        // Add date filter
+
         query += ` AND Trans_Date >= @FromDate AND Trans_Date <= @ToDate`;
         request.input('FromDate', sql.Date, new Date(FromDate));
         request.input('ToDate', sql.Date, new Date(ToDate));
@@ -1012,9 +1012,7 @@ const getStockValueDetails = async (req, res) => {
             request.input('StockGroupId', sql.Int, parseInt(StockGroupId));
         }
 
-        // Add item filter (if needed - you may need to join with items table)
-        // This depends on your table structure
-
+    
         query += ` ORDER BY Trans_Date ASC, Group_Name ASC`;
 
         const result = await request.query(query);
@@ -1043,6 +1041,47 @@ const getStockValueDetails = async (req, res) => {
     }
 };
 
+const getStockValueSummaryAlt = async (req, res) => {
+  try {
+    const { Pre_date, stock_group_id } = req.body;
+    
+   
+    
+    if (!Pre_date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pre_date is required'
+      });
+    }
+    
+    if (stock_group_id === undefined || stock_group_id === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'stock_group_id is required'
+      });
+    }
+    
+    // Your database call
+    const result = await new sql.Request()
+      .input('Pre_date', sql.VarChar(50), Pre_date)
+      .input('stock_group_id', sql.Int, parseInt(stock_group_id))
+      .execute('Stock_Value_By_Summarry_New');
+    
+
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Stock value report generated successfully',
+      data: result.recordset,
+      count: result.recordset.length
+    });
+    
+  } catch (error) {
+   servError(error,res)
+  }
+};
+
+
     return {
       
         stockGroup,
@@ -1054,7 +1093,8 @@ const getStockValueDetails = async (req, res) => {
         updateArrivalList,
         updateOverAllGroupUpdate,
         getStockValueReport,
-        getStockValueDetails
+        getStockValueDetails,
+        getStockValueSummaryAlt
     }
 }
 
