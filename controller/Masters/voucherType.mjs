@@ -67,7 +67,7 @@ const voucherType = () => {
                         vt.Branch_Id branchId,
                         vt.Type type,
                         COALESCE(vt.crLimit, 0) AS crLimit,
-                        COALESCE(vt.drLimit, 0) AS drLimit,
+                        COALESCE(vt.drLimit, 0) AS drLimit
                     FROM tbl_Voucher_Type vt
                     WHERE 
 				    	vt.Vocher_Type_Id IS NOT NULL
