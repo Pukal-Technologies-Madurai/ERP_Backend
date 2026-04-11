@@ -200,4 +200,8 @@ ReportRouter.put('/settings/updatereport', updateReportSettings);
 ReportRouter.get('/settings/byParent', getReportsByParent);
 ReportRouter.get('settings/getreport', executeReportByTemplate);
 
+
+ReportRouter.get('/storageStock/stockvalueitem', storageStockReport.getStorageStockValueItemWise);
+ReportRouter.get('/storageStock/stockvaluegodown', storageStockReport.getStorageStockValueGodownWise);
+
 export default ReportRouter;
