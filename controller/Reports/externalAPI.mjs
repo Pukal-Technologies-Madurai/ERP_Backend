@@ -334,3 +334,22 @@ export const StockValueGraph = async (req, res) => {
         servError(error, res);
     }
 };
+
+
+export const StockValueReport = async (req, res) => {
+    try {
+        const { Fromdate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .query("EXEC Stock_Value_CL_Rate @Fromdate")
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+};
