@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon app.mjs",
-    "start": "node app.mjs",
+    "start": "node --max-old-space-size=4096 app.mjs",
     "import": "node import.js"
   },
   "keywords": [
