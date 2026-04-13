@@ -17,7 +17,7 @@ import templateMobile from '../controller/Reports/templateMobile.mjs';
 import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
     onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport
- ,StockValueGraph } from '../controller/Reports/externalAPI.mjs';
+ ,StockValueGraph,StockValueReport } from '../controller/Reports/externalAPI.mjs';
 import { MenuSettings, executeSP, saveReportSettings, getReportList, getReportEditData, updateReportSettings, getReportsByParent, executeReportByTemplate } from '../controller/Reports/reportsettings.mjs';
 
 const ReportRouter = express.Router();
@@ -203,5 +203,8 @@ ReportRouter.get('settings/getreport', executeReportByTemplate);
 
 ReportRouter.get('/storageStock/stockvalueitem', storageStockReport.getStorageStockValueItemWise);
 ReportRouter.get('/storageStock/stockvaluegodown', storageStockReport.getStorageStockValueGodownWise);
+
+ReportRouter.get('/externalAPI/stockValue', StockValueReport);
+
 
 export default ReportRouter;
