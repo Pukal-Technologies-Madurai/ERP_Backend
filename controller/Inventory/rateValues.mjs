@@ -696,10 +696,10 @@ const updateArrivalList = async (req, res) => {
             arrival_id            
         } = req.body;
 
-        // Check if this is an individual row update
+        
         const isIndividualUpdate = (type === 'individual' && arrival_id);
 
-        // Validation for individual update
+ 
         if (isIndividualUpdate) {
           
 
@@ -734,7 +734,7 @@ const updateArrivalList = async (req, res) => {
             });
         }
 
-        // Validation for bulk update
+
         if (!FromDate) {
             return failed(res, 'From date is required');
         }
@@ -747,11 +747,9 @@ const updateArrivalList = async (req, res) => {
             return failed(res, 'From date cannot be greater than To date');
         }
 
-        if (!gstRate || gstRate <= 0) {
-            return failed(res, 'GST rate is required and must be greater than 0');
-        }
+      
 
-        // Build bulk update query
+
         let query = `
             UPDATE S 
             SET 
@@ -771,7 +769,7 @@ const updateArrivalList = async (req, res) => {
         request.input('FromDate', sql.Date, new Date(FromDate));
         request.input('ToDate', sql.Date, new Date(ToDate));
 
-        // Add optional filters
+  
         if (StockGroupId && StockGroupId !== '0' && StockGroupId !== 'null') {
             query += ` AND IG.Item_Group_Id = @StockGroupId`;
             request.input('StockGroupId', sql.NVarChar, StockGroupId);
@@ -782,7 +780,6 @@ const updateArrivalList = async (req, res) => {
             request.input('ItemId', sql.NVarChar, ItemId);
         }
 
-        // Execute bulk update
         const result = await request.query(query);
 
         if (result.rowsAffected[0] === 0) {
