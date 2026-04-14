@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { servError, sentData,success } from '../../res.mjs';
-import { isEqualNumber, ISOString } from '../../helper_functions.mjs';
+import { isEqualNumber, ISOString,randomNumber,checkIsNumber } from '../../helper_functions.mjs';
 
 const getInventoryReport = async (req, res) => {
     try {
@@ -381,4 +381,167 @@ const updateStockJournalAdjustment = async (req, res) => {
 
 
 
-export default { getInventoryReport,getStockAdjustment,createStockJournalAdjustment,updateStockJournalAdjustment };
+
+const createLedgerOpeningBalance = async (req, res) => {
+  
+    let transaction = null;
+
+    try {
+        const { ob_date, ledger_data = [] } = req.body;
+        
+        if (!ob_date || !Array.isArray(ledger_data) || ledger_data.length === 0) {
+            return res.status(400).json({ success: false, message: 'Invalid data' });
+        }
+        
+        transaction = new sql.Transaction();
+        await transaction.begin();
+
+        // Get new ID
+        const Led_OB_ID = (await new sql.Request(transaction).query(`
+            SELECT ISNULL(MAX(Led_OB_ID), 0) + 1 AS Led_OB_ID FROM tbl_Ledger_OB
+        `)).recordset[0].Led_OB_ID;
+        
+        const formattedOBDate = new Date(ob_date);
+        
+        // Insert into tbl_Ledger_OB
+        await new sql.Request(transaction)
+            .input('Led_OB_ID', sql.Int, Led_OB_ID)
+            .input('Led_OB_DATE', sql.DateTime, formattedOBDate)
+            .query(`INSERT INTO tbl_Ledger_OB (Led_OB_ID, Led_OB_DATE) VALUES (@Led_OB_ID, @Led_OB_DATE)`);
+
+        // Delete existing OB_Date
+        await new sql.Request(transaction)
+            .input('OB_Id', sql.Int, Led_OB_ID)
+            .query(`DELETE FROM tbl_OB_Date WHERE Id = @OB_Id`);
+
+        // Insert new OB_Date
+        await new sql.Request(transaction)
+            .input('Id', sql.Int, Led_OB_ID)
+            .input('OB_Date', sql.DateTime, formattedOBDate)
+            .input('Is_Active', sql.Int, 1)
+            .query(`INSERT INTO tbl_OB_Date (Id, OB_Date, Is_Active) VALUES (@Id, @OB_Date, @Is_Active)`);
+
+        // Account lookup (batched)
+        const uniqueNames = [...new Set(ledger_data.map(l => l.ledger_name).filter(Boolean))];
+        const accountMap = {};
+
+        if (uniqueNames.length > 0) {
+            for (let i = 0; i < uniqueNames.length; i += 100) {
+                const batch = uniqueNames.slice(i, i + 100);
+                const accRequest = new sql.Request(transaction);
+                
+                batch.forEach((name, idx) => {
+                    accRequest.input(`name${idx}`, sql.NVarChar(255), name);
+                });
+                
+                const placeholders = batch.map((_, idx) => `@name${idx}`).join(',');
+                const result = await accRequest.query(`
+                    SELECT Acc_Id, Account_name 
+                    FROM tbl_Account_Master 
+                    WHERE Account_name IN (${placeholders})
+                `);
+                
+                result.recordset.forEach(row => accountMap[row.Account_name] = row.Acc_Id);
+            }
+        }
+
+        // Prepare valid records
+        const validRecords = [];
+        let skippedCount = 0;
+
+        ledger_data.forEach(ledger => {
+            const accId = accountMap[ledger.ledger_name];
+            if (accId) {
+                validRecords.push({
+                    Retailer_id: accId,
+                    ledger_name: ledger.ledger_name || '',
+                    OB_date: formattedOBDate,
+                    bill_date: ledger.bill_date ? new Date(ledger.bill_date) : null,
+                    due_date: ledger.due_date ? new Date(ledger.due_date) : null,
+                    bill_no: ledger.bill_no || '',
+                    amount: Number(ledger.amount || 0),
+                    dr_amount: Number(ledger.dr_amount || 0),
+                    cr_amount: Number(ledger.cr_amount || 0),
+                    Bill_Company: ledger.bill_company || null,
+                    OB_Id: Led_OB_ID
+                });
+            } else {
+                skippedCount++;
+             
+            }
+        });
+
+        if (validRecords.length === 0) {
+            throw new Error('No valid records found. Please check ledger names in Account Master.');
+        }
+
+        // BULK INSERT using raw SQL (no parameter limit issue)
+        const BATCH_SIZE = 500; // Smaller batch size to avoid query length limits
+        
+        for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+            const batch = validRecords.slice(i, i + BATCH_SIZE);
+            
+            // Build raw INSERT query without parameters
+            let insertQuery = `
+                INSERT INTO tbl_Ledger_Opening_Balance (
+                    Retailer_id, ledger_name, OB_date, bill_date, bill_no,
+                    amount, dr_amount, cr_amount, Bill_Company, OB_Id
+                )
+                VALUES 
+            `;
+            
+            const valueStrings = batch.map(record => {
+                // Escape single quotes in strings
+                const ledgerName = record.ledger_name.replace(/'/g, "''");
+                const billNo = record.bill_no.replace(/'/g, "''");
+                const billCompany = record.Bill_Company ? record.Bill_Company.replace(/'/g, "''") : null;
+                
+                return `(
+                    ${record.Retailer_id}, 
+                    '${ledgerName}', 
+                    '${record.OB_date.toISOString().slice(0, 19).replace('T', ' ')}', 
+                    ${record.bill_date ? `'${record.bill_date.toISOString().slice(0, 19).replace('T', ' ')}'` : 'NULL'},
+                    '${billNo}', 
+                    ${record.amount}, 
+                    ${record.dr_amount}, 
+                    ${record.cr_amount}, 
+                    ${billCompany ? `'${billCompany}'` : 'NULL'},
+                    ${record.OB_Id}
+                )`;
+            }).join(',');
+            
+            insertQuery += valueStrings;
+            
+            // Execute the raw query
+            await new sql.Request(transaction).query(insertQuery);
+      
+        }
+
+        await transaction.commit();
+
+        res.json({
+            success: true,
+            message: `✅ Successfully inserted ${validRecords.length} out of ${ledger_data.length} records. ${skippedCount} records skipped (ledger not found).`,
+            data: { 
+                Led_OB_ID, 
+                inserted: validRecords.length, 
+                skipped: skippedCount,
+                total: ledger_data.length 
+            }
+        });
+
+    } catch (error) {
+       
+        if (transaction) {
+            try {
+                await transaction.rollback();
+            } catch (rollbackError) {
+                console.error('Rollback error:', rollbackError);
+            }
+        }
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
+export default { getInventoryReport,getStockAdjustment,createStockJournalAdjustment,updateStockJournalAdjustment,createLedgerOpeningBalance };
