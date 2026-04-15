@@ -119,4 +119,10 @@ inventoryRouter.post('/stockValueErp',rateValues.getStockValueDetails)
 
 inventoryRouter.post('/getStockValueSummaryAlt',rateValues.getStockValueSummaryAlt )
 inventoryRouter.post('/uploadLedgerOpening',inventoryReport.createLedgerOpeningBalance)
+inventoryRouter.post('/uploadStockOpening',inventoryReport.createStockOpeningBalance)
+
+inventoryRouter.get('/getStockOpeningDetails',inventoryReport.stockOpeningDetails)
+inventoryRouter.get('/getLastObDate',inventoryReport.getLastObDate)
+
+
 export default inventoryRouter;
