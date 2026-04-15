@@ -1105,10 +1105,10 @@ const getLastObDate = async (req, res) => {
         let result = null;
         
         if (type === 'ledger') {
-            // Get the latest OB date from tbl_Ledger_OB
+           
             query = `
-                SELECT TOP 10 
-                    Led_OB_DATE as ob_date
+                SELECT DISTINCT(Led_OB_DATE)
+                     as ob_date
                 FROM tbl_Ledger_OB
                 WHERE Led_OB_DATE IS NOT NULL
                 ORDER BY Led_OB_DATE DESC
@@ -1119,8 +1119,8 @@ const getLastObDate = async (req, res) => {
         } else if (type === 'stock') {
             // Get the latest OB date from tbl_Stock_OB
             query = `
-                SELECT TOP 10
-                    STCK_DATE as ob_date
+                SELECT distinct( STCK_DATE)
+                     as ob_date
                 FROM tbl_Stock_OB
                 WHERE STCK_DATE IS NOT NULL
                 ORDER BY STCK_DATE DESC
@@ -1138,16 +1138,13 @@ const getLastObDate = async (req, res) => {
         if (result.recordset && result.recordset.length > 0) {
             const obDate = result.recordset[0];
             
-            // Get additional details based on type (optional - for preview)
+
             let details = [];
             if (type === 'ledger') {
                 const detailsQuery = `
-                    SELECT TOP 10 
-                        Led_OB_ID,
-                        Led_OB_DATE as ob_date
+                    SELECT DISTINCT(Led_OB_DATE)
+                         as ob_date
                     FROM tbl_Ledger_OB
-                    WHERE Led_OB_DATE = @ob_date
-                    ORDER BY Led_OB_ID
                 `;
                 
                 const detailsResult = await new sql.Request()
@@ -1158,12 +1155,9 @@ const getLastObDate = async (req, res) => {
                 
             } else if (type === 'stock') {
                 const detailsQuery = `
-                    SELECT TOP 10 
-                        STCK_ID,
-                        STCK_DATE as ob_date
+                    SELECT distinct(STCK_DATE) as ob_date
                     FROM tbl_Stock_OB
-                    WHERE STCK_DATE = @ob_date
-                    ORDER BY STCK_ID
+                    ORDER BY ob_date desc
                 `;
                 
                 const detailsResult = await new sql.Request()
