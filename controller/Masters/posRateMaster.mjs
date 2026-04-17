@@ -35,41 +35,63 @@ const posBranchController = () => {
         }
     }
 
-    const getPosRateMaster = async (req, res) => {
-        const { FromDate } = req.query;
+const getPosRateMaster = async (req, res) => {
+    const { FromDate } = req.query;
 
-        if (!FromDate) {
-            return invalidInput(res, 'FromDate is required');
+    if (!FromDate) {
+        return invalidInput(res, 'FromDate is required');
+    }
+
+    try {
+        const request = new sql.Request();
+
+        // Query for Pos Rate Master
+        let posRateQuery = `
+            SELECT rm.Id, rm.Rate_Date, rm.Pos_Brand_Id, rm.Item_Id, rm.Rate, rm.Max_Rate, 
+                   pb.POS_Brand_Name, pm.Product_Name, pm.Short_Name, 
+                   pm.isActive AS Is_Active_Decative, rm.Brand_Level, rm.Item_Level
+            FROM tbl_Pos_Rate_Master rm
+            LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
+            LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
+            WHERE rm.Rate_Date = @FromDate
+            ORDER BY pm.IsActive DESC
+        `;
+
+        // Query for Rate Gen - Get only the fields that exist
+        let rateGenQuery = `
+            SELECT 
+                rg.Id,
+                rg.Rate_Date,
+                rg.Rate_time
+               
+            FROM tbl_Rate_Gen rg
+            WHERE rg.Rate_Date = @FromDate
+            ORDER BY rg.Rate_time DESC
+        `;
+
+        request.input('FromDate', sql.Date, FromDate);
+
+        // Execute both queries
+        const posRateResult = await request.query(posRateQuery);
+        const rateGenResult = await request.query(rateGenQuery);
+
+        const combinedResults = {
+            posRateMaster: posRateResult.recordset,
+            rateGen: rateGenResult.recordset,
+            totalPosRateRecords: posRateResult.recordset.length,
+            totalRateGenRecords: rateGenResult.recordset.length,
+            fromDate: FromDate
+        };
+
+        if (combinedResults.totalPosRateRecords > 0 || combinedResults.totalRateGenRecords > 0) {
+            return dataFound(res, combinedResults);
+        } else {
+            return noData(res);
         }
-
-        try {
-            const request = new sql.Request();
-
-            let query = `
-                SELECT rm.Id, rm.Rate_Date, rm.Pos_Brand_Id, rm.Item_Id, rm.Rate,rm.Max_Rate, 
-                       pb.POS_Brand_Name, pm.Product_Name, pm.Short_Name, 
-                       pm.isActive AS Is_Active_Decative
-                FROM tbl_Pos_Rate_Master rm
-                LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
-                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
-                WHERE Rate_Date = @FromDate
-                ORDER BY pm.IsActive DESC; 
-            `;
-
-            request.input('FromDate', sql.Date, FromDate);
-
-            const result = await request.query(query);
-
-            if (result.recordset.length > 0) {
-                return dataFound(res, result.recordset);
-            } else {
-                return noData(res);
-            }
-        } catch (e) {
-            return servError(e, res);
-        }
-    };
-
+    } catch (e) {
+        return servError(e, res);
+    }
+};
     const postPosRateMaster = async (req, res) => {
         const { Rate_Date, Pos_Brand_Id, Item_Id, Rate, MaxRate, Is_Active_Decative } = req.body;
 
@@ -158,72 +180,332 @@ const posBranchController = () => {
         }
     };
 
-    const putPosRateMaster = async (req, res) => {
-        const { Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, MaxRate, Is_Active_Decative } = req.body;
+    // const putPosRateMaster = async (req, res) => {
+    //     const { Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, MaxRate, Is_Active_Decative } = req.body;
 
-        if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Id | !MaxRate) {
-            return invalidInput(res, 'Rate_Date,Pos_Brand,Item is required')
+    //     if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Id | !MaxRate) {
+    //         return invalidInput(res, 'Rate_Date,Pos_Brand,Item is required')
+    //     }
+
+    //     try {
+    //         const request = new sql.Request();
+    //         request.input('Id', Id);
+    //         request.input('Rate_Date', Rate_Date);
+    //         request.input('Pos_Brand_Id', Pos_Brand_Id);
+    //         request.input('Item_Id', Item_Id);
+    //         request.input('Rate', Rate);
+    //         request.input('Max_Rate', MaxRate);
+    //         request.input('Is_Active_Decative', Is_Active_Decative);
+    //         const result = await request.query(`
+    //             UPDATE tbl_Pos_Rate_Master
+    //             SET Rate = @Rate,
+    //             Max_Rate=@Max_Rate,
+    //             Pos_Brand_Id=@Pos_Brand_Id,
+    //             Rate_Date=@Rate_Date,
+    //             Item_Id=@Item_Id,
+    //             Is_Active_Decative=@Is_Active_Decative
+    //             WHERE Id=@Id
+    //         `);
+
+
+    //         const request3 = new sql.Request();
+    //         request3.input('Item_Id', Item_Id);
+
+    //         const query3 = `SELECT * FROM tbl_Product_Master WHERE Product_Id=@Item_Id`;
+    //         const result3 = await request3.query(query3);
+
+    //         // if (result3.recordset.length > 0) {
+    //         //     const request4 = new sql.Request();
+    //         //     request4.input('Item_Id', Item_Id);
+    //         //     const query4 = `DELETE FROM tbl_Pro_Rate_Master WHERE Product_Id=@Item_Id`;
+    //         //     await request4.query(query4);
+    //         // }
+
+
+    //         const request6 = new sql.Request();
+    //         request6.input('Rate_Date', Rate_Date);
+    //         request6.input('Item_Id', Item_Id);
+    //         request6.input('Rate', Rate);
+    //         request6.input('Max_Rate', MaxRate)
+    //         request6.input('Is_Active_Decative', Is_Active_Decative);
+
+    //         const query6 = `update tbl_Product_Master SET Product_Rate=@Rate,Max_Rate=@Max_Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id`;
+
+    //         const result6 = await request6.query(query6);
+
+
+    //         if (result.rowsAffected[0] > 0) {
+
+    //             return success(res, 'Rate Master updated successfully');
+    //         } else {
+    //             return failed(res, 'No changes were made, the Rate Master not exist');
+    //         }
+    //     } catch (e) {
+
+
+    //         return servError(e, res);
+    //     }
+    // };
+
+
+const putPosRateMaster = async (req, res) => {
+    const { 
+        Id, 
+        Rate_Date, 
+        Pos_Brand_Id, 
+        Item_Id, 
+        Rate, 
+        Max_Rate, 
+        Old_Rate, 
+        Old_Max_Rate,
+        Rate_time,
+        Updated_By,
+        Is_Active_Decative 
+    } = req.body;
+
+    if (!Id || !Item_Id) {
+        return invalidInput(res, 'Id and Item_Id are required');
+    }
+
+    try {
+        const request = new sql.Request();
+        
+        // 1. Update tbl_Pos_Rate_Master
+        request.input('Id', sql.Int, Id);
+        request.input('Rate_Date', sql.Date, Rate_Date || new Date());
+        request.input('Pos_Brand_Id', sql.Int, Pos_Brand_Id);
+        request.input('Item_Id', sql.Int, Item_Id);
+        request.input('Rate', sql.Decimal(18, 2), Rate || 0);
+        request.input('Max_Rate', sql.Decimal(18, 2), Max_Rate || 0);
+        request.input('Is_Active_Decative', sql.Bit, Is_Active_Decative !== undefined ? Is_Active_Decative : 1);
+        
+        const updateResult = await request.query(`
+            UPDATE tbl_Pos_Rate_Master
+            SET Rate = @Rate,
+                Max_Rate = @Max_Rate,
+                Pos_Brand_Id = @Pos_Brand_Id,
+                Rate_Date = @Rate_Date,
+                Item_Id = @Item_Id,
+                Is_Active_Decative = @Is_Active_Decative
+            WHERE Id = @Id
+        `);
+
+        // 2. Update tbl_Product_Master with new rates
+        const request2 = new sql.Request();
+        request2.input('Item_Id', sql.Int, Item_Id);
+        request2.input('Rate', sql.Decimal(18, 2), Rate || 0);
+        request2.input('Max_Rate', sql.Decimal(18, 2), Max_Rate || 0);
+        request2.input('Is_Active_Decative', sql.Bit, Is_Active_Decative !== undefined ? Is_Active_Decative : 1);
+        
+        await request2.query(`
+            UPDATE tbl_Product_Master 
+            SET Product_Rate = @Rate,
+                Max_Rate = @Max_Rate,
+                isActive = @Is_Active_Decative 
+            WHERE Product_Id = @Item_Id
+        `);
+
+        // 3. Insert or Update tbl_Rate_Gen with date and time
+        const request3 = new sql.Request();
+        request3.input('Rate_Date', sql.Date, Rate_Date || new Date());
+        request3.input('Rate_time', sql.Time, Rate_time || new Date().toTimeString().split(' ')[0]);
+        
+        // Check if record exists
+        const checkGen = await request3.query(`
+            SELECT COUNT(*) as count FROM tbl_Rate_Gen WHERE Rate_Date = @Rate_Date
+        `);
+        
+        if (checkGen.recordset[0].count > 0) {
+            // Update existing
+            await request3.query(`
+                UPDATE tbl_Rate_Gen 
+                SET Rate_time = @Rate_time 
+                WHERE Rate_Date = @Rate_Date
+            `);
+        } else {
+            // Insert new
+            await request3.query(`
+                INSERT INTO tbl_Rate_Gen (Rate_Date, Rate_time) 
+                VALUES (@Rate_Date, @Rate_time)
+            `);
         }
 
-        try {
-            const request = new sql.Request();
-            request.input('Id', Id);
-            request.input('Rate_Date', Rate_Date);
-            request.input('Pos_Brand_Id', Pos_Brand_Id);
-            request.input('Item_Id', Item_Id);
-            request.input('Rate', Rate);
-            request.input('Max_Rate', MaxRate);
-            request.input('Is_Active_Decative', Is_Active_Decative);
-            const result = await request.query(`
+        // 4. Insert update history into tbl_Pos_Updated_Rate
+        const request4 = new sql.Request();
+        request4.input('Updated_Date', sql.DateTime, new Date());
+        request4.input('Item_Id', sql.Int, Item_Id);
+        request4.input('New_Rate', sql.Decimal(18, 2), Rate || 0);
+        request4.input('Old_Rate', sql.Decimal(18, 2), Old_Rate || 0);
+        request4.input('New_Max_Rate', sql.Decimal(18, 2), Max_Rate || 0);
+        request4.input('Old_Max_Rate', sql.Decimal(18, 2), Old_Max_Rate || 0);
+        request4.input('Updated_By', sql.NVarChar(100), Updated_By || 'System');
+        
+        await request4.query(`
+            INSERT INTO tbl_Pos_Updated_Rate 
+            (Updated_Date, Item_Id, New_Rate, Old_Rate, New_Max_Rate, Old_Max_Rate, Updated_By)
+            VALUES (@Updated_Date, @Item_Id, @New_Rate, @Old_Rate, @New_Max_Rate, @Old_Max_Rate, @Updated_By)
+        `);
+
+        if (updateResult.rowsAffected[0] > 0) {
+            return success(res, 'Rate Master updated successfully', {
+                Id: Id,
+                Rate: Rate,
+                Max_Rate: Max_Rate,
+                Updated_Date: new Date(),
+                Updated_By: Updated_By
+            });
+        } else {
+            return failed(res, 'No changes were made, the Rate Master does not exist');
+        }
+    } catch (e) {
+        console.error('Error updating rate master:', e);
+        return servError(e, res);
+    }
+};
+
+
+
+
+const bulkUpdatePosRateMaster = async (req, res) => {
+    const { updates, Rate_Date, Rate_time } = req.body;
+
+    // Validate input
+    if (!updates || !Array.isArray(updates) || updates.length === 0) {
+        return invalidInput(res, 'Updates array is required and cannot be empty');
+    }
+
+    if (!Rate_Date) {
+        return invalidInput(res, 'Rate_Date is required');
+    }
+
+    if (!Rate_time) {
+        return invalidInput(res, 'Rate_time is required');
+    }
+
+    let transaction;
+
+    try {
+        // Start a transaction
+        transaction = new sql.Transaction();
+        await transaction.begin();
+
+        let updatedCount = 0;
+
+        // Process each update
+        for (const update of updates) {
+            // Parse IDs as integers
+            const Id = parseInt(update.Id);
+            const Item_Id = parseInt(update.Item_Id);
+            const Rate = parseFloat(update.Rate) || 0;
+            const Max_Rate = parseFloat(update.Max_Rate) || 0;
+            const Old_Rate = parseFloat(update.Old_Rate) || 0;
+            const Old_Max_Rate = parseFloat(update.Old_Max_Rate) || 0;
+            
+            // Updated_By should be bigint (user ID)
+            const Updated_By = parseInt(update.Updated_By) || null;
+
+            if (isNaN(Id) || isNaN(Item_Id)) {
+                throw new Error(`Invalid update data: Invalid Id or Item_Id values`);
+            }
+
+            // 1. Update tbl_Pos_Rate_Master
+            const request = new sql.Request(transaction);
+            request.input('Id', sql.BigInt, Id);
+            request.input('Rate', sql.Decimal(18, 2), Rate);
+            request.input('Max_Rate', sql.Decimal(18, 2), Max_Rate);
+            request.input('Rate_Date', sql.Date, Rate_Date);
+            
+            const updateRateMasterResult = await request.query(`
                 UPDATE tbl_Pos_Rate_Master
                 SET Rate = @Rate,
-                Max_Rate=@Max_Rate,
-                Pos_Brand_Id=@Pos_Brand_Id,
-                Rate_Date=@Rate_Date,
-                Item_Id=@Item_Id,
-                Is_Active_Decative=@Is_Active_Decative
-                WHERE Id=@Id
+                    Max_Rate = @Max_Rate,
+                    Rate_Date = @Rate_Date
+                WHERE Id = @Id
             `);
 
-
-            const request3 = new sql.Request();
-            request3.input('Item_Id', Item_Id);
-
-            const query3 = `SELECT * FROM tbl_Product_Master WHERE Product_Id=@Item_Id`;
-            const result3 = await request3.query(query3);
-
-            // if (result3.recordset.length > 0) {
-            //     const request4 = new sql.Request();
-            //     request4.input('Item_Id', Item_Id);
-            //     const query4 = `DELETE FROM tbl_Pro_Rate_Master WHERE Product_Id=@Item_Id`;
-            //     await request4.query(query4);
-            // }
-
-
-            const request6 = new sql.Request();
-            request6.input('Rate_Date', Rate_Date);
-            request6.input('Item_Id', Item_Id);
-            request6.input('Rate', Rate);
-            request6.input('Max_Rate', MaxRate)
-            request6.input('Is_Active_Decative', Is_Active_Decative);
-
-            const query6 = `update tbl_Product_Master SET Product_Rate=@Rate,Max_Rate=@Max_Rate,isActive=@Is_Active_Decative where Product_Id=@Item_Id`;
-
-            const result6 = await request6.query(query6);
-
-
-            if (result.rowsAffected[0] > 0) {
-
-                return success(res, 'Rate Master updated successfully');
-            } else {
-                return failed(res, 'No changes were made, the Rate Master not exist');
+            if (updateRateMasterResult.rowsAffected[0] > 0) {
+                updatedCount++;
             }
-        } catch (e) {
+
+            // 2. Update tbl_Product_Master with new rates
+            const request2 = new sql.Request(transaction);
+            request2.input('Item_Id', sql.BigInt, Item_Id);
+            request2.input('Rate', sql.Decimal(18, 2), Rate);
+            request2.input('Max_Rate', sql.Decimal(18, 2), Max_Rate);
+            
+            await request2.query(`
+                UPDATE tbl_Product_Master 
+                SET Product_Rate = @Rate,
+                    Max_Rate = @Max_Rate
+                WHERE Product_Id = @Item_Id
+            `);
+
+            
+
+        const request4 = new sql.Request(transaction);
+        request4.input('Rate_Date', sql.Date, Rate_Date);
+        request4.input('Rate_time', sql.NVarChar(10), Rate_time);
+        
+    
+        const checkGenResult = await request4.query(`
+            SELECT COUNT(*) as count FROM tbl_Rate_Gen WHERE Rate_Date = @Rate_Date
+        `);
+        
+         const getMax= checkGenResult.recordset[0].count +  1;
+         const rateGenId = getMax;
+       
+            request4.input('Id', sql.BigInt, rateGenId);
+            await request4.query(`
+                INSERT INTO tbl_Rate_Gen (Id,Rate_Date, Rate_time) 
+                VALUES (@Id,@Rate_Date, @Rate_time)
+            `);
+      
 
 
-            return servError(e, res);
+
+
+            const request3 = new sql.Request(transaction);
+            request3.input('Updated_Date', sql.DateTime, new Date());
+            request3.input('Item_Id', sql.BigInt, Item_Id);
+            request3.input('New_Rate', sql.Decimal(18, 2), Rate);
+            request3.input('Old_Rate', sql.Decimal(18, 2), Old_Rate);
+            request3.input('New_Max_Rate', sql.Decimal(18, 2), Max_Rate);
+            request3.input('Old_Max_Rate', sql.Decimal(18, 2), Old_Max_Rate);
+            request3.input('Updated_By', sql.BigInt, Updated_By);
+             request3.input('Gen_Id', sql.BigInt, rateGenId);
+            
+            await request3.query(`
+                INSERT INTO tbl_Pos_Updated_Rate 
+                (Updated_Date, Item_Id, New_Rate, Old_Rate, New_Max_Rate, Old_Max_Rate, Updated_By,Gen_Id)
+                VALUES (@Updated_Date, @Item_Id, @New_Rate, @Old_Rate, @New_Max_Rate, @Old_Max_Rate, @Updated_By,@Gen_Id)
+            `);
         }
-    };
+
+
+     
+        await transaction.commit();
+
+        return success(res, `Successfully updated ${updatedCount} rate(s)`, {
+            updatedCount: updatedCount,
+            totalUpdates: updates.length,
+            rateDate: Rate_Date,
+            rateTime: Rate_time
+        });
+
+    } catch (error) {
+        // Rollback transaction on error
+        if (transaction) {
+            try {
+                await transaction.rollback();
+            } catch (rollbackError) {
+                console.error('Error rolling back transaction:', rollbackError);
+            }
+        }
+        console.error('Error in bulk update:', error);
+        return servError(error, res);
+    }
+};
+
 
     const deletePosRateMaster = async (req, res) => {
         const { Id } = req.body;
@@ -295,102 +577,374 @@ const posBranchController = () => {
         }
     }
 
-    const postbulkExport = async (req, res) => {
-        var { FromDate, NewDate } = req.query;
+    // const postbulkExport = async (req, res) => {
+    //     var { FromDate, NewDate } = req.query;
 
-        if (!FromDate || !NewDate) {
-            return invalidInput(res, "Both FromDate and NewDate are required");
+    //     if (!FromDate || !NewDate) {
+    //         return invalidInput(res, "Both FromDate and NewDate are required");
+    //     }
+
+    //     let transaction;
+    //     try {
+    //         const pool = await sql.connect();
+    //         transaction = new sql.Transaction(pool);
+    //         await transaction.begin();
+
+    //         const request = new sql.Request(transaction);
+    //         request.input("FromDate", sql.Date, FromDate);
+    //         request.input("NewDate", sql.Date, NewDate);
+
+    //         const query = `
+    //             SELECT rm.*, pb.POS_Brand_Name, pm.Product_Name
+    //             FROM tbl_Pos_Rate_Master rm
+    //             LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
+    //             LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
+    //             WHERE Rate_Date = @FromDate
+    //         `;
+
+    //         const result = await request.query(query);
+    //         const getMaxId = await getNextId({ table: "tbl_Pos_Rate_Master", column: "Id" });
+
+    //         if (!checkIsNumber(getMaxId.MaxId)) {
+    //             await transaction.rollback();
+    //             return failed(res, "Error generating RateMaster");
+    //         }
+
+    //         let newId = getMaxId.MaxId;
+
+    //         if (result.recordset.length > 0) {
+    //             const records = result.recordset;
+
+    //             await deleteRecords(records, transaction, NewDate);
+    //             await insertRecords(records, newId, transaction, NewDate);
+
+    //             await transaction.commit();
+    //             return success(res, "Records successfully updated and inserted into both tables");
+    //         } else {
+    //             await transaction.rollback();
+    //             return noData(res, "No records found for the given date range");
+    //         }
+    //     } catch (e) {
+    //         if (transaction) await transaction.rollback();
+    //         return servError(e, res);
+    //     }
+    // };
+
+    // const deleteRecords = async (records, transaction, NewDate) => {
+    //     for (const record of records) {
+    //         const requestDelete = new sql.Request(transaction);
+    //         requestDelete.input("Rate_Date", sql.Date, NewDate);
+    //         requestDelete.input("Item_Id", sql.Int, record.Item_Id);
+
+    //         await requestDelete.query(`
+    //             DELETE FROM tbl_Pos_Rate_Master
+    //             WHERE Rate_Date = @Rate_Date AND Item_Id = @Item_Id
+    //         `);
+    //     }
+    // };
+
+    // const insertRecords = async (records, newId, transaction, NewDate) => {
+
+    //     for (const record of records) {
+    //         const requestInsert = new sql.Request(transaction);
+    //         requestInsert.input("Id", newId++);
+    //         requestInsert.input("Rate_Date", NewDate);
+    //         requestInsert.input("Pos_Brand_Id", record.Pos_Brand_Id);
+    //         requestInsert.input("Item_Id", record.Item_Id);
+    //         requestInsert.input("Rate", record.Rate);
+    //         requestInsert.input("Max_Rate", record.Max_Rate);
+    //         requestInsert.input("Is_Active_Decative", record.Is_Active_Decative);
+
+    //         await requestInsert.query(`
+    //             INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,Max_Rate,Is_Active_Decative)
+    //             VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate,@Max_Rate, @Is_Active_Decative)
+    //         `);
+
+    //         // const requestProInsert = new sql.Request(transaction);
+    //         // requestProInsert.input("Rate_Date",  NewDate);
+    //         // requestProInsert.input("Item_Id",  record.Item_Id);
+    //         // requestProInsert.input("Rate",  record.Rate);
+    //         // requestProInsert.input("Is_Active_Decative",  record.Is_Active_Decative);
+
+    //         // await requestProInsert.query(`
+    //         //     UPDATE tbl_Product_Master SET Product_Rate=@Rate, IsActive=@Is_Active_Decative WHERE Product_Id=@Item_Id
+    //         // `);
+    //     }
+    // };
+
+const postbulkExport = async (req, res) => {
+    var { FromDate, NewDate, NewTime } = req.query;
+    const { brandLevels, productLevels } = req.body;
+
+    if (!FromDate || !NewDate) {
+        return invalidInput(res, "Both FromDate and NewDate are required");
+    }
+
+    let timeOnly = '00:00:00';
+    
+    if (NewTime) {
+        timeOnly = `${NewTime}:00`;
+    }
+    
+    const dateOnly = NewDate;
+
+    let transaction;
+    try {
+        const pool = await sql.connect();
+        transaction = new sql.Transaction(pool);
+        await transaction.begin();
+
+        const request = new sql.Request(transaction);
+        request.input("FromDate", sql.Date, FromDate);
+        request.input("NewDate", sql.Date, NewDate);
+
+        const query = `
+            SELECT rm.*, pb.POS_Brand_Name, pm.Product_Name
+            FROM tbl_Pos_Rate_Master rm
+            LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
+            LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
+            WHERE rm.Rate_Date = @FromDate
+        `;
+
+        const result = await request.query(query);
+
+        if (result.recordset.length === 0) {
+            await transaction.rollback();
+            return noData(res, "No records found for the given date range");
         }
 
-        let transaction;
-        try {
-            const pool = await sql.connect();
-            transaction = new sql.Transaction(pool);
-            await transaction.begin();
+        const records = result.recordset;
 
-            const request = new sql.Request(transaction);
-            request.input("FromDate", sql.Date, FromDate);
-            request.input("NewDate", sql.Date, NewDate);
+        await deleteExistingRecords(transaction, NewDate);
 
-            const query = `
-                SELECT rm.*, pb.POS_Brand_Name, pm.Product_Name
-                FROM tbl_Pos_Rate_Master rm
-                LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
-                LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
-                WHERE Rate_Date = @FromDate
-            `;
+        const rateGenId = await insertRateGen(transaction, NewDate, timeOnly);
 
-            const result = await request.query(query);
-            const getMaxId = await getNextId({ table: "tbl_Pos_Rate_Master", column: "Id" });
+        const getMaxId = await getNextId({ table: "tbl_Pos_Rate_Master", column: "Id", transaction });
+        
+        if (!checkIsNumber(getMaxId.MaxId)) {
+            await transaction.rollback();
+            return failed(res, "Error generating RateMaster ID");
+        }
 
-            if (!checkIsNumber(getMaxId.MaxId)) {
+        let newId = getMaxId.MaxId;
+
+        const insertResults = await insertRateMasterRecords(records, newId, transaction, dateOnly, timeOnly, brandLevels, productLevels, rateGenId);
+
+        if (insertResults.changedRecords.length > 0) {
+            const getUpdatedRateMaxId = await getNextId({ table: "tbl_Pos_Updated_Rate", column: "Id", transaction });
+            let updatedRateId = getUpdatedRateMaxId.MaxId;
+            
+            await insertUpdatedRateRecords(insertResults.changedRecords, transaction, dateOnly, timeOnly, updatedRateId);
+        }
+
+        await transaction.commit();
+        return success(res, `Successfully exported ${records.length} records. ${insertResults.changedRecords.length} rates were updated.`);
+        
+    } catch (e) {
+        console.error("Error in postbulkExport:", e);
+        if (transaction) {
+            try {
                 await transaction.rollback();
-                return failed(res, "Error generating RateMaster");
+            } catch (rollbackError) {
+                console.error("Error during rollback:", rollbackError);
             }
+        }
+        return servError(e, res);
+    }
+};
 
-            let newId = getMaxId.MaxId;
 
-            if (result.recordset.length > 0) {
-                const records = result.recordset;
+const deleteExistingRecords = async (transaction, NewDate) => {
+    const deleteRequest = new sql.Request(transaction);
+    deleteRequest.input("NewDate", sql.Date, NewDate);
+    
+    await deleteRequest.query(`
+        DELETE FROM tbl_Pos_Rate_Master 
+        WHERE CAST(Rate_Date AS DATE) = @NewDate
+    `);
+};
 
-                await deleteRecords(records, transaction, NewDate);
-                await insertRecords(records, newId, transaction, NewDate);
+const insertRateGen = async (transaction, NewDate, timeOnly) => {
+    const rateGenRequest = new sql.Request(transaction);
+    rateGenRequest.input("Rate_Date", sql.Date, NewDate);
+    
+    const [hours, minutes] = timeOnly.split(':');
+    
+  
+    const getMaxId = await getNextId({ table: "tbl_Rate_Gen", column: "Id", transaction });
+    const newId = getMaxId.MaxId;
+    
+    rateGenRequest.input("Id", sql.BigInt, newId);
+    
+    const rateGenQuery = `
+        INSERT INTO tbl_Rate_Gen (Id, Rate_Date, Rate_time)
+        VALUES (@Id, @Rate_Date, '${hours}:${minutes}:00')
+    `;
+    
+    await rateGenRequest.query(rateGenQuery);
+    return newId; 
+};
 
-                await transaction.commit();
-                return success(res, "Records successfully updated and inserted into both tables");
+const getExistingRate = async (itemId, posBrandId, transaction) => {
+    const checkRequest = new sql.Request(transaction);
+    checkRequest.input("Item_Id", sql.BigInt, itemId);
+    checkRequest.input("Pos_Brand_Id", sql.BigInt, posBrandId);
+    
+    const checkQuery = `
+        SELECT TOP 1 Rate, Max_Rate 
+        FROM tbl_Pos_Rate_Master 
+        WHERE Item_Id = @Item_Id 
+        AND Pos_Brand_Id = @Pos_Brand_Id
+        AND Is_Active_Decative = 1
+        ORDER BY Rate_Date DESC, Id DESC
+    `;
+    
+    const result = await checkRequest.query(checkQuery);
+    return result.recordset[0] || null;
+};
+
+
+const insertRateMasterRecords = async (records, startId, transaction, dateOnly, timeOnly, brandLevels, productLevels, rateGenId) => {
+    const changedRecordsMap = new Map();
+    let currentId = startId;
+    
+    const [hours, minutes] = timeOnly.split(':');
+    
+    for (const record of records) {
+        const insertRequest = new sql.Request(transaction);
+        
+        const existingRate = await getExistingRate(record.Item_Id, record.Pos_Brand_Id, transaction);
+        
+        const newRate = parseFloat(record.Rate) || 0;
+        const newMaxRate = parseFloat(record.Max_Rate) || 0;
+        const oldRate = existingRate ? parseFloat(existingRate.Rate) || 0 : 0;
+        const oldMaxRate = existingRate ? parseFloat(existingRate.Max_Rate) || 0 : 0;
+        
+        const hasRateChanged = existingRate && oldRate !== newRate;
+        const hasMaxRateChanged = existingRate && oldMaxRate !== newMaxRate;
+        
+        const brandLevel = brandLevels?.[record.Pos_Brand_Id] || record.Brand_Level || null;
+        const itemLevel = productLevels?.[`${record.Pos_Brand_Id}_${record.Item_Id}`] || record.Item_Level || null;
+        
+        insertRequest.input("Id", sql.BigInt, currentId);
+        insertRequest.input("Pos_Brand_Id", sql.BigInt, record.Pos_Brand_Id);
+        insertRequest.input("Item_Id", sql.BigInt, record.Item_Id);
+        insertRequest.input("Rate", sql.Decimal(18, 2), newRate);
+        insertRequest.input("Max_Rate", sql.Decimal(18, 2), newMaxRate);
+        insertRequest.input("Is_Active_Decative", sql.Int, record.Is_Active_Decative || 1);
+        insertRequest.input("Brand_Level", sql.NVarChar, brandLevel);
+        insertRequest.input("Item_Level", sql.NVarChar, itemLevel);
+        
+     
+        const insertQuery = `
+            INSERT INTO tbl_Pos_Rate_Master (
+                Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Max_Rate, 
+                Is_Active_Decative, Brand_Level, Item_Level
+            )
+            VALUES (
+                @Id, 
+                '${dateOnly}',
+                @Pos_Brand_Id, @Item_Id, @Rate, @Max_Rate,
+                @Is_Active_Decative, @Brand_Level, @Item_Level
+            )
+        `;
+        
+        await insertRequest.query(insertQuery);
+        
+        if (hasRateChanged || hasMaxRateChanged) {
+            const key = `${record.Item_Id}`;
+            
+            if (!changedRecordsMap.has(key)) {
+                changedRecordsMap.set(key, {
+                    Item_Id: record.Item_Id,
+                    New_Rate: hasRateChanged ? newRate : (existingRate ? oldRate : newRate),
+                    Old_Rate: hasRateChanged ? oldRate : (existingRate ? oldRate : newRate),
+                    New_Max_Rate: hasMaxRateChanged ? newMaxRate : (existingRate ? oldMaxRate : newMaxRate),
+                    Old_Max_Rate: hasMaxRateChanged ? oldMaxRate : (existingRate ? oldMaxRate : newMaxRate),
+                    hasRateChanged: hasRateChanged,
+                    hasMaxRateChanged: hasMaxRateChanged,
+                    Gen_Id: rateGenId
+                });
             } else {
-                await transaction.rollback();
-                return noData(res, "No records found for the given date range");
+                const existing = changedRecordsMap.get(key);
+                if (hasRateChanged) {
+                    existing.New_Rate = newRate;
+                    existing.Old_Rate = oldRate;
+                    existing.hasRateChanged = true;
+                }
+                if (hasMaxRateChanged) {
+                    existing.New_Max_Rate = newMaxRate;
+                    existing.Old_Max_Rate = oldMaxRate;
+                    existing.hasMaxRateChanged = true;
+                }
+                existing.Gen_Id = rateGenId;
             }
-        } catch (e) {
-            if (transaction) await transaction.rollback();
-            return servError(e, res);
         }
-    };
+        
+        currentId++;
+    }
+    
+    const changedRecords = Array.from(changedRecordsMap.values());
+    return { changedRecords, lastId: currentId - 1 };
+};
 
-    const deleteRecords = async (records, transaction, NewDate) => {
-        for (const record of records) {
-            const requestDelete = new sql.Request(transaction);
-            requestDelete.input("Rate_Date", sql.Date, NewDate);
-            requestDelete.input("Item_Id", sql.Int, record.Item_Id);
+const insertUpdatedRateRecords = async (changedRecords, transaction, dateOnly, timeOnly, startId) => {
+    let currentId = startId;
+    
+    const fullDateTime = `${dateOnly} ${timeOnly}`;
+    
+    for (const record of changedRecords) {
+        const insertRequest = new sql.Request(transaction);
+        
+        insertRequest.input("Id", sql.BigInt, currentId);
+        insertRequest.input("Updated_Date", sql.DateTime, fullDateTime);
+        insertRequest.input("Item_Id", sql.BigInt, record.Item_Id);
+        insertRequest.input("New_Rate", sql.Decimal(18, 2), record.New_Rate);
+        insertRequest.input("Old_Rate", sql.Decimal(18, 2), record.Old_Rate);
+        insertRequest.input("New_Max_Rate", sql.Decimal(18, 2), record.New_Max_Rate);
+        insertRequest.input("Old_Max_Rate", sql.Decimal(18, 2), record.Old_Max_Rate);
+        insertRequest.input("Gen_Id", sql.BigInt, record.Gen_Id);
+        
+        const insertQuery = `
+            INSERT INTO tbl_Pos_Updated_Rate (
+                Id, Updated_Date, Item_Id, New_Rate, Old_Rate, New_Max_Rate, Old_Max_Rate, Gen_Id
+            )
+            VALUES (
+                @Id, @Updated_Date, @Item_Id, @New_Rate, @Old_Rate, @New_Max_Rate, @Old_Max_Rate, @Gen_Id
+            )
+        `;
+        
+        await insertRequest.query(insertQuery);
+        currentId++;
+    }
+};
 
-            await requestDelete.query(`
-                DELETE FROM tbl_Pos_Rate_Master
-                WHERE Rate_Date = @Rate_Date AND Item_Id = @Item_Id
-            `);
-        }
-    };
+const getNextId = async ({ table, column, transaction }) => {
+    const request = new sql.Request(transaction);
+    const query = `
+        SELECT ISNULL(MAX(${column}), 0) + 1 AS MaxId 
+        FROM ${table} WITH (TABLOCKX)
+    `;
+    const result = await request.query(query);
+    return { MaxId: result.recordset[0].MaxId };
+};
 
-    const insertRecords = async (records, newId, transaction, NewDate) => {
+const checkIsNumber = (value) => {
+    return !isNaN(value) && isFinite(value);
+};
 
-        for (const record of records) {
-            const requestInsert = new sql.Request(transaction);
-            requestInsert.input("Id", newId++);
-            requestInsert.input("Rate_Date", NewDate);
-            requestInsert.input("Pos_Brand_Id", record.Pos_Brand_Id);
-            requestInsert.input("Item_Id", record.Item_Id);
-            requestInsert.input("Rate", record.Rate);
-            requestInsert.input("Max_Rate", record.Max_Rate);
-            requestInsert.input("Is_Active_Decative", record.Is_Active_Decative);
 
-            await requestInsert.query(`
-                INSERT INTO tbl_Pos_Rate_Master (Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,Max_Rate,Is_Active_Decative)
-                VALUES (@Id, @Rate_Date, @Pos_Brand_Id, @Item_Id, @Rate,@Max_Rate, @Is_Active_Decative)
-            `);
 
-            // const requestProInsert = new sql.Request(transaction);
-            // requestProInsert.input("Rate_Date",  NewDate);
-            // requestProInsert.input("Item_Id",  record.Item_Id);
-            // requestProInsert.input("Rate",  record.Rate);
-            // requestProInsert.input("Is_Active_Decative",  record.Is_Active_Decative);
 
-            // await requestProInsert.query(`
-            //     UPDATE tbl_Product_Master SET Product_Rate=@Rate, IsActive=@Is_Active_Decative WHERE Product_Id=@Item_Id
-            // `);
-        }
-    };
 
-    const valuesSync = async (req, res) => {
+
+
+
+
+
+
+
+ const valuesSync = async (req, res) => {
         try {
             const { invoiceId } = req.query;
 
@@ -657,10 +1211,62 @@ const posBranchController = () => {
         }
     };
 
-  const getPosRateMasterForWhatsapp = async (req, res) => {
+//   const getPosRateMasterForWhatsapp = async (req, res) => {
+//     try {
+//         const request = new sql.Request();
+
+//         const dateQuery = `SELECT TOP 1 Rate_Date FROM tbl_Pos_Rate_Master ORDER BY Rate_Date DESC`;
+//         const resultOfDate = await request.query(dateQuery);
+
+//         if (resultOfDate.recordset.length === 0) {
+//             return noData(res);
+//         }
+
+      
+//         const latestDate = resultOfDate.recordset[0].Rate_Date;
+
+      
+//         request.input('latestDate', sql.DateTime, latestDate);
+
+//         const query = `
+//              SELECT 
+//                 rm.Id, 
+//                 rm.Rate_Date, 
+//                 rm.Pos_Brand_Id, 
+//                 rm.Item_Id,		
+//                 rm.Rate,
+//                 rm.Max_Rate, 
+//                 pb.POS_Brand_Name, 
+//                 pm.Product_Name, 
+//                 pm.Short_Name, 
+//                 pm.isActive AS Is_Active_Decative,
+// 				slo.Item_Name_Modified
+//             FROM tbl_Pos_Rate_Master rm
+//             LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
+//             LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
+// 			LEFT JOIN tbl_Stock_LOS slo ON slo.Pro_Id=pm.Product_Id
+//             WHERE rm.Rate_Date = @latestDate
+//              ORDER BY pm.Product_Name asc
+//         `;
+
+//         const result = await request.query(query);
+
+//         if (result.recordset.length > 0) {
+//             return dataFound(res, result.recordset);
+//         } else {
+//             return noData(res);
+//         }
+
+//     } catch (e) {
+//         return servError(e, res);
+//     }
+// };
+
+const getPosRateMasterForWhatsapp = async (req, res) => {
     try {
         const request = new sql.Request();
 
+        
         const dateQuery = `SELECT TOP 1 Rate_Date FROM tbl_Pos_Rate_Master ORDER BY Rate_Date DESC`;
         const resultOfDate = await request.query(dateQuery);
 
@@ -668,14 +1274,18 @@ const posBranchController = () => {
             return noData(res);
         }
 
-      
         const latestDate = resultOfDate.recordset[0].Rate_Date;
+ 
+        
+        const dateOnly = latestDate.toISOString().split('T')[0];
+    
+        
+        request.input('latestDate', sql.Date, latestDate);
+        request.input('dateOnly', sql.NVarChar, dateOnly);
 
-      
-        request.input('latestDate', sql.DateTime, latestDate);
-
-        const query = `
-             SELECT 
+        // Query for Pos Rate Master
+        const posRateQuery = `
+            SELECT 
                 rm.Id, 
                 rm.Rate_Date, 
                 rm.Pos_Brand_Id, 
@@ -686,25 +1296,150 @@ const posBranchController = () => {
                 pm.Product_Name, 
                 pm.Short_Name, 
                 pm.isActive AS Is_Active_Decative,
-				slo.Item_Name_Modified
+                slo.Item_Name_Modified,
+                rm.Brand_Level,
+                rm.Item_Level
             FROM tbl_Pos_Rate_Master rm
             LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
             LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
-			LEFT JOIN tbl_Stock_LOS slo ON slo.Pro_Id=pm.Product_Id
-            WHERE rm.Rate_Date = @latestDate
-             ORDER BY pm.Product_Name asc
+            LEFT JOIN tbl_Stock_LOS slo ON slo.Pro_Id = pm.Product_Id
+            WHERE CAST(rm.Rate_Date AS DATE) = CAST(@latestDate AS DATE)
+            ORDER BY pm.Product_Name ASC
         `;
 
-        const result = await request.query(query);
+        // Query for Rate Gen - Get latest Rate_Gen record overall (if no record for the specific date)
+        const rateGenQuery = `
+            SELECT TOP 1
+                rg.Id,
+                rg.Rate_Date,
+                rg.Rate_time,
+                FORMAT(rg.Rate_time, 'HH:mm:ss') AS Rate_time_only,
+                FORMAT(rg.Rate_time, 'hh:mm:ss tt') AS Rate_time_formatted
+            FROM tbl_Rate_Gen rg
+            ORDER BY rg.Rate_Date DESC, rg.Rate_time DESC
+        `;
 
-        if (result.recordset.length > 0) {
-            return dataFound(res, result.recordset);
+        // Execute both queries
+        const [posRateResult, rateGenResult] = await Promise.all([
+            request.query(posRateQuery),
+            request.query(rateGenQuery)
+        ]);
+        
+     
+        
+        const latestRateGen = rateGenResult.recordset.length > 0 ? rateGenResult.recordset[0] : null;
+       
+        
+        const rateTime = latestRateGen?.Rate_time || null;
+        const rateTimeOnly = latestRateGen?.Rate_time_only || null;
+        const rateTimeFormatted = latestRateGen?.Rate_time_formatted || null;
+
+        // Prepare response
+        const response = {
+            success: true,
+            message: "Data fetched successfully",
+            data: {
+                posRateMaster: posRateResult.recordset,
+                latestRateGen: latestRateGen,
+                metadata: {
+                    fromDate: latestDate,
+                    fromDateOnly: dateOnly,
+                    totalPosRateRecords: posRateResult.recordset.length,
+                    rateGenDate: latestRateGen?.Rate_Date || null,
+                    latestRateTime: rateTime,
+                    latestRateTimeOnly: rateTimeOnly,
+                    latestRateTimeFormatted: rateTimeFormatted,
+                    fetchedAt: new Date().toISOString()
+                }
+            }
+        };
+
+        if (posRateResult.recordset.length > 0) {
+            return res.status(200).json(response);
         } else {
-            return noData(res);
+            return noData(res, `No rate master data found for date: ${latestDate}`);
         }
 
     } catch (e) {
+        console.error("Error in getPosRateMasterForWhatsapp:", e);
         return servError(e, res);
+    }
+};
+
+const saveOrderLevels = async (req, res) => {
+    const { brandLevels, productLevels } = req.body;
+    
+    if (!brandLevels && !productLevels) {
+        return invalidInput(res, "No level data provided");
+    }
+    
+    let transaction;
+    try {
+        const pool = await sql.connect();
+        transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        
+        // Update Brand Levels
+        if (brandLevels && Object.keys(brandLevels).length > 0) {
+            for (const [brandId, level] of Object.entries(brandLevels)) {
+                if (level && level.trim() !== '') {
+                    const updateRequest = new sql.Request(transaction);
+                    updateRequest.input("Pos_Brand_Id", sql.BigInt, brandId);
+                    updateRequest.input("Brand_Level", sql.NVarChar, level);
+                    updateRequest.input("Rate_Date", sql.Date, new Date().toISOString().split('T')[0]);
+                    
+                    const updateQuery = `
+                        UPDATE tbl_Pos_Rate_Master 
+                        SET Brand_Level = @Brand_Level
+                        WHERE Pos_Brand_Id = @Pos_Brand_Id 
+                        AND Rate_Date = @Rate_Date
+                        AND Is_Active_Decative = 1
+                    `;
+                    
+                    await updateRequest.query(updateQuery);
+                }
+            }
+        }
+        
+        // Update Product/Item Levels
+        if (productLevels && Object.keys(productLevels).length > 0) {
+            for (const [key, level] of Object.entries(productLevels)) {
+                if (level && level.trim() !== '') {
+                    const [brandId, itemId] = key.split('_');
+                    
+                    const updateRequest = new sql.Request(transaction);
+                    updateRequest.input("Pos_Brand_Id", sql.BigInt, brandId);
+                    updateRequest.input("Item_Id", sql.BigInt, itemId);
+                    updateRequest.input("Item_Level", sql.NVarChar, level);
+                    updateRequest.input("Rate_Date", sql.Date, new Date().toISOString().split('T')[0]);
+                    
+                    const updateQuery = `
+                        UPDATE tbl_Pos_Rate_Master 
+                        SET Item_Level = @Item_Level
+                        WHERE Pos_Brand_Id = @Pos_Brand_Id 
+                        AND Item_Id = @Item_Id
+                        AND Rate_Date = @Rate_Date
+                        AND Is_Active_Decative = 1
+                    `;
+                    
+                    await updateRequest.query(updateQuery);
+                }
+            }
+        }
+        
+        await transaction.commit();
+        return success(res, "Order levels saved successfully");
+        
+    } catch (error) {
+        console.error("Error saving order levels:", error);
+        if (transaction) {
+            try {
+                await transaction.rollback();
+            } catch (rollbackError) {
+                console.error("Error during rollback:", rollbackError);
+            }
+        }
+        return servError(error, res);
     }
 };
 
@@ -719,7 +1454,9 @@ const posBranchController = () => {
         valuesSync,
         posProductSync,
         posProductList,
-        getPosRateMasterForWhatsapp
+        getPosRateMasterForWhatsapp,
+        saveOrderLevels,
+        bulkUpdatePosRateMaster
     }
 }
 
