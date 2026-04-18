@@ -101,7 +101,8 @@ export const saveReportSettings = async (req, res) => {
             abstractColumns,
             expandedColumns,
             abstractSP,
-            expandedSP
+            expandedSP,
+            createdBy
         } = req.body;
 
         if (
@@ -117,17 +118,16 @@ export const saveReportSettings = async (req, res) => {
 
         await transaction.begin();
 
-        /* ================= INSERT REPORT ================= */
-
         const reportResult = await new sql.Request(transaction)
             .input("Report_Name", sql.VarChar, reportName)
             .input("Parent_Report", sql.VarChar, parentReport)
-            .input("CreatedBy", sql.Int, 1)
+            .input("CreatedBy", sql.Int, createdBy || 0)
             .query(`
-                INSERT INTO tbl_ERP_Report 
+                INSERT INTO tbl_ERP_Report
                 (Report_Name, Parent_Report, CreatedBy, CreatedAt)
                 OUTPUT INSERTED.Report_Id
-                VALUES (@Report_Name, @Parent_Report, @CreatedBy, GETDATE())
+                VALUES
+                (@Report_Name, @Parent_Report, @CreatedBy, GETDATE())
             `);
 
         if (!reportResult.recordset?.length) {
@@ -220,6 +220,7 @@ export const saveReportSettings = async (req, res) => {
             message: "Error saving report"
         });
     }
+
 };
 
 export const getReportList = async (req, res) => {
@@ -229,17 +230,21 @@ export const getReportList = async (req, res) => {
                 r.Report_Id,
                 r.Report_Name,
                 r.Parent_Report,
+                r.CreatedBy,
+                u.Name AS CreatedByName,
+                r.CreatedAt,
                 rt.Type_Id,
                 rt.Report_Type
             FROM tbl_ERP_Report r
             LEFT JOIN tbl_ERP_ReportType rt 
                 ON r.Report_Id = rt.Report_Id
+            LEFT JOIN ERP_LIVE_DB_SMT.dbo.tbl_Users u
+                ON r.CreatedBy = u.UserId
             ORDER BY r.Parent_Report, r.Report_Name
         `);
 
         const rows = result.recordset || [];
 
-        // 🔥 Group by Parent_Report
         const grouped = {};
 
         rows.forEach((row) => {
@@ -257,8 +262,13 @@ export const getReportList = async (req, res) => {
                 report = {
                     Report_Id: row.Report_Id,
                     Report_Name: row.Report_Name,
+                    Parent_Report: row.Parent_Report,
+                    CreatedBy: row.CreatedBy,
+                    CreatedByName: row.CreatedByName || "-",
+                    CreatedAt: row.CreatedAt,
                     templates: []
                 };
+
                 grouped[parent].push(report);
             }
 
@@ -501,3 +511,36 @@ export const executeReportByTemplate = async (req, res) => {
         });
     }
 };
+
+export const deleteReport = async (req, res) => {
+    const { reportId } = req.params;
+
+    try {
+        await new sql.Request()
+            .input("Report_Id", sql.Int, reportId)
+            .query(`
+                DELETE FROM tbl_ERP_Report_Fileds
+                WHERE Report_Id = @Report_Id;
+
+                DELETE FROM tbl_ERP_ReportType
+                WHERE Report_Id = @Report_Id;
+
+                DELETE FROM tbl_ERP_Report
+                WHERE Report_Id = @Report_Id;
+            `);
+
+        return res.json({
+            success: true,
+            message: "Template deleted successfully"
+        });
+
+    } catch (e) {
+        console.error("DELETE ERROR:", e);
+
+        return res.status(500).json({
+            success: false,
+            message: "Delete failed"
+        });
+    }
+};
+
