@@ -355,6 +355,9 @@ MastersRouter.post('/saveOrderLevels',posRateMaster.saveOrderLevels)
 
 MastersRouter.put('/posRateMaster/bulkUpdate',posRateMaster.bulkUpdatePosRateMaster)
 
+MastersRouter.get('/rateGen',posRateMaster.rateGen)
+
+
 // MastersRouter.post('/stockGroup',baseGroup.stockGroup);
 // MastersRouter.post('/stockItemGroup',baseGroup.stockItemGroup);
 // MastersRouter.post('/stockItemGroupList',baseGroup.stockItemGroupList)
