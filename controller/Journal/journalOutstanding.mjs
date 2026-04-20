@@ -577,7 +577,7 @@ export const getCreditNoteOutstanding = (JournalAutoId) => `
             'CREDIT_NOTE'            AS actualSource,
             COALESCE(pb.againstAmount, 0) AS againstAmount,
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
-            'Dr'                     AS accountSide,
+            'Cr'                     AS accountSide,
             cngi.CR_Inv_No           AS BillRefNo,
             cngi.Total_Invoice_value - COALESCE(pb.againstAmount, 0) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
         FROM @filteredCreditNote fc
@@ -607,7 +607,7 @@ export const getCreditNoteOutstanding = (JournalAutoId) => `
             WHERE 
                 jh.JournalStatus <> 0
                 AND je.Acc_Id = @Acc_Id
-                AND je.DrCr = 'Cr'
+                AND je.DrCr = 'Dr'
                 ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo
         ) jr ON jr.RefId = cngi.CR_Id AND jr.RefNo = cngi.CR_Inv_No
@@ -626,7 +626,7 @@ export const getDebitNoteOutstanding = (JournalAutoId) => `
             'DEBIT_NOTE'             AS actualSource,
             COALESCE(rp.againstAmount, 0) AS againstAmount,
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
-            'Cr'                     AS accountSide,
+            'Dr'                     AS accountSide,
             dngi.DB_Inv_No           AS BillRefNo,
             dngi.Total_Invoice_value - COALESCE(rp.againstAmount, 0) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
         FROM @filteredDebitNote fd
@@ -656,7 +656,7 @@ export const getDebitNoteOutstanding = (JournalAutoId) => `
             WHERE 
                 jh.JournalStatus <> 0
                 AND je.Acc_Id = @Acc_Id
-                AND je.DrCr = 'Dr'
+                AND je.DrCr = 'Cr'
                 ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo
         ) jr ON jr.RefId = dngi.DB_Id AND jr.RefNo = dngi.DB_Inv_No
