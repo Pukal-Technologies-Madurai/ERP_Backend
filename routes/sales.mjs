@@ -95,6 +95,7 @@ SalesRouter.post('/salesInvoice/lrReport', postAssignCostCenterToSalesInvoice);
 SalesRouter.post('/salesInvoice/lrReport/multiple', multipleSalesInvoiceStaffUpdate);
 SalesRouter.post('/salesInvoice/lrReport/multipleDelete', multipleSalesInvoiceStaffDelete);
 
+// SalesRouter.post('/lrreportUpload',lrReportUpload)
 
 SalesRouter.get('/salesInvoice/lrReportWhatsapp', getSalesInvoiceForAssignCostCenterWhatsapp);
 

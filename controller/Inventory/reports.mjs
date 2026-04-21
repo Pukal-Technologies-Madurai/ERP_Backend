@@ -135,6 +135,92 @@ const getInventoryReport = async (req, res) => {
 
 
 
+// const getStockAdjustment = async (req, res) => {
+//     try {
+//         const result = await sql.query(`
+//             SELECT 
+//                 i.Aj_id,
+//                 i.invoice_no,
+//                 i.Adj_date,
+//                 i.Adj_ledger_id AS godown_id,
+//                 ISNULL(g.Godown_Name, 'Unassigned') AS godown_name,
+//                 i.total_value,
+//                 i.narration,
+//                 i.Adjust_Type,
+//                 i.created_on,
+//                 i.altered_on,
+//                 d.Aj_A_id,
+//                 d.name_item_id,
+//                 d.name_item_id AS Item_Id,
+//                 pm.Product_Name,
+//                 d.bill_qty,
+//                 d.rate,
+//                 d.amount,
+//                 d.act_qty,
+//                 d.Adj_Payment
+//             FROM [dbo].[tbl_Stock_Adjustment_Info] i
+//             LEFT JOIN [dbo].[tbl_Godown_Master] g 
+//                 ON i.Adj_ledger_id = g.Godown_Id
+//             LEFT JOIN [dbo].[tbl_Stock_Adjustment_Details] d 
+//                 ON i.Aj_id = d.Aj_id
+//             LEFT JOIN [dbo].[tbl_Product_Master] pm
+//                 ON d.name_item_id = pm.Product_Id
+//             ORDER BY  i.invoice_no  desc
+//         `);
+
+
+//         const groupedMap = new Map();
+
+//         for (const row of result.recordset) {
+//             if (!groupedMap.has(row.Aj_id)) {
+           
+//                 groupedMap.set(row.Aj_id, {
+//                     Aj_id:       row.Aj_id,
+//                     invoice_no:  row.invoice_no,
+//                     Adj_date:    row.Adj_date,
+//                     godown_id:   row.godown_id,
+//                     godown_name: row.godown_name,
+//                     total_value: row.total_value,
+//                     narration:   row.narration,
+//                     Adjust_Type: row.Adjust_Type,
+//                     created_on:  row.created_on,
+//                     altered_on:  row.altered_on,
+//                     godown_name:row.godown_name,
+//                     details: []
+//                 });
+//             }
+
+
+//             if (row.Aj_A_id) {
+//                 groupedMap.get(row.Aj_id).details.push({
+//                     Aj_A_id:      row.Aj_A_id,
+//                     Aj_id:        row.Aj_id,
+//                     name_item_id: row.name_item_id,
+//                     Item_Id:      row.Item_Id,      
+//                     Product_Name: row.Product_Name,
+//                     bill_qty:     row.bill_qty,
+//                     act_qty:      row.act_qty,
+//                     rate:         row.rate,
+//                     amount:       row.amount,
+//                     Adj_Payment:  row.Adj_Payment,
+//                 });
+//             }
+//         }
+
+//         const adjustments = Array.from(groupedMap.values());
+
+//         return res.status(200).json({
+//             success: true,
+//             message: 'Stock adjustments fetched successfully',
+//             adjustments
+//         });
+
+//     } catch (e) {
+//         servError(e, res);
+//     }
+// };
+
+
 const getStockAdjustment = async (req, res) => {
     try {
         const result = await sql.query(`
@@ -165,54 +251,36 @@ const getStockAdjustment = async (req, res) => {
                 ON i.Aj_id = d.Aj_id
             LEFT JOIN [dbo].[tbl_Product_Master] pm
                 ON d.name_item_id = pm.Product_Id
-            ORDER BY  i.invoice_no  desc
+            ORDER BY i.invoice_no DESC, d.Aj_A_id
         `);
 
-
-        const groupedMap = new Map();
-
-        for (const row of result.recordset) {
-            if (!groupedMap.has(row.Aj_id)) {
-           
-                groupedMap.set(row.Aj_id, {
-                    Aj_id:       row.Aj_id,
-                    invoice_no:  row.invoice_no,
-                    Adj_date:    row.Adj_date,
-                    godown_id:   row.godown_id,
-                    godown_name: row.godown_name,
-                    total_value: row.total_value,
-                    narration:   row.narration,
-                    Adjust_Type: row.Adjust_Type,
-                    created_on:  row.created_on,
-                    altered_on:  row.altered_on,
-                    godown_name:row.godown_name,
-                    details: []
-                });
-            }
-
-
-            if (row.Aj_A_id) {
-                groupedMap.get(row.Aj_id).details.push({
-                    Aj_A_id:      row.Aj_A_id,
-                    Aj_id:        row.Aj_id,
-                    name_item_id: row.name_item_id,
-                    Item_Id:      row.Item_Id,      
-                    Product_Name: row.Product_Name,
-                    bill_qty:     row.bill_qty,
-                    act_qty:      row.act_qty,
-                    rate:         row.rate,
-                    amount:       row.amount,
-                    Adj_Payment:  row.Adj_Payment,
-                });
-            }
-        }
-
-        const adjustments = Array.from(groupedMap.values());
+        const adjustments = result.recordset.map(row => ({
+            Aj_id: row.Aj_id,
+            invoice_no: row.invoice_no,
+            Adj_date: row.Adj_date,
+            godown_id: row.godown_id,
+            godown_name: row.godown_name,
+            total_value: row.total_value,
+            narration: row.narration,
+            Adjust_Type: row.Adjust_Type,
+            created_on: row.created_on,
+            altered_on: row.altered_on,
+            Aj_A_id: row.Aj_A_id || null,
+            name_item_id: row.name_item_id || null,
+            Item_Id: row.Item_Id || null,
+            Product_Name: row.Product_Name || null,
+            bill_qty: row.bill_qty || null,
+            act_qty: row.act_qty || null,
+            rate: row.rate || null,
+            amount: row.amount || null,
+            Adj_Payment: row.Adj_Payment || null
+        }));
 
         return res.status(200).json({
             success: true,
             message: 'Stock adjustments fetched successfully',
-            adjustments
+            data: adjustments,
+            totalRecords: adjustments.length
         });
 
     } catch (e) {
