@@ -3,7 +3,6 @@ import { checkIsNumber, Division, isEqualNumber, ISOString, Multiplication, Subr
 import { servError, sentData, success, invalidInput, failed } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
-import { error } from 'console';
 
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
@@ -1017,13 +1016,3 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
         servError(e, res);
     }
 };
-
-
-// export const lrReportUploadMobile = async(req,res)=>{
-//     try{
-//          const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-
-//     }catch(e){
-//         servError(e,res)
-//     }
-// }
