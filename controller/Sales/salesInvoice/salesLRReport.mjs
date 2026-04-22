@@ -1157,7 +1157,7 @@ ORDER BY Do_Id;
                 const pathParts = invoice.ImageUrl.split(/[\\/]/);
                 filename = pathParts[pathParts.length - 1];
                 hasImage = true;
-                console.log('Extracted filename:', filename); // Debug log
+              
             }
 
             const imageStatus = hasImage ? 'uploaded' : 'pending';
@@ -1167,7 +1167,7 @@ ORDER BY Do_Id;
                 ? getImage('LRReport', filename)
                 : '';
 
-            console.log('Transformed URL:', transformedImageUrl); // Debug log
+        
 
             // Create new object without the original ImageUrl field
             const { ImageUrl, ...invoiceWithoutImageUrl } = invoice;
