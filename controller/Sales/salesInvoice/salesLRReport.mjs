@@ -3,6 +3,7 @@ import { checkIsNumber, Division, isEqualNumber, ISOString, Multiplication, Subr
 import { servError, sentData, success, invalidInput, failed } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
+import { error } from 'console';
 
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
@@ -1016,3 +1017,395 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
         servError(e, res);
     }
 };
+
+
+
+
+export const lrReportUploadgetMobile = async(req,res)=>{
+   try {
+        const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
+        const status = req.query.staffStatus ? req.query.staffStatus : 0;
+
+        const getSalesInvoice = new sql.Request()
+            .input('reqDate', sql.Date, reqDate)
+            .input('status', sql.Int, toNumber(status))
+           .query(`
+    -- filtered invoices ids temp table
+        DECLARE @FilteredInvoice TABLE (Do_Id BIGINT);
+    -- inserting data to temp table
+        INSERT INTO @FilteredInvoice (Do_Id)
+        SELECT Do_Id
+        FROM tbl_Sales_Delivery_Gen_Info
+        WHERE 
+            CONVERT(DATE, Do_Date) = @reqDate
+            ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
+        SELECT 
+            gen.Do_Id,
+            gen.Do_Inv_No,
+            gen.Voucher_Type,
+            vt.Voucher_Type AS voucherTypeGet,
+            gen.Do_Date,
+            gen.Retailer_Id,
+            s.Status AS Delivery_Status, 
+            s.Status_Id AS Delivery_Status_Id,
+            CASE  
+                WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
+                ELSE r.Retailer_Name
+            END AS retailerNameGet,
+            gen.Branch_Id,
+            b.BranchName AS branchNameGet,
+            gen.Total_Invoice_value,
+            gen.Cancel_status,
+            gen.Created_by,
+            gen.Created_on,
+            ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
+            CONVERT(DATETIME, gen.Created_on) AS createdOn,
+            gen.Narration,
+            COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+        FROM tbl_Sales_Delivery_Gen_Info AS gen
+        LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
+        LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
+        LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
+        LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
+        LEFT JOIN tbl_Users AS cb ON cb.UserId = gen.Created_by
+        WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+        ORDER BY Do_Id;
+    -- involved staffs
+        SELECT 
+            stf.*,
+            e.Cost_Center_Name AS Emp_Name,
+            cc.Cost_Category AS Involved_Emp_Type
+        FROM tbl_Sales_Delivery_Staff_Info AS stf
+        LEFT JOIN tbl_ERP_Cost_Center AS e
+            ON e.Cost_Center_Id = stf.Emp_Id
+        LEFT JOIN tbl_ERP_Cost_Category AS cc
+            ON cc.Cost_Category_Id = stf.Emp_Type_Id
+        WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+        ORDER BY stf.Do_Id;
+    -- Unique Cost Category IDs
+        SELECT DISTINCT Emp_Type_Id
+        FROM tbl_Sales_Delivery_Staff_Info
+        WHERE Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
+    -- Cost Types
+        SELECT Cost_Category_Id, Cost_Category
+        FROM tbl_ERP_Cost_Category
+        ORDER BY Cost_Category;
+    -- Stock Details
+        SELECT 
+            sdsi.Do_Date,
+            sdsi.Delivery_Order_Id,
+            sdsi.Item_Id,
+            sdsi.S_No,
+            COALESCE(p.Product_Name, 'not available') AS Product_Name,
+            COALESCE(p.Product_Image_Name, 'not available') AS Product_Image_Name,
+            COALESCE(u.Units, 'not available') AS UOM,
+            COALESCE(br.Brand_Name, 'not available') AS Brand_Name,
+            COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
+            COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
+            CASE 
+                WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                     OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                THEN 0
+                ELSE CONVERT(
+                    DECIMAL(18,2),
+                    COALESCE(sdsi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                )
+            END AS Alt_Act_Qty,
+            TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
+            COALESCE(p.Product_Rate, 0) AS itemRate,
+            COALESCE(sdsi.Item_Rate, 0) AS billedRate
+        FROM tbl_Sales_Delivery_Stock_Info sdsi
+        LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
+        LEFT JOIN tbl_UOM AS u ON u.Unit_Id = sdsi.Unit_Id
+        LEFT JOIN tbl_Brand_Master AS br ON br.Brand_Id = p.Brand
+        LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+        WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+        ORDER BY sdsi.Delivery_Order_Id, sdsi.S_No`
+);
+
+        const result = await getSalesInvoice;
+
+        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [], stockDetails = []] = result.recordsets;
+
+        const calculatedStockDetails = stockDetails.map(stock => ({
+            ...stock,
+
+            Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
+            quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
+        }));
+
+        const invoicesWithStaffs = invoices.map(invoice => {
+            const involvedStaffs = staffs.filter(stf =>
+                isEqualNumber(stf.Do_Id, invoice.Do_Id)
+            );
+
+            const invoiceStockDetails = calculatedStockDetails.filter(stk =>
+                isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
+            );
+
+            return {
+                ...invoice,
+                involvedStaffs,
+                stockDetails: invoiceStockDetails
+            };
+        });
+
+        sentData(res, invoicesWithStaffs, {
+            costTypes: toArray(costTypes),
+            uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+
+export const lrReportUploadMobile=async(req,res)=>{
+
+    const transaction = new sql.Transaction();
+
+    try {
+        await uploadFile(req, res, 0, 'LR_Image');
+
+        const fileName = req?.file?.filename;
+        const filePath = req?.file?.path;
+
+        const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus = 0, Uploaded_By } = req.body;
+
+        if (!Do_Id) {
+            return invalidInput(res, 'Do_Id is required');
+        }
+
+        await transaction.begin();
+
+
+        const updateStatusRequest = new sql.Request(transaction);
+        await updateStatusRequest
+            .input('Do_Id', sql.BigInt, Do_Id)
+            .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
+            .query(`
+                UPDATE tbl_Sales_Delivery_Gen_Info
+                SET staffInvolvedStatus = @staffInvolvedStatus
+                WHERE Do_Id = @Do_Id;
+            `);
+
+       
+        if (involvedStaffs && JSON.parse(involvedStaffs || '[]').length > 0) {
+            const staffRequest = new sql.Request(transaction);
+            await staffRequest
+                .input('Do_Id', sql.BigInt, Do_Id)
+                .input('involvedStaffs', sql.NVarChar, involvedStaffs)
+                .query(`
+                    INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
+                    SELECT 
+                        @Do_Id,
+                        JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
+                        JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
+                    FROM OPENJSON(@involvedStaffs);
+                `);
+        }
+
+     
+        if (fileName) {
+     
+            const idRequest = new sql.Request(transaction);
+            const idResult = await idRequest.query(`
+                SELECT ISNULL(MAX(Id), 0) + 1 AS NewId 
+                FROM tbl_LrReport WITH (UPDLOCK, HOLDLOCK)
+            `);
+            const newLrId = idResult.recordset[0].NewId;
+
+            const imageRequest = new sql.Request(transaction);
+            await imageRequest
+                .input('Id', sql.BigInt, newLrId)
+                .input('Do_Id', sql.NVarChar, Do_Id.toString())
+                .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+                .input('ImageUrl', sql.NVarChar, filePath || fileName)
+                .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+                .query(`
+                    INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl, Uploaded_By)
+                    VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl, @Uploaded_By);
+                `);
+        }
+
+        await transaction.commit();
+
+        success(res, 'Changes saved successfully');
+    } catch (e) {
+        if (transaction._aborted === false) {
+            await transaction.rollback();
+        }
+        servError(e, res);
+    }
+};
+
+export const lrReportUpdateMobile = async (req, res) => {
+    const transaction = new sql.Transaction();
+
+    try {
+        await uploadFile(req, res, 0, 'LR_Image');
+
+        const fileName = req?.file?.filename;
+        const filePath = req?.file?.path;
+
+        if (!fileName) {
+            return invalidInput(res, 'New image is required');
+        }
+
+        const { Id, Do_Id, Do_Inv_No, Uploaded_By } = req.body;
+
+        if (!Id) {
+            return invalidInput(res, 'Id is required to update');
+        }
+
+        await transaction.begin();
+
+   
+        const getOldImageRequest = new sql.Request(transaction);
+        const oldImageResult = await getOldImageRequest
+            .input('Id', sql.BigInt, Id)
+            .query(`SELECT ImageUrl FROM tbl_LrReport WHERE Id = @Id`);
+
+        if (oldImageResult.recordset.length === 0) {
+            await transaction.rollback();
+            return failed(res, 'LR Report record not found');
+        }
+
+
+        const oldImagePath = oldImageResult.recordset[0].ImageUrl;
+        if (oldImagePath) {
+            try {
+                const fs = await import('fs');
+                if (fs.existsSync(oldImagePath)) {
+                    fs.unlinkSync(oldImagePath);
+                }
+            } catch (fileErr) {
+                console.error('Failed to delete old image file:', fileErr.message);
+                
+            }
+        }
+
+    
+        const updateRequest = new sql.Request(transaction);
+        const updateResult = await updateRequest
+            .input('Id', sql.BigInt, Id)
+            .input('Do_Id', sql.NVarChar, Do_Id?.toString() || '')
+            .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+            .input('ImageUrl', sql.NVarChar, filePath || fileName)
+            .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+            .query(`
+                UPDATE tbl_LrReport
+                SET 
+                    Do_Id       = @Do_Id,
+                    Do_Inv_No   = @Do_Inv_No,
+                    ImageUrl    = @ImageUrl,
+                    Uploaded_By = @Uploaded_By
+                WHERE Id = @Id;
+            `);
+
+        if (updateResult.rowsAffected[0] === 0) {
+            await transaction.rollback();
+            return failed(res, 'Failed to update LR Report image');
+        }
+
+        await transaction.commit();
+        success(res, 'LR Report image updated successfully');
+
+    } catch (e) {
+        if (transaction._aborted === false) {
+            await transaction.rollback();
+        }
+        servError(e, res);
+    }
+};
+
+// export const lrReportUploadMobile = async (req, res) => {
+//     const transaction = new sql.Transaction();
+
+//     try {
+//         await uploadFile(req, res, 0, 'LR_Image');
+
+//         const fileName = req?.file?.filename;
+//         const filePath = req?.file?.path;
+
+//         const { Do_Id, Do_Inv_No, staffInvolvedStatus = 0, Uploaded_By } = req.body;
+
+//         // ✅ Parse involvedStaffs — handles both string and array
+//         let involvedStaffs = [];
+//         try {
+//             const raw = req.body.involvedStaffs;
+//             if (Array.isArray(raw)) {
+//                 involvedStaffs = raw;
+//             } else if (typeof raw === 'string' && raw.trim()) {
+//                 involvedStaffs = JSON.parse(raw);
+//             }
+//         } catch (parseErr) {
+//             return invalidInput(res, 'involvedStaffs must be a valid JSON array');
+//         }
+
+//         if (!Do_Id) {
+//             return invalidInput(res, 'Do_Id is required');
+//         }
+
+//         await transaction.begin();
+
+//         // 1. Update staffInvolvedStatus
+//         const updateStatusRequest = new sql.Request(transaction);
+//         await updateStatusRequest
+//             .input('Do_Id', sql.BigInt, Do_Id)
+//             .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
+//             .query(`
+//                 UPDATE tbl_Sales_Delivery_Gen_Info
+//                 SET staffInvolvedStatus = @staffInvolvedStatus
+//                 WHERE Do_Id = @Do_Id;
+//             `);
+
+//         // 2. Insert staff entries
+//         if (involvedStaffs.length > 0) {
+//             const staffRequest = new sql.Request(transaction);
+//             await staffRequest
+//                 .input('Do_Id', sql.BigInt, Do_Id)
+//                 .input('involvedStaffs', sql.NVarChar, JSON.stringify(involvedStaffs))
+//                 .query(`
+//                     INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
+//                     SELECT 
+//                         @Do_Id,
+//                         JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
+//                         JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
+//                     FROM OPENJSON(@involvedStaffs);
+//                 `);
+//         }
+
+//         // 3. Insert image into tbl_LrReport
+//         if (fileName) {
+//             const idRequest = new sql.Request(transaction);
+//             const idResult = await idRequest.query(`
+//                 SELECT ISNULL(MAX(Id), 0) + 1 AS NewId 
+//                 FROM tbl_LrReport WITH (UPDLOCK, HOLDLOCK)
+//             `);
+//             const newLrId = idResult.recordset[0].NewId;
+
+//             const imageRequest = new sql.Request(transaction);
+//             await imageRequest
+//                 .input('Id', sql.BigInt, newLrId)
+//                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
+//                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+//                 .input('ImageUrl', sql.NVarChar, filePath || fileName)
+//                 .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+//                 .query(`
+//                     INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl, Uploaded_By)
+//                     VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl, @Uploaded_By);
+//                 `);
+//         }
+
+//         await transaction.commit();
+//         success(res, 'Changes saved successfully');
+
+//     } catch (e) {
+//         if (transaction._aborted === false) {
+//             await transaction.rollback();
+//         }
+//         servError(e, res);
+//     }
+// };
