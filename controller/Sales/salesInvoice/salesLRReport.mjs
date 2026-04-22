@@ -544,9 +544,9 @@ export const PendingSalesInvoice = async (req, res) => {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
         const request = new sql.Request();
         request.input('reqDate', sql.Date, reqDate);
-        
+
         const [invoicesResult, staffResult, stockResult, costTypesResult, uniqueStaffResult] = await Promise.all([
-         
+
             request.query(`
                 SELECT 
                     gen.Do_Id,
@@ -580,8 +580,8 @@ export const PendingSalesInvoice = async (req, res) => {
                     AND gen.Delivery_Status IN (1,2,5,6)
                 ORDER BY gen.Do_Id;
             `),
-            
-   
+
+
             request.query(`
                 SELECT 
                     stf.*,
@@ -598,8 +598,8 @@ export const PendingSalesInvoice = async (req, res) => {
                     ON cc.Cost_Category_Id = stf.Emp_Type_Id
                 ORDER BY stf.Do_Id;
             `),
-            
- 
+
+
             request.query(`
                 SELECT 
                     sdsi.Do_Date,
@@ -620,15 +620,15 @@ export const PendingSalesInvoice = async (req, res) => {
                     ON pck.Pack_Id = p.Pack_Id
                 ORDER BY sdsi.S_No;
             `),
-            
+
 
             request.query(`
                 SELECT Cost_Category_Id, Cost_Category
                 FROM tbl_ERP_Cost_Category WITH (NOLOCK)
                 ORDER BY Cost_Category;
             `),
-            
-  
+
+
             request.query(`
                 SELECT DISTINCT stf.Emp_Type_Id
                 FROM tbl_Sales_Delivery_Staff_Info stf WITH (NOLOCK)
@@ -640,14 +640,14 @@ export const PendingSalesInvoice = async (req, res) => {
             `)
         ]);
 
- 
+
         const invoices = invoicesResult.recordset;
         const staffs = staffResult.recordset;
         const stockDetails = stockResult.recordset;
         const costTypes = costTypesResult.recordset;
         const uniqueStaffs = uniqueStaffResult.recordset;
 
-  
+
         const Division = (a, b) => {
             if (!b || b === 0) return 0;
             return Number(((a || 0) / b).toFixed(2));
@@ -657,7 +657,7 @@ export const PendingSalesInvoice = async (req, res) => {
             return Number(((a || 0) - (b || 0)).toFixed(2));
         };
 
-   
+
         const processedStockDetails = stockDetails.map(stock => ({
             Do_Date: stock.Do_Date,
             Delivery_Order_Id: stock.Delivery_Order_Id,
@@ -670,7 +670,7 @@ export const PendingSalesInvoice = async (req, res) => {
             quantityDifference: Subtraction(stock.Bill_Qty, stock.Act_Qty)
         }));
 
-   
+
         const staffMap = new Map();
         staffs.forEach(staff => {
             const doId = staff.Do_Id;
@@ -695,7 +695,7 @@ export const PendingSalesInvoice = async (req, res) => {
             stockDetails: stockMap.get(invoice.Do_Id) || []
         }));
 
-       
+
         const responseData = {
             data: invoicesWithDetails,
             options: {
@@ -704,7 +704,7 @@ export const PendingSalesInvoice = async (req, res) => {
             }
         };
 
-      
+
         sentData(res, invoicesWithDetails, {
             costTypes: costTypes,
             uniqeInvolvedStaffs: uniqueStaffs.map(i => i.Emp_Type_Id)
@@ -1023,15 +1023,15 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
 
 
 
-export const lrReportUploadgetMobile = async(req,res)=>{
-   try {
+export const lrReportUploadgetMobile = async (req, res) => {
+    try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
         const status = req.query.staffStatus ? req.query.staffStatus : 0;
 
         const getSalesInvoice = new sql.Request()
             .input('reqDate', sql.Date, reqDate)
             .input('status', sql.Int, toNumber(status))
-           .query(`
+            .query(`
     -- filtered invoices ids temp table
         DECLARE @FilteredInvoice TABLE (Do_Id BIGINT);
     -- inserting data to temp table
@@ -1123,7 +1123,7 @@ export const lrReportUploadgetMobile = async(req,res)=>{
         LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
         WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
         ORDER BY sdsi.Delivery_Order_Id, sdsi.S_No`
-);
+            );
 
         const result = await getSalesInvoice;
 
@@ -1163,12 +1163,12 @@ export const lrReportUploadgetMobile = async(req,res)=>{
 }
 
 
-export const lrReportUploadMobile=async(req,res)=>{
+export const lrReportUploadMobile = async (req, res) => {
 
     const transaction = new sql.Transaction();
 
     try {
-        await uploadFile(req, res, 0, 'LRReport');
+        await uploadFile(req, res, 6, 'LR_Image');
 
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
@@ -1192,7 +1192,7 @@ export const lrReportUploadMobile=async(req,res)=>{
                 WHERE Do_Id = @Do_Id;
             `);
 
-       
+
         if (involvedStaffs && JSON.parse(involvedStaffs || '[]').length > 0) {
             const staffRequest = new sql.Request(transaction);
             await staffRequest
@@ -1208,9 +1208,9 @@ export const lrReportUploadMobile=async(req,res)=>{
                 `);
         }
 
-     
+
         if (fileName) {
-     
+
             const idRequest = new sql.Request(transaction);
             const idResult = await idRequest.query(`
                 SELECT ISNULL(MAX(Id), 0) + 1 AS NewId 
@@ -1246,7 +1246,7 @@ export const lrReportUpdateMobile = async (req, res) => {
     const transaction = new sql.Transaction();
 
     try {
-        await uploadFile(req, res, 0, 'LR_Image');
+        await uploadFile(req, res, 6, 'LR_Image');
 
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
@@ -1263,7 +1263,7 @@ export const lrReportUpdateMobile = async (req, res) => {
 
         await transaction.begin();
 
-   
+
         const getOldImageRequest = new sql.Request(transaction);
         const oldImageResult = await getOldImageRequest
             .input('Id', sql.BigInt, Id)
@@ -1284,11 +1284,11 @@ export const lrReportUpdateMobile = async (req, res) => {
                 }
             } catch (fileErr) {
                 console.error('Failed to delete old image file:', fileErr.message);
-                
+
             }
         }
 
-    
+
         const updateRequest = new sql.Request(transaction);
         const updateResult = await updateRequest
             .input('Id', sql.BigInt, Id)
@@ -1371,7 +1371,7 @@ export const lrReportUpdateMobile = async (req, res) => {
 //                 .input('involvedStaffs', sql.NVarChar, JSON.stringify(involvedStaffs))
 //                 .query(`
 //                     INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
-//                     SELECT 
+//                     SELECT
 //                         @Do_Id,
 //                         JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
 //                         JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
@@ -1383,7 +1383,7 @@ export const lrReportUpdateMobile = async (req, res) => {
 //         if (fileName) {
 //             const idRequest = new sql.Request(transaction);
 //             const idResult = await idRequest.query(`
-//                 SELECT ISNULL(MAX(Id), 0) + 1 AS NewId 
+//                 SELECT ISNULL(MAX(Id), 0) + 1 AS NewId
 //                 FROM tbl_LrReport WITH (UPDLOCK, HOLDLOCK)
 //             `);
 //             const newLrId = idResult.recordset[0].NewId;
