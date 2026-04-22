@@ -4,6 +4,8 @@ import { servError, sentData, success, invalidInput, failed } from '../../../res
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 import { error } from 'console';
+import uploadFile from '../../../middleware/uploadMiddleware.mjs';
+
 
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
