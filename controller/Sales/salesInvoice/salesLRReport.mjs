@@ -1168,7 +1168,7 @@ export const lrReportUploadMobile=async(req,res)=>{
     const transaction = new sql.Transaction();
 
     try {
-        await uploadFile(req, res, 0, 'LR_Image');
+        await uploadFile(req, res, 0, 'LRReport');
 
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
