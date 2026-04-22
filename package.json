@@ -1,6 +1,6 @@
 {
   "name": "erp_task_sales",
-  "version": "3.24.14",
+  "version": "3.23.14",
   "description": "",
   "main": "app.mjs",
   "scripts": {
