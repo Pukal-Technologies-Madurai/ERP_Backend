@@ -5,7 +5,7 @@ import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 import { error } from 'console';
 import uploadFile from '../../../middleware/uploadMiddleware.mjs';
-
+import getImage from '../../../middleware/getImageIfExist.mjs';
 
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
@@ -1022,7 +1022,6 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
 
 
 
-
 export const lrReportUploadgetMobile = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
@@ -1041,37 +1040,42 @@ export const lrReportUploadgetMobile = async (req, res) => {
         WHERE 
             CONVERT(DATE, Do_Date) = @reqDate
             ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
-        SELECT 
-            gen.Do_Id,
-            gen.Do_Inv_No,
-            gen.Voucher_Type,
-            vt.Voucher_Type AS voucherTypeGet,
-            gen.Do_Date,
-            gen.Retailer_Id,
-            s.Status AS Delivery_Status, 
-            s.Status_Id AS Delivery_Status_Id,
-            CASE  
-                WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
-                ELSE r.Retailer_Name
-            END AS retailerNameGet,
-            gen.Branch_Id,
-            b.BranchName AS branchNameGet,
-            gen.Total_Invoice_value,
-            gen.Cancel_status,
-            gen.Created_by,
-            gen.Created_on,
-            ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
-            CONVERT(DATETIME, gen.Created_on) AS createdOn,
-            gen.Narration,
-            COALESCE(cb.Name, 'unknown') AS Created_BY_Name
-        FROM tbl_Sales_Delivery_Gen_Info AS gen
-        LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
-        LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
-        LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
-        LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
-        LEFT JOIN tbl_Users AS cb ON cb.UserId = gen.Created_by
-        WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
-        ORDER BY Do_Id;
+       SELECT 
+    gen.Do_Id,
+    gen.Do_Inv_No,
+    gen.Voucher_Type,
+    vt.Voucher_Type AS voucherTypeGet,
+    gen.Do_Date,
+    gen.Retailer_Id,
+    s.Status AS Delivery_Status, 
+    s.Status_Id AS Delivery_Status_Id,
+    CASE  
+        WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
+        ELSE r.Retailer_Name
+    END AS retailerNameGet,
+    gen.Branch_Id,
+    b.BranchName AS branchNameGet,
+    gen.Total_Invoice_value,
+    gen.Cancel_status,
+    gen.Created_by,
+    gen.Created_on,
+    ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
+    CONVERT(DATETIME, gen.Created_on) AS createdOn,
+    gen.Narration,
+    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+    COALESCE(lr.ImageUrl, '') AS ImageUrl,
+    lr.Uploaded_By AS LR_Uploaded_By,
+    COALESCE(lu.Name, '') AS LR_Uploaded_By_Name
+FROM tbl_Sales_Delivery_Gen_Info AS gen
+LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
+LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
+LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
+LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
+LEFT JOIN tbl_Users AS cb ON cb.UserId = gen.Created_by
+LEFT JOIN tbl_LrReport AS lr ON CAST(lr.Do_Id AS BIGINT) = gen.Do_Id
+LEFT JOIN tbl_Users AS lu ON lu.UserId = lr.Uploaded_By
+WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+ORDER BY Do_Id;
     -- involved staffs
         SELECT 
             stf.*,
@@ -1131,7 +1135,6 @@ export const lrReportUploadgetMobile = async (req, res) => {
 
         const calculatedStockDetails = stockDetails.map(stock => ({
             ...stock,
-
             Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
             quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
         }));
@@ -1145,11 +1148,39 @@ export const lrReportUploadgetMobile = async (req, res) => {
                 isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
             );
 
-            return {
-                ...invoice,
+            // Extract filename from the full path - use ImageUrl (capital U)
+            let filename = '';
+            let hasImage = false;
+            
+            if (invoice.ImageUrl && invoice.ImageUrl.trim() !== '') {
+                // Handle both Windows (\) and Unix (/) path separators
+                const pathParts = invoice.ImageUrl.split(/[\\/]/);
+                filename = pathParts[pathParts.length - 1];
+                hasImage = true;
+                console.log('Extracted filename:', filename); // Debug log
+            }
+
+            const imageStatus = hasImage ? 'uploaded' : 'pending';
+
+            // Pass just the filename to getImage
+            const transformedImageUrl = hasImage 
+                ? getImage('LRReport', filename)
+                : '';
+
+            console.log('Transformed URL:', transformedImageUrl); // Debug log
+
+            // Create new object without the original ImageUrl field
+            const { ImageUrl, ...invoiceWithoutImageUrl } = invoice;
+
+            const transformedInvoice = {
+                ...invoiceWithoutImageUrl,
+                Imageurl: transformedImageUrl,  // Add the transformed URL
+                imageStatus: imageStatus,
                 involvedStaffs,
                 stockDetails: invoiceStockDetails
             };
+
+            return transformedInvoice;
         });
 
         sentData(res, invoicesWithStaffs, {
@@ -1163,17 +1194,18 @@ export const lrReportUploadgetMobile = async (req, res) => {
 }
 
 
+
 export const lrReportUploadMobile = async (req, res) => {
 
     const transaction = new sql.Transaction();
 
     try {
-        await uploadFile(req, res, 6, 'LR_Image');
+        await uploadFile(req, res, 6, 'LRReport');
 
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
 
-        const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus = 0, Uploaded_By } = req.body;
+        const { Do_Id, Do_Inv_No, involedStaffs, staffInvolvedStatus = 0, Uploaded_By } = req.body;
 
         if (!Do_Id) {
             return invalidInput(res, 'Do_Id is required');
@@ -1223,11 +1255,12 @@ export const lrReportUploadMobile = async (req, res) => {
                 .input('Id', sql.BigInt, newLrId)
                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
-                .input('ImageUrl', sql.NVarChar, filePath || fileName)
+                .input('ImageUrl', sql.NVarChar, filePath )
+                .input('Image_Name', fileName)
                 .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
                 .query(`
-                    INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl, Uploaded_By)
-                    VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl, @Uploaded_By);
+                    INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl,Image_Name, Uploaded_By)
+                    VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl,@Image_Name, @Uploaded_By);
                 `);
         }
 
@@ -1246,7 +1279,7 @@ export const lrReportUpdateMobile = async (req, res) => {
     const transaction = new sql.Transaction();
 
     try {
-        await uploadFile(req, res, 6, 'LR_Image');
+        await uploadFile(req, res, 6, 'LRReport');
 
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
@@ -1294,7 +1327,8 @@ export const lrReportUpdateMobile = async (req, res) => {
             .input('Id', sql.BigInt, Id)
             .input('Do_Id', sql.NVarChar, Do_Id?.toString() || '')
             .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
-            .input('ImageUrl', sql.NVarChar, filePath || fileName)
+            .input('ImageUrl', sql.NVarChar, filePath)
+            .input('Image_Name',fileName)
             .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
             .query(`
                 UPDATE tbl_LrReport
@@ -1302,6 +1336,7 @@ export const lrReportUpdateMobile = async (req, res) => {
                     Do_Id       = @Do_Id,
                     Do_Inv_No   = @Do_Inv_No,
                     ImageUrl    = @ImageUrl,
+                    Image_Name =@Image_Name,
                     Uploaded_By = @Uploaded_By
                 WHERE Id = @Id;
             `);
