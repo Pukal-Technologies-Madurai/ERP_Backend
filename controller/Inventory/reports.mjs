@@ -223,7 +223,31 @@ const getInventoryReport = async (req, res) => {
 
 const getStockAdjustment = async (req, res) => {
     try {
-        const result = await sql.query(`
+        const { fromdate, todate } = req.query;
+        
+       
+        let dateFilter = '';
+        const params = [];
+        
+        if (fromdate && todate) {
+            dateFilter = `WHERE i.Adj_date >= @fromdate AND i.Adj_date <= @todate`;
+            params.push(
+                { name: 'fromdate', type: sql.DateTime, value: fromdate },
+                { name: 'todate', type: sql.DateTime, value: todate }
+            );
+        } else if (fromdate) {
+            dateFilter = `WHERE i.Adj_date >= @fromdate`;
+            params.push(
+                { name: 'fromdate', type: sql.DateTime, value: fromdate }
+            );
+        } else if (todate) {
+            dateFilter = `WHERE i.Adj_date <= @todate`;
+            params.push(
+                { name: 'todate', type: sql.DateTime, value: todate }
+            );
+        }
+
+        const query = `
             SELECT 
                 i.Aj_id,
                 i.invoice_no,
@@ -231,10 +255,10 @@ const getStockAdjustment = async (req, res) => {
                 i.Adj_ledger_id AS godown_id,
                 ISNULL(g.Godown_Name, 'Unassigned') AS godown_name,
                 i.total_value,
-                i.narration,
                 i.Adjust_Type,
                 i.created_on,
                 i.altered_on,
+                i.narration,
                 d.Aj_A_id,
                 d.name_item_id,
                 d.name_item_id AS Item_Id,
@@ -251,8 +275,16 @@ const getStockAdjustment = async (req, res) => {
                 ON i.Aj_id = d.Aj_id
             LEFT JOIN [dbo].[tbl_Product_Master] pm
                 ON d.name_item_id = pm.Product_Id
+            ${dateFilter}
             ORDER BY i.invoice_no DESC, d.Aj_A_id
-        `);
+        `;
+
+        const request = new sql.Request();
+        params.forEach(param => {
+            request.input(param.name, param.type, param.value);
+        });
+
+        const result = await request.query(query);
 
         const adjustments = result.recordset.map(row => ({
             Aj_id: row.Aj_id,
@@ -261,9 +293,9 @@ const getStockAdjustment = async (req, res) => {
             godown_id: row.godown_id,
             godown_name: row.godown_name,
             total_value: row.total_value,
-            narration: row.narration,
             Adjust_Type: row.Adjust_Type,
             created_on: row.created_on,
+            narration: row.narration,
             altered_on: row.altered_on,
             Aj_A_id: row.Aj_A_id || null,
             name_item_id: row.name_item_id || null,
@@ -291,7 +323,7 @@ const getStockAdjustment = async (req, res) => {
 const createStockJournalAdjustment = async (req, res) => {
     try {
         const { adjustmentDetails, Product_Array } = req.body;
-        const { godownId, adjustmentType,Adj_date } = adjustmentDetails;
+        const { godownId, adjustmentType,Adj_date,Narration } = adjustmentDetails;
 
 
         if (!Product_Array || Product_Array.length === 0) {
@@ -320,7 +352,7 @@ const createStockJournalAdjustment = async (req, res) => {
                     '${Adj_date}',
                     ${godownId || 0},
                     ${totalValue},
-                    '${(req.body.narration || '').replace(/'/g, "''")}',
+                    ${Narration},
                     GETDATE(),
                     GETDATE(),
                     ${adjustmentType}
@@ -368,8 +400,8 @@ const createStockJournalAdjustment = async (req, res) => {
 
 const updateStockJournalAdjustment = async (req, res) => {
     try {
-        const { adjustmentDetails, Product_Array, Aj_id, narration,invoiceNo } = req.body;
-        const { godownId, adjustmentType } = adjustmentDetails;
+        const { adjustmentDetails, Product_Array, Aj_id,invoiceNo } = req.body;
+        const { godownId, adjustmentType,Narration } = adjustmentDetails;
         
 
         const existCheck = await sql.query(`
@@ -393,11 +425,10 @@ const updateStockJournalAdjustment = async (req, res) => {
         const updateInfoQuery = `
             UPDATE tbl_Stock_Adjustment_Info 
             SET 
-                invoice_no = '${invoiceNo}',
                 Adj_date = GETDATE(),
                 Adj_ledger_id = ${godownId},
                 total_value = ${totalValue},
-                narration = '${(narration || '').replace(/'/g, "''")}',
+                narration = ${Narration},
                 altered_on = GETDATE(),
                 Adjust_Type = ${adjustmentType}
             WHERE Aj_id = ${Aj_id}
@@ -440,7 +471,7 @@ const updateStockJournalAdjustment = async (req, res) => {
             await sql.query(insertDetailsQuery);
         }
 
-         return success(res, 'Journal Updated Successfully');
+         return success(res, 'Journal Adjustment Updated Successfully');
 
     }  catch (e) {
         servError(e, res);
@@ -674,7 +705,7 @@ const createLedgerOpeningBalance = async (req, res) => {
                 insertedCount += batch.length;
       
             } catch (batchError) {
-                console.error(`   ❌ Batch ${batchNumber} failed:`, batchError.message);
+                console.error(` Batch ${batchNumber} failed:`, batchError.message);
                 throw new Error(`Batch ${batchNumber} failed: ${batchError.message}`);
             }
         }
@@ -1260,4 +1291,25 @@ const getLastObDate = async (req, res) => {
     }
 };
 
-export default { getInventoryReport,getStockAdjustment,createStockJournalAdjustment,updateStockJournalAdjustment,createLedgerOpeningBalance,createStockOpeningBalance,stockOpeningDetails,getLastObDate };
+const getStockAdjustmentPending=async(req,res)=>{
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Stock_Adjustment_Balance_Search @Fromdate, @Todate`);
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
+export default { getInventoryReport,getStockAdjustment,createStockJournalAdjustment,updateStockJournalAdjustment,createLedgerOpeningBalance,createStockOpeningBalance,stockOpeningDetails,getLastObDate,getStockAdjustmentPending };
