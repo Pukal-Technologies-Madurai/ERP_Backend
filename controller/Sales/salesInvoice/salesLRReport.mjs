@@ -530,7 +530,7 @@ export const getSalesInvoiceDetails = async (Do_Id) => {
         }
 
     } catch (e) {
-        console.log(e);
+       
         return {
             success: false,
             data: [],
@@ -1064,6 +1064,8 @@ export const lrReportUploadgetMobile = async (req, res) => {
     gen.Narration,
     COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
     COALESCE(lr.ImageUrl, '') AS ImageUrl,
+    COALESCE(lr.Image_Name, '') AS Image_Name,
+    lr.Id AS LrId,
     lr.Uploaded_By AS LR_Uploaded_By,
     COALESCE(lu.Name, '') AS LR_Uploaded_By_Name
 FROM tbl_Sales_Delivery_Gen_Info AS gen
@@ -1072,7 +1074,16 @@ LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
 LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
 LEFT JOIN tbl_Users AS cb ON cb.UserId = gen.Created_by
-LEFT JOIN tbl_LrReport AS lr ON CAST(lr.Do_Id AS BIGINT) = gen.Do_Id
+LEFT JOIN (
+    SELECT 
+        Id,
+        Do_Id,
+        ImageUrl,
+        Image_Name,
+        Uploaded_By,
+        ROW_NUMBER() OVER (PARTITION BY Do_Id ORDER BY Id DESC) as rn
+    FROM tbl_LrReport
+) AS lr ON CAST(lr.Do_Id AS BIGINT) = gen.Do_Id AND lr.rn = 1
 LEFT JOIN tbl_Users AS lu ON lu.UserId = lr.Uploaded_By
 WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
 ORDER BY Do_Id;
@@ -1102,6 +1113,7 @@ ORDER BY Do_Id;
             sdsi.Delivery_Order_Id,
             sdsi.Item_Id,
             sdsi.S_No,
+            gm.Godown_Name,
             COALESCE(p.Product_Name, 'not available') AS Product_Name,
             COALESCE(p.Product_Image_Name, 'not available') AS Product_Image_Name,
             COALESCE(u.Units, 'not available') AS UOM,
@@ -1125,6 +1137,7 @@ ORDER BY Do_Id;
         LEFT JOIN tbl_UOM AS u ON u.Unit_Id = sdsi.Unit_Id
         LEFT JOIN tbl_Brand_Master AS br ON br.Brand_Id = p.Brand
         LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+        LEFT JOIN tbl_Godown_Master As gm ON gm.Godown_Id =sdsi.GoDown_Id
         WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
         ORDER BY sdsi.Delivery_Order_Id, sdsi.S_No`
             );
@@ -1148,16 +1161,15 @@ ORDER BY Do_Id;
                 isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
             );
 
-            // Extract filename from the full path - use ImageUrl (capital U)
+            
             let filename = '';
             let hasImage = false;
             
             if (invoice.ImageUrl && invoice.ImageUrl.trim() !== '') {
-                // Handle both Windows (\) and Unix (/) path separators
+                
                 const pathParts = invoice.ImageUrl.split(/[\\/]/);
                 filename = pathParts[pathParts.length - 1];
                 hasImage = true;
-              
             }
 
             const imageStatus = hasImage ? 'uploaded' : 'pending';
@@ -1167,14 +1179,14 @@ ORDER BY Do_Id;
                 ? getImage('LRReport', filename)
                 : '';
 
-        
-
             // Create new object without the original ImageUrl field
-            const { ImageUrl, ...invoiceWithoutImageUrl } = invoice;
+            const { ImageUrl, Image_Name, LrId, ...invoiceWithoutImageUrl } = invoice;
 
             const transformedInvoice = {
                 ...invoiceWithoutImageUrl,
+                Id: LrId,  // Add Id for update operations
                 Imageurl: transformedImageUrl,  // Add the transformed URL
+                Image_Name: Image_Name || filename,  // Add Image_Name for the File column
                 imageStatus: imageStatus,
                 involvedStaffs,
                 stockDetails: invoiceStockDetails
@@ -1205,7 +1217,7 @@ export const lrReportUploadMobile = async (req, res) => {
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
 
-        const { Do_Id, Do_Inv_No, involedStaffs, staffInvolvedStatus = 0, Uploaded_By } = req.body;
+        const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus = 0, Uploaded_By } = req.body;
 
         if (!Do_Id) {
             return invalidInput(res, 'Do_Id is required');
@@ -1296,7 +1308,7 @@ export const lrReportUpdateMobile = async (req, res) => {
 
         await transaction.begin();
 
-
+        
         const getOldImageRequest = new sql.Request(transaction);
         const oldImageResult = await getOldImageRequest
             .input('Id', sql.BigInt, Id)
@@ -1307,7 +1319,7 @@ export const lrReportUpdateMobile = async (req, res) => {
             return failed(res, 'LR Report record not found');
         }
 
-
+        // Delete old image file
         const oldImagePath = oldImageResult.recordset[0].ImageUrl;
         if (oldImagePath) {
             try {
@@ -1317,34 +1329,28 @@ export const lrReportUpdateMobile = async (req, res) => {
                 }
             } catch (fileErr) {
                 console.error('Failed to delete old image file:', fileErr.message);
-
             }
         }
 
+        // Delete the old record
+        const deleteRequest = new sql.Request(transaction);
+        await deleteRequest
+            .input('Id', sql.BigInt, Id)
+            .query(`DELETE FROM tbl_LrReport WHERE Id = @Id`);
 
-        const updateRequest = new sql.Request(transaction);
-        const updateResult = await updateRequest
+        // Insert new record with same Id
+        const insertRequest = new sql.Request(transaction);
+        await insertRequest
             .input('Id', sql.BigInt, Id)
             .input('Do_Id', sql.NVarChar, Do_Id?.toString() || '')
             .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
             .input('ImageUrl', sql.NVarChar, filePath)
-            .input('Image_Name',fileName)
+            .input('Image_Name', sql.NVarChar, fileName)
             .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
             .query(`
-                UPDATE tbl_LrReport
-                SET 
-                    Do_Id       = @Do_Id,
-                    Do_Inv_No   = @Do_Inv_No,
-                    ImageUrl    = @ImageUrl,
-                    Image_Name =@Image_Name,
-                    Uploaded_By = @Uploaded_By
-                WHERE Id = @Id;
+                INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
+                VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By)
             `);
-
-        if (updateResult.rowsAffected[0] === 0) {
-            await transaction.rollback();
-            return failed(res, 'Failed to update LR Report image');
-        }
 
         await transaction.commit();
         success(res, 'LR Report image updated successfully');

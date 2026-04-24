@@ -123,6 +123,6 @@ inventoryRouter.post('/uploadStockOpening',inventoryReport.createStockOpeningBal
 
 inventoryRouter.get('/getStockOpeningDetails',inventoryReport.stockOpeningDetails)
 inventoryRouter.get('/getLastObDate',inventoryReport.getLastObDate)
-
+inventoryRouter.get('/getStockAdjustment',inventoryReport.getStockAdjustmentPending)
 
 export default inventoryRouter;
