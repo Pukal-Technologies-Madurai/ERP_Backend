@@ -1245,197 +1245,189 @@ const getStorageStockValueItemWise = async (req, res) => {
 
 const getStorageStockValueGodownWise = async (req, res) => {
     try {
-        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
-        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-        
-        // Regular filters
-        const filter1 = req.query.filter1 ? req.query.filter1.split(',').map(f => f.trim()).filter(f => f) : [];
-        const filter2 = req.query.filter2 ? req.query.filter2.split(',').map(f => f.trim()).filter(f => f) : [];
-        const filter3 = req.query.filter3 ? req.query.filter3.split(',').map(f => f.trim()).filter(f => f) : [];
-        
-        // Group filters - dynamically check which ones are provided
-        const groupFilter1 = req.query.groupFilter1 ? req.query.groupFilter1.split(',').map(f => f.trim()).filter(f => f) : [];
-        const groupFilter2 = req.query.groupFilter2 ? req.query.groupFilter2.split(',').map(f => f.trim()).filter(f => f) : [];
-        const groupFilter3 = req.query.groupFilter3 ? req.query.groupFilter3.split(',').map(f => f.trim()).filter(f => f) : [];
-        
+        const Fromdate = req.query.Fromdate
+            ? ISOString(req.query.Fromdate)
+            : ISOString();
+
+        const Todate = req.query.Todate
+            ? ISOString(req.query.Todate)
+            : ISOString();
+
         const Godown_Id = req.query.godown_Id || 0;
 
-        // Create a map of which group filters are active
+        // -------------------------------
+        // Parse Filters
+        // -------------------------------
+        const parseFilter = (key) =>
+            req.query[key]
+                ? req.query[key]
+                    .split(",")
+                    .map((x) => x.trim())
+                    .filter(Boolean)
+                : [];
+
+        const filter1 = parseFilter("filter1");
+        const filter2 = parseFilter("filter2");
+        const filter3 = parseFilter("filter3");
+
+        const groupFilter1 = parseFilter("groupFilter1");
+        const groupFilter2 = parseFilter("groupFilter2");
+        const groupFilter3 = parseFilter("groupFilter3");
+
         const activeGroupFilters = {};
-        if (groupFilter1.length > 0) activeGroupFilters[1] = groupFilter1;
-        if (groupFilter2.length > 0) activeGroupFilters[2] = groupFilter2;
-        if (groupFilter3.length > 0) activeGroupFilters[3] = groupFilter3;
+        if (groupFilter1.length) activeGroupFilters[1] = groupFilter1;
+        if (groupFilter2.length) activeGroupFilters[2] = groupFilter2;
+        if (groupFilter3.length) activeGroupFilters[3] = groupFilter3;
 
-      
-
-        // Fetch mobile filters with group filters
+        // -------------------------------
+        // Get Filter Configuration
+        // -------------------------------
         const mobileFilters = await new sql.Request().query(`
-            -- Regular Filters (Level 1 & 2)
             SELECT 
                 mrd.Type AS FilterType,
                 mrd.Column_Name AS ColumnName,
-                mrd.Table_Id AS TableId,
-                tm.Table_Name AS TableName,
                 mrd.FilterLevel,
                 'Regular' AS FilterCategory,
                 NULL AS Level_Id,
                 mrd.Type AS SortOrder
-            FROM tbl_Mobile_Report_Details mrd 
-            INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
-            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = mrd.Table_Id
+            FROM tbl_Mobile_Report_Details mrd
+            INNER JOIN tbl_Mobile_Report_Type mrt
+                ON mrt.Mob_Rpt_Id = mrd.Mob_Rpt_Id
             WHERE mrt.Report_Name = 'StockInhand-Godown'
-            
+
             UNION ALL
-            
-            -- Group Filters from tbl_Group_Template
-            SELECT 
+
+            SELECT
                 7 AS FilterType,
                 gt.Column_Name AS ColumnName,
-                gt.Table_Id AS TableId,
-                tm.Table_Name AS TableName,
                 3 AS FilterLevel,
                 'Group' AS FilterCategory,
                 gt.Level_Id,
                 100 + gt.Level_Id AS SortOrder
             FROM tbl_Group_Template gt
-            INNER JOIN tbl_Mobile_Report_Type mrt ON mrt.Mob_Rpt_Id = gt.Mob_Rpt_Id
-            LEFT JOIN tbl_Table_Master tm ON tm.Table_Id = gt.Table_Id
+            INNER JOIN tbl_Mobile_Report_Type mrt
+                ON mrt.Mob_Rpt_Id = gt.Mob_Rpt_Id
             WHERE mrt.Report_Name = 'StockInhand-Godown'
-            
+
             ORDER BY SortOrder
         `);
 
-        // Separate regular filters and group filters
-        const regularFilters = mobileFilters.recordset.filter(e => 
-            e.ColumnName && e.FilterCategory === 'Regular'
+        const rows = mobileFilters.recordset;
+
+        const regularFilters = rows
+            .filter((x) => x.FilterCategory === "Regular" && x.ColumnName)
+            .sort((a, b) => a.FilterType - b.FilterType);
+
+        const groupFilters = rows
+            .filter(
+                (x) =>
+                    x.FilterCategory === "Group" &&
+                    x.ColumnName &&
+                    x.Level_Id
+            )
+            .sort((a, b) => a.Level_Id - b.Level_Id);
+
+        const level1Filters = regularFilters.filter(
+            (x) => x.FilterLevel == 1
         );
-        
-        const groupFilters = mobileFilters.recordset.filter(e => 
-            e.ColumnName && e.FilterCategory === 'Group' && e.Level_Id
-        );
 
-        // Sort group filters by Level_Id (1,2,3)
-        groupFilters.sort((a, b) => a.Level_Id - b.Level_Id);
+        const filter1Column = level1Filters[0]?.ColumnName || "";
+        const filter2Column = level1Filters[1]?.ColumnName || "";
+        const filter3Column = level1Filters[2]?.ColumnName || "";
 
-     
-
-        const formatDate = (date) => {
-            const d = new Date(date);
-            return `${d.getFullYear()}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}`;
-        };
-
-        const formatFilterValues = (values) => {
-            if (!values || values.length === 0) return '';
-            
-            const formatted = values.map(v => {
-                let cleaned = v.replace(/"/g, '');
-                cleaned = cleaned.trim();
-                cleaned = cleaned.replace(/'/g, "''");
-                return `''${cleaned}''`;
-            }).join(',');
-            
-            return formatted;
-        };
-
-        const escapeColumnName = (name) => {
-            if (!name) return '';
-            return name.replace(/'/g, "''");
-        };
-
-        // Sort regular filters by FilterType
-        regularFilters.sort((a, b) => a.FilterType - b.FilterType);
-        
-        // Get regular filter columns (Level 1 filters only)
-        const level1Filters = regularFilters.filter(f => f.FilterLevel == 1);
-        const filter1Column = level1Filters[0]?.ColumnName || '';
-        const filter2Column = level1Filters[1]?.ColumnName || '';
-        const filter3Column = level1Filters[2]?.ColumnName || '';
-
-        // Create a map of group filter columns by Level_Id (1,2,3)
         const groupFilterColumns = {};
-        groupFilters.forEach(gf => {
-            if (gf.Level_Id) {
-                groupFilterColumns[gf.Level_Id] = gf.ColumnName;
-            }
+        groupFilters.forEach((x) => {
+            groupFilterColumns[x.Level_Id] = x.ColumnName;
         });
 
-        // Format regular filter values
-        const filter1Value = filter1.length > 0 ? formatFilterValues(filter1) : '';
-        const filter2Value = filter2.length > 0 ? formatFilterValues(filter2) : '';
-        const filter3Value = filter3.length > 0 ? formatFilterValues(filter3) : '';
+        // -------------------------------
+        // Helpers
+        // -------------------------------
+        const formatDate = (date) => {
+            const d = new Date(date);
+            return `${d.getFullYear()}/${String(
+                d.getMonth() + 1
+            ).padStart(2, "0")}/${String(d.getDate()).padStart(
+                2,
+                "0"
+            )}`;
+        };
 
-        // Execute stored procedure WITHOUT group filter parameters
-        const sqlString = `exec Stock_Summarry_Godown_Search_Stock_Value
+        const escapeSql = (val = "") =>
+            String(val).replace(/'/g, "''");
+
+        const formatFilterValues = (arr) =>
+            arr
+                .map((x) => `''${escapeSql(x)}''`)
+                .join(",");
+
+        // -------------------------------
+        // Execute Procedure
+        // -------------------------------
+        const sqlString = `
+            EXEC Stock_Summarry_Godown_Search_Stock_Value
             '${formatDate(Fromdate)}',
             '${formatDate(Todate)}',
             '${Godown_Id}',
-            '${escapeColumnName(filter1Column)}',
-            '${filter1Value}',
-            '${escapeColumnName(filter2Column)}',
-            '${filter2Value}',
-            '${escapeColumnName(filter3Column)}',
-            '${filter3Value}'`;
-
-   
+            '${escapeSql(filter1Column)}',
+            '${formatFilterValues(filter1)}',
+            '${escapeSql(filter2Column)}',
+            '${formatFilterValues(filter2)}',
+            '${escapeSql(filter3Column)}',
+            '${formatFilterValues(filter3)}'
+        `;
 
         const result = await new sql.Request().query(sqlString);
-        
-        // Start with all results from stored procedure
+
         let filteredData = result.recordset;
-        
-    
 
-        // ============ DYNAMICALLY APPLY ACTIVE GROUP FILTERS ============
-        
-        // Apply group filters based on Level_Id (1,2,3)
-        const activeLevels = Object.keys(activeGroupFilters).map(Number).sort();
-        
-        if (activeLevels.length > 0) {
-        
-            
+        // -------------------------------
+        // Fast Group Filter Handling
+        // -------------------------------
+        const activeLevels = Object.keys(activeGroupFilters)
+            .map(Number)
+            .sort();
+
+        if (activeLevels.length) {
             for (const levelId of activeLevels) {
-                const filterValues = activeGroupFilters[levelId];
-                const columnName = groupFilterColumns[levelId];
-                
-                if (filterValues && filterValues.length > 0 && columnName) {
-                    const beforeCount = filteredData.length;
-                    
-                    filteredData = filteredData.filter(row => {
-                        const value = row[columnName];
-                        if (value === undefined || value === null) return false;
-                        // Convert to string and trim for comparison
-                        const stringValue = String(value).trim();
-                        return filterValues.some(fv => String(fv).trim() === stringValue);
-                    });
-                    
-                   
-                } 
-            }
-        } 
+                const col = groupFilterColumns[levelId];
+                const values = activeGroupFilters[levelId];
 
-        // Filter out zero quantity records
-        const beforeZeroFilter = filteredData.length;
+                if (!col || !values?.length) continue;
+
+                const set = new Set(
+                    values.map((x) => String(x).trim())
+                );
+
+                filteredData = filteredData.filter((row) =>
+                    set.has(String(row[col] ?? "").trim())
+                );
+            }
+        }
+
+        // -------------------------------
+        // Remove Zero Rows
+        // -------------------------------
         filteredData = filteredData.filter(
-            row => !(
-                isEqualNumber(row?.OB_Act_Qty, 0) &&
-                isEqualNumber(row?.Pur_Act_Qty, 0) &&
-                isEqualNumber(row?.Sal_Act_Qty, 0) &&
-                isEqualNumber(row?.OB_Bal_Qty, 0) &&
-                isEqualNumber(row?.Pur_Qty, 0) &&
-                isEqualNumber(row?.Sal_Qty, 0) &&
-                isEqualNumber(row?.Bal_Qty, 0) &&
-                isEqualNumber(row?.Act_Bal_Qty, 0)
-            )
+            (row) =>
+                !(
+                    isEqualNumber(row?.OB_Act_Qty, 0) &&
+                    isEqualNumber(row?.Pur_Act_Qty, 0) &&
+                    isEqualNumber(row?.Sal_Act_Qty, 0) &&
+                    isEqualNumber(row?.OB_Bal_Qty, 0) &&
+                    isEqualNumber(row?.Pur_Qty, 0) &&
+                    isEqualNumber(row?.Sal_Qty, 0) &&
+                    isEqualNumber(row?.Bal_Qty, 0) &&
+                    isEqualNumber(row?.Act_Bal_Qty, 0)
+                )
         );
-    
 
         sentData(res, filteredData);
-        
     } catch (e) {
-        console.error('API Error:', e);
+        console.error("API Error:", e);
         servError(e, res);
     }
-}
+};
 
 export default {
     getStorageStockItemWise,

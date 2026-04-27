@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { checkIsNumber, Division, isEqualNumber, ISOString, Multiplication, Subraction, toArray, toNumber } from '../../../helper_functions.mjs';
-import { servError, sentData, success, invalidInput, failed } from '../../../res.mjs';
+import { servError, sentData, success, invalidInput, failed,dataFound,noData } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 import { error } from 'console';
@@ -1063,8 +1063,8 @@ export const lrReportUploadgetMobile = async (req, res) => {
     CONVERT(DATETIME, gen.Created_on) AS createdOn,
     gen.Narration,
     COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-    COALESCE(lr.ImageUrl, '') AS ImageUrl,
-    COALESCE(lr.Image_Name, '') AS Image_Name,
+    lr.ImageUrl,
+    lr.Image_Name,
     lr.Id AS LrId,
     lr.Uploaded_By AS LR_Uploaded_By,
     COALESCE(lu.Name, '') AS LR_Uploaded_By_Name
@@ -1146,12 +1146,18 @@ ORDER BY Do_Id;
 
         const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [], stockDetails = []] = result.recordsets;
 
+        if (!invoices.length) {
+            return noData(res);
+        }
+
         const calculatedStockDetails = stockDetails.map(stock => ({
             ...stock,
             Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
             quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
         }));
+      
 
+        
         const invoicesWithStaffs = invoices.map(invoice => {
             const involvedStaffs = staffs.filter(stf =>
                 isEqualNumber(stf.Do_Id, invoice.Do_Id)
@@ -1161,32 +1167,19 @@ ORDER BY Do_Id;
                 isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
             );
 
+             
+            const transformedImageUrl = getImage('LRReport',invoice.Image_Name);
             
-            let filename = '';
-            let hasImage = false;
-            
-            if (invoice.ImageUrl && invoice.ImageUrl.trim() !== '') {
-                
-                const pathParts = invoice.ImageUrl.split(/[\\/]/);
-                filename = pathParts[pathParts.length - 1];
-                hasImage = true;
-            }
-
+            const hasImage = invoice.Image_Name && invoice.Image_Name.trim() !== '';
             const imageStatus = hasImage ? 'uploaded' : 'pending';
 
-            // Pass just the filename to getImage
-            const transformedImageUrl = hasImage 
-                ? getImage('LRReport', filename)
-                : '';
-
-            // Create new object without the original ImageUrl field
             const { ImageUrl, Image_Name, LrId, ...invoiceWithoutImageUrl } = invoice;
 
             const transformedInvoice = {
                 ...invoiceWithoutImageUrl,
-                Id: LrId,  // Add Id for update operations
-                Imageurl: transformedImageUrl,  // Add the transformed URL
-                Image_Name: Image_Name || filename,  // Add Image_Name for the File column
+                Id: LrId,
+                Imageurl: transformedImageUrl,  
+                Image_Name: Image_Name || '',
                 imageStatus: imageStatus,
                 involvedStaffs,
                 stockDetails: invoiceStockDetails
@@ -1195,7 +1188,7 @@ ORDER BY Do_Id;
             return transformedInvoice;
         });
 
-        sentData(res, invoicesWithStaffs, {
+        dataFound(res, invoicesWithStaffs, {
             costTypes: toArray(costTypes),
             uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
         });
