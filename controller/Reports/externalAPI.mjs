@@ -375,3 +375,44 @@ export const StaffBasedReport = async (req, res) => {
         servError(error, res);
     }
 }
+
+
+export const StaffBasedReportLOS = async (req, res) => {
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Stock_Journal_Item_VW @Fromdate, @Todate`);
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
+export const costcenterList = async (req, res) => {
+    try {
+        const result = await new sql.Request()
+            .execute("ERP_Cost_Center_vw");
+
+        const recordset = result.recordset || [];
+
+        if (recordset.length === 0) {
+            return noData(res);
+        }
+
+        return dataFound(res, recordset);
+
+    } catch (error) {
+        console.error("Cost Center List Error:", error);
+        return servError(error, res);
+    }
+};
