@@ -323,66 +323,54 @@ const getStockAdjustment = async (req, res) => {
 const createStockJournalAdjustment = async (req, res) => {
     try {
         const { adjustmentDetails, Product_Array } = req.body;
-        const { godownId, adjustmentType,Adj_date,Narration } = adjustmentDetails;
-
+        const { godownId, adjustmentType, Adj_date, Narration } = adjustmentDetails;
 
         if (!Product_Array || Product_Array.length === 0) {
             return res.status(400).json({ success: false, message: 'Product details are required' });
         }
 
-        
-        const maxIdResult = await sql.query(`
+        // Get next Aj_id
+        const maxIdResult = await new sql.Request().query(`
             SELECT ISNULL(MAX(Aj_id), 0) + 1 AS Next_Id 
             FROM tbl_Stock_Adjustment_Info
         `);
         const nextAjId = maxIdResult.recordset[0].Next_Id;
-
         const invoiceNo = `STAJ${String(nextAjId).padStart(4, '0')}`;
-
         const totalValue = Product_Array.reduce((sum, item) => sum + (parseFloat(item.Amount) || 0), 0);
-    
 
-        await sql.query(`
-            INSERT INTO tbl_Stock_Adjustment_Info 
-                (Aj_id, invoice_no, Adj_date, Adj_ledger_id, total_value, narration, created_on, altered_on, Adjust_Type)
-            VALUES 
-                (
-                    ${nextAjId},
-                    '${invoiceNo}',
-                    '${Adj_date}',
-                    ${godownId || 0},
-                    ${totalValue},
-                    ${Narration},
-                    GETDATE(),
-                    GETDATE(),
-                    ${adjustmentType}
-                )
-        `);
+        // Insert header
+        await new sql.Request()
+            .input('Aj_id', sql.Int, nextAjId)
+            .input('invoice_no', sql.NVarChar, invoiceNo)
+            .input('Adj_date', sql.Date, Adj_date)
+            .input('godownId', sql.Int, godownId || 0)
+            .input('totalValue', sql.Decimal(18, 2), totalValue)
+            .input('Narration', sql.NVarChar, Narration || '')
+            .input('adjustmentType', sql.Int, adjustmentType)
+            .query(`
+                INSERT INTO tbl_Stock_Adjustment_Info 
+                    (Aj_id, invoice_no, Adj_date, Adj_ledger_id, total_value, narration, created_on, altered_on, Adjust_Type)
+                VALUES 
+                    (@Aj_id, @invoice_no, @Adj_date, @godownId, @totalValue, @Narration, GETDATE(), GETDATE(), @adjustmentType)
+            `);
 
-       
-        const maxDetailIdResult = await sql.query(`
-            SELECT ISNULL(MAX(Aj_A_id), 0) + 1 AS Next_Detail_Id 
-            FROM tbl_Stock_Adjustment_Details
-        `);
-        let nextDetailId = maxDetailIdResult.recordset[0].Next_Detail_Id;
-
-
+        // Insert details
         for (const item of Product_Array) {
-    await sql.query(`
-        INSERT INTO tbl_Stock_Adjustment_Details 
-            (Aj_id, name_item_id, bill_qty, rate, amount, act_qty, Adj_Payment)
-        VALUES 
-            (
-                ${nextAjId},
-                ${item.Item_Id || 0},
-                ${parseFloat(item.Bill_Qty) || 0},
-                ${parseFloat(item.Item_Rate) || 0},
-                ${parseFloat(item.Amount) || 0},
-                ${parseFloat(item.Act_Qty) || 0},
-                ${parseFloat(item.Adj_Payment) || 0}
-            )
-    `);
-}
+            await new sql.Request()
+                .input('Aj_id', sql.Int, nextAjId)
+                .input('Item_Id', sql.Int, item.Item_Id || 0)
+                .input('Bill_Qty', sql.Decimal(18, 2), parseFloat(item.Bill_Qty) || 0)
+                .input('Item_Rate', sql.Decimal(18, 2), parseFloat(item.Item_Rate) || 0)
+                .input('Amount', sql.Decimal(18, 2), parseFloat(item.Amount) || 0)
+                .input('Act_Qty', sql.Decimal(18, 2), parseFloat(item.Act_Qty) || 0)
+                .input('Adj_Payment', sql.Decimal(18, 2), parseFloat(item.Adj_Payment) || 0)
+                .query(`
+                    INSERT INTO tbl_Stock_Adjustment_Details 
+                        (Aj_id, name_item_id, bill_qty, rate, amount, act_qty, Adj_Payment)
+                    VALUES 
+                        (@Aj_id, @Item_Id, @Bill_Qty, @Item_Rate, @Amount, @Act_Qty, @Adj_Payment)
+                `);
+        }
 
         return res.status(200).json({
             success: true,
@@ -397,83 +385,78 @@ const createStockJournalAdjustment = async (req, res) => {
         servError(e, res);
     }
 };
-
 const updateStockJournalAdjustment = async (req, res) => {
     try {
-        const { adjustmentDetails, Product_Array, Aj_id,invoiceNo } = req.body;
-        const { godownId, adjustmentType,Narration } = adjustmentDetails;
-        
+        const { adjustmentDetails, Product_Array, Aj_id, invoiceNo } = req.body;
+        const { godownId, adjustmentType, Narration } = adjustmentDetails;
 
-        const existCheck = await sql.query(`
-            SELECT Aj_id, created_on, invoice_no 
-            FROM tbl_Stock_Adjustment_Info 
-            WHERE Aj_id = ${Aj_id}
-        `);
+        // Check exists
+        const existCheck = await new sql.Request()
+            .input('Aj_id', sql.Int, Aj_id)
+            .query(`
+                SELECT Aj_id, created_on, invoice_no 
+                FROM tbl_Stock_Adjustment_Info 
+                WHERE Aj_id = @Aj_id
+            `);
 
-       
-        const existingRecord = existCheck.recordset[0];
+        if (!existCheck.recordset.length) {
+            return res.status(404).json({ success: false, message: 'Record not found' });
+        }
 
-        
         const totalValue = Product_Array.reduce((sum, item) => {
             return sum + (parseFloat(item.Amount) || 0);
         }, 0);
 
-       
-        
+        // Update header
+        await new sql.Request()
+            .input('Aj_id', sql.Int, Aj_id)
+            .input('godownId', sql.Int, godownId || 0)
+            .input('totalValue', sql.Decimal(18, 2), totalValue)
+            .input('Narration', sql.NVarChar, Narration || '')
+            .input('adjustmentType', sql.Int, adjustmentType)
+            .query(`
+                UPDATE tbl_Stock_Adjustment_Info 
+                SET 
+                    Adj_date = GETDATE(),
+                    Adj_ledger_id = @godownId,
+                    total_value = @totalValue,
+                    narration = @Narration,
+                    altered_on = GETDATE(),
+                    Adjust_Type = @adjustmentType
+                WHERE Aj_id = @Aj_id
+            `);
 
-      
-        const updateInfoQuery = `
-            UPDATE tbl_Stock_Adjustment_Info 
-            SET 
-                Adj_date = GETDATE(),
-                Adj_ledger_id = ${godownId},
-                total_value = ${totalValue},
-                narration = ${Narration},
-                altered_on = GETDATE(),
-                Adjust_Type = ${adjustmentType}
-            WHERE Aj_id = ${Aj_id}
-        `;
-        
-        await sql.query(updateInfoQuery);
+        // Delete old details
+        await new sql.Request()
+            .input('Aj_id', sql.Int, Aj_id)
+            .query(`DELETE FROM tbl_Stock_Adjustment_Details WHERE Aj_id = @Aj_id`);
 
-
-        const deleteDetailsQuery = `
-            DELETE FROM tbl_Stock_Adjustment_Details 
-            WHERE Aj_id = ${Aj_id}
-        `;
-        
-        await sql.query(deleteDetailsQuery);
-
-        
+        // Insert new details
         for (const item of Product_Array) {
-     
             if (!item.Item_Id) {
                 console.warn("Skipping item without Item_Id:", item);
                 continue;
             }
 
-            const insertDetailsQuery = `
-                INSERT INTO tbl_Stock_Adjustment_Details 
-                    (Aj_id, name_item_id, bill_qty, rate, amount, act_qty, Adj_Payment)
-                VALUES 
-                    (
-                        ${Aj_id},
-                        ${item.Item_Id},
-                        ${parseFloat(item.Bill_Qty) || 0},
-                        ${parseFloat(item.Item_Rate) || 0},
-                        ${parseFloat(item.Amount) || 0},
-                        ${parseFloat(item.Act_Qty) || 0},
-                        ${parseFloat(item.Adj_Payment) || 0}
-                    )
-            `;
-            
-       
-            await sql.query(insertDetailsQuery);
+            await new sql.Request()
+                .input('Aj_id', sql.Int, Aj_id)
+                .input('Item_Id', sql.Int, item.Item_Id)
+                .input('Bill_Qty', sql.Decimal(18, 2), parseFloat(item.Bill_Qty) || 0)
+                .input('Item_Rate', sql.Decimal(18, 2), parseFloat(item.Item_Rate) || 0)
+                .input('Amount', sql.Decimal(18, 2), parseFloat(item.Amount) || 0)
+                .input('Act_Qty', sql.Decimal(18, 2), parseFloat(item.Act_Qty) || 0)
+                .input('Adj_Payment', sql.Decimal(18, 2), parseFloat(item.Adj_Payment) || 0)
+                .query(`
+                    INSERT INTO tbl_Stock_Adjustment_Details 
+                        (Aj_id, name_item_id, bill_qty, rate, amount, act_qty, Adj_Payment)
+                    VALUES 
+                        (@Aj_id, @Item_Id, @Bill_Qty, @Item_Rate, @Amount, @Act_Qty, @Adj_Payment)
+                `);
         }
 
-         return success(res, 'Journal Adjustment Updated Successfully');
+        return success(res, 'Journal Adjustment Updated Successfully');
 
-    }  catch (e) {
+    } catch (e) {
         servError(e, res);
     }
 };
