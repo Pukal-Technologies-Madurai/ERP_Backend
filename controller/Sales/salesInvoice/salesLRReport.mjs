@@ -1025,7 +1025,7 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
 export const lrReportUploadgetMobile = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-        const status = req.query.staffStatus ? req.query.staffStatus : 0;
+        const status = req.query.staffStatus ? req.query.staffStatus : 1;
 
         const getSalesInvoice = new sql.Request()
             .input('reqDate', sql.Date, reqDate)
