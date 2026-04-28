@@ -75,6 +75,7 @@ const ReceiptMaster = () => {
                         COALESCE(debAcc.Account_name, 'Not found') AS DebitAccountGet,
                         COALESCE(creAcc.Account_name, 'Not found') AS CreditAccountGet,
                     	COALESCE(u.Name, 'Not found') AS CreatedByGet,
+                        apb.Name AS approved_by_get,
                         (
                             SELECT COALESCE(SUM(Credit_Amo), 0)
                             FROM tbl_Receipt_Bill_Info rbi
@@ -107,6 +108,7 @@ const ReceiptMaster = () => {
                     LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
                     LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = rgi.credit_ledger
                     LEFT JOIN tbl_Users AS  u ON u.UserId = rgi.created_by
+                    LEFT JOIN tbl_Users AS apb ON apb.UserId = rgi.approved_by
                     WHERE rgi.receipt_id IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)
                     ORDER BY 
                         rgi.receipt_date DESC, rgi.created_on DESC;
@@ -116,16 +118,26 @@ const ReceiptMaster = () => {
                     LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
                     WHERE 
                         alteredTable = 'tbl_Receipt_General_Info' 
-                        AND alteredRowId IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)`
+                        AND alteredRowId IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)
+                    -- STAFF INVOLVED
+                    SELECT
+                        rsi.*,
+                        c.Cost_Center_Name AS Emp_Name,
+                        cc.Cost_Category AS Emp_Type_Name
+                    FROM tbl_Receipt_Staff_Involved AS rsi
+                    LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = rsi.Emp_Id
+                    LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = rsi.Emp_Type_Id
+                    WHERE rsi.receipt_id IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)`
                 );
 
             const result = await request;
 
-            const [receipts, alterHistory] = result.recordsets;
+            const [receipts, alterHistory, staffDetails] = result.recordsets;
 
             const receiptsMap = receipts.map(receipt => ({
                 ...receipt,
-                alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, receipt.receipt_id))
+                alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, receipt.receipt_id)),
+                staffDetails: staffDetails.filter(sd => isEqualNumber(sd.receipt_id, receipt.receipt_id)),
             }))
 
             sentData(res, receiptsMap)
@@ -143,7 +155,8 @@ const ReceiptMaster = () => {
                 debit_ledger, debit_ledger_name,
                 credit_amount,
                 check_no, check_date, bank_name, bank_date, is_new_ref = 0, is_journal_type = 0,
-                BillsDetails = [], transaction_type = ''
+                BillsDetails = [], transaction_type = '', staffDetails = [],
+                approved_by = null, cost_center_mapping = 0
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -242,6 +255,8 @@ const ReceiptMaster = () => {
                 .input('is_new_ref', is_new_ref)
                 .input('is_journal_type', is_journal_type)
                 .input('Alter_Id', Alter_Id)
+                .input('approved_by', approved_by)
+                .input('cost_center_mapping', cost_center_mapping)
                 .query(`
                     INSERT INTO tbl_Receipt_General_Info (
                         receipt_id, year_id, receipt_sno, receipt_invoice_no, 
@@ -249,18 +264,37 @@ const ReceiptMaster = () => {
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
                         check_no, check_date, bank_name, bank_date, transaction_type,
-                        remarks, status, created_by, created_on, is_new_ref, is_journal_type, Alter_Id
+                        remarks, status, created_by, created_on, is_new_ref, is_journal_type, Alter_Id,
+                        approved_by, cost_center_mapping
                     ) VALUES (
                         @receipt_id, @year_id, @receipt_sno, @receipt_invoice_no, 
                         @receipt_voucher_type_id, @receipt_date, @receipt_bill_type, 
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
                         @check_no, @check_date, @bank_name, @bank_date, @transaction_type,
-                        @remarks, @status, @created_by, GETDATE(), @is_new_ref, @is_journal_type, @Alter_Id
+                        @remarks, @status, @created_by, GETDATE(), @is_new_ref, @is_journal_type, @Alter_Id,
+                        @approved_by, @cost_center_mapping
                     )`
                 );
 
             const result = await request;
+
+            if (Array.isArray(staffDetails) && staffDetails.length > 0) {
+                for (const staff of staffDetails) {
+                    const reqStaff = new sql.Request()
+                        .input('receipt_id', receipt_id)
+                        .input('Emp_Id', toNumber(staff?.Emp_Id))
+                        .input('Emp_Type_Id', toNumber(staff?.Emp_Type_Id))
+                        .query(`
+                            INSERT INTO tbl_Receipt_Staff_Involved (
+                                receipt_id, Emp_Id, Emp_Type_Id
+                            ) VALUES (
+                                @receipt_id, @Emp_Id, @Emp_Type_Id
+                            )`
+                        );
+                    await reqStaff;
+                }
+            }
 
             if (result.rowsAffected[0] > 0) {
                 const isReference = !isEqualNumber(receipt_bill_type, 3);
@@ -335,7 +369,8 @@ const ReceiptMaster = () => {
                 credit_amount, altered_by,
                 check_no, check_date, bank_name,
                 bank_date, is_new_ref,
-                is_journal_type = 0, transaction_type = ''
+                is_journal_type = 0, transaction_type = '', staffDetails = [],
+                approved_by = null, cost_center_mapping = 0
             } = req.body;
 
             const receipt_date = req.body?.receipt_date ? ISOString(req.body?.receipt_date) : ISOString();
@@ -377,6 +412,8 @@ const ReceiptMaster = () => {
                 .input('is_journal_type', is_journal_type)
                 .input('transaction_type', transaction_type)
                 .input('Alter_Id', Alter_Id)
+                .input('approved_by', approved_by)
+                .input('cost_center_mapping', cost_center_mapping)
                 .query(`
                     UPDATE tbl_Receipt_General_Info
                     SET 
@@ -398,7 +435,9 @@ const ReceiptMaster = () => {
                         is_new_ref = @is_new_ref,
                         is_journal_type = @is_journal_type,
                         transaction_type = @transaction_type,
-                        Alter_Id = @Alter_Id
+                        Alter_Id = @Alter_Id,
+                        approved_by = @approved_by,
+                        cost_center_mapping = @cost_center_mapping
                     WHERE
                         receipt_id = @receipt_id;`
                 );
@@ -424,6 +463,34 @@ const ReceiptMaster = () => {
                 );
 
             await updateChildTables;
+
+            // deleting existing staffs
+            await new sql.Request(transaction)
+                .input('receipt_id', receipt_id)
+                .query(`DELETE FROM tbl_Receipt_Staff_Involved WHERE receipt_id = @receipt_id`)
+
+            if (Array.isArray(staffDetails) && staffDetails.length > 0) {
+                for (const staff of staffDetails) {
+                    const request = new sql.Request(transaction)
+                        .input('receipt_id', receipt_id)
+                        .input('Emp_Id', toNumber(staff?.Emp_Id))
+                        .input('Emp_Type_Id', toNumber(staff?.Emp_Type_Id))
+                        .query(`
+                            INSERT INTO tbl_Receipt_Staff_Involved (
+                                receipt_id, Emp_Id, Emp_Type_Id
+                            ) VALUES (
+                                @receipt_id, @Emp_Id, @Emp_Type_Id
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Staff row in receipt update');
+                    }
+                }
+            }
+
             await transaction.commit();
             success(res, 'Changes saved')
 

@@ -1,5 +1,5 @@
 import { servError, success, invalidInput, dataFound, noData, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, randomNumber, toArray } from '../../helper_functions.mjs';
+import { ISOString, checkIsNumber, createPadString, randomNumber, toArray, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql';
 import { isGuid, normGuid, zodToErrors, EditJournalSchema, CreateJournalSchema } from './journalValidation.mjs';
@@ -37,11 +37,13 @@ const getJournal = async (req, res) => {
                     jgi.*,
                     v.Voucher_Type AS VoucherTypeGet,
                     b.BranchName AS BranchGet,
-                    cb.Name AS CreatedByGet
+                    cb.Name AS CreatedByGet,
+                    apb.Name AS approved_by_get
                 FROM tbl_Journal_General_Info AS jgi
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = jgi.VoucherType
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = jgi.BranchId
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = jgi.CreatedBy
+                LEFT JOIN tbl_Users AS apb ON apb.UserId = jgi.approved_by
                 WHERE jgi.JournalAutoId IN (SELECT DISTINCT JournalAutoId FROM @journalID);
             -- Entries Info
                 SELECT 
@@ -55,6 +57,15 @@ const getJournal = async (req, res) => {
                     jbi.*
                 FROM tbl_Journal_Bill_Reference AS jbi
                 WHERE jbi.JournalAutoId IN (SELECT DISTINCT JournalAutoId FROM @journalID);
+            -- Staff Involved
+				SELECT
+                    jsi.*,
+                    c.Cost_Center_Name AS Emp_Name,
+                    cc.Cost_Category AS Emp_Type_Name
+                FROM tbl_Journal_Staff_Involved AS jsi
+                LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = jsi.Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = jsi.Emp_Type_Id
+                WHERE jsi.JournalAutoId IN (SELECT DISTINCT JournalAutoId FROM @journalID)
             -- Alteration History
                 SELECT ah.*, u.Name AS alterByGet 
                 FROM tbl_Alteration_History AS ah
@@ -66,7 +77,7 @@ const getJournal = async (req, res) => {
 
         const result = await request;
 
-        const [generalInfo, entriesInfo, billReferencesInfo, alterHistory] = result.recordsets;
+        const [generalInfo, entriesInfo, billReferencesInfo, staffInvolved, alterHistory] = result.recordsets;
 
         // const merged = generalInfo.map(journal => ({
         //     ...journal,
@@ -74,7 +85,7 @@ const getJournal = async (req, res) => {
         // }));
 
         if (generalInfo.length > 0) {
-            dataFound(res, [], 'data found', { generalInfo, entriesInfo, billReferencesInfo, alterHistory })
+            dataFound(res, [], 'data found', { generalInfo, entriesInfo, billReferencesInfo, staffInvolved, alterHistory })
         } else {
             noData(res)
         }
@@ -101,6 +112,9 @@ const createJournal = async (req, res) => {
             JournalStatus,
             CreatedBy,
             Entries = [],
+            journalStaffInvolved = [],
+            approved_by = null,
+            cost_center_mapping = 0,
         } = parsed.data;
 
         const journalDate = JournalDate ? ISOString(JournalDate) : ISOString();
@@ -175,17 +189,19 @@ const createJournal = async (req, res) => {
             .input("JournalStatus", JournalStatus)
             .input("CreatedBy", CreatedBy)
             .input("AlterId", AlterId)
+            .input("approved_by", approved_by)
+            .input("cost_center_mapping", cost_center_mapping)
             .query(`
                 INSERT INTO dbo.tbl_Journal_General_Info (
                   JournalAutoId, JournalId, Year_Id, VoucherType, JournalNo, JournalVoucherNo,
                   JournalDate, BranchId, Narration, JournalStatus,
-                  CreatedBy, CreatedAt, UpdatedAt, AlterId
+                  CreatedBy, CreatedAt, UpdatedAt, AlterId, approved_by, cost_center_mapping
                 )
                 OUTPUT inserted.JournalAutoId
                 VALUES (
                   DEFAULT, @JournalId, @Year_Id, @VoucherType, @JournalNo, @JournalVoucherNo,
                   @JournalDate, @BranchId, @Narration, @JournalStatus,
-                  @CreatedBy, GETDATE(), NULL, @AlterId
+                  @CreatedBy, GETDATE(), NULL, @AlterId, @approved_by, @cost_center_mapping
                 )`);
 
         const JournalAutoId = hdrIns?.recordset?.[0]?.JournalAutoId;
@@ -256,6 +272,28 @@ const createJournal = async (req, res) => {
             }
         }
 
+        if (Array.isArray(journalStaffInvolved) && journalStaffInvolved.length > 0) {
+            for (const staff of journalStaffInvolved) {
+                const request = new sql.Request(tx)
+                    .input('JournalAutoId', JournalAutoId)
+                    .input('Emp_Id', toNumber(staff?.Emp_Id))
+                    .input('Emp_Type_Id', toNumber(staff?.Emp_Type_Id))
+                    .query(`
+                        INSERT INTO tbl_Journal_Staff_Involved (
+                            JournalAutoId, Emp_Id, Emp_Type_Id
+                        ) VALUES (
+                            @JournalAutoId, @Emp_Id, @Emp_Type_Id
+                        )`
+                    );
+
+                const result = await request;
+
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error('Failed to insert Staff row in journal creation');
+                }
+            }
+        }
+
         await tx.commit();
 
         return success(res, "Journal Created", {
@@ -302,6 +340,9 @@ const editJournal = async (req, res) => {
             JournalStatus,
             BranchId,
             Entries,
+            journalStaffInvolved = [],
+            approved_by = null,
+            cost_center_mapping = 0,
         } = parsed.data;
 
         const journalAutoId = normGuid(JournalAutoId);
@@ -327,9 +368,9 @@ const editJournal = async (req, res) => {
             VoucherType,
             JournalNo,
             JournalVoucherNo,
-            BranchId: dbBranchId,
+            BranchId: dbBranchId
         } = hdrQ.recordset[0];
-        
+
         await new sql.Request(tx)
             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
             .query(`
@@ -344,6 +385,8 @@ const editJournal = async (req, res) => {
             .input("Narration", Narration)
             .input("JournalStatus", JournalStatus)
             .input("BranchId", BranchId ?? dbBranchId)
+            .input("approved_by", approved_by)
+            .input("cost_center_mapping", cost_center_mapping)
             .query(`
                 UPDATE dbo.tbl_Journal_General_Info
                 SET
@@ -352,14 +395,17 @@ const editJournal = async (req, res) => {
                   JournalStatus=@JournalStatus,
                   BranchId=@BranchId,
                   UpdatedAt=GETDATE(),
-                  AlterId=AlterId+1
+                  AlterId=AlterId+1,
+                  approved_by=@approved_by,
+                  cost_center_mapping=@cost_center_mapping
                 WHERE JournalAutoId=@JournalAutoId;`);
 
         await new sql.Request(tx)
             .input("JournalAutoId", sql.UniqueIdentifier, journalAutoId)
             .query(`
                 DELETE FROM dbo.tbl_Journal_Bill_Reference WHERE JournalAutoId = @JournalAutoId;
-                DELETE FROM dbo.tbl_Journal_Entries_Info WHERE JournalAutoId = @JournalAutoId;`);
+                DELETE FROM dbo.tbl_Journal_Entries_Info WHERE JournalAutoId = @JournalAutoId;
+                DELETE FROM dbo.tbl_Journal_Staff_Involved WHERE JournalAutoId = @JournalAutoId;`);
 
         const lineMap = new Map();
 
@@ -441,6 +487,28 @@ const editJournal = async (req, res) => {
             }
         }
 
+        if (Array.isArray(journalStaffInvolved) && journalStaffInvolved.length > 0) {
+            for (const staff of journalStaffInvolved) {
+                const request = new sql.Request(tx)
+                    .input('JournalAutoId', JournalAutoId)
+                    .input('Emp_Id', toNumber(staff?.Emp_Id))
+                    .input('Emp_Type_Id', toNumber(staff?.Emp_Type_Id))
+                    .query(`
+                        INSERT INTO tbl_Journal_Staff_Involved (
+                            JournalAutoId, Emp_Id, Emp_Type_Id
+                        ) VALUES (
+                            @JournalAutoId, @Emp_Id, @Emp_Type_Id
+                        )`
+                    );
+
+                const result = await request;
+
+                if (result.rowsAffected[0] === 0) {
+                    throw new Error('Failed to insert Staff row in journal creation');
+                }
+            }
+        }
+
         await tx.commit();
 
         return success(res, "Journal Updated", {
@@ -462,7 +530,7 @@ const editJournal = async (req, res) => {
     } catch (e) {
         try {
             if (tx._aborted !== true) await tx.rollback();
-        } catch (err) { 
+        } catch (err) {
             console.log(err);
         }
         return servError(e, res);

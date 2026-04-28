@@ -69,6 +69,7 @@ const PaymentMaster = () => {
                     	debAcc.Account_name AS DebitAccountGet,
                     	creAcc.Account_name AS CreditAccountGet,
                         cb.Name AS getCreatedBy,
+                        apb.Name AS approved_by_get,
                     	(
                     		SELECT COALESCE(SUM(rbi.Credit_Amo), 0) 
                     		FROM tbl_Receipt_Bill_Info AS rbi
@@ -98,6 +99,7 @@ const PaymentMaster = () => {
                     LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
                     LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
                     LEFT JOIN tbl_Users AS cb ON cb.UserId = pgi.created_by
+                    LEFT JOIN tbl_Users AS apb ON apb.UserId = pgi.approved_by
                     WHERE pgi.pay_id IN (SELECT DISTINCT pay_id FROM @FilteredPayments)
                     ORDER BY 
                         pgi.payment_date DESC, pgi.created_on DESC;
@@ -107,16 +109,26 @@ const PaymentMaster = () => {
                     LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
                     WHERE 
                         alteredTable = 'tbl_Payment_General_Info' 
-                        AND alteredRowId IN (SELECT DISTINCT pay_id FROM @FilteredPayments)`
+                        AND alteredRowId IN (SELECT DISTINCT pay_id FROM @FilteredPayments)
+                    -- STAFF INVOLVED
+                    SELECT
+                        psi.*,
+                        c.Cost_Center_Name AS Emp_Name,
+                        cc.Cost_Category AS Emp_Type_Name
+                    FROM tbl_Payment_Staff_Involved AS psi
+                    LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = psi.Emp_Id
+                    LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = psi.Emp_Type_Id
+                    WHERE psi.payment_id IN (SELECT DISTINCT pay_id FROM @FilteredPayments)`
                 );
 
             const result = await request;
 
-            const [payments, alterHistory] = result.recordsets;
+            const [payments, alterHistory, staffDetails] = result.recordsets;
 
             const paymentsMap = payments.map(payment => ({
                 ...payment,
-                alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, payment.pay_id))
+                alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, payment.pay_id)),
+                staffDetails: staffDetails.filter(sd => isEqualNumber(sd.payment_id, payment.pay_id)),
             }))
 
             sentData(res, paymentsMap)
@@ -126,6 +138,8 @@ const PaymentMaster = () => {
     }
 
     const createGeneralInfoPayments = async (req, res) => {
+        const tx = new sql.Transaction();
+
         try {
 
             const {
@@ -134,7 +148,8 @@ const PaymentMaster = () => {
                 debit_ledger, debit_ledger_name,
                 debit_amount, transaction_type = null,
                 check_no, check_date, bank_name, bank_date,
-                remarks, status, created_by, BillsDetails = []
+                remarks, status, created_by, BillsDetails = [], staffDetails = [],
+                approved_by = null, cost_center_mapping = 0
             } = req.body;
 
             const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
@@ -213,7 +228,9 @@ const PaymentMaster = () => {
 
             const Alter_Id = randomNumber(6, 8);
 
-            const request = new sql.Request()
+            await tx.begin();
+
+            const mainResult = await new sql.Request(tx)
                 .input('pay_id', pay_id)
                 .input('year_id', Year_Id)
                 .input('payment_sno', payment_sno)
@@ -236,6 +253,8 @@ const PaymentMaster = () => {
                 .input('bank_date', bank_date ? bank_date : null)
                 .input('status', status)
                 .input('created_by', created_by)
+                .input('approved_by', approved_by)
+                .input('cost_center_mapping', cost_center_mapping)
                 .input('Alter_Id', Alter_Id)
                 .query(`
                     INSERT INTO tbl_Payment_General_Info (
@@ -243,19 +262,45 @@ const PaymentMaster = () => {
                         credit_ledger, credit_ledger_name, credit_amount, 
                         debit_ledger, debit_ledger_name, debit_amount,
                         check_no, check_date, bank_name, bank_date, transaction_type,
-                        remarks, status, created_by, created_on, Alter_Id
+                        remarks, status, created_by, created_on, Alter_Id,
+                        approved_by, cost_center_mapping
                     ) VALUES (
                         @pay_id, @year_id, @payment_sno, @payment_invoice_no, @payment_voucher_type_id, @payment_date, @pay_bill_type, @is_new_ref,
                         @credit_ledger, @credit_ledger_name, @credit_amount, 
                         @debit_ledger, @debit_ledger_name, @debit_amount, 
                         @check_no, @check_date, @bank_name, @bank_date, @transaction_type,
-                        @remarks, @status, @created_by, GETDATE(), @Alter_Id
+                        @remarks, @status, @created_by, GETDATE(), @Alter_Id,
+                        @approved_by, @cost_center_mapping
                     )`
                 );
 
-            const result = await request;
 
-            if (result.rowsAffected[0] > 0) {
+            if (Array.isArray(staffDetails) && staffDetails.length > 0) {
+                for (const staff of staffDetails) {
+
+                    const request = new sql.Request(tx)
+                        .input('payment_id', pay_id)
+                        .input('Emp_Id', toNumber(staff?.Emp_Id))
+                        .input('Emp_Type_Id', toNumber(staff?.Emp_Type_Id))
+                        .query(`
+                            INSERT INTO tbl_Payment_Staff_Involved (
+                                payment_id, Emp_Id, Emp_Type_Id
+                            ) VALUES (
+                                @payment_id, @Emp_Id, @Emp_Type_Id
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Staff row in journal creation');
+                    }
+                }
+            }
+
+            await tx.commit();
+
+            if (mainResult.rowsAffected[0] > 0) {
 
                 const isReference = isEqualNumber(pay_bill_type, 1) || isEqualNumber(pay_bill_type, 3);
 
@@ -319,6 +364,13 @@ const PaymentMaster = () => {
             }
 
         } catch (e) {
+            if (tx._aborted === false) {
+                try {
+                    await tx.rollback();
+                } catch (err) {
+                    console.error('Rollback failed:', err);
+                }
+            }
             servError(e, res)
         }
     }
@@ -332,7 +384,8 @@ const PaymentMaster = () => {
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount, altered_by, transaction_type,
-                check_no, check_date, bank_name, bank_date
+                check_no, check_date, bank_name, bank_date, staffDetails = [],
+                approved_by = null, cost_center_mapping = 0
             } = req.body;
 
             const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
@@ -372,6 +425,8 @@ const PaymentMaster = () => {
                 .input('status', status)
                 .input('altered_by', altered_by)
                 .input('Alter_Id', Alter_Id)
+                .input('approved_by', approved_by)
+                .input('cost_center_mapping', cost_center_mapping)
                 .query(`
                     UPDATE tbl_Payment_General_Info
                     SET 
@@ -392,14 +447,17 @@ const PaymentMaster = () => {
                         status = @status,
                         altered_by = @altered_by,
                         alterd_on = GETDATE(),
-                        Alter_Id = @Alter_Id
+                        Alter_Id = @Alter_Id,
+                        approved_by = @approved_by,
+                        cost_center_mapping = @cost_center_mapping
                     WHERE
                         pay_id = @pay_id;`
                 );
 
             await request;
 
-            const updateChildTables = new sql.Request(transaction)
+            // updating child tables
+            await new sql.Request(transaction)
                 .input('payment_id', pay_id)
                 .input('payment_date', payment_date)
                 .input('Debit_Ledger_Id', debit_ledger)
@@ -417,7 +475,33 @@ const PaymentMaster = () => {
                     WHERE payment_id = @payment_id;`
                 );
 
-            await updateChildTables;
+            // deleting existing staffs
+            await new sql.Request(transaction)
+                .input('pay_id', pay_id)
+                .query(`DELETE FROM tbl_Payment_Staff_Involved WHERE payment_id = @pay_id`)
+
+            if (Array.isArray(staffDetails) && staffDetails.length > 0) {
+                for (const staff of staffDetails) {
+
+                    const request = new sql.Request(transaction)
+                        .input('payment_id', pay_id)
+                        .input('Emp_Id', toNumber(staff?.Emp_Id))
+                        .input('Emp_Type_Id', toNumber(staff?.Emp_Type_Id))
+                        .query(`
+                            INSERT INTO tbl_Payment_Staff_Involved (
+                                payment_id, Emp_Id, Emp_Type_Id
+                            ) VALUES (
+                                @payment_id, @Emp_Id, @Emp_Type_Id
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Staff row in journal creation');
+                    }
+                }
+            }
 
             await transaction.commit();
 

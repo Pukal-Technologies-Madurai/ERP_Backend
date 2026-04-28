@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { number, z } from "zod";
 
 export const toArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
 
@@ -85,6 +85,14 @@ export const EditJournalSchema = z
         BranchId: zNumber("BranchId").optional(),
         CreatedBy: zPositive("CreatedBy"),
         Entries: z.array(EntrySchema).min(1, { message: "Entries is required" }),
+        journalStaffInvolved: z.array(
+            z.object({
+                Emp_Id: zPositive("Emp_Id"),
+                Emp_Type_Id: zPositive("Emp_Type_Id"),
+            })
+        ).optional().default([]),
+        approved_by: number().optional().nullable().default(null),
+        cost_center_mapping: number().optional().nullable().default(0),
     })
     .superRefine((data, ctx) => {
         const hasDr = data.Entries.some((e) => e.DrCr === "Dr");
@@ -135,6 +143,15 @@ export const CreateJournalSchema = z
         CreatedBy: zPositive("CreatedBy"),
 
         Entries: z.array(EntrySchema).min(1, { message: "Entries is required" }),
+        
+        journalStaffInvolved: z.array(
+            z.object({
+                Emp_Id: zPositive("Emp_Id"),
+                Emp_Type_Id: zPositive("Emp_Type_Id"),
+            })
+        ).optional().default([]),
+        approved_by: number().optional().nullable().default(null),
+        cost_center_mapping: number().optional().nullable().default(0),
     })
     .superRefine((data, ctx) => {
         const hasDr = data.Entries.some((e) => e.DrCr === "Dr");
