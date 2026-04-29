@@ -3,7 +3,7 @@ import LoginController from '../controller/Authorization/login.mjs';
 import appMenu from '../controller/Authorization/appMenu.mjs';
 import authenticateToken from '../middleware/auth.mjs';
 import branchRight from '../controller/Authorization/branchRight.mjs';
-import { getModuleConfiguration, postModuleConfiguration, putModuleConfiguration } from '../controller/Authorization/moduleConfiguration.mjs';
+import { getModuleRulesWithAccess, postModuleRules, putModuleRules, saveModuleRuleccess } from '../controller/Authorization/moduleConfiguration.mjs';
 
 const AuthorizationRouter = express.Router();
 
@@ -35,9 +35,11 @@ AuthorizationRouter.get('/userBranches', branchRight.getUserBranches);
 AuthorizationRouter.post('/userBranches', branchRight.modifyUserBranch)
 AuthorizationRouter.post('/userBranches/saveAll', branchRight.saveAllUserBranches);
 
-AuthorizationRouter.get('/moduleConfiguration', getModuleConfiguration);
-AuthorizationRouter.post('/moduleConfiguration', postModuleConfiguration);
-AuthorizationRouter.put('/moduleConfiguration', putModuleConfiguration);
+AuthorizationRouter.get('/moduleRules', getModuleRulesWithAccess);
+AuthorizationRouter.post('/moduleRules', postModuleRules);
+AuthorizationRouter.put('/moduleRules', putModuleRules);
+
+AuthorizationRouter.post('/moduleRules/access', saveModuleRuleccess);
 
 
 AuthorizationRouter.post('/getUserTypeAuth',LoginController.getUserTypeAuth)

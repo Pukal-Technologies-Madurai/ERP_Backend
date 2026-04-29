@@ -5,7 +5,7 @@ dotenv.config();
 
 const userPortal = process.env.USERPORTALDB
 
-export const getModuleConfiguration = async (req, res) => {
+export const getModuleRulesWithAccess = async (req, res) => {
     try {
         if (!userPortal) {
             return failed(res, 'User Portal DB not configured')
@@ -37,7 +37,7 @@ export const getModuleConfiguration = async (req, res) => {
     }
 }
 
-export const postModuleConfiguration = async (req, res) => {
+export const postModuleRules = async (req, res) => {
     try {
         const { moduleName, ruleName, discription, ruleValue, createdBy } = req.body;
         if (!moduleName || !ruleName || !ruleValue || !createdBy) {
@@ -65,7 +65,7 @@ export const postModuleConfiguration = async (req, res) => {
     }
 }
 
-export const putModuleConfiguration = async (req, res) => {
+export const putModuleRules = async (req, res) => {
     try {
         const { id, moduleName, ruleName, discription, ruleValue } = req.body;
         if (!id || !moduleName || !ruleName || !ruleValue) {
@@ -94,3 +94,36 @@ export const putModuleConfiguration = async (req, res) => {
     }
 }
 
+export const saveModuleRuleccess = async (req, res) => {
+    const transaction = new sql.Transaction();
+    try {
+        const { rulesAccess = [] } = req.body;
+        await transaction.begin();
+
+        for (const rule of rulesAccess) {
+            const { ruleId, getOption = 0, createOption = 0, updateOption = 0, deleteOption = 0 } = rule;
+
+            await new sql.Request(transaction)
+                .input('ruleId', sql.UniqueIdentifier, ruleId)
+                .input('getOption', sql.Int, getOption)
+                .input('createOption', sql.Int, createOption)
+                .input('updateOption', sql.Int, updateOption)
+                .input('deleteOption', sql.Int, deleteOption)
+                .input('modifiedAt', sql.DateTimeOffset, new Date())
+                .query(`
+                    DELETE FROM tbl_Module_Rules_Access WHERE ruleId = @ruleId;
+                    INSERT INTO tbl_Module_Rules_Access (
+                        ruleId, getOption, createOption, updateOption, deleteOption, modifiedAt
+                    ) VALUES (
+                        @ruleId, @getOption, @createOption, @updateOption, @deleteOption, @modifiedAt
+                    );`
+                );
+        }
+
+        await transaction.commit();
+        sentData(res, 'Rule access saved successfully');
+    } catch (e) {
+        await transaction.rollback();
+        servError(e, res)
+    }
+}

@@ -49,8 +49,10 @@ const user = () => {
                     LEFT JOIN tbl_Company_Master AS c ON c.Company_id = u.Company_Id
 			        LEFT JOIN tbl_ERP_Cost_Center AS ec ON ec.User_Id = u.UserId
 			        LEFT JOIN tbl_User_Type AS uct ON uct.Id = ec.User_Type
+			        LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = u.BranchId
                     WHERE 
-                        u.UDel_Flag = 0
+                        u.UDel_Flag = 0 
+                        AND u.UserId <> 0
                         ${checkIsNumber(UserTypeId) ? ' AND u.UserTypeId = @UserTypeId ' : ''}
                         ${checkIsNumber(BranchId) ? ' AND u.BranchId = @BranchId ' : ''}
                         ${checkIsNumber(UserId) ? ' AND u.UserId = @UserId ' : ''}
