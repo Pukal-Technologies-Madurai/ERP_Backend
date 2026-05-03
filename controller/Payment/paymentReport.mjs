@@ -1,7 +1,7 @@
 import sql from 'mssql';
 import { isEqualNumber, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
 import { sentData, servError } from '../../res.mjs';
-import { paymentCosingGet } from './dataDependency.mjs';
+import { paymentCosingGet, paymentIndirectExpencesGet } from './dataDependency.mjs';
 
 const PaymentReports = () => {
 
@@ -490,12 +490,53 @@ const PaymentReports = () => {
         }
     }
 
+    const paymentIndirectExpences = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(paymentIndirectExpencesGet);
+
+            const result = await request;
+
+            const [paymentGeneralInfo, paymentStaffs] = result.recordsets;
+
+            const indirectExpenses = paymentGeneralInfo.map(pgi => {
+                return {
+                    payId: pgi.payId,
+                    paymentDate: pgi.paymentDate,
+                    amount: toNumber(pgi.amount),
+                    paymentStatus: pgi.paymentStatus,
+                    paymentType: pgi.paymentType,
+                    narration: pgi.narration,
+                    groupId: pgi.groupId,
+                    groupNameGet: pgi.groupNameGet,
+                    accountId: pgi.accountId,
+                    accountNameGet: pgi.accountNameGet,
+                    creditAccountId: pgi.creditAccountId,
+                    creditAccountNameGet: pgi.creditAccountNameGet,
+                    createdByGet: pgi.createdByGet,
+                    approvedByGet: pgi.approvedByGet,
+                    staffInfo: paymentStaffs.filter(ps => isEqualNumber(ps.paymentId, pgi.payId))
+                }
+            }).filter(fil => fil.amount > 0);
+
+            sentData(res, indirectExpenses)
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getPendingPaymentReference,
         getAccountsTransaction,
         itemTotalExpenceWithStockGroup,
         paymentDue,
-        paymentDirectExpenses
+        paymentDirectExpenses,
+        paymentIndirectExpences
     }
 }
 

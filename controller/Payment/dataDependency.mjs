@@ -923,3 +923,70 @@ WHERE
 	AND COALESCE(prgi.PR_Status, '') <> 'Canceled'
 	AND pci.expence_value > 0
 GROUP BY pdi.PR_Id, pdi.Dest_Item_Id, pdi.Dest_Qty, pci.payment_id;`
+
+export const paymentIndirectExpencesGet = `
+DECLARE @groupFilter TABLE (groupId INT, groupName NVARCHAR(200), parantId INT);
+DECLARE @accountFilter TABLE (accId INT);
+-- getting expence groups
+WITH GroupHierarchy AS (
+    SELECT 
+        Group_Id,
+        Group_Name,
+        Parent_AC_id
+    FROM tbl_Accounting_Group
+    WHERE Group_Id = 28
+    UNION ALL
+    SELECT 
+        g.Group_Id,
+        g.Group_Name,
+        g.Parent_AC_id
+    FROM tbl_Accounting_Group g
+    INNER JOIN GroupHierarchy gh ON g.Parent_AC_id = gh.Group_Id
+)
+INSERT INTO @groupFilter (
+	groupId, groupName, parantId
+)
+SELECT Group_Id, Group_Name, Parent_AC_id
+FROM GroupHierarchy;
+-- getting expence accounts
+INSERT INTO @accountFilter (accId)
+SELECT a.Acc_Id
+FROM @groupFilter AS g
+JOIN tbl_Account_Master AS a ON a.Group_Id = g.groupId;
+-- *************************** payment general info ***************************
+SELECT 
+	pgi.pay_id AS payId,
+	pgi.payment_date AS paymentDate,
+	pgi.debit_ledger AS accountId,
+	am.Account_name AS accountNameGet,
+	agm.Group_Id AS groupId,
+	agm.Group_Name AS groupNameGet,
+	pgi.credit_ledger AS creditAccountId,
+	cam.Account_name AS creditAccountNameGet,
+	pgi.remarks AS narration,
+	pgi.transaction_type AS paymentType,
+	pgi.debit_amount AS amount,
+	sm.Status AS paymentStatus,
+	cb.Name AS createdByGet,
+	ab.Name AS approvedByGet
+FROM tbl_Payment_General_Info AS pgi
+JOIN @accountFilter AS af ON af.accId = pgi.debit_ledger
+JOIN tbl_Account_Master AS am ON am.Acc_Id = pgi.debit_ledger
+LEFT JOIN tbl_Account_Master AS cam ON cam.Acc_Id = pgi.credit_ledger
+JOIN tbl_Accounting_Group AS agm ON agm.Group_Id = am.Group_Id
+LEFT JOIN tbl_Users AS cb ON cb.UserId = pgi.created_by
+LEFT JOIN tbl_Users AS ab ON ab.UserId = pgi.approved_by
+LEFT JOIN tbl_Status AS sm ON sm.Status_Id = pgi.status
+WHERE pgi.payment_date BETWEEN @Fromdate AND @Todate AND pgi.status <> 0;
+--  *************************** payment involved staffs ***************************
+SELECT
+	psi.payment_id AS paymentId,
+    psi.Emp_Id AS staffId,
+	psi.Emp_Type_Id AS staffTypeId,
+    c.Cost_Center_Name AS staffNameGet,
+    cc.Cost_Category AS staffTypeGet
+FROM tbl_Payment_Staff_Involved AS psi
+JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = psi.payment_id
+LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = psi.Emp_Id
+LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = psi.Emp_Type_Id
+WHERE pgi.payment_date BETWEEN @Fromdate AND @Todate AND pgi.status <> 0;`
