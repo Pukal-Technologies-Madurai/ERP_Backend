@@ -39,6 +39,7 @@ PaymentRouter.get('/reports/pendingReference', paymentReport.getPendingPaymentRe
 PaymentRouter.get('/reports/accountsTransaction', paymentReport.getAccountsTransaction);
 PaymentRouter.get('/reports/itemExpences', paymentReport.itemTotalExpenceWithStockGroup);
 PaymentRouter.get('/reports/paymentDue', paymentReport.paymentDue);
+PaymentRouter.get('/reports/paymentDirectExpenses', paymentReport.paymentDirectExpenses);
 
 PaymentRouter.post('/debtorsCreditors', debtorsCreditors.getDebtorsCrditors)
 PaymentRouter.get('/getDebtorsCreditors', debtorsCreditors.getDebtorsCreditorsId);

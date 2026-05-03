@@ -805,3 +805,121 @@ const PaymentDataDependency = () => {
 }
 
 export default PaymentDataDependency();
+
+export const paymentCosingGet = `
+DECLARE @groupFilter TABLE (groupId INT, groupName NVARCHAR(200), parantId INT);
+DECLARE @accountFilter TABLE (accId INT);
+-- getting expence groups
+WITH GroupHierarchy AS (
+    SELECT 
+        Group_Id,
+        Group_Name,
+        Parent_AC_id
+    FROM tbl_Accounting_Group
+    WHERE Group_Id = 26
+    UNION ALL
+    SELECT 
+        g.Group_Id,
+        g.Group_Name,
+        g.Parent_AC_id
+    FROM tbl_Accounting_Group g
+    INNER JOIN GroupHierarchy gh ON g.Parent_AC_id = gh.Group_Id
+)
+INSERT INTO @groupFilter (
+	groupId, groupName, parantId
+)
+SELECT Group_Id, Group_Name, Parent_AC_id
+FROM GroupHierarchy;
+-- getting expence accounts
+INSERT INTO @accountFilter (accId)
+SELECT a.Acc_Id
+FROM @groupFilter AS g
+JOIN tbl_Account_Master AS a ON a.Group_Id = g.groupId;
+-- *************************** payment costing details ***************************
+SELECT 
+	pci.payment_id AS payId,
+	pci.pay_bill_id AS payBillId,
+	pgi.payment_date AS paymentDate,
+	pci.item_id AS itemId,
+	pci.item_name AS itemName,
+	pci.Debit_Ledger_Id AS accountId,
+	am.Account_name AS accountNameGet,
+	agm.Group_Id AS groupId,
+	agm.Group_Name AS groupNameGet,
+	pci.JournalBillType AS costingType,
+	pgi.remarks AS narration,
+	pgi.transaction_type AS paymentType,
+	pgi.debit_amount AS paymentAmount,
+	sm.Status AS paymentStatus,
+	cb.Name AS createdByGet,
+	ab.Name AS approvedByGet
+FROM tbl_Payment_General_Info AS pgi
+JOIN tbl_Payment_Costing_Info AS pci ON pci.payment_id = pgi.pay_id
+JOIN @accountFilter AS af ON af.accId = pci.Debit_Ledger_Id
+JOIN tbl_Account_Master AS am ON am.Acc_Id = pci.Debit_Ledger_Id
+JOIN tbl_Accounting_Group AS agm ON agm.Group_Id = am.Group_Id
+LEFT JOIN tbl_Users AS cb ON cb.UserId = pgi.created_by
+LEFT JOIN tbl_Users AS ab ON ab.UserId = pgi.approved_by
+LEFT JOIN tbl_Status AS sm ON sm.Status_Id = pgi.status
+WHERE pgi.payment_date BETWEEN @Fromdate AND @Todate AND pgi.status <> 0
+--  *************************** payment costing mapping (Processing) ***************************
+SELECT 
+	pgi.pay_id AS payId,
+	pgi.debit_amount AS debitAmount,
+	COALESCE(SUM(pci.expence_value), 0) AS expenceValue
+FROM tbl_Payment_Costing_Info AS pci
+JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pci.payment_id
+WHERE pgi.payment_date BETWEEN @Fromdate AND @Todate AND pgi.status <> 0
+GROUP BY pgi.pay_id, pgi.debit_amount
+--  *************************** payment involved staffs ***************************
+SELECT
+	psi.payment_id AS paymentId,
+    psi.Emp_Id AS staffId,
+	psi.Emp_Type_Id AS staffTypeId,
+    c.Cost_Center_Name AS staffNameGet,
+    cc.Cost_Category AS staffTypeGet
+FROM tbl_Payment_Staff_Involved AS psi
+JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = psi.payment_id
+LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = psi.Emp_Id
+LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = psi.Emp_Type_Id
+WHERE pgi.payment_date BETWEEN @Fromdate AND @Todate AND pgi.status <> 0
+--  *************************** quantity and price of costing (Trip Sheet) ***************************
+SELECT 
+	td.Trip_Id AS pay_bill_id,
+	ta.Product_Id AS item_id,
+	COALESCE(ta.QTY, 0) AS itemQuantity,
+	tm.BillType AS JournalBillType, -- MATERIAL INWARD OR OTHER GODOWN
+	COALESCE(SUM(pci.expence_value), 0) AS PaidAmount,
+	pci.payment_id
+FROM tbl_Trip_Details AS td
+JOIN tbl_Trip_Arrival AS ta ON ta.Arr_Id = td.Arrival_Id
+JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = td.Trip_Id
+JOIN tbl_Payment_Costing_Info AS pci ON 
+	pci.pay_bill_id = td.Trip_Id 
+	AND pci.item_id = ta.Product_Id
+	AND (pci.JournalBillType = 'MATERIAL INWARD' OR pci.JournalBillType = 'OTHER GODOWN')
+WHERE 
+	pci.payment_date BETWEEN @Fromdate AND @Todate
+	AND tm.BillType IN ('MATERIAL INWARD', 'OTHER GODOWN')
+	AND COALESCE(tm.TripStatus, '') <> 'Canceled'
+	AND pci.expence_value > 0
+GROUP BY td.Trip_Id, ta.Product_Id, ta.QTY, tm.BillType, pci.payment_id
+--  *************************** quantity and price of costing (Processing) ***************************
+SELECT 
+	pdi.PR_Id AS pay_bill_id, 
+	pdi.Dest_Item_Id AS item_id,
+	COALESCE(pdi.Dest_Qty, 0) AS itemQuantity,
+	'PROCESSING' AS JournalBillType,
+	COALESCE(SUM(pci.expence_value), 0) AS PaidAmount,
+	pci.payment_id
+FROM tbl_Processing_Destin_Details AS pdi
+JOIN tbl_Processing_Gen_Info AS prgi ON prgi.PR_Id = pdi.PR_Id
+JOIN tbl_Payment_Costing_Info AS pci ON 
+	pci.pay_bill_id = pdi.PR_Id 
+	AND pci.item_id = pdi.Dest_Item_Id
+	AND pci.JournalBillType = 'PROCESSING'
+WHERE 
+	pci.payment_date BETWEEN @Fromdate AND @Todate
+	AND COALESCE(prgi.PR_Status, '') <> 'Canceled'
+	AND pci.expence_value > 0
+GROUP BY pdi.PR_Id, pdi.Dest_Item_Id, pdi.Dest_Qty, pci.payment_id;`

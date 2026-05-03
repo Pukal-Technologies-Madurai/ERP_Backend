@@ -1,6 +1,7 @@
 import sql from 'mssql';
-import { isEqualNumber, ISOString, toArray, toNumber } from '../../helper_functions.mjs';
+import { isEqualNumber, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
 import { sentData, servError } from '../../res.mjs';
+import { paymentCosingGet } from './dataDependency.mjs';
 
 const PaymentReports = () => {
 
@@ -421,11 +422,80 @@ const PaymentReports = () => {
         }
     }
 
+    const paymentDirectExpenses = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .query(paymentCosingGet);
+
+            const result = await request;
+
+            const [paymentCosting, paymentCostingMap, paymentStaffs, tripCosting, processingCosting] = result.recordsets;
+
+            const expenceGroups = Array.from(
+                new Map(
+                    paymentCosting.map(item => [
+                        item.groupId,
+                        { groupNameGet: item.groupNameGet, groupId: item.groupId }
+                    ])
+                ).values()
+            );
+
+            const productCostins = paymentCosting.map(pc => {
+                const istrip = !stringCompare(pc?.costingType, 'PROCESSING');
+
+                const costingValue = (istrip ?
+                    tripCosting.find(tc => (
+                        isEqualNumber(tc?.pay_bill_id, pc?.payBillId) && isEqualNumber(tc?.item_id, pc?.itemId) && isEqualNumber(tc?.payment_id, pc?.payId)
+                    )) :
+                    processingCosting.find(pr => (
+                        isEqualNumber(pr?.pay_bill_id, pc?.payBillId) && isEqualNumber(pr?.item_id, pc?.itemId) && isEqualNumber(pr?.payment_id, pc?.payId)
+                    ))) || {};
+                
+                const mappingValue = paymentCostingMap.find(pcm => isEqualNumber(pcm?.payId, pc?.payId)) || {}
+
+                return {
+                    payId: pc.payId,
+                    paymentDate: pc.paymentDate,
+                    itemId: pc.itemId,
+                    itemName: pc.itemName,
+                    quantity: toNumber(costingValue?.itemQuantity),
+                    amount: toNumber(costingValue?.PaidAmount),
+                    paymentStatus: pc.paymentStatus,
+                    paymentType: pc.paymentType,
+                    narration: pc.narration,
+                    groupId: pc.groupId,
+                    groupNameGet: pc.groupNameGet,
+                    accountId: pc.accountId,
+                    accountNameGet: pc.accountNameGet,
+                    costMapping: toNumber(costingValue?.PaidAmount) >= toNumber(mappingValue?.expenceValue),
+                    ...Object.fromEntries(expenceGroups.map(eGrp => {
+                        if (isEqualNumber(eGrp.groupId, pc.groupId)) {
+                            return [eGrp.groupNameGet, toNumber(costingValue?.PaidAmount)];
+                        } else {
+                            return [eGrp.groupNameGet, 0];
+                        }
+                    })),
+                    staffInfo: paymentStaffs.filter(ps => isEqualNumber(ps.paymentId, pc.payId))
+                }
+            }).filter(fil => fil.amount > 0);
+
+            sentData(res, productCostins, { expenceGroups })
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getPendingPaymentReference,
         getAccountsTransaction,
         itemTotalExpenceWithStockGroup,
-        paymentDue
+        paymentDue,
+        paymentDirectExpenses
     }
 }
 
