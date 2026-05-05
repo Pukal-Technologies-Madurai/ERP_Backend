@@ -4060,6 +4060,7 @@ ORDER BY llos.Pro_Id;
 
 
 
+
     return {
         getSalesInvoiceMobileFilter1,
         getSalesInvoiceMobileFilter2,
@@ -4072,6 +4073,7 @@ ORDER BY llos.Pro_Id;
         downloadGeneratedPdf,
         salesInvoiceWhatsapp,
         getInvoiceDetails
+      
     }
 }
 
