@@ -1280,11 +1280,11 @@ const getStockAdjustmentPending=async(req,res)=>{
 
         const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
         const toDate = Todate ? ISOString(Todate) : ISOString();
-
-        const result = await new sql.Request()
-            .input("Fromdate", fromDate)
-            .input("Todate", toDate)
-            .query(`EXEC Stock_Adjustment_Balance_Search @Fromdate, @Todate`);
+         
+       const result = await new sql.Request()
+    .input("fromDate", fromDate)
+    .input("toDate", toDate)
+    .query(`EXEC Stock_Adjustment_Balance_Search @Fromdate = @fromDate, @Todate = @toDate`);
 
         const recordset = result.recordset ?? [];
         if (!recordset.length) return noData(res);
@@ -1295,4 +1295,55 @@ const getStockAdjustmentPending=async(req,res)=>{
     }
 }
 
-export default { getInventoryReport,getStockAdjustment,createStockJournalAdjustment,updateStockJournalAdjustment,createLedgerOpeningBalance,createStockOpeningBalance,stockOpeningDetails,getLastObDate,getStockAdjustmentPending };
+
+const deleteStockAdjustment = async (req, res) => {
+    try {
+        const { Aj_id } = req.query; 
+         
+        if (!Aj_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Aj_id is required'    
+            });
+        }
+
+
+        const transaction = new sql.Transaction();
+        await transaction.begin();
+
+        try {
+         
+            await new sql.Request(transaction)
+                .input('Aj_id', sql.Int, Aj_id)
+                .query(`DELETE FROM tbl_Stock_Adjustment_Details WHERE Aj_id = @Aj_id`);
+
+           
+            await new sql.Request(transaction)
+                .input('Aj_id', sql.Int, Aj_id)
+                .query(`DELETE FROM tbl_Stock_Adjustment_Info WHERE Aj_id = @Aj_id`);
+
+   
+            await transaction.commit();
+
+            res.json({
+                success: true,
+                message: 'Stock adjustment deleted successfully from both tables'
+            });
+
+        } catch (error) {
+          
+            await transaction.rollback();
+            throw error;
+        }
+
+    } catch (error) {
+        console.error('Error deleting stock adjustment:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete stock adjustment',
+            error: error.message
+        });
+    }
+};
+
+export default { getInventoryReport,getStockAdjustment,createStockJournalAdjustment,updateStockJournalAdjustment,createLedgerOpeningBalance,createStockOpeningBalance,stockOpeningDetails,getLastObDate,getStockAdjustmentPending,deleteStockAdjustment };

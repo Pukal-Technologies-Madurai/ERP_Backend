@@ -2106,6 +2106,222 @@ const SaleOrder = () => {
         }
     };
 
+
+
+   const getSaleOrderList = async (req, res) => {
+        try {
+            const {
+                Retailer_Id,
+                Cancel_status,
+                Created_by,
+                Sales_Person_Id,
+                VoucherType,
+                OrderStatus,
+                Branch_Id,
+            } = req.query;
+
+            const Fromdate = req.query?.Fromdate
+                ? ISOString(req.query.Fromdate)
+                : ISOString();
+
+            const Todate = req.query?.Todate
+                ? ISOString(req.query.Todate)
+                : ISOString();
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
+                .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
+                .input('creater', checkIsNumber(Created_by) ? Created_by : null)
+                .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
+                .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
+                .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null);
+
+            const result = await request.query(`
+            /* ================================
+               STEP 1 : FILTER SALES ORDERS
+            ================================= */
+            DECLARE @FilteredOrders TABLE (So_Id INT);
+            INSERT INTO @FilteredOrders (So_Id)
+            SELECT so.So_Id
+            FROM tbl_Sales_Order_Gen_Info so
+            WHERE 
+                CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
+                AND (@retailer IS NULL OR so.Retailer_Id = @retailer)
+                AND (@cancel IS NULL OR so.Cancel_status = @cancel)
+                AND (@creater IS NULL OR so.Created_by = @creater)
+                AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
+                AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
+                AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id);
+            /* ================================
+               STEP 2 : SALES ORDER HEADER
+            ================================= */
+            SELECT 
+                so.*,
+                COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+                COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+            FROM tbl_Sales_Order_Gen_Info so
+            LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = so.Retailer_Id
+            LEFT JOIN tbl_Users sp ON sp.UserId = so.Sales_Person_Id
+            LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+            LEFT JOIN tbl_Users cb ON cb.UserId = so.Created_by
+            LEFT JOIN tbl_Voucher_Type v ON v.Vocher_Type_Id = so.VoucherType
+            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+            /* ================================
+               STEP 3 : ORDER PRODUCTS
+            ================================= */
+            SELECT 
+                si.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Order_Stock_Info si
+            LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = si.Item_Id
+            LEFT JOIN tbl_UOM u ON u.Unit_Id = si.Unit_Id
+            LEFT JOIN tbl_Brand_Master b ON b.Brand_Id = pm.Brand
+            WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+            /* ================================
+               STEP 4 : STAFF INVOLVED
+            ================================= */
+            SELECT 
+                sosi.So_Id,
+                sosi.Involved_Emp_Id,
+                sosi.Cost_Center_Type_Id,
+                c.Cost_Center_Name AS EmpName,
+                cc.Cost_Category AS EmpType
+            FROM tbl_Sales_Order_Staff_Info sosi
+            LEFT JOIN tbl_ERP_Cost_Center c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+            LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+            WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+            /* ================================
+               STEP 5 : DELIVERY HEADER
+            ================================= */
+            SELECT 
+                dgi.*,
+                rm.Retailer_Name,
+                bm.BranchName AS Branch_Name,
+                st.Status AS DeliveryStatusName,
+                COALESCE((
+                    SELECT SUM(collected_amount)
+                    FROM tbl_Sales_Receipt_Details_Info
+                    WHERE bill_id = dgi.Do_Id
+                ), 0) AS receiptsTotalAmount
+            FROM tbl_Sales_Delivery_Gen_Info dgi
+            LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = dgi.Retailer_Id
+            LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = dgi.Branch_Id
+            LEFT JOIN tbl_Status st ON st.Status_Id = dgi.Delivery_Status
+            WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+            /* ================================
+               STEP 6 : DELIVERY PRODUCTS
+            ================================= */
+            SELECT 
+                oi.*,
+                COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                COALESCE(u.Units, 'not available') AS UOM,
+                COALESCE(b.Brand_Name, 'not available') AS BrandGet
+            FROM tbl_Sales_Delivery_Stock_Info oi
+            LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = oi.Item_Id
+            LEFT JOIN tbl_UOM u ON u.Unit_Id = oi.Unit_Id
+            LEFT JOIN tbl_Brand_Master b ON b.Brand_Id = pm.Brand
+            WHERE oi.Delivery_Order_Id IN (
+                SELECT Do_Id
+                FROM tbl_Sales_Delivery_Gen_Info
+                WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+            );
+            /* ================================ 
+                STEP 7 : ALTERATION HISTORY
+            ================================= */
+            SELECT 
+                ah.*,
+                u.Name AS alterByGet
+            FROM tbl_Alteration_History AS ah
+            LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+            WHERE 
+                alteredTable = 'tbl_Sales_Order_Gen_Info' 
+                AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
+        `);
+
+            const [
+                OrderData,
+                ProductDetails,
+                StaffInvolved,
+                DeliveryData,
+                DeliveryItems,
+                AlterHistory
+            ] = result.recordsets.map(toArray);
+
+            if (!OrderData.length) return noData(res);
+
+            const resData = OrderData.map(order => {
+                const orderProducts = ProductDetails.filter(p =>
+                    isEqualNumber(p.Sales_Order_Id, order.So_Id)
+                );
+
+                const deliveryList = DeliveryData.filter(d =>
+                    isEqualNumber(d.So_No, order.So_Id)
+                );
+
+                const totalOrderedQty = orderProducts.reduce(
+                    (s, p) => s + toNumber(p.Bill_Qty), 0
+                );
+
+                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                    const items = DeliveryItems.filter(i =>
+                        isEqualNumber(i.Delivery_Order_Id, d.Do_Id)
+                    );
+                    return sum + items.reduce((s, i) => s + toNumber(i.Bill_Qty), 0);
+                }, 0);
+
+                const status =
+                    totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+
+                const alterHistory = AlterHistory.filter(ah =>
+                    isEqualNumber(ah.alteredRowId, order.So_Id)
+                );
+
+                return {
+                    ...order,
+                    OrderStatus: status,
+                    Products_List: orderProducts.map(p => ({
+                        ...p,
+                        ProductImageUrl: getImage("products", p.Product_Image_Name)
+                    })),
+                    Staff_Involved_List: StaffInvolved.filter(s =>
+                        isEqualNumber(s.So_Id, order.So_Id)
+                    ),
+                    ConvertedInvoice: deliveryList.map(d => ({
+                        ...d,
+                        InvoicedProducts: DeliveryItems
+                            .filter(i => isEqualNumber(i.Delivery_Order_Id, d.Do_Id))
+                            .map(p => ({
+                                ...p,
+                                ProductImageUrl: getImage("products", p.Product_Image_Name)
+                            }))
+                    })),
+                    alterHistoryDetails: alterHistory
+                };
+            });
+
+            const finalData = OrderStatus
+                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+                : resData;
+
+            dataFound(res, finalData);
+
+        } catch (err) {
+            servError(err, res);
+        }
+    };
+
+
+
     return {
         saleOrderCreation,
         getSaleOrder,
@@ -2118,7 +2334,8 @@ const SaleOrder = () => {
         updatesaleOrderWithPso,
         getSaleOrderMobile,
         saleOrderReport,
-        getSalesOrderPending
+        getSalesOrderPending,
+        getSaleOrderList
     }
 }
 
