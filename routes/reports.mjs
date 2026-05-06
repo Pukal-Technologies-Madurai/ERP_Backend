@@ -17,7 +17,7 @@ import templateMobile from '../controller/Reports/templateMobile.mjs';
 import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
     onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport
- ,StockValueGraph,StockValueReport,StaffBasedReport,costcenterList,StaffBasedReportLOS } from '../controller/Reports/externalAPI.mjs';
+ ,StockValueGraph,StockValueReport,StaffBasedReport,costcenterList,StaffBasedReportLOS,OnlinePaymentReport } from '../controller/Reports/externalAPI.mjs';
 import { MenuSettings, executeSP, saveReportSettings, getReportList, getReportEditData, updateReportSettings, getReportsByParent, executeReportByTemplate,deleteReport } from '../controller/Reports/reportsettings.mjs';
 
 const ReportRouter = express.Router();
@@ -212,5 +212,8 @@ ReportRouter.delete('/settings/deleteReport/:reportId', deleteReport);
 
 ReportRouter.get('/externalAPI/costCenter', costcenterList);
 ReportRouter.get('/externalAPI/staffbased', StaffBasedReportLOS);
+
+
+ReportRouter.get('/externalAPI/expenses', OnlinePaymentReport);
 
 export default ReportRouter;

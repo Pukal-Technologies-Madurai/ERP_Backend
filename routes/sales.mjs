@@ -132,4 +132,8 @@ SalesRouter.put('/salesReturn', salesRetrunEntry.updateSalesReturn);
 
 
 SalesRouter.post('/salesInvoice/Whatsapp',salesInvoice.salesInvoiceWhatsapp)
+
+
+SalesRouter.get('/salesOrder/list',salesOrder.getSaleOrderList)
+
 export default SalesRouter;
