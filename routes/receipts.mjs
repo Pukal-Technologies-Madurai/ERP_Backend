@@ -48,7 +48,9 @@ ReceiptsRouter.get('/receiptMaster/pendingSalesInvoiceReceipt/retailerBased', da
 ReceiptsRouter.get('/outstanding', paymentCollection.getOutStanding);
 
 ReceiptsRouter.get('/outStandingAbove',receiptReport.getOutstadingAbove)
-ReceiptsRouter.get('/outstandingOver',receiptReport.getoutstandingOver)
+ReceiptsRouter.get('/outstandingOver',receiptReport.getoutstandingOver);
+ReceiptsRouter.get('/chequeTransaction',receiptReport.getChequeTransction);
+
 // ReceiptsRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 
 

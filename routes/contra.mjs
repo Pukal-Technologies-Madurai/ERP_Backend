@@ -18,6 +18,7 @@ contraRouter.put(
 );
 
 contraRouter.get('/filtersValues', dependency.getFilterValues);
+contraRouter.get('/receiptReference', dependency.getReceiptReference);
 
 
 export default contraRouter;

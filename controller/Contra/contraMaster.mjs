@@ -91,6 +91,9 @@ const createContra = async (req, res) => {
             CreatedBy,
             Chequeno,
             TransactionType,
+            dr_cr = null,
+            bill_id = null,
+            bill_no = null,
         } = req.body || {};
 
         const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
@@ -186,6 +189,31 @@ const createContra = async (req, res) => {
         const ContraAutoId = ins?.recordset?.[0]?.ContraAutoId;
         if (!ContraAutoId) throw new Error("Failed to capture ContraAutoId");
 
+        if ((dr_cr === 'Dr' || dr_cr === 'Cr') && bill_id && bill_no) {
+            const createReference = new sql.Request(tx)
+                .input('contra_id', ContraId)
+                .input('contra_no', ContraVoucherNo)
+                .input('dr_cr', dr_cr)
+                .input('bill_id', bill_id)
+                .input('bill_no', bill_no)
+                .input('created_at', new Date())
+                .input('created_by', CreatedBy)
+                .input("BankDate", BankDate)
+                .query(`
+                    INSERT INTO tbl_Contra_Bill_Info (
+                        contra_id, contra_no, dr_cr, bill_id, bill_no, created_at, created_by
+                    ) VALUES (
+                        @contra_id, @contra_no, @dr_cr, @bill_id, @bill_no, @created_at, @created_by
+                    );
+                    UPDATE tbl_Receipt_General_Info
+                    SET bank_date = @BankDate
+                    WHERE receipt_id = @bill_id AND receipt_invoice_no = @bill_no;`
+                );
+
+            await createReference;
+        }
+
+
         await tx.commit();
 
         return success(res, "Contra Created", {
@@ -229,6 +257,10 @@ const editContra = async (req, res) => {
             BankName = '',
             Chequeno,
             TransactionType,
+            CreatedBy,
+            dr_cr = null,
+            bill_id = null,
+            bill_no = null
         } = req.body || {};
 
         const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
@@ -295,6 +327,29 @@ const editContra = async (req, res) => {
                     AlterId = @AlterId
                 WHERE ContraAutoId = @ContraAutoId;`
             );
+
+        if ((dr_cr === 'Dr' || dr_cr === 'Cr') && bill_id && bill_no) {
+            await new sql.Request(tx)
+                .input('contra_id', ContraId)
+                .input('contra_no', ContraVoucherNo)
+                .input('dr_cr', dr_cr)
+                .input('bill_id', bill_id)
+                .input('bill_no', bill_no)
+                .input('created_at', new Date())
+                .input('created_by', CreatedBy)
+                .input("BankDate", BankDate)
+                .query(`
+                    DELETE FROM tbl_Contra_Bill_Info WHERE contra_id = @contra_id;
+                    INSERT INTO tbl_Contra_Bill_Info (
+                        contra_id, contra_no, dr_cr, bill_id, bill_no, created_at, created_by
+                    ) VALUES (
+                        @contra_id, @contra_no, @dr_cr, @bill_id, @bill_no, @created_at, @created_by
+                    );
+                    UPDATE tbl_Receipt_General_Info
+                    SET bank_date = @BankDate
+                    WHERE receipt_id = @bill_id AND receipt_invoice_no = @bill_no;`
+                );
+        }
 
         await tx.commit();
 
