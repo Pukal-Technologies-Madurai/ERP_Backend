@@ -58,19 +58,30 @@ const getReceiptReference = async (req, res) => {
             .input('Fromdate', Fromdate)
             .input('Todate', Todate)
             .query(`
-            -- *********************************  RECEIPT FILTERS *********************************
+                DECLARE @accountFilter TABLE (accId INT);
+                WITH GroupHierarchy AS (
+                    SELECT Group_Id, Parent_AC_id
+                    FROM tbl_Accounting_Group
+                    WHERE Group_Id = 11 OR Group_Id = 22
+                    UNION ALL
+                    SELECT g.Group_Id, g.Parent_AC_id
+                    FROM tbl_Accounting_Group g
+                    JOIN GroupHierarchy gh ON g.Parent_AC_id = gh.Group_Id
+                )
+                INSERT INTO @accountFilter (accId)
+                SELECT Acc_Id
+                FROM tbl_Account_Master
+                WHERE Group_Id IN (SELECT Group_Id FROM GroupHierarchy);
+                -- *********************************  RECEIPT FILTERS *********************************
                 DECLARE @receiptFilter TABLE (receipt_id BIGINT PRIMARY KEY, receipt_number NVARCHAR(20));
                 INSERT INTO @receiptFilter (receipt_id, receipt_number)
                 SELECT DISTINCT rgi.receipt_id, rgi.receipt_invoice_no
                 FROM tbl_Receipt_General_Info AS rgi
-                JOIN tbl_Receipt_Bill_Info AS rbi ON rbi.receipt_id = rgi.receipt_id
-                JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
+                JOIN @accountFilter AS debAcc ON debAcc.accId = rgi.debit_ledger
                 WHERE 
                 	rgi.receipt_date BETWEEN @Fromdate AND @Todate 
-                	AND rgi.status <> 0
-                	AND (debAcc.Group_Id = 11 OR debAcc.Group_Id = 22)
-                	AND rbi.JournalBillType = 'SALES RECEIPT';
-            -- ********************************* getting receipts *********************************
+                	AND rgi.status <> 0;
+                 -- ********************************* getting receipts *********************************
                 SELECT
                 	rgi.receipt_id,
                 	rgi.receipt_invoice_no,
