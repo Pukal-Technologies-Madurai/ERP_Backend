@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { servError, sentData, invalidInput, } from '../../res.mjs';
-import { isEqualNumber, ISOString, stringCompare } from '../../helper_functions.mjs';
+import { isEqualNumber, ISOString, isValidNumber, stringCompare } from '../../helper_functions.mjs';
 
 const ReceiptReport = () => {
 
@@ -537,10 +537,12 @@ ORDER BY [Above 30 Pending Amt] ASC
         try {
             const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
             const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+            const debitAccount = req.query?.debitAccount || null
 
             const request = new sql.Request()
                 .input('Fromdate', Fromdate)
                 .input('Todate', Todate)
+                .input('debitAccount', debitAccount)
                 .query(`
                 -- ********************************* account filter  *********************************
                     DECLARE @accountFilter TABLE (accId INT);
@@ -556,7 +558,9 @@ ORDER BY [Above 30 Pending Amt] ASC
                     INSERT INTO @accountFilter (accId)
                     SELECT Acc_Id
                     FROM tbl_Account_Master
-                    WHERE Group_Id IN (SELECT Group_Id FROM GroupHierarchy);
+                    WHERE 
+                        Group_Id IN (SELECT Group_Id FROM GroupHierarchy)
+                        ${isValidNumber(debitAccount) ? ` AND Acc_Id = @debitAccount ` : ''};
                 -- *********************************  RECEIPT FILTERS *********************************
                     DECLARE @receiptFilter TABLE (receipt_id BIGINT PRIMARY KEY, receipt_number NVARCHAR(20));
                     INSERT INTO @receiptFilter (receipt_id, receipt_number)

@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { dataFound, sentData, servError } from '../../res.mjs';
-import { ISOString, toArray } from '../../helper_functions.mjs';
+import { checkIsNumber, ISOString, isValidNumber, toArray } from '../../helper_functions.mjs';
 
 
 const getFilterValues = async (req, res) => {
@@ -53,10 +53,12 @@ const getReceiptReference = async (req, res) => {
     try {
         const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
         const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+        const accId = req.query?.accId ? Number(req.query?.accId) : null;
 
         const request = new sql.Request()
             .input('Fromdate', Fromdate)
             .input('Todate', Todate)
+            .input('accId', accId)
             .query(`
                 DECLARE @accountFilter TABLE (accId INT);
                 WITH GroupHierarchy AS (
@@ -80,7 +82,8 @@ const getReceiptReference = async (req, res) => {
                 JOIN @accountFilter AS debAcc ON debAcc.accId = rgi.debit_ledger
                 WHERE 
                 	rgi.receipt_date BETWEEN @Fromdate AND @Todate 
-                	AND rgi.status <> 0;
+                	AND rgi.status <> 0
+                    ${isValidNumber(accId) ? ` AND rgi.debit_ledger = @accId ` : ``}
                  -- ********************************* getting receipts *********************************
                 SELECT
                 	rgi.receipt_id,
@@ -92,8 +95,10 @@ const getReceiptReference = async (req, res) => {
                 	rgi.check_no,
                 	rgi.check_date,
                 	rgi.bank_date,
+                    rgi.bank_name,
                 	rgi.debit_amount,
                 	rgi.credit_amount,
+                    rgi.transaction_type,
                 	vm.Voucher_Type AS voucherTypeGet,
                 	debAcc.Account_name AS debitAccountGet,
                 	creAcc.Account_name AS creditAccountGet
@@ -121,7 +126,35 @@ const getReceiptReference = async (req, res) => {
     }
 }
 
+const getChequeAccounts = async (req, res) => {
+    try {
+        const request = new sql.Request()
+            .query(`
+                WITH GroupHierarchy AS (
+                    SELECT Group_Id, Parent_AC_id
+                    FROM tbl_Accounting_Group
+                    WHERE Group_Id = 11 OR Group_Id = 22
+                    UNION ALL
+                    SELECT g.Group_Id, g.Parent_AC_id
+                    FROM tbl_Accounting_Group g
+                    JOIN GroupHierarchy gh ON g.Parent_AC_id = gh.Group_Id
+                )
+                SELECT 
+                    Acc_Id AS value, Account_Name AS label
+                FROM tbl_Account_Master
+                WHERE Group_Id IN (SELECT Group_Id FROM GroupHierarchy);
+            `);
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
 export default {
     getFilterValues,
-    getReceiptReference
+    getReceiptReference,
+    getChequeAccounts
 }
