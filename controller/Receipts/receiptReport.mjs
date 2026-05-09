@@ -590,7 +590,8 @@ ORDER BY [Above 30 Pending Amt] ASC
                     LEFT JOIN tbl_Voucher_Type AS vm ON vm.Vocher_Type_Id = rgi.receipt_voucher_type_id
                     LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
                     LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = rgi.credit_ledger
-                    JOIN @receiptFilter AS rfltr ON rfltr.receipt_id = rgi.receipt_id;
+                    JOIN @receiptFilter AS rfltr ON rfltr.receipt_id = rgi.receipt_id
+                    ORDER BY rgi.receipt_date;
                 -- ********************************* receipt references *********************************
                     SELECT 
                     	rbi.receipt_id,

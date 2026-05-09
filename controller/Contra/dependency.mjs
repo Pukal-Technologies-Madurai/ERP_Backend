@@ -115,7 +115,8 @@ const getReceiptReference = async (req, res) => {
                 		cgi.ContraStatus <> 0
                 		AND cbi.bill_id = rgi.receipt_id 
                 		AND cbi.bill_no = rgi.receipt_invoice_no
-                );`
+                )
+                ORDER BY rgi.receipt_date DESC;`
             );
 
         const result = await request;
