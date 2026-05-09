@@ -446,3 +446,34 @@ export const OnlinePaymentReport = async (req, res) => {
         servError(error, res);
     }
 };
+
+
+export const costingReport = async (req, res) => {
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Payment_Costing_VW @Fromdate, @Todate`);
+
+        const [ItemSummary, Accountgroup] = result.recordsets || [];
+
+        if (!ItemSummary || ItemSummary.length === 0) {
+            return noData(res);
+        }
+
+        dataFound(res, {
+            ItemSummary,
+            Accountgroup
+        });
+
+    } catch (error) {
+        servError(error, res);
+
+    }
+
+};
