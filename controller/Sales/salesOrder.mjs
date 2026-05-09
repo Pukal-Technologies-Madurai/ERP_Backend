@@ -2108,37 +2108,27 @@ const SaleOrder = () => {
 
 
 
-   const getSaleOrderList = async (req, res) => {
-        try {
-            const {
-                Retailer_Id,
-                Cancel_status,
-                Created_by,
-                Sales_Person_Id,
-                VoucherType,
-                OrderStatus,
-                Branch_Id,
-            } = req.query;
+const getSaleOrderList = async (req, res) => {
+    try {
+        const {
+            Retailer_Id,
+            Cancel_status,
+            Created_by,
+            Sales_Person_Id,
+            VoucherType,
+            OrderStatus,
+            Branch_Id,
+        } = req.query;
 
-            const Fromdate = req.query?.Fromdate
-                ? ISOString(req.query.Fromdate)
-                : ISOString();
+        const request = new sql.Request()
+            .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
+            .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
+            .input('creater', checkIsNumber(Created_by) ? Created_by : null)
+            .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
+            .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
+            .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null);
 
-            const Todate = req.query?.Todate
-                ? ISOString(req.query.Todate)
-                : ISOString();
-
-            const request = new sql.Request()
-                .input('Fromdate', Fromdate)
-                .input('Todate', Todate)
-                .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
-                .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
-                .input('creater', checkIsNumber(Created_by) ? Created_by : null)
-                .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
-                .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
-                .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null);
-
-            const result = await request.query(`
+        const result = await request.query(`
             /* ================================
                STEP 1 : FILTER SALES ORDERS
             ================================= */
@@ -2147,8 +2137,7 @@ const SaleOrder = () => {
             SELECT so.So_Id
             FROM tbl_Sales_Order_Gen_Info so
             WHERE 
-                CONVERT(DATE, so.So_Date) BETWEEN CONVERT(DATE, @Fromdate) AND CONVERT(DATE, @Todate)
-                AND (@retailer IS NULL OR so.Retailer_Id = @retailer)
+                (@retailer IS NULL OR so.Retailer_Id = @retailer)
                 AND (@cancel IS NULL OR so.Cancel_status = @cancel)
                 AND (@creater IS NULL OR so.Created_by = @creater)
                 AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
@@ -2248,77 +2237,77 @@ const SaleOrder = () => {
                 AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
         `);
 
-            const [
-                OrderData,
-                ProductDetails,
-                StaffInvolved,
-                DeliveryData,
-                DeliveryItems,
-                AlterHistory
-            ] = result.recordsets.map(toArray);
+        const [
+            OrderData,
+            ProductDetails,
+            StaffInvolved,
+            DeliveryData,
+            DeliveryItems,
+            AlterHistory
+        ] = result.recordsets.map(toArray);
 
-            if (!OrderData.length) return noData(res);
+        if (!OrderData.length) return noData(res);
 
-            const resData = OrderData.map(order => {
-                const orderProducts = ProductDetails.filter(p =>
-                    isEqualNumber(p.Sales_Order_Id, order.So_Id)
+        const resData = OrderData.map(order => {
+            const orderProducts = ProductDetails.filter(p =>
+                isEqualNumber(p.Sales_Order_Id, order.So_Id)
+            );
+
+            const deliveryList = DeliveryData.filter(d =>
+                isEqualNumber(d.So_No, order.So_Id)
+            );
+
+            const totalOrderedQty = orderProducts.reduce(
+                (s, p) => s + toNumber(p.Bill_Qty), 0
+            );
+
+            const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                const items = DeliveryItems.filter(i =>
+                    isEqualNumber(i.Delivery_Order_Id, d.Do_Id)
                 );
+                return sum + items.reduce((s, i) => s + toNumber(i.Bill_Qty), 0);
+            }, 0);
 
-                const deliveryList = DeliveryData.filter(d =>
-                    isEqualNumber(d.So_No, order.So_Id)
-                );
+            const status =
+                totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
 
-                const totalOrderedQty = orderProducts.reduce(
-                    (s, p) => s + toNumber(p.Bill_Qty), 0
-                );
+            const alterHistory = AlterHistory.filter(ah =>
+                isEqualNumber(ah.alteredRowId, order.So_Id)
+            );
 
-                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-                    const items = DeliveryItems.filter(i =>
-                        isEqualNumber(i.Delivery_Order_Id, d.Do_Id)
-                    );
-                    return sum + items.reduce((s, i) => s + toNumber(i.Bill_Qty), 0);
-                }, 0);
+            return {
+                ...order,
+                OrderStatus: status,
+                Products_List: orderProducts.map(p => ({
+                    ...p,
+                    ProductImageUrl: getImage("products", p.Product_Image_Name)
+                })),
+                Staff_Involved_List: StaffInvolved.filter(s =>
+                    isEqualNumber(s.So_Id, order.So_Id)
+                ),
+                ConvertedInvoice: deliveryList.map(d => ({
+                    ...d,
+                    InvoicedProducts: DeliveryItems
+                        .filter(i => isEqualNumber(i.Delivery_Order_Id, d.Do_Id))
+                        .map(p => ({
+                            ...p,
+                            ProductImageUrl: getImage("products", p.Product_Image_Name)
+                        }))
+                })),
+                alterHistoryDetails: alterHistory
+            };
+        });
 
-                const status =
-                    totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
+        const finalData = OrderStatus
+            ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+            : resData;
 
-                const alterHistory = AlterHistory.filter(ah =>
-                    isEqualNumber(ah.alteredRowId, order.So_Id)
-                );
+        dataFound(res, finalData);
 
-                return {
-                    ...order,
-                    OrderStatus: status,
-                    Products_List: orderProducts.map(p => ({
-                        ...p,
-                        ProductImageUrl: getImage("products", p.Product_Image_Name)
-                    })),
-                    Staff_Involved_List: StaffInvolved.filter(s =>
-                        isEqualNumber(s.So_Id, order.So_Id)
-                    ),
-                    ConvertedInvoice: deliveryList.map(d => ({
-                        ...d,
-                        InvoicedProducts: DeliveryItems
-                            .filter(i => isEqualNumber(i.Delivery_Order_Id, d.Do_Id))
-                            .map(p => ({
-                                ...p,
-                                ProductImageUrl: getImage("products", p.Product_Image_Name)
-                            }))
-                    })),
-                    alterHistoryDetails: alterHistory
-                };
-            });
-
-            const finalData = OrderStatus
-                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
-                : resData;
-
-            dataFound(res, finalData);
-
-        } catch (err) {
-            servError(err, res);
-        }
-    };
+    } catch (err) {
+        servError(err, res);
+    }
+};
 
 
 
