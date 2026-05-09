@@ -2118,6 +2118,8 @@ const getSaleOrderList = async (req, res) => {
             VoucherType,
             OrderStatus,
             Branch_Id,
+            FromDate,
+            ToDate
         } = req.query;
 
         const request = new sql.Request()
@@ -2126,7 +2128,9 @@ const getSaleOrderList = async (req, res) => {
             .input('creater', checkIsNumber(Created_by) ? Created_by : null)
             .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
             .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
-            .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null);
+            .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
+            .input('FromDate', FromDate)
+            .input('ToDate', ToDate);
 
         const result = await request.query(`
             /* ================================
@@ -2142,7 +2146,9 @@ const getSaleOrderList = async (req, res) => {
                 AND (@creater IS NULL OR so.Created_by = @creater)
                 AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
                 AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
-                AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id);
+                AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
+                AND (@FromDate IS NULL OR so.Created_on >= @FromDate)
+                AND (@ToDate IS NULL OR so.Created_on <= @ToDate);
             /* ================================
                STEP 2 : SALES ORDER HEADER
             ================================= */
