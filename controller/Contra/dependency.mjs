@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { dataFound, sentData, servError } from '../../res.mjs';
-import { checkIsNumber, ISOString, isValidNumber, toArray } from '../../helper_functions.mjs';
+import { ISOString, isValidNumber, toArray } from '../../helper_functions.mjs';
 
 
 const getFilterValues = async (req, res) => {
@@ -86,10 +86,10 @@ const getReceiptReference = async (req, res) => {
                     ${isValidNumber(accId) ? ` AND rgi.debit_ledger = @accId ` : ``}
                  -- ********************************* getting receipts *********************************
                 SELECT
-                	rgi.receipt_id,
-                	rgi.receipt_invoice_no,
-                	rgi.receipt_date,
-                	rgi.receipt_voucher_type_id,
+                	rgi.receipt_id AS uniqueId,
+                	rgi.receipt_invoice_no AS uniqueNumber,
+                	rgi.receipt_date AS entryDate,
+                	rgi.receipt_voucher_type_id AS voucherId,
                 	rgi.debit_ledger,
                 	rgi.credit_ledger,
                 	rgi.check_no,
@@ -101,7 +101,10 @@ const getReceiptReference = async (req, res) => {
                     rgi.transaction_type,
                 	vm.Voucher_Type AS voucherTypeGet,
                 	debAcc.Account_name AS debitAccountGet,
-                	creAcc.Account_name AS creditAccountGet
+                	creAcc.Account_name AS creditAccountGet,
+                    'Cr' AS dr_cr,
+                    rgi.credit_amount AS amount,
+                    creAcc.Account_name AS displayAccount
                 FROM tbl_Receipt_General_Info AS rgi
                 LEFT JOIN tbl_Voucher_Type AS vm ON vm.Vocher_Type_Id = rgi.receipt_voucher_type_id
                 LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
@@ -117,6 +120,88 @@ const getReceiptReference = async (req, res) => {
                 		AND cbi.bill_no = rgi.receipt_invoice_no
                 )
                 ORDER BY rgi.receipt_date DESC;`
+            );
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
+const getPaymentReference = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+        const accId = req.query?.accId ? Number(req.query?.accId) : null;
+
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
+            .input('accId', accId)
+            .query(`
+                DECLARE @accountFilter TABLE (accId INT);
+                WITH GroupHierarchy AS (
+                    SELECT Group_Id, Parent_AC_id
+                    FROM tbl_Accounting_Group
+                    WHERE Group_Id = 11 OR Group_Id = 22
+                    UNION ALL
+                    SELECT g.Group_Id, g.Parent_AC_id
+                    FROM tbl_Accounting_Group g
+                    JOIN GroupHierarchy gh ON g.Parent_AC_id = gh.Group_Id
+                )
+                INSERT INTO @accountFilter (accId)
+                SELECT Acc_Id
+                FROM tbl_Account_Master
+                WHERE Group_Id IN (SELECT Group_Id FROM GroupHierarchy);
+                -- *********************************  PAYMENT FILTERS *********************************
+                DECLARE @paymentFilter TABLE (pay_id BIGINT PRIMARY KEY, payment_number NVARCHAR(20));
+                INSERT INTO @paymentFilter (pay_id, payment_number)
+                SELECT DISTINCT pgi.pay_id, pgi.payment_invoice_no
+                FROM tbl_Payment_General_Info AS pgi
+                JOIN @accountFilter AS debAcc ON debAcc.accId = pgi.credit_ledger
+                WHERE 
+                	pgi.payment_date BETWEEN @Fromdate AND @Todate 
+                	AND pgi.status <> 0
+                    ${isValidNumber(accId) ? ` AND pgi.credit_ledger = @accId ` : ``}
+                 -- ********************************* getting payments *********************************
+                SELECT
+                	pgi.pay_id AS uniqueId,
+                	pgi.payment_invoice_no AS uniqueNumber,
+                	pgi.payment_date AS entryDate,
+                	pgi.payment_voucher_type_id AS voucherId,
+                	pgi.debit_ledger,
+                	pgi.credit_ledger,
+                	pgi.check_no,
+                	pgi.check_date,
+                	pgi.bank_date,
+                    pgi.bank_name,
+                	pgi.debit_amount,
+                	pgi.credit_amount,
+                    pgi.transaction_type,
+                	vm.Voucher_Type AS voucherTypeGet,
+                	debAcc.Account_name AS debitAccountGet,
+                	creAcc.Account_name AS creditAccountGet,
+                    'Dr' AS dr_cr,
+                    pgi.debit_amount AS amount,
+                    debAcc.Account_name AS displayAccount
+                FROM tbl_Payment_General_Info AS pgi
+                LEFT JOIN tbl_Voucher_Type AS vm ON vm.Vocher_Type_Id = pgi.payment_voucher_type_id
+                LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
+                LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
+                JOIN @paymentFilter AS pfltr ON pfltr.pay_id = pgi.pay_id
+                WHERE NOT EXISTS (
+                    SELECT 1
+                	FROM tbl_Contra_General_Info AS cgi 
+                	JOIN tbl_Contra_Bill_Info AS cbi ON cbi.contra_id = cgi.ContraId
+                	WHERE 
+                		cgi.ContraStatus <> 0
+                		AND cbi.bill_id = pgi.pay_id 
+                		AND cbi.bill_no = pgi.payment_invoice_no
+                		AND cbi.dr_cr = 'Dr'
+                )
+                ORDER BY pgi.payment_date DESC;`
             );
 
         const result = await request;
@@ -157,5 +242,6 @@ const getChequeAccounts = async (req, res) => {
 export default {
     getFilterValues,
     getReceiptReference,
+    getPaymentReference,
     getChequeAccounts
 }
