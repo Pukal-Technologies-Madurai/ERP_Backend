@@ -2147,8 +2147,8 @@ const getSaleOrderList = async (req, res) => {
                 AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
                 AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
                 AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
-                AND (@FromDate IS NULL OR so.Created_on >= @FromDate)
-                AND (@ToDate IS NULL OR so.Created_on <= @ToDate);
+                    AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
+    AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= CAST(@ToDate AS DATE));
             /* ================================
                STEP 2 : SALES ORDER HEADER
             ================================= */
