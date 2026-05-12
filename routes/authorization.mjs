@@ -18,7 +18,8 @@ AuthorizationRouter.get('/userAuthmobile', LoginController.mobileApplogin);
 AuthorizationRouter.get('/appMenu', authenticateToken, appMenu.newAppMenu);
 AuthorizationRouter.get('/newAppMenu', authenticateToken, appMenu.newAppMenu)
 
-AuthorizationRouter.get('/userRights', appMenu.getNewUserBasedRights);
+AuthorizationRouter.get('/userRights/userBased', appMenu.getNewUserBasedRights);
+AuthorizationRouter.get('/userRights', appMenu.getNewAuthBasedRights);
 AuthorizationRouter.post('/userRights', appMenu.newModifyUserRights);
 
 AuthorizationRouter.get('/userTypeRights', appMenu.getNewUserTypeBasedRights);

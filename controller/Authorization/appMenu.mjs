@@ -66,6 +66,46 @@ const appMenu = () => {
     }
 
     const getNewUserBasedRights = async (req, res) => {
+        
+        try {
+            const { UserId } = req.query;
+            if (!isValidNumber(UserId)) return invalidInput(res, 'UserId is required');
+            const result = await getUserBasedRights(UserId);
+
+            if (Array.isArray(result)) {
+                const mainMenu = result.filter(menu => isEqualNumber(menu.menu_type, 1)).sort((a, b) => a.display_order - b.display_order);
+                const subMenu = result.filter(menu => isEqualNumber(menu.menu_type, 2)).sort((a, b) => a.display_order - b.display_order);
+                const childMenu = result.filter(menu => isEqualNumber(menu.menu_type, 3)).sort((a, b) => a.display_order - b.display_order);
+                const subRoutings = result
+                    .filter(menu => isEqualNumber(menu.menu_type, 0))
+                    .sort((a, b) => a.parent_id - b.parent_id);
+
+                const nestedRoutes = buildRoutesTree(subRoutings);
+
+                const menuStrucre = mainMenu.map(main => ({
+                    ...main,
+                    SubMenu: subMenu.filter(sub => isEqualNumber(sub.parent_id, main.id)).map(sub => ({
+                        ...sub,
+                        ChildMenu: childMenu.filter(child => isEqualNumber(child.parent_id, sub.id)).map(child => ({
+                            ...child,
+                            SubRoutes: buildRoutesTree(subRoutings, child.id)
+                        })),
+                        SubRoutes: buildRoutesTree(subRoutings, sub.id)
+                    })),
+                    SubRoutes: buildRoutesTree(subRoutings, main.id)
+                }));
+
+                dataFound(res, menuStrucre, 'data Found', { subRoutings, nestedRoutes })
+            } else {
+                failed(res);
+            }
+        } catch (e) {
+            console.log(e)
+            servError(e, res)
+        }
+    }
+
+    const getNewAuthBasedRights = async (req, res) => {
         const Auth = req.header('Authorization');
 
         try {
@@ -360,6 +400,7 @@ const appMenu = () => {
     return {
         newAppMenu,
         getNewUserBasedRights,
+        getNewAuthBasedRights,
         newModifyUserRights,
         getNewUserTypeBasedRights,
         newModifyUserTypeRights,
