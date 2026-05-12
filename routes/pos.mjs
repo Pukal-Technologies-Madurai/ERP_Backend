@@ -31,5 +31,7 @@ PosRouter.get('/posGroupList',pos.getPosGroupDetails)
 PosRouter.get('/posProductList',pos.getAllProductsPos)
 
 PosRouter.get('/posProductWithStock',pos.getProductsWithStock)
+PosRouter.get('/retailerMasterOptRetailerId',pos.getRetailersOptRetailerId)
+
 export default PosRouter;
 

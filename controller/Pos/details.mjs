@@ -299,7 +299,6 @@ const posBranchController = () => {
             const offset = (page - 1) * limit;
             const search = req.query.search || '';
 
-            // Build base query
             let baseQuery = `
             SELECT 
                 Cost_Center_Id AS Broker_Id,
@@ -314,7 +313,6 @@ const posBranchController = () => {
             WHERE User_Type = 3
         `;
 
-            // Add search filter if provided
             if (search) {
                 const searchFilter = ` AND (Cost_Center_Name LIKE '%' + @search + '%' OR 
                                         Cost_Center_Id LIKE '%' + @search + '%')`;
@@ -323,12 +321,12 @@ const posBranchController = () => {
                 request.input('search', sql.NVarChar, search);
             }
 
-            // Get total count
+
             const countResult = await request.query(countQuery);
             const totalRecords = countResult.recordset[0].total;
             const totalPages = Math.ceil(totalRecords / limit);
 
-            // Add pagination to main query
+       
             baseQuery += `
             ORDER BY Cost_Center_Id
             OFFSET @offset ROWS
@@ -648,6 +646,134 @@ const getProductsWithStock = async (req, res) => {
               } 
 };
 
+
+const getRetailersOptRetailerId = async (req, res) => {
+    try {
+        const request = new sql.Request();
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 12;
+        const offset = (page - 1) * limit;
+        const search = req.query.search || '';
+        const customerId = req.query.Customer_Id || req.query.customerId || '';
+
+        let whereClause = 'WHERE 1=1';
+
+        
+        if (customerId) {
+            whereClause += ' AND r.Retailer_Id = @customerId';
+            request.input('customerId', sql.Int, parseInt(customerId));
+        }
+     
+        if (search) {
+            whereClause += ` AND (r.Retailer_Name LIKE '%' + @search + '%' OR 
+                                  r.Contact_Person LIKE '%' + @search + '%' OR
+                                  r.Mobile_No LIKE '%' + @search + '%')`;
+            request.input('search', sql.NVarChar, search);
+        }
+
+      
+        if (customerId) {
+            const query = `
+                SELECT 
+                    r.Retailer_Id AS Customer_Id,
+                    r.Retailer_Name AS Short_Name,
+                    r.Contact_Person AS Billl_Name,
+                    r.Mobile_No,
+                    r.Reatailer_Address AS Address,
+                    r.Reatailer_City AS City,
+                    ISNULL(pos.Broker, '') AS Broker,
+                    ISNULL(pos.Transporter, '') AS Transporter,
+                    ISNULL(pos.Broker_Id, 0) AS Broker_Id,
+                    ISNULL(pos.Transporter_Id, 0) AS Transporter_Id,
+                    ISNULL(pos.Total_Outstanding, 0) AS Total_Outstanding,
+                    ISNULL(pos.Above_30Days, 0) AS Above_30Days,
+                    ISNULL(pos.QPay, 0) AS QPay,
+                    ISNULL(pos.Frequency_Days, 0) AS Frequency_Days,
+                    ISNULL(pos.LastBilling_Amount, 0) AS LastBilling_Amount,
+                    ISNULL(pos.Month_Avg_Ton, 0) AS Month_Avg_Ton,
+                    ISNULL(pos.Month_Avg_Amo, 0) AS Month_Avg_Amo,
+                    '' AS Land_Line,
+                    '' AS Lorry_Shed
+                FROM dbo.tbl_Retailers_Master r
+                LEFT JOIN dbo.tbl_ERP_POS_Master pos ON r.Retailer_Id = pos.Retailer_Id
+                ${whereClause}
+            `;
+
+            const result = await request.query(query);
+            const data = result.recordset || [];
+
+            return res.status(200).json({
+                success: true,
+                data: data,
+                pagination: { totalRecords: data.length }
+            });
+        }
+
+        // Normal paginated flow (when no specific customerId)
+        const countQuery = `SELECT COUNT(*) as total FROM dbo.tbl_Retailers_Master r ${whereClause}`;
+        const countResult = await request.query(countQuery);
+        const totalRecords = countResult.recordset[0].total;
+        const totalPages = Math.ceil(totalRecords / limit);
+
+        const query = `
+            SELECT 
+                r.Retailer_Id AS Customer_Id,
+                r.Retailer_Name AS Short_Name,
+                r.Contact_Person AS Billl_Name,
+                r.Mobile_No,
+                r.Reatailer_Address AS Address,
+                r.Reatailer_City AS City,
+                ISNULL(pos.Broker, '') AS Broker,
+                ISNULL(pos.Transporter, '') AS Transporter,
+                ISNULL(pos.Broker_Id, 0) AS Broker_Id,
+                ISNULL(pos.Transporter_Id, 0) AS Transporter_Id,
+                ISNULL(pos.Total_Outstanding, 0) AS Total_Outstanding,
+                ISNULL(pos.Above_30Days, 0) AS Above_30Days,
+                ISNULL(pos.QPay, 0) AS QPay,
+                ISNULL(pos.Frequency_Days, 0) AS Frequency_Days,
+                ISNULL(pos.LastBilling_Amount, 0) AS LastBilling_Amount,
+                ISNULL(pos.Month_Avg_Ton, 0) AS Month_Avg_Ton,
+                ISNULL(pos.Month_Avg_Amo, 0) AS Month_Avg_Amo,
+                '' AS Land_Line,
+                '' AS Lorry_Shed
+            FROM dbo.tbl_Retailers_Master r
+            LEFT JOIN dbo.tbl_ERP_POS_Master pos ON r.Retailer_Id = pos.Retailer_Id
+            ${whereClause}
+            ORDER BY r.Retailer_Id
+            OFFSET @offset ROWS
+            FETCH NEXT @limit ROWS ONLY
+        `;
+
+        request.input('offset', sql.Int, offset);
+        request.input('limit', sql.Int, limit);
+        const result = await request.query(query);
+
+        const response = {
+            success: true,
+            data: result.recordset || [],
+            pagination: {
+                currentPage: page,
+                perPage: limit,
+                totalRecords,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1
+            }
+        };
+
+        res.status(200).json(response);
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: e.message
+        });
+    }
+};
+
+
+
     return {
 
         getPosBrand,
@@ -664,7 +790,8 @@ const getProductsWithStock = async (req, res) => {
         getPOSGroupsByStock,
         getPosGroupDetails,
         getAllProductsPos,
-        getProductsWithStock
+        getProductsWithStock,
+        getRetailersOptRetailerId
         
     }
 }
