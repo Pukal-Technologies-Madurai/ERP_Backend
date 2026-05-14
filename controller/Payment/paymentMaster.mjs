@@ -1,11 +1,11 @@
 import { servError, success, failed, sentData, invalidInput, } from '../../res.mjs';
-import { ISOString, checkIsNumber, createPadString, isArray, randomNumber, toArray, toNumber } from '../../helper_functions.mjs';
+import { ISOString, checkIsNumber, createPadString, isArray, isValidNumber, randomNumber, toArray, toNumber } from '../../helper_functions.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 import sql from 'mssql'
 
 const validations = (obj) => {
     return {
-        payment_voucher_type_id: checkIsNumber(obj.payment_voucher_type_id),
+        // payment_voucher_type_id: checkIsNumber(obj.payment_voucher_type_id),
         pay_bill_type: checkIsNumber(obj.pay_bill_type) ? obj.pay_bill_type > 0 && obj.pay_bill_type < 5 : false,
         // created_by: checkIsNumber(obj?.created_by),
         credit_ledger: checkIsNumber(obj?.credit_ledger),
@@ -143,7 +143,7 @@ const PaymentMaster = () => {
         try {
 
             const {
-                payment_voucher_type_id, pay_bill_type, is_new_ref = 0,
+                payment_voucher_type_id = null, pay_bill_type, is_new_ref = 0,
                 credit_ledger, credit_ledger_name,
                 debit_ledger, debit_ledger_name,
                 debit_amount, transaction_type = null,
@@ -192,39 +192,41 @@ const PaymentMaster = () => {
 
             // get Voucher and year based invoice count
 
-            const payment_sno = Number((await new sql.Request()
-                .input('Year_Id', Year_Id)
-                .input('payment_voucher_type_id', payment_voucher_type_id)
-                .query(`
-                    SELECT 
-                        COALESCE(MAX(payment_sno), 0) AS payment_sno
-                    FROM 
-                        tbl_Payment_General_Info
-                    WHERE
-                        year_id = @Year_Id
-                        AND
-                        payment_voucher_type_id = @payment_voucher_type_id`
-                ))?.recordset[0]?.payment_sno) + 1;
+            let payment_sno = null;
+            let payment_invoice_no = null;
 
-            if (!checkIsNumber(payment_sno)) throw new Error('Failed to get voucher Based unique id');
+            if (isValidNumber(payment_voucher_type_id)) {
+                payment_sno = Number((await new sql.Request()
+                    .input('Year_Id', Year_Id)
+                    .input('payment_voucher_type_id', payment_voucher_type_id)
+                    .query(`
+                        SELECT COALESCE(MAX(payment_sno), 0) AS payment_sno
+                        FROM tbl_Payment_General_Info
+                        WHERE
+                            year_id = @Year_Id
+                            AND payment_voucher_type_id = @payment_voucher_type_id`
+                    ))?.recordset[0]?.payment_sno) + 1;
 
-            // get Voucher Code
+                if (!isValidNumber(payment_sno)) throw new Error('Failed to get voucher Based unique id');
 
-            const VoucherCodeGet = await new sql.Request()
-                .input('Vocher_Type_Id', payment_voucher_type_id)
-                .query(`
-                    SELECT Voucher_Code
-                    FROM tbl_Voucher_Type
-                    WHERE Vocher_Type_Id = @Vocher_Type_Id`
-                );
+                // get Voucher Code
 
-            if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
+                const VoucherCodeGet = await new sql.Request()
+                    .input('Vocher_Type_Id', payment_voucher_type_id)
+                    .query(`
+                        SELECT Voucher_Code
+                        FROM tbl_Voucher_Type
+                        WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                    );
 
-            const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
+                if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
 
-            // get invoice code
+                const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
 
-            const payment_invoice_no = Voucher_Code + "/" + createPadString(payment_sno, 6) + '/' + Year_Desc;
+                // get invoice code
+
+                payment_invoice_no = Voucher_Code + "/" + createPadString(payment_sno, 6) + '/' + Year_Desc;
+            }
 
             const Alter_Id = randomNumber(6, 8);
 
@@ -235,7 +237,7 @@ const PaymentMaster = () => {
                 .input('year_id', Year_Id)
                 .input('payment_sno', payment_sno)
                 .input('payment_invoice_no', payment_invoice_no)
-                .input('payment_voucher_type_id', payment_voucher_type_id)
+                .input('payment_voucher_type_id', isValidNumber(payment_voucher_type_id) ? payment_voucher_type_id : null)
                 .input('payment_date', payment_date)
                 .input('pay_bill_type', pay_bill_type)
                 .input('is_new_ref', is_new_ref)
@@ -337,7 +339,7 @@ const PaymentMaster = () => {
                     .query(`
                         SELECT 
                         	pgi.*,
-                        	vt.Voucher_Type,
+                        	COALESCE(vt.Voucher_Type, 'Not found') AS Voucher_Type,
                         	debAcc.Account_name AS DebitAccountGet,
                         	creAcc.Account_name AS CreditAccountGet,
 					    	COALESCE((
@@ -346,12 +348,9 @@ const PaymentMaster = () => {
 					    		WHERE pbi.payment_id = pgi.pay_id
 					    	), 0) AS TotalReferencedAmount
                         FROM tbl_Payment_General_Info AS pgi
-                        LEFT JOIN tbl_Voucher_Type AS vt
-                            ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
-                        LEFT JOIN tbl_Account_Master AS debAcc
-                            ON debAcc.Acc_Id = pgi.debit_ledger
-					    LEFT JOIN tbl_Account_Master AS creAcc
-                            ON creAcc.Acc_Id = pgi.credit_ledger
+                        LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = pgi.payment_voucher_type_id
+                        LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
+					    LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
                         WHERE pay_id = @pay_id;`
                     );
 
@@ -385,7 +384,7 @@ const PaymentMaster = () => {
                 debit_ledger, debit_ledger_name,
                 debit_amount, altered_by, transaction_type,
                 check_no, check_date, bank_name, bank_date, staffDetails = [],
-                approved_by = null, cost_center_mapping = 0
+                approved_by = null, cost_center_mapping = 0, payment_voucher_type_id = null
             } = req.body;
 
             const payment_date = req.body?.payment_date ? ISOString(req.body?.payment_date) : ISOString();
@@ -404,11 +403,75 @@ const PaymentMaster = () => {
             }
 
             const Alter_Id = req.alterId;
+
+            // Check if payment_voucher_type_id has changed
+            const existingRecord = await new sql.Request(transaction)
+                .input('pay_id', pay_id)
+                .query(`SELECT payment_voucher_type_id, payment_sno, payment_invoice_no FROM tbl_Payment_General_Info WHERE pay_id = @pay_id`);
+            if (existingRecord.recordset.length === 0) throw new Error('Payment record not found');
+            
+            const oldRecord = existingRecord.recordset[0];
+            let existing_payment_voucher_type_id = oldRecord?.payment_voucher_type_id || null;
+            let payment_sno = null, payment_invoice_no = null;
+
+            if (isValidNumber(payment_voucher_type_id) && !isValidNumber(existing_payment_voucher_type_id)) {
+
+                if (payment_voucher_type_id) {
+                    const get_year_id = await new sql.Request(transaction)
+                        .input('payment_date', payment_date)
+                        .query(`
+                            SELECT Id AS Year_Id, Year_Desc
+                            FROM tbl_Year_Master
+                            WHERE 
+                                Fin_Start_Date <= @payment_date 
+                                AND Fin_End_Date >= @payment_date`
+                        );
+
+                    if (get_year_id.recordset.length === 0) throw new Error('Year_Id not found');
+                    const { Year_Id, Year_Desc } = get_year_id.recordset[0];
+
+                    payment_sno = Number((await new sql.Request(transaction)
+                        .input('Year_Id', Year_Id)
+                        .input('payment_voucher_type_id', payment_voucher_type_id)
+                        .query(`
+                            SELECT 
+                                COALESCE(MAX(payment_sno), 0) AS payment_sno
+                            FROM 
+                                tbl_Payment_General_Info
+                            WHERE
+                                year_id = @Year_Id
+                                AND
+                                payment_voucher_type_id = @payment_voucher_type_id`
+                        ))?.recordset[0]?.payment_sno) + 1;
+
+                    if (!isValidNumber(payment_sno)) throw new Error('Failed to get voucher Based unique id');
+
+                    const VoucherCodeGet = await new sql.Request(transaction)
+                        .input('Vocher_Type_Id', payment_voucher_type_id)
+                        .query(`
+                            SELECT Voucher_Code
+                            FROM tbl_Voucher_Type
+                            WHERE Vocher_Type_Id = @Vocher_Type_Id`
+                        );
+
+                    if (VoucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
+
+                    const Voucher_Code = VoucherCodeGet.recordset[0]?.Voucher_Code || '';
+                    payment_invoice_no = Voucher_Code + "/" + createPadString(payment_sno, 6) + '/' + Year_Desc;
+                } else {
+                    payment_sno = null;
+                    payment_invoice_no = null;
+                }
+            }
+
             // update values
 
             const request = new sql.Request(transaction)
                 .input('pay_id', pay_id)
                 .input('payment_date', payment_date)
+                .input('payment_voucher_type_id', payment_voucher_type_id)
+                .input('payment_sno', payment_sno)
+                .input('payment_invoice_no', payment_invoice_no)
                 .input('is_new_ref', is_new_ref)
                 .input('credit_ledger', credit_ledger)
                 .input('credit_ledger_name', credit_ledger_name)
@@ -431,6 +494,9 @@ const PaymentMaster = () => {
                     UPDATE tbl_Payment_General_Info
                     SET 
                         payment_date = @payment_date,
+                        payment_voucher_type_id = @payment_voucher_type_id,
+                        payment_sno = @payment_sno,
+                        payment_invoice_no = @payment_invoice_no,
                         is_new_ref = @is_new_ref,
                         credit_ledger = @credit_ledger,
                         credit_ledger_name = @credit_ledger_name,

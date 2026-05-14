@@ -101,7 +101,8 @@ export const paymentFilterQuery = `
     WHERE 
         pgi.debit_ledger = @Acc_Id
         AND pgi.payment_date >= @OB_Date
-        AND pgi.status <> 0;
+        AND pgi.status <> 0
+        AND COALESCE(pgi.payment_invoice_no, '') <> '';
 `;
 
 export const journalFilterQuery = `
