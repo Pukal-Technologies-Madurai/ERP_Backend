@@ -42,7 +42,8 @@ const tripActivities = () => {
                     AND tm.BillType IN (
                         'MATERIAL INWARD',
                         'OTHER GODOWN',
-                        'CREDIT_NOTE'
+                        'CREDIT_NOTE',
+                        'DEBIT_NOTE'
                     )
                 ), TRIP_DETAILS AS (
                     SELECT
@@ -146,6 +147,22 @@ const tripActivities = () => {
                     LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = cngi.Retailer_Id
                     LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = cngi.Voucher_Type
                     WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+                ), DEBIT_NOTE AS (
+                    SELECT
+                        td.*,
+                        dngi.DB_Id,
+                        dngi.DB_Inv_No,
+                        dngi.DB_Date,
+                        dngi.Voucher_Type,
+                        v.Voucher_Type AS VoucherTypeGet,
+                        dngi.Retailer_Id,
+                        rm.Retailer_Name,
+                        dngi.Total_Invoice_value
+                    FROM tbl_Trip_Details AS td
+                    LEFT JOIN tbl_Debit_Note_Gen_Info AS dngi ON dngi.DB_Id = td.Debit_Note_Id 
+                    LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
+                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = dngi.Voucher_Type
+                    WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
                 )
                 SELECT 
                     tm.*,
@@ -178,7 +195,13 @@ const tripActivities = () => {
                         FROM CREDIT_NOTE AS cn
                         WHERE cn.Trip_Id = tm.Trip_Id
                         FOR JSON PATH
-                    ), '[]') AS Credit_Note_List
+                    ), '[]') AS Credit_Note_List,
+                    COALESCE((
+                        SELECT dn.* 
+                        FROM DEBIT_NOTE AS dn
+                        WHERE dn.Trip_Id = tm.Trip_Id
+                        FOR JSON PATH
+                    ), '[]') AS Debit_Note_List
                 FROM 
                     TRIP_MASTER AS tm`
             );
@@ -192,6 +215,7 @@ const tripActivities = () => {
                     ConvertedPurchaseOrders: JSON.parse(o?.ConvertedPurchaseOrders),
                     Alteration_History: JSON.parse(o?.Alteration_History),
                     Credit_Note_List: JSON.parse(o?.Credit_Note_List),
+                    Debit_Note_List: JSON.parse(o?.Debit_Note_List),
                 }));
 
                 dataFound(res, parsed);
@@ -370,6 +394,7 @@ const tripActivities = () => {
                     .input('Trip_Date', Trip_Date)
                     .input('Arrival_Id', toNumber(product?.Arrival_Id))
                     .input('CR_Id', toNumber(product?.CR_Id))
+                    .input('DB_Id', toNumber(product?.DB_Id))
                     .input('Batch_No', product?.Batch_No)
                     .input('Product_Id', toNumber(product?.Product_Id))
                     .input('QTY', toNumber(product?.QTY))
@@ -381,16 +406,16 @@ const tripActivities = () => {
                     -- trip update
                         DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                         DECLARE @reference_id INT;
-                        ${(filterableText(product?.Batch_No) && BillType !== 'CREDIT_NOTE') ? `
+                        ${(filterableText(product?.Batch_No) && BillType !== 'CREDIT_NOTE' && BillType !== 'DEBIT_NOTE') ? `
                     -- batch update in arrival
                             UPDATE tbl_Trip_Arrival
                             SET Batch_No = @Batch_No
                             WHERE Arr_Id = @Arrival_Id;` : ''}
                     -- Trip details
                         INSERT INTO tbl_Trip_Details (
-                            Trip_Id, ${BillType === 'CREDIT_NOTE' ? 'Credit_Note_Id' : 'Arrival_Id'}
+                            Trip_Id, ${BillType === 'CREDIT_NOTE' ? 'Credit_Note_Id' : BillType === 'DEBIT_NOTE' ? 'Debit_Note_Id' : 'Arrival_Id'}
                         ) VALUES (
-                            @Trip_Id, ${BillType === 'CREDIT_NOTE' ? '@CR_Id' : '@Arrival_Id'}
+                            @Trip_Id, ${BillType === 'CREDIT_NOTE' ? '@CR_Id' : BillType === 'DEBIT_NOTE' ? '@DB_Id' : '@Arrival_Id'}
                         );
                         SET @reference_id = SCOPE_IDENTITY();
                         ${(BillType === 'MATERIAL INWARD' && filterableText(product?.Batch_No)) ? `
@@ -609,6 +634,7 @@ const tripActivities = () => {
                     .input('Trip_Date', Trip_Date)
                     .input('Arrival_Id', toNumber(product?.Arrival_Id))
                     .input('CR_Id', toNumber(product?.CR_Id))
+                    .input('DB_Id', toNumber(product?.DB_Id))
                     .input('Batch_No', product?.Batch_No ? product?.Batch_No : null)
                     .input('Product_Id', toNumber(product?.Product_Id))
                     .input('QTY', toNumber(product?.QTY))
@@ -621,16 +647,16 @@ const tripActivities = () => {
                         DECLARE @reference_id INT;
                     -- latest obid
                         DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-                        ${(filterableText(product?.Batch_No) && BillType !== 'CREDIT_NOTE') ? `
+                        ${(filterableText(product?.Batch_No) && BillType !== 'CREDIT_NOTE' && BillType !== 'DEBIT_NOTE') ? `
                     -- batch update in arrival
                         UPDATE tbl_Trip_Arrival
                         SET Batch_No = @Batch_No
                         WHERE Arr_Id = @Arrival_Id;` : ''}
                     -- trip details
                         INSERT INTO tbl_Trip_Details (
-                            Trip_Id, ${BillType === 'CREDIT_NOTE' ? 'Credit_Note_Id' : 'Arrival_Id'}
+                            Trip_Id, ${BillType === 'CREDIT_NOTE' ? 'Credit_Note_Id' : BillType === 'DEBIT_NOTE' ? 'Debit_Note_Id' : 'Arrival_Id'}
                         ) VALUES (
-                            @Trip_Id, ${BillType === 'CREDIT_NOTE' ? '@CR_Id' : '@Arrival_Id'}
+                            @Trip_Id, ${BillType === 'CREDIT_NOTE' ? '@CR_Id' : BillType === 'DEBIT_NOTE' ? '@DB_Id' : '@Arrival_Id'}
                         );
                         SET @reference_id = SCOPE_IDENTITY();
                         ${(BillType === 'MATERIAL INWARD' && filterableText(product?.Batch_No)) ? `

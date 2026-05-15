@@ -115,14 +115,19 @@ export const getCreditNote = async (req, res) => {
                     COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
                     COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                     COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+                    tm.Trip_Id
                 FROM 
                     tbl_Credit_Note_Gen_Info AS gi
                 LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = gi.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = gi.Branch_Id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = gi.Created_by
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = gi.Voucher_Type
-                WHERE gi.CR_Id IN (SELECT CR_Id FROM @FilteredInvoice)
+                LEFT JOIN tbl_Trip_Details AS td ON td.Credit_Note_Id = gi.CR_Id
+                LEFT JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = td.Trip_Id
+                WHERE 
+                    gi.CR_Id IN (SELECT CR_Id FROM @FilteredInvoice)
+                    AND (tm.tripStatus <> 'Canceled' OR tm.Trip_Id IS NULL)
                 ORDER BY gi.CR_Id desc;
                 SELECT
                     oi.*,
