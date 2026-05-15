@@ -40,7 +40,7 @@ import prodGroup from '../controller/Masters/prodGroup.mjs';
 import defaultBanks from '../controller/Masters/defaultBanks.mjs';
 import processMaster from '../controller/Masters/processMaster.mjs';
 import accountMasterSales from "../controller/Masters/accountMasterSales.mjs";
-
+import accountUserMapping from "../controller/Masters/accountUserMapping.mjs";
 
 const MastersRouter = express.Router();
 
@@ -274,6 +274,10 @@ MastersRouter.get('/accountMaster/groupFilter', accountMaster.getAccountsByGroup
 MastersRouter.put('/accountMaster', accountMaster.updateAccountDetails)
 MastersRouter.delete('/accountMaster', accountMaster.deleteAccountDetails)
 
+MastersRouter.get('/userAccountMapping', accountUserMapping.getMappings);
+MastersRouter.post('/userAccountMapping', accountUserMapping.addMapping);
+MastersRouter.put('/userAccountMapping', accountUserMapping.editMapping);
+MastersRouter.delete('/userAccountMapping', accountUserMapping.deleteMapping);
 
 MastersRouter.get('/accountGroup/dropDown', accountMaster.accountingGroupDropDown)
 MastersRouter.get('/accountGroup', accountGroup.getAccountGroup);
