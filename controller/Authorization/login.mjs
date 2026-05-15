@@ -78,38 +78,44 @@ const LoginController = () => {
     }
 
     const login = async (req, res) => {
-        const { username, password } = req.body;
-
-        if (!username || !password) {
-            return invalidInput(res, 'username and password are required');
-        }
-
         try {
 
-            const query = `
-                SELECT
-                  u.UserTypeId,
-                  u.UserId,
-                  u.UserName,
-                  u.Password,
-                  u.BranchId,
-                  b.BranchName,
-                  u.Name,
-                  ut.UserType,
-                  u.Autheticate_Id,
-                  u.Company_id,
-                  c.Company_Name
-                FROM tbl_Users AS u
-                LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = u.BranchId
-                LEFT JOIN tbl_User_Type AS ut ON ut.Id = u.UserTypeId
-                LEFT JOIN tbl_Company_Master AS c ON c.Company_id = u.Company_Id
-                WHERE LOWER(UserName) = LOWER(@UserName) AND Password = @Password AND UDel_Flag = 0`;
+            const { username, password } = req.body;
+            if (!username || !password) {
+                return invalidInput(res, 'username and password are required');
+            }
 
-            const loginReq = new sql.Request();
-            loginReq.input('UserName', String(username).trim());
-            loginReq.input('Password', decryptPasswordFun(password));
+            const loginReq = new sql.Request()
+                .input('UserName', String(username).trim())
+                .input('Password', decryptPasswordFun(password))
+                .query(`
+                    SELECT
+                        u.UserTypeId,
+                        u.UserId,
+                        u.UserName,
+                        u.Password,
+                        u.BranchId,
+                        b.BranchName,
+                        u.Name,
+                        ut.UserType,
+                        u.Autheticate_Id,
+                        u.Company_id,
+                        c.Company_Name,
+                        am.Acc_Id,
+                        COALESCE(am.Account_name, 'Not found') AS Account_name
+                    FROM tbl_Users AS u
+                    LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = u.BranchId
+                    LEFT JOIN tbl_User_Type AS ut ON ut.Id = u.UserTypeId
+                    LEFT JOIN tbl_Company_Master AS c ON c.Company_id = u.Company_Id
+                    LEFT JOIN tbl_Acc_User_Mapping AS uam ON uam.UserId = u.UserId
+                    LEFT JOIN tbl_Account_Master AS am ON am.Acc_Id = uam.Acc_Id
+                    WHERE 
+                        LOWER(u.UserName) = LOWER(@UserName) AND 
+                        u.Password = @Password AND 
+                        u.UDel_Flag = 0`
+                );
 
-            const loginResult = await loginReq.query(query);
+            const loginResult = await loginReq;
 
             if (loginResult.recordset.length > 0) {
                 const userInfo = loginResult.recordset[0];
@@ -147,55 +153,49 @@ const LoginController = () => {
     };
 
     const getUserByAuth = async (req, res) => {
-        const Auth = req.header('Authorization')
-
         try {
-            const query = `
-            SELECT
-                u.UserTypeId,
-                u.UserId,
-                u.UserName,
-                u.Password,
-                u.BranchId,
-                b.BranchName,
-                u.Name,
-                ut.UserType,
-                u.Autheticate_Id,
-                u.Company_Id AS Company_id,
-                c.Company_Name,
+            const Auth = req.header('Authorization');
 
-                (
-                    SELECT 
-                        TOP (1)
-                        UserId,
-                        SessionId,
-                        InTime
-                    FROM
-                        tbl_User_Log
-                    WHERE
-                        UserId = u.UserId
-                    ORDER BY
-                        InTime DESC
-                        FOR JSON PATH
-                )  AS session
+            const request = new sql.Request()
+                .input('auth', Auth)
+                .query(`
+                    SELECT
+                        u.UserTypeId,
+                        u.UserId,
+                        u.UserName,
+                        u.Password,
+                        u.BranchId,
+                        b.BranchName,
+                        u.Name,
+                        ut.UserType,
+                        u.Autheticate_Id,
+                        u.Company_Id AS Company_id,
+                        c.Company_Name,
+                        am.Acc_Id,
+                        COALESCE(am.Account_name, 'Not found') AS Account_name,
+                        (
+                            SELECT 
+                                TOP (1)
+                                UserId,
+                                SessionId,
+                                InTime
+                            FROM
+                                tbl_User_Log
+                            WHERE
+                                UserId = u.UserId
+                            ORDER BY
+                                InTime DESC
+                                FOR JSON PATH
+                        )  AS session
+                    FROM tbl_Users AS u
+                    LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = u.BranchId
+                    LEFT JOIN tbl_User_Type AS ut ON ut.Id = u.UserTypeId
+                    LEFT JOIN tbl_Company_Master AS c ON c.Company_id = u.Company_Id
+                    LEFT JOIN tbl_Acc_User_Mapping AS uam ON uam.UserId = u.UserId
+                    LEFT JOIN tbl_Account_Master AS am ON am.Acc_Id = uam.Acc_Id
+                    WHERE u.Autheticate_Id = @auth AND UDel_Flag= 0`);
 
-            FROM tbl_Users AS u
-
-            LEFT JOIN tbl_Branch_Master AS b
-            ON b.BranchId = u.BranchId
-
-            LEFT JOIN tbl_User_Type AS ut
-            ON ut.Id = u.UserTypeId
-
-            LEFT JOIN tbl_Company_Master AS c
-            ON c.Company_id = u.Company_Id
-
-            WHERE u.Autheticate_Id = @auth AND UDel_Flag= 0`;
-
-            const request = new sql.Request();
-            request.input('auth', Auth)
-
-            const result = await request.query(query);
+            const result = await request;
 
             if (result.recordset.length > 0) {
                 result.recordset[0].session = result.recordset[0].session ? JSON.parse(result.recordset[0].session) : [{
@@ -297,78 +297,77 @@ const LoginController = () => {
         }
     };
 
-
     const getUserTypeAuth = async (req, res) => {
-    try {
-        const { username } = req.body;
-        
-        if (!username || !username.trim()) {
-            return res.status(400).json({
-                success: false,
-                message: "Username is required"
-            });
-        }
+        try {
+            const { username } = req.body;
+
+            if (!username || !username.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Username is required"
+                });
+            }
 
 
-        const userQuery = `
+            const userQuery = `
             SELECT 
               *
             FROM tbl_Users 
             WHERE UserName = @username 
                 AND UDel_Flag = 0
         `;
-        
-        const userRequest = new sql.Request();
-        userRequest.input('username', sql.VarChar, username);
-        const userResult = await userRequest.query(userQuery);
-        
-          if (userResult.recordset.length > 0) {
-            const user = userResult.recordset[0];
-            
-             return res.status(200).json({
-                  
-                    step:2,
+
+            const userRequest = new sql.Request();
+            userRequest.input('username', sql.VarChar, username);
+            const userResult = await userRequest.query(userQuery);
+
+            if (userResult.recordset.length > 0) {
+                const user = userResult.recordset[0];
+
+                return res.status(200).json({
+
+                    step: 2,
                     requirePassword: true,
                     success: true,
                     message: 'User Details Found',
                 });
-           
-            
-         
+
+
+
             } else {
-                
-                  const ledgerQuery = `
+
+                const ledgerQuery = `
                   SELECT *
             FROM tbl_Ledger_LoL lol
             WHERE lol.A1 = @username  `;
-        
-        const ledgerRequest = new sql.Request();
-        ledgerRequest.input('username', username);
-        const ledgerResult = await ledgerRequest.query(ledgerQuery);
-        
-        if (ledgerResult.recordset.length > 0) {
-            const customer = ledgerResult.recordset;
-         
-             return res.status(200).json({
-                    customer,
-                    step:4,
-                    requirePassword: false,
-                    success: true,
-                    message: 'Ledger Details Found',
-                });
-           
-      }
-                
-        
-        
-       
-    }
-        
-    } catch (error) {
-        console.error("Error in getUserTypeAuth:", error);
-        return servError(error, res);
-    }
-};
+
+                const ledgerRequest = new sql.Request();
+                ledgerRequest.input('username', username);
+                const ledgerResult = await ledgerRequest.query(ledgerQuery);
+
+                if (ledgerResult.recordset.length > 0) {
+                    const customer = ledgerResult.recordset;
+
+                    return res.status(200).json({
+                        customer,
+                        step: 4,
+                        requirePassword: false,
+                        success: true,
+                        message: 'Ledger Details Found',
+                    });
+
+                }
+
+
+
+
+            }
+
+        } catch (error) {
+            console.error("Error in getUserTypeAuth:", error);
+            return servError(error, res);
+        }
+    };
 
     return {
         getAccountsInUserPortal,
