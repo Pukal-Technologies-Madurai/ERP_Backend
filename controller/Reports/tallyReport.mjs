@@ -357,6 +357,61 @@ const QPayReport = () => {
         }
     }
 
+    const getQpaysearchData=async(req,res)=>{
+          const { Month_No, Year, Customer_Id, Pending_List } = req.query;
+
+        if (!checkIsNumber(Month_No) || !Year || !Customer_Id || !Pending_List) {
+            return invalidInput(res, 'Month_No, Year, Customer_Id, Pending_List is required')
+        }
+
+        try {
+            const request = new sql.Request()
+                .input('Month_No', Month_No)
+                .input('Year', Year)
+                .input('Customer_Id', Customer_Id)
+                .input('Pending_List', Pending_List)
+                .execute('Q_Pay_Search_Consoldate')
+
+            const result = await request;
+
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset)
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+   
+
+    const getQpaySalesInvoiceDetails = async(req,res)=>{
+         const { Month_No, Year, Customer_Id, Consoidate } = req.query;
+
+        if (!checkIsNumber(Month_No) || !Year || !Customer_Id || !Consoidate) {
+            return invalidInput(res, 'Month_No, Year, Customer_Id, Consoidate is required')
+        }
+
+        try {
+            const request = new sql.Request()
+                .input('Month_No', Month_No)
+                .input('Year', Year)
+                .input('Customer_Id', Customer_Id)
+                .input('Consoidate', Consoidate)
+                .execute('Q_Pay_Search')
+
+            const result = await request;
+
+            if (result.recordset.length > 0) {
+                dataFound(res, result.recordset)
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
 
     return {
         getQpayData,
@@ -367,6 +422,8 @@ const QPayReport = () => {
         productBasedSalesDetails,
         getTallyLOLData,
         getTallyLOSData,
+        getQpaysearchData,
+        getQpaySalesInvoiceDetails
     }
 
 }
