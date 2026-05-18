@@ -143,6 +143,7 @@ const StockManagement = () => {
                 Total_Reading = Subraction(EN_Reading, ST_Reading),
                 Narration = '',
                 PR_Status = 'New',
+                sourceType = 'BOTH',
                 Created_By = 0,
             } = req.body;
 
@@ -285,6 +286,7 @@ const StockManagement = () => {
                 .input('Total_Reading', toNumber(Total_Reading))
                 .input('Narration', Narration)
                 .input('PR_Status', PR_Status)
+                .input('sourceType', sourceType)
                 .input('Created_By', Created_By)
                 .input('Created_At', new Date())
                 .query(`
@@ -292,12 +294,12 @@ const StockManagement = () => {
                         PR_Id, PR_Inv_Id, Year_Id, P_No, Process_no, Branch_Id,
                         VoucherType, BillType, Process_date, Machine_No, Godownlocation, 
                         StartDateTime, EndDateTime, ST_Reading, EN_Reading, Total_Reading, Narration,
-                        PR_Status, Created_By, Created_At
+                        PR_Status, sourceType, Created_By, Created_At
                     ) VALUES (
                         @PR_Id, @PR_Inv_Id, @Year_Id, @P_No, @Process_no, @Branch_Id,
                         @VoucherType, @BillType, @Process_date, @Machine_No, @Godownlocation, 
                         @StartDateTime, @EndDateTime, @ST_Reading, @EN_Reading, @Total_Reading, @Narration,
-                        @PR_Status, @Created_By, @Created_At
+                        @PR_Status, @sourceType, @Created_By, @Created_At
                     );
                 `);
 
@@ -487,6 +489,7 @@ const StockManagement = () => {
                 Total_Reading = '',
                 Narration = '',
                 PR_Status = 'New',
+                sourceType = 'BOTH',
                 Updated_By = 0
             } = req.body;
 
@@ -545,6 +548,7 @@ const StockManagement = () => {
                 .input('Total_Reading', toNumber(Total_Reading))
                 .input('Narration', Narration)
                 .input('PR_Status', PR_Status)
+                .input('sourceType', sourceType)
                 .input('Updated_By', toNumber(Updated_By))
                 .input('Updated_At', new Date())
                 .input('PR_Id', PR_Id)
@@ -563,6 +567,7 @@ const StockManagement = () => {
                         Total_Reading = @Total_Reading,
                         Narration = @Narration,
                         PR_Status = @PR_Status,
+                        sourceType = @sourceType,
                         Updated_By = @Updated_By,
                         Updated_At = @Updated_At
                     WHERE PR_Id = @PR_Id;`
