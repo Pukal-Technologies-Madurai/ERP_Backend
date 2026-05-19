@@ -198,11 +198,11 @@ const createContra = async (req, res) => {
                 const updateQuery = ref.dr_cr === 'Dr' 
                     ? `
                     UPDATE tbl_Payment_General_Info 
-                    SET bank_date = @BankDate, Alter_Id = (Alter_Id + 1) 
+                    SET bank_date = @BankDate, Alter_Id = (Alter_Id + 1), alterd_on = GETDATE() 
                     WHERE pay_id = @bill_id AND payment_invoice_no = @bill_no;`
                     : `
                     UPDATE tbl_Receipt_General_Info 
-                    SET bank_date = @BankDate, Alter_Id = (Alter_Id + 1) 
+                    SET bank_date = @BankDate, Alter_Id = (Alter_Id + 1), alterd_on = GETDATE() 
                     WHERE receipt_id = @bill_id AND receipt_invoice_no = @bill_no;`;
 
                 await new sql.Request(tx)

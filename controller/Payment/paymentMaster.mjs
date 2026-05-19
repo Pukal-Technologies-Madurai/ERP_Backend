@@ -424,7 +424,7 @@ const PaymentMaster = () => {
             const isNewVoucher = isValidNumber(payment_voucher_type_id) && !isValidNumber(existing_payment_voucher_type_id);
 
             if (isNewVoucher) {
-                const get_year_id = await new sql.Request(transaction)
+                const get_year_id = await new sql.Request()
                     .input('payment_date', payment_date)
                     .query(`
                         SELECT Id AS Year_Id, Year_Desc
@@ -437,7 +437,7 @@ const PaymentMaster = () => {
                 if (get_year_id.recordset.length === 0) throw new Error('Year_Id not found');
                 const { Year_Id, Year_Desc } = get_year_id.recordset[0];
 
-                const payment_sno = Number((await new sql.Request(transaction)
+                const payment_sno = Number((await new sql.Request()
                     .input('Year_Id', Year_Id)
                     .input('payment_voucher_type_id', payment_voucher_type_id)
                     .query(`
@@ -449,7 +449,7 @@ const PaymentMaster = () => {
                     ))?.recordset[0]?.payment_sno) + 1;
                 if (!isValidNumber(payment_sno)) throw new Error('Failed to get voucher Based unique id');
 
-                const VoucherCodeGet = await new sql.Request(transaction)
+                const VoucherCodeGet = await new sql.Request()
                     .input('Vocher_Type_Id', payment_voucher_type_id)
                     .query(`
                         SELECT Voucher_Code
