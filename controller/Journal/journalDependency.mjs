@@ -228,10 +228,31 @@ const partyOutstanding = async (req, res) => {
     }
 }
 
+const accountTransaction = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+        const Acc_Id = toNumber(req.query?.Acc_Id);
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .input('Acc_Id', sql.BigInt, Acc_Id)
+            .execute(`Transaction_Report_vw_By_Acc_Id_1`);
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 export default {
     getFilterValues,
-    getAccountPendingReference, 
+    getAccountPendingReference,
     getJournalAccounts,
     groupOutstandings,
-    partyOutstanding
+    partyOutstanding,
+    accountTransaction
 }
