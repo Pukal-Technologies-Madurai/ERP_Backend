@@ -1,9 +1,8 @@
 import sql from 'mssql';
-import { checkIsNumber, Division, isEqualNumber, ISOString, Multiplication, Subraction, toArray, toNumber } from '../../../helper_functions.mjs';
+import { checkIsNumber, Division, isEqualNumber, ISOString, Subraction, toArray, toNumber } from '../../../helper_functions.mjs';
 import { servError, sentData, success, invalidInput, failed,dataFound,noData } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
-import { error } from 'console';
 import uploadFile from '../../../middleware/uploadMiddleware.mjs';
 import getImage from '../../../middleware/getImageIfExist.mjs';
 
@@ -886,8 +885,6 @@ export const salesInvoicePaper = async (req, res) => {
     }
 }
 
-
-
 export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
@@ -1019,8 +1016,6 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
         servError(e, res);
     }
 };
-
-
 
 export const lrReportUploadgetMobile = async (req, res) => {
     try {
@@ -1198,11 +1193,10 @@ ORDER BY Do_Id;
     }
 }
 
-
-
 export const lrReportUploadMobile = async (req, res) => {
 
     const transaction = new sql.Transaction();
+    let transactionBegun = false;
 
     try {
         await uploadFile(req, res, 6, 'LRReport');
@@ -1217,6 +1211,7 @@ export const lrReportUploadMobile = async (req, res) => {
         }
 
         await transaction.begin();
+        transactionBegun = true;
 
 
         const updateStatusRequest = new sql.Request(transaction);
@@ -1273,8 +1268,8 @@ export const lrReportUploadMobile = async (req, res) => {
 
         success(res, 'Changes saved successfully');
     } catch (e) {
-        if (transaction._aborted === false) {
-            await transaction.rollback();
+        if (transactionBegun) {
+            try { await transaction.rollback(); } catch (_) { /* already rolled back or aborted */ }
         }
         servError(e, res);
     }
@@ -1282,6 +1277,7 @@ export const lrReportUploadMobile = async (req, res) => {
 
 export const lrReportUpdateMobile = async (req, res) => {
     const transaction = new sql.Transaction();
+    let transactionBegun = false;
 
     try {
         await uploadFile(req, res, 6, 'LRReport');
@@ -1300,6 +1296,7 @@ export const lrReportUpdateMobile = async (req, res) => {
         }
 
         await transaction.begin();
+        transactionBegun = true;
 
         
         const getOldImageRequest = new sql.Request(transaction);
@@ -1309,6 +1306,7 @@ export const lrReportUpdateMobile = async (req, res) => {
 
         if (oldImageResult.recordset.length === 0) {
             await transaction.rollback();
+            transactionBegun = false;
             return failed(res, 'LR Report record not found');
         }
 
@@ -1349,8 +1347,8 @@ export const lrReportUpdateMobile = async (req, res) => {
         success(res, 'LR Report image updated successfully');
 
     } catch (e) {
-        if (transaction._aborted === false) {
-            await transaction.rollback();
+        if (transactionBegun) {
+            try { await transaction.rollback(); } catch (_) { /* already rolled back or aborted */ }
         }
         servError(e, res);
     }

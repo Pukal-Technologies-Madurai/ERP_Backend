@@ -1337,6 +1337,333 @@ export const createSalesInvoice = async (req, res) => {
     }
 }
 
+export const bulkCreateSalesInvoice = async (req, res) => {
+    const transaction = new sql.Transaction();
+
+    try {
+        const {
+            Voucher_Type,
+            Do_Date,
+            Stock_Item_Ledger_Name,
+            backupGodownId,
+            SaleOrders = [],
+            Created_by
+        } = req.body;
+
+        if (!Voucher_Type || !Do_Date || !Array.isArray(SaleOrders) || SaleOrders.length === 0 || !Created_by) {
+            return invalidInput(res, 'Missing required fields for bulk conversion');
+        }
+
+        const Do_Date_ISO = ISOString(Do_Date);
+        const productsData = (await getProducts()).dataArray;
+        const Alter_Id = Math.floor(Math.random() * 999999);
+
+        // GETTING YEAR ID, CODE
+        const Do_Year_Get = await new sql.Request()
+            .input('Do_Date', Do_Date_ISO)
+            .query(`
+                SELECT Id AS Year_Id, Year_Desc
+                FROM tbl_Year_Master
+                WHERE 
+                    Fin_Start_Date <= @Do_Date 
+                    AND Fin_End_Date >= @Do_Date`
+            );
+
+        if (Do_Year_Get.recordset.length === 0) throw new Error('Year_Id not found');
+        const { Year_Id, Year_Desc } = Do_Year_Get.recordset[0];
+
+        // GETTING VOUCHER CODE
+        const voucherData = await new sql.Request()
+            .input('Voucher_Type', Voucher_Type)
+            .query(`
+                SELECT Voucher_Code 
+                FROM tbl_Voucher_Type 
+                WHERE Vocher_Type_Id = @Voucher_Type`
+            );
+
+        const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
+        if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
+
+        // Fetch starting Do_No
+        const currentDoNoReq = await new sql.Request()
+            .input('Do_Year', Year_Id)
+            .input('Voucher_Type', Voucher_Type)
+            .query(`
+                SELECT COALESCE(MAX(Do_No), 0) AS maxDoNo
+                FROM tbl_Sales_Delivery_Gen_Info
+                WHERE Do_Year = @Do_Year
+                AND Voucher_Type = @Voucher_Type`
+            );
+        let nextDoNo = Number(currentDoNoReq.recordset[0]?.maxDoNo) + 1;
+
+        // Fetch starting Do_Id
+        const getDo_Id = await getNextId({ table: 'tbl_Sales_Delivery_Gen_Info', column: 'Do_Id' });
+        if (!getDo_Id.status || !checkIsNumber(getDo_Id.MaxId)) throw new Error('Failed to get Do_Id');
+        let nextDoId = getDo_Id.MaxId;
+
+        const genInfoRows = [];
+        let allStockRows = [];
+
+        // Build Rows iteratively
+        for (const order of SaleOrders) {
+            const {
+                Retailer_Id, Branch_Id, So_No, Cancel_status = 1, Ref_Inv_Number = '',
+                Narration = null, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
+                Products_List = [], Expence_Array = [], 
+                Delivery_Status = 1, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
+            } = order;
+
+            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+            const isInclusive = isEqualNumber(GST_Inclusive, 1);
+            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+            const isIGST = isEqualNumber(IS_IGST, 1);
+            
+            const Do_Id = nextDoId++;
+            const Do_No = nextDoNo++;
+            const Do_Inv_No = `${VoucherCode}/${createPadString(Do_No, 6)}/${Year_Desc}`;
+
+            const TotalExpences = toNumber(RoundNumber(
+                toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+            ));
+
+            const Total_Invoice_value = RoundNumber(
+                Addition(
+                    TotalExpences,
+                    Products_List.reduce((acc, item) => {
+                        const itemRate = RoundNumber(item?.Item_Rate);
+                        const billQty = RoundNumber(item?.Bill_Qty);
+                        const Amount = Multiplication(billQty, itemRate);
+    
+                        if (isNotTaxableBill) return Addition(acc, Amount);
+    
+                        const product = findProductDetails(productsData, item.Item_Id);
+                        const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+    
+                        if (isInclusive) {
+                            return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+                        } else {
+                            return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+                        }
+                    }, 0)
+                )
+            );
+
+            const totalValueBeforeTax = () => {
+                const productTax = Products_List.reduce((acc, item) => {
+                    const itemRate = RoundNumber(item?.Item_Rate);
+                    const billQty = RoundNumber(item?.Bill_Qty);
+                    const Amount = Multiplication(billQty, itemRate);
+    
+                    if (isNotTaxableBill) return {
+                        TotalValue: Addition(acc.TotalValue, Amount),
+                        TotalTax: 0
+                    }
+    
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+    
+                    const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                    const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                    const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+    
+                    return { TotalValue, TotalTax };
+                }, { TotalValue: 0, TotalTax: 0 });
+    
+                const invoiceExpencesTaxTotal = toArray(Expence_Array).reduce((acc, exp) => {
+                    if (isNotTaxableBill) return 0;
+                    return Addition(acc, calculateGSTDetails(exp?.Expence_Value, exp?.percentageValue, 'remove').tax_amount)
+                }, 0);
+    
+                return {
+                    TotalValue: productTax.TotalValue,
+                    TotalTax: Addition(productTax.TotalTax, invoiceExpencesTaxTotal),
+                }
+            };
+    
+            const totalValueBeforeTaxValues = totalValueBeforeTax();
+            const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
+            const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
+
+            genInfoRows.push({
+                Do_Id,
+                Do_Inv_No,
+                Voucher_Type,
+                Do_No,
+                Do_Year: Year_Id,
+                Do_Date: Do_Date_ISO,
+                Branch_Id: Number(Branch_Id),
+                Retailer_Id: Number(Retailer_Id),
+                Delivery_Person_Id: 0,
+                Narration: Narration || '',
+                So_No: checkIsNumber(So_No) ? So_No : null,
+                Cancel_status: toNumber(Cancel_status),
+                GST_Inclusive: GST_Inclusive,
+                IS_IGST: isIGST ? 1 : 0,
+                CSGT_Total: CGST,
+                SGST_Total: SGST,
+                IGST_Total: IGST,
+                Total_Expences: TotalExpences,
+                Round_off: Round_off,
+                Total_Before_Tax: totalValueBeforeTaxValues.TotalValue,
+                Total_Tax: totalValueBeforeTaxValues.TotalTax,
+                Total_Invoice_value: Math.round(Total_Invoice_value),
+                Stock_Item_Ledger_Name: Stock_Item_Ledger_Name,
+                paymentDueDays: toNumber(paymentDueDays),
+                Trans_Type: 'INSERT',
+                Alter_Id: Alter_Id,
+                Created_by: Number(Created_by),
+                Created_on: new Date().toISOString(),
+                Ref_Inv_Number: Ref_Inv_Number,
+                deliveryAddressId: null,
+                Delivery_Status: Delivery_Status,
+                Payment_Mode: Payment_Mode,
+                Payment_Status: Payment_Status,
+                shipingAddressId: null
+            });
+
+            const processedProducts = Products_List.map(p => ({
+                ...p,
+                GoDown_Id: checkIsNumber(p.GoDown_Id) ? p.GoDown_Id : backupGodownId
+            }));
+
+            const { stockRows } = buildBulkSalesRows(toArray(processedProducts), productsData, {
+                isInclusive,
+                isNotTaxableBill,
+                isIGST,
+                isSO: checkIsNumber(So_No)
+            });
+
+            // Map stockRows to include Do_Id manually
+            stockRows.forEach(sr => {
+                sr.Do_Id = Do_Id;
+            });
+
+            allStockRows = allStockRows.concat(stockRows);
+        }
+
+        await transaction.begin();
+
+        const genInfoRequest = new sql.Request(transaction)
+            .input('GenInfoJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: genInfoRows }))
+            .query(`
+                INSERT INTO tbl_Sales_Delivery_Gen_Info (
+                    Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year, 
+                    Do_Date, Branch_Id, Retailer_Id, Delivery_Person_Id, Narration, So_No, Cancel_status,
+                    GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
+                    Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name, paymentDueDays,
+                    Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number, deliveryAddressId,
+                    Delivery_Status, Payment_Mode, Payment_Status, shipingAddressId
+                ) 
+                SELECT 
+                    Do_Id, Do_Inv_No, Voucher_Type, Do_No, Do_Year, 
+                    Do_Date, Branch_Id, Retailer_Id, Delivery_Person_Id, Narration, So_No, Cancel_status,
+                    GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
+                    Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name, paymentDueDays,
+                    Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number, deliveryAddressId,
+                    Delivery_Status, Payment_Mode, Payment_Status, shipingAddressId
+                FROM OPENJSON(@GenInfoJson, '$.rows')
+                WITH (
+                    Do_Id BIGINT, Do_Inv_No NVARCHAR(100), Voucher_Type BIGINT, Do_No BIGINT, Do_Year BIGINT, 
+                    Do_Date DATETIME, Branch_Id BIGINT, Retailer_Id BIGINT, Delivery_Person_Id BIGINT, Narration NVARCHAR(MAX), So_No BIGINT, Cancel_status INT,
+                    GST_Inclusive INT, IS_IGST INT, CSGT_Total DECIMAL(18,2), SGST_Total DECIMAL(18,2), IGST_Total DECIMAL(18,2), Total_Expences DECIMAL(18,2), Round_off DECIMAL(18,2), 
+                    Total_Before_Tax DECIMAL(18,2), Total_Tax DECIMAL(18,2), Total_Invoice_value DECIMAL(18,2), Stock_Item_Ledger_Name NVARCHAR(200), paymentDueDays INT,
+                    Trans_Type NVARCHAR(50), Alter_Id BIGINT, Created_by BIGINT, Created_on DATETIME, Ref_Inv_Number NVARCHAR(100), deliveryAddressId BIGINT,
+                    Delivery_Status INT, Payment_Mode INT, Payment_Status INT, shipingAddressId BIGINT
+                )
+            `);
+        await genInfoRequest;
+
+        const stockInsertRequest = new sql.Request(transaction)
+            .input('Do_Date', Do_Date_ISO)
+            .input('SalesJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: allStockRows }))
+            .query(`
+                INSERT INTO tbl_Sales_Delivery_Stock_Info (
+                    Do_Date, Delivery_Order_Id, S_No, Item_Id,
+                    Bill_Qty, Alt_Bill_Qty, Act_Qty, Alt_Act_Qty,
+                    Item_Rate, GoDown_Id, Amount, Free_Qty, Total_Qty,
+                    Taxble, Taxable_Rate, HSN_Code,
+                    Unit_Id, Unit_Name, Act_unit_Id, Alt_Act_Unit_Id,
+                    Taxable_Amount, Tax_Rate,
+                    Cgst, Cgst_Amo, Sgst, Sgst_Amo, Igst, Igst_Amo, Final_Amo, Created_on,
+                    Batch_Name
+                )
+                SELECT
+                    @Do_Date, p.Do_Id, ISNULL(p.S_No, ROW_NUMBER() OVER (ORDER BY (SELECT 1))), p.Item_Id,
+                    p.Bill_Qty, p.Alt_Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
+                    p.Item_Rate, p.GoDown_Id, p.Amount, p.Free_Qty, p.Total_Qty,
+                    p.Taxble, p.Taxable_Rate, p.HSN_Code,
+                    p.Unit_Id, p.Unit_Name, p.Act_unit_Id, p.Alt_Act_Unit_Id,
+                    p.Taxable_Amount, p.Tax_Rate,
+                    p.Cgst, p.Cgst_Amo, p.Sgst, p.Sgst_Amo, p.Igst, p.Igst_Amo, p.Final_Amo, GETDATE(), 
+                    p.Batch_Name
+                FROM OPENJSON(@SalesJson, '$.rows')
+                WITH (
+                    Do_Id BIGINT '$.Do_Id',
+                    S_No INT '$.S_No',
+                    Item_Id BIGINT '$.Item_Id',
+                    Bill_Qty DECIMAL(18,2) '$.Bill_Qty',
+                    Alt_Bill_Qty DECIMAL(18,2) '$.Alt_Bill_Qty',
+                    Act_Qty DECIMAL(18,2) '$.Act_Qty',
+                    Alt_Act_Qty DECIMAL(18,2) '$.Alt_Act_Qty',
+                    Item_Rate DECIMAL(18,2) '$.Item_Rate',
+                    GoDown_Id BIGINT '$.GoDown_Id',
+                    Amount DECIMAL(18,2) '$.Amount',
+                    Free_Qty DECIMAL(18,2) '$.Free_Qty',
+                    Total_Qty DECIMAL(18,2) '$.Total_Qty',
+                    Taxble BIT '$.Taxble',
+                    Taxable_Rate DECIMAL(18,2) '$.Taxable_Rate',
+                    HSN_Code NVARCHAR(50) '$.HSN_Code',
+                    Unit_Id NVARCHAR(50) '$.Unit_Id',
+                    Unit_Name NVARCHAR(200) '$.Unit_Name',
+                    Act_unit_Id NVARCHAR(50) '$.Act_unit_Id',
+                    Alt_Act_Unit_Id NVARCHAR(50) '$.Alt_Act_Unit_Id',
+                    Taxable_Amount DECIMAL(18,2) '$.Taxable_Amount',
+                    Tax_Rate DECIMAL(18,2) '$.Tax_Rate',
+                    Cgst DECIMAL(18,2) '$.Cgst',
+                    Cgst_Amo DECIMAL(18,2) '$.Cgst_Amo',
+                    Sgst DECIMAL(18,2) '$.Sgst',
+                    Sgst_Amo DECIMAL(18,2) '$.Sgst_Amo',
+                    Igst DECIMAL(18,2) '$.Igst',
+                    Igst_Amo DECIMAL(18,2) '$.Igst_Amo',
+                    Final_Amo DECIMAL(18,2) '$.Final_Amo',
+                    Batch_Name NVARCHAR(200) '$.Batch_Name'
+                ) AS p;
+            `);
+        await stockInsertRequest;
+
+        // UPDATE SALE ORDERS STATUS
+        if (genInfoRows.some(r => r.So_No)) {
+            const soIds = genInfoRows.map(r => r.So_No).filter(Boolean);
+            if (soIds.length > 0) {
+                const soUpdateRequest = new sql.Request(transaction)
+                    .input('SoIds', sql.NVarChar(sql.MAX), JSON.stringify(soIds))
+                    .query(`
+                        UPDATE tbl_Sales_Order_Gen_Info
+                        SET isConverted = 2
+                        WHERE So_Id IN (
+                            SELECT value FROM OPENJSON(@SoIds)
+                        )
+                    `);
+                await soUpdateRequest;
+            }
+        }
+
+        await transaction.commit();
+
+        return res.status(200).json({
+            success: true,
+            message: `${genInfoRows.length} invoices generated successfully!`,
+            invoicesGenerated: genInfoRows.length
+        });
+
+    } catch (e) {
+        console.log(e);
+        await transaction.rollback();
+        return res.status(400).json({ success: false, message: e.message || 'Failed to bulk generate invoices', error: e });
+    }
+}
+
 export const updateSalesInvoice = async (req, res) => {
     const transaction = req.transaction;
 

@@ -288,7 +288,7 @@ export const createCreditNote = async (req, res) => {
 
     try {
         const {
-            Retailer_Id, Branch_Id, CR_No, Voucher_Type = '', Cancel_status = 1, Ref_Inv_Number = '', Ref_Inv_Date,
+            Retailer_Id, Branch_Id, Voucher_Type = '', Cancel_status = 1, Ref_Inv_Number = '', Ref_Inv_Date,
             Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
             paymentDueDays = 0, Mailing_Name = '', Mailing_Address = '', Mailing_Phone = '',

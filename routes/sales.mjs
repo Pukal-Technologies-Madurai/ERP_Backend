@@ -3,7 +3,7 @@ import salesOrder from '../controller/Sales/salesOrder.mjs';
 import salesEntry from '../controller/Sales/salesEntry.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 import {
-    getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation,getSalesInvoiceById, getLastSalesInvoiceByRetailerId, getAdjacentSalesInvoice
+    getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation,getSalesInvoiceById, getLastSalesInvoiceByRetailerId, getAdjacentSalesInvoice, bulkCreateSalesInvoice
 } from '../controller/Sales/salesInvoice/salesInvoceCrud.mjs';
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
@@ -47,6 +47,7 @@ SalesRouter.get('/salesFilterDropdown', salesInvoice.getMobileReportDropdowns)
 
 SalesRouter.get('/salesInvoice', getSalesInvoice);
 SalesRouter.post('/salesInvoice', createSalesInvoice);
+SalesRouter.post('/salesInvoice/bulkConvert', bulkCreateSalesInvoice);
 SalesRouter.get('/salesInvoice/tallySync', salesTallySync);
 SalesRouter.put(
     '/salesInvoice', 
