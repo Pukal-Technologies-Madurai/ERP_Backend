@@ -161,7 +161,7 @@ const SaleOrder = () => {
         const {
             Retailer_Id, Sales_Person_Id, Branch_Id,
             Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = '',
-            Staff_Involved_List = []
+            Staff_Involved_List = [], invoiceCopyCount = 1
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -310,6 +310,7 @@ const SaleOrder = () => {
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
+                .input('invoiceCopyCount', invoiceCopyCount)
                 .input('Narration', Narration)
                 .input('Cancel_status', 1)
                 .input('Created_by', Created_by)
@@ -323,13 +324,13 @@ const SaleOrder = () => {
                         So_Id, So_Inv_No, So_Year, So_Branch_Inv_Id, So_Date, 
                         Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, CSGT_Total, 
                         SGST_Total, IGST_Total, GST_Inclusive, IS_IGST, Round_off, 
-                        Total_Invoice_value, Total_Before_Tax, Total_Tax,Narration, Cancel_status, 
+                        Total_Invoice_value, Total_Before_Tax, Total_Tax, Narration, invoiceCopyCount, Cancel_status, 
                         Created_by, Altered_by, Alter_Id, Created_on, Alterd_on, Trans_Type
                     ) VALUES (
                         @So_Id, @So_Inv_No, @So_Year, @So_Branch_Inv_Id, @So_Date, 
                         @Retailer_Id, @Sales_Person_Id, @Branch_Id, @VoucherType, @CSGT_Total, 
                         @SGST_Total, @IGST_Total, @GST_Inclusive, @IS_IGST, @Round_off, 
-                        @Total_Invoice_value, @Total_Before_Tax, @Total_Tax, @Narration, @Cancel_status, 
+                        @Total_Invoice_value, @Total_Before_Tax, @Total_Tax, @Narration, @invoiceCopyCount, @Cancel_status, 
                         @Created_by, @Altered_by, @Alter_Id, @Created_on, @Alterd_on, @Trans_Type
                     );`
                 );
@@ -491,7 +492,7 @@ const SaleOrder = () => {
             const {
                 So_Id, Retailer_Id, Sales_Person_Id, Branch_Id, Cancel_status,
                 Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0,
-                Staff_Involved_List = []
+                Staff_Involved_List = [], invoiceCopyCount = 1
             } = req.body;
 
             const So_Date = ISOString(req?.body?.So_Date);
@@ -571,6 +572,7 @@ const SaleOrder = () => {
                 .input('totalinvoice', Math.round(Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
+                .input('invoiceCopyCount', invoiceCopyCount)
                 .input('narration', Narration)
                 .input('alterby', Created_by)
                 .input('Alter_Id', alterId)
@@ -595,6 +597,7 @@ const SaleOrder = () => {
                         Total_Before_Tax = @Total_Before_Tax, 
                         Total_Tax = @Total_Tax,
                         Narration = @narration,  
+                        invoiceCopyCount = @invoiceCopyCount,  
                         Altered_by = @alterby, 
                         Alter_Id = @Alter_Id, 
                         Alterd_on = @alteron,

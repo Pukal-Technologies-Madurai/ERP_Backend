@@ -102,13 +102,19 @@ const LoginController = () => {
                         u.Company_id,
                         c.Company_Name,
                         am.Acc_Id,
-                        COALESCE(am.Account_name, 'Not found') AS Account_name
+                        COALESCE(am.Account_name, 'Not found') AS Account_name,
+						cc.Cost_Center_Id AS costCenterId,
+						COALESCE(cc.Cost_Center_Name, 'Not found') AS costCenterName,
+						cct.Cost_Category_Id AS costCategoryId,
+						COALESCE(cct.Cost_Category, 'Not found') AS costCategoryName
                     FROM tbl_Users AS u
                     LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = u.BranchId
                     LEFT JOIN tbl_User_Type AS ut ON ut.Id = u.UserTypeId
                     LEFT JOIN tbl_Company_Master AS c ON c.Company_id = u.Company_Id
                     LEFT JOIN tbl_Acc_User_Mapping AS uam ON uam.UserId = u.UserId
                     LEFT JOIN tbl_Account_Master AS am ON am.Acc_Id = uam.Acc_Id
+					LEFT JOIN tbl_ERP_Cost_Center AS cc ON cc.User_Id = u.UserId
+					LEFT JOIN tbl_ERP_Cost_Category AS cct ON cct.Cost_Category_Id = cc.User_Type
                     WHERE 
                         LOWER(u.UserName) = LOWER(@UserName) AND 
                         u.Password = @Password AND 
@@ -173,6 +179,10 @@ const LoginController = () => {
                         c.Company_Name,
                         am.Acc_Id,
                         COALESCE(am.Account_name, 'Not found') AS Account_name,
+						cc.Cost_Center_Id AS costCenterId,
+						COALESCE(cc.Cost_Center_Name, 'Not found') AS costCenterName,
+						cct.Cost_Category_Id AS costCategoryId,
+						COALESCE(cct.Cost_Category, 'Not found') AS costCategoryName,
                         (
                             SELECT 
                                 TOP (1)
@@ -193,6 +203,8 @@ const LoginController = () => {
                     LEFT JOIN tbl_Company_Master AS c ON c.Company_id = u.Company_Id
                     LEFT JOIN tbl_Acc_User_Mapping AS uam ON uam.UserId = u.UserId
                     LEFT JOIN tbl_Account_Master AS am ON am.Acc_Id = uam.Acc_Id
+					LEFT JOIN tbl_ERP_Cost_Center AS cc ON cc.User_Id = u.UserId
+					LEFT JOIN tbl_ERP_Cost_Category AS cct ON cct.Cost_Category_Id = cc.User_Type
                     WHERE u.Autheticate_Id = @auth AND UDel_Flag= 0`);
 
             const result = await request;

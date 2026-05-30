@@ -1407,7 +1407,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
         // Build Rows iteratively
         for (const order of SaleOrders) {
             const {
-                Retailer_Id, Branch_Id, So_No, Cancel_status = 1, Ref_Inv_Number = '',
+                Retailer_Id, Branch_Id, So_Id, Cancel_status = 1, Ref_Inv_Number = '',
                 Narration = null, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
                 Products_List = [], Expence_Array = [], 
                 Delivery_Status = 1, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
@@ -1496,7 +1496,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                 Retailer_Id: Number(Retailer_Id),
                 Delivery_Person_Id: 0,
                 Narration: Narration || '',
-                So_No: checkIsNumber(So_No) ? So_No : null,
+                So_No: checkIsNumber(So_Id) ? So_Id : null,
                 Cancel_status: toNumber(Cancel_status),
                 GST_Inclusive: GST_Inclusive,
                 IS_IGST: isIGST ? 1 : 0,
@@ -1531,7 +1531,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                 isInclusive,
                 isNotTaxableBill,
                 isIGST,
-                isSO: checkIsNumber(So_No)
+                isSO: checkIsNumber(So_Id)
             });
 
             // Map stockRows to include Do_Id manually
@@ -1669,7 +1669,7 @@ export const updateSalesInvoice = async (req, res) => {
 
     try {
         const {
-            Do_Id, Retailer_Id, Branch_Id, So_No, Voucher_Type = '', Cancel_status, Ref_Inv_Number = '',
+            Do_Id, Retailer_Id, Branch_Id, So_No, Cancel_status, Ref_Inv_Number = '',
             Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
             deliveryAddressDetails = {}, shipingAddressDetails = {},
