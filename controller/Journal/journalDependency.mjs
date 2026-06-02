@@ -113,10 +113,10 @@ const getAccountPendingReference = async (req, res) => {
                 -- journal outstandings (Dr and Cr)
                 ${getJournalOutstanding(JournalAutoId)}
                 UNION ALL
-                -- credit note outstandings (Dr)
+                -- credit note outstandings (Cr)
                 ${getCreditNoteOutstanding(JournalAutoId)}
                 UNION ALL
-                -- debit note outstandings (Cr)
+                -- debit note outstandings (Dr)
                 ${getDebitNoteOutstanding(JournalAutoId)}
                 ORDER BY eventDate ASC;
             `);

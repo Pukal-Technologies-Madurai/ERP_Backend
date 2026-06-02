@@ -4233,7 +4233,7 @@ WHERE
             servError(e, res);
         }
     };
-    
+
     return {
         salesDeliveryCreation,
         getSaleOrder,

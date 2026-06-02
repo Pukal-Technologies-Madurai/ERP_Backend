@@ -41,7 +41,8 @@ const accountMaster = () => {
                         COALESCE(ag.Group_Name, 'Not found') AS Group_Name,
                         a.creditLimit,
                         a.creditDays,
-                        a.percentageValue
+                        a.percentageValue,
+                        a.creditBillLimitCount
                     FROM tbl_Account_Master AS a 
                     LEFT JOIN tbl_Accounting_Group AS ag ON ag.Group_Id = a.Group_Id
                     WHERE a.Acc_Id IS NOT NULL
@@ -72,6 +73,7 @@ const accountMaster = () => {
                         a.creditLimit,
                         a.creditDays,
                         a.percentageValue,
+                        a.creditBillLimitCount,
                         COALESCE(ag.Group_Name, 'Not found') AS Group_Name
                     FROM tbl_Account_Master AS a 
                     LEFT JOIN tbl_Accounting_Group AS ag
@@ -159,7 +161,8 @@ const accountMaster = () => {
                 Created_By,
                 creditLimit,
                 creditDays,
-                percentageValue
+                percentageValue,
+                creditBillLimitCount = 0
             } = req.body;
             if (!Account_name || !Group_Id) {
                 return invalidInput(res, 'Account_name, Group_Id, and Created_By are required');
@@ -181,16 +184,17 @@ const accountMaster = () => {
                 .input('creditLimit', sql.Decimal(18, 2), parseFloat(creditLimit) || 0) 
                 .input('percentageValue', sql.Decimal(5, 2), parseFloat(percentageValue) || 0) 
                 .input('creditDays', sql.Int, parseInt(creditDays) || 0)
+                .input('creditBillLimitCount', sql.Int, creditBillLimitCount)
                 .input('Alter_Id', sql.Int, Alter_Id)
                 .input('Created_By', sql.VarChar, Created_By)
                 .input('Created_Time', sql.DateTime, Created_Time)
 
             await insertRequest.query(`
                 INSERT INTO tbl_Account_Master (
-                    Acc_Id, Account_name, Account_Alias_Name, Group_Id,creditLimit,percentageValue,creditDays,
+                    Acc_Id, Account_name, Account_Alias_Name, Group_Id,creditLimit,percentageValue,creditDays,creditBillLimitCount,
                     Alter_Id, Created_By, Created_Time
                 ) VALUES (
-                    @Acc_Id, @Account_name, @Account_Alias_Name, @Group_Id,@creditLimit,@percentageValue,@creditDays,
+                    @Acc_Id, @Account_name, @Account_Alias_Name, @Group_Id,@creditLimit,@percentageValue,@creditDays,@creditBillLimitCount,
                     @Alter_Id, @Created_By, @Created_Time
                 );`
             );
@@ -212,7 +216,8 @@ const accountMaster = () => {
                 Alter_By,
                    creditLimit,
                 creditDays,
-                percentageValue
+                percentageValue,
+                creditBillLimitCount = 0
             } = req.body;
 
 
@@ -230,6 +235,7 @@ const accountMaster = () => {
                 .input('creditLimit', sql.Decimal(18, 2), parseFloat(creditLimit) || 0) 
                 .input('creditDays', sql.Int, parseInt(creditDays) || 0) 
                 .input('percentageValue', sql.Decimal(5, 2), parseFloat(percentageValue) || 0)
+                .input('creditBillLimitCount', sql.Int, creditBillLimitCount)
                 .input('Alter_Id', sql.Int, Alter_Id)
                 .input('Alter_By', sql.Int, Number(Alter_By))
                 .input('Alter_Time', sql.DateTime, new Date());
@@ -243,6 +249,7 @@ const accountMaster = () => {
                 creditLimit=@creditLimit,
                 creditDays=@creditDays,
                 percentageValue=@percentageValue,
+                creditBillLimitCount=@creditBillLimitCount,
                 Alter_Id = @Alter_Id,
                 Alter_By = @Alter_By,
                 Alter_Time = @Alter_Time

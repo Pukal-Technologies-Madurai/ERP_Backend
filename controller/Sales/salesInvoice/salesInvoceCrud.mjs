@@ -1403,6 +1403,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
 
         const genInfoRows = [];
         let allStockRows = [];
+        const allStaffRows = [];
 
         // Build Rows iteratively
         for (const order of SaleOrders) {
@@ -1540,6 +1541,20 @@ export const bulkCreateSalesInvoice = async (req, res) => {
             });
 
             allStockRows = allStockRows.concat(stockRows);
+
+            // Extract and map staff details
+            const orderStaffList = toArray(order.Staff_Involved_List || order.Staffs_Array);
+            for (const staff of orderStaffList) {
+                const Emp_Id = toNumber(staff.Involved_Emp_Id || staff.Emp_Id);
+                const Emp_Type_Id = toNumber(staff.Cost_Center_Type_Id || staff.Emp_Type_Id);
+                if (checkIsNumber(Emp_Id) && checkIsNumber(Emp_Type_Id)) {
+                    allStaffRows.push({
+                        Do_Id,
+                        Emp_Id,
+                        Emp_Type_Id
+                    });
+                }
+            }
         }
 
         await transaction.begin();
@@ -1631,6 +1646,26 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                 ) AS p;
             `);
         await stockInsertRequest;
+
+        // INSERT STAFF INVOLVED DETAILS
+        if (allStaffRows.length > 0) {
+            const staffInsertRequest = new sql.Request(transaction)
+                .input('StaffJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: allStaffRows }))
+                .query(`
+                    INSERT INTO tbl_Sales_Delivery_Staff_Info (
+                        Do_Id, Emp_Id, Emp_Type_Id
+                    )
+                    SELECT
+                        p.Do_Id, p.Emp_Id, p.Emp_Type_Id
+                    FROM OPENJSON(@StaffJson, '$.rows')
+                    WITH (
+                        Do_Id BIGINT '$.Do_Id',
+                        Emp_Id BIGINT '$.Emp_Id',
+                        Emp_Type_Id BIGINT '$.Emp_Type_Id'
+                    ) AS p;
+                `);
+            await staffInsertRequest;
+        }
 
         // UPDATE SALE ORDERS STATUS
         if (genInfoRows.some(r => r.So_No)) {
