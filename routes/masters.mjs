@@ -361,6 +361,8 @@ MastersRouter.put('/posRateMaster/bulkUpdate',posRateMaster.bulkUpdatePosRateMas
 
 MastersRouter.get('/rateGen',posRateMaster.rateGen)
 
+MastersRouter.get('/retailerswithlol',retailers.getRetailerswithlol)
+
 
 // MastersRouter.post('/stockGroup',baseGroup.stockGroup);
 // MastersRouter.post('/stockItemGroup',baseGroup.stockItemGroup);

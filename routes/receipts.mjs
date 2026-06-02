@@ -56,6 +56,6 @@ ReceiptsRouter.get('/chequeTransaction',receiptReport.getChequeTransction);
 
 
 ReceiptsRouter.post('/syncSelectedWithReceipt',receiptMaster.syncSelectedWithReceipt)
-
+ReceiptsRouter.get('/receiptMasterwithLol', receiptMaster.getReceiptswithlol);
 
 export default ReceiptsRouter;

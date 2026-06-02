@@ -9,7 +9,7 @@ import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
 } from '../controller/Sales/salesInvoice/invoiceDependency.mjs';
 import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPrintOut, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice,deliverySlipPrintOut, salesInvoicePaper, multipleSalesInvoiceStaffDelete, PendingSalesInvoice,getSalesInvoiceForAssignCostCenterWhatsapp,
-lrReportUploadgetMobile,lrReportUploadMobile,lrReportUpdateMobile
+lrReportUploadgetMobile,lrReportUploadMobile,lrReportUpdateMobile,getSalesOrderForAssignCostCenterWhatsapp
  } from '../controller/Sales/salesInvoice/salesLRReport.mjs';
 import salesInvoice from '../controller/Sales/salesInvoice.mjs';
 import salesReports from '../controller/Sales/reports.mjs';
@@ -136,5 +136,6 @@ SalesRouter.post('/salesInvoice/Whatsapp',salesInvoice.salesInvoiceWhatsapp)
 SalesRouter.put('/salesInvoice/Whatsapp',salesInvoice.salesInvoiceWhatsappupdate)
 
 SalesRouter.get('/salesOrder/list',salesOrder.getSaleOrderList)
+SalesRouter.get('/salesOrder/lrReportWhatsapp', getSalesOrderForAssignCostCenterWhatsapp);
 
 export default SalesRouter;

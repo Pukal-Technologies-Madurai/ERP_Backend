@@ -912,7 +912,7 @@ const getStockValueReport = async (req, res) => {
            
             const lastRecordset = result.recordsets[result.recordsets.length - 1];
             if (lastRecordset && lastRecordset.length > 0) {
-                closingBalance = lastRecordset[0];
+                closingBalance = lastRecordset;
             }
 
        
@@ -932,6 +932,82 @@ const getStockValueReport = async (req, res) => {
         servError(e, res);
     }
 };
+
+
+
+const getStockValueErpReport = async (req, res) => {
+    try {
+        const { 
+            Pre_date,    
+            FromDate,     
+            ToDate,      
+            stock_group_id 
+        } = req.body;
+
+       
+        if (!Pre_date) {
+            return failed(res, 'Previous date is required');
+        }
+
+        if (!FromDate) {
+            return failed(res, 'From date is required');
+        }
+
+        if (!ToDate) {
+            return failed(res, 'To date is required');
+        }
+
+        if (new Date(FromDate) > new Date(ToDate)) {
+            return failed(res, 'From date cannot be greater than To date');
+        }
+
+        if (!stock_group_id && stock_group_id !== 0) {
+            return failed(res, 'Stock group ID is required');
+        }
+
+    
+        const request = new sql.Request();
+        
+        // Add parameters
+        request.input('Pre_date', sql.VarChar(50), Pre_date);
+        request.input('Fromdate', sql.VarChar(50), FromDate);
+        request.input('Todate', sql.VarChar(50), ToDate);
+        request.input('stock_group_id', sql.Int, stock_group_id);
+
+      
+        const result = await request.execute('Stock_Value_ERP_Item_Group_Wise');
+
+     
+        let stockValueData = [];
+        let closingBalance = null;
+
+
+        if (result.recordsets && result.recordsets.length > 0) {
+           
+            const lastRecordset = result.recordsets[result.recordsets.length - 1];
+            if (lastRecordset && lastRecordset.length > 0) {
+                closingBalance = lastRecordset;
+            }
+
+       
+        }
+
+        return success(res, 'Stock value report generated successfully', {
+            fromDate: FromDate,
+            toDate: ToDate,
+            preDate: Pre_date,
+            stockGroupId: stock_group_id,
+            closingBalance: closingBalance,
+          
+        });
+
+    } catch (e) {
+        console.error('Error in getStockValueReport:', e);
+        servError(e, res);
+    }
+};
+
+
 
 
 const getStockValueDetails = async (req, res) => {
@@ -1038,9 +1114,11 @@ const getStockValueDetails = async (req, res) => {
     }
 };
 
+
+
 const getStockValueSummaryAlt = async (req, res) => {
   try {
-    const { Pre_date, stock_group_id } = req.body;
+    const { Pre_date,Todate, stock_group_id } = req.body;
     
    
     
@@ -1061,6 +1139,7 @@ const getStockValueSummaryAlt = async (req, res) => {
     // Your database call
     const result = await new sql.Request()
       .input('Pre_date', sql.VarChar(50), Pre_date)
+      .input('Todate', sql.VarChar(50), Todate)
       .input('stock_group_id', sql.Int, parseInt(stock_group_id))
       .execute('Stock_Value_By_Summarry_New');
     
@@ -1091,7 +1170,8 @@ const getStockValueSummaryAlt = async (req, res) => {
         updateOverAllGroupUpdate,
         getStockValueReport,
         getStockValueDetails,
-        getStockValueSummaryAlt
+        getStockValueSummaryAlt,
+        getStockValueErpReport
     }
 }
 

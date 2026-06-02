@@ -24,108 +24,113 @@ const findRecentDate = (dateArray) => {
 const RetailerControll = () => {
     const domain = process.env.domain;
 
-    const getSFCustomers = async (req, res) => {
-        const {
-            isRetailer = 1,
-            isVendor = 0,
-            Retailer_Id,
-            PhoneNumber,
-            ContactPerson_Name,
-            Route_Id,
-            Area_Id,
-            City,
+const getSFCustomers = async (req, res) => {
+    const {
+        isRetailer = 1,
+        isVendor = 0,
+        Retailer_Id,
+        PhoneNumber,
+        ContactPerson_Name,
+        Route_Id,
+        Area_Id,
+        City,
+        Del_Flag 
+    } = req.query;
 
+    try {
+        let query = `
+            SELECT 
+                rm.*,
+                COALESCE(rom.Route_Name, '') AS RouteGet,
+                COALESCE(am.Area_Name, '') AS AreaGet,
+                COALESCE(sm.State_Name, '') AS StateGet,
+                COALESCE(cm.Company_Name, '') AS Company_Name,
+                COALESCE(modify.Name, '') AS lastModifiedBy,
+                COALESCE(created.Name, '') AS createdBy,
+                COALESCE((
+                    SELECT TOP (1) *
+                    FROM tbl_Retailers_Locations
+                    WHERE Retailer_Id = rm.Retailer_Id AND isActiveLocation = 1
+                    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                ), '{}') AS VERIFIED_LOCATION,
+                COALESCE((
+                    SELECT TOP (5) ml.*,
+                        COALESCE((SELECT NAME FROM tbl_Users WHERE UserId = ml.EntryBy), 'unknown') AS EntryByGet
+                    FROM tbl_Retailers_Locations AS ml
+                    WHERE rm.Retailer_Id = ml.Retailer_Id
+                    ORDER BY CONVERT(DATETIME, EntryAt) DESC
+                    FOR JSON PATH
+                ), '[]') AS AllLocations
+            FROM tbl_Retailers_Master AS rm
+            LEFT JOIN tbl_Route_Master AS rom ON rom.Route_Id = rm.Route_Id
+            LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
+            LEFT JOIN tbl_State_Master AS sm ON sm.State_Id = rm.State_Id
+            LEFT JOIN tbl_Company_Master AS cm ON cm.Company_id = rm.Company_Id
+            LEFT JOIN tbl_Users AS modify ON modify.UserId = rm.Updated_By
+            LEFT JOIN tbl_Users AS created ON created.UserId = rm.Created_By
+            WHERE rm.isVendor = @isVendor AND rm.isRetailer = @isRetailer
+        `;
 
-        } = req.query;
+        const request = new sql.Request();
+        request.input('isRetailer', isRetailer);
+        request.input('isVendor', isVendor);
 
-        try {
-            let query = `
-                SELECT 
-                    rm.*,
-                    COALESCE(rom.Route_Name, '') AS RouteGet,
-                    COALESCE(am.Area_Name, '') AS AreaGet,
-                    COALESCE(sm.State_Name, '') AS StateGet,
-                    COALESCE(cm.Company_Name, '') AS Company_Name,
-                    COALESCE(modify.Name, '') AS lastModifiedBy,
-                    COALESCE(created.Name, '') AS createdBy,
-                    COALESCE((
-                        SELECT TOP (1) *
-                        FROM tbl_Retailers_Locations
-                        WHERE Retailer_Id = rm.Retailer_Id AND isActiveLocation = 1
-                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-                    ), '{}') AS VERIFIED_LOCATION,
-                    COALESCE((
-                        SELECT TOP (5) ml.*,
-                            COALESCE((SELECT NAME FROM tbl_Users WHERE UserId = ml.EntryBy), 'unknown') AS EntryByGet
-                        FROM tbl_Retailers_Locations AS ml
-                        WHERE rm.Retailer_Id = ml.Retailer_Id
-                        ORDER BY CONVERT(DATETIME, EntryAt) DESC
-                        FOR JSON PATH
-                    ), '[]') AS AllLocations
-                FROM tbl_Retailers_Master AS rm
-                LEFT JOIN tbl_Route_Master AS rom ON rom.Route_Id = rm.Route_Id
-                LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
-                LEFT JOIN tbl_State_Master AS sm ON sm.State_Id = rm.State_Id
-                LEFT JOIN tbl_Company_Master AS cm ON cm.Company_id = rm.Company_Id
-                LEFT JOIN tbl_Users AS modify ON modify.UserId = rm.Updated_By
-                LEFT JOIN tbl_Users AS created ON created.UserId = rm.Created_By
-                WHERE rm.isVendor = @isVendor AND rm.isRetailer = @isRetailer
-            `;
-
-            const request = new sql.Request();
-            request.input('isRetailer', isRetailer);
-            request.input('isVendor', isVendor);
-
-            if (Retailer_Id) {
-                query += ` AND rm.Retailer_Id = @Retailer_Id`;
-                request.input('Retailer_Id', Retailer_Id);
-            }
-
-            if (PhoneNumber) {
-                query += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
-                request.input('PhoneNumber', PhoneNumber);
-            }
-
-            if (ContactPerson_Name) {
-                query += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
-                request.input('ContactPerson_Name', ContactPerson_Name);
-            }
-
-            if (Route_Id && Route_Id !== 'ALL') {
-                query += ` AND rm.Route_Id = @Route_Id`;
-                request.input('Route_Id', Route_Id);
-            }
-
-            if (Area_Id && Area_Id !== 'ALL') {
-                query += ` AND rm.Area_Id = @Area_Id`;
-                request.input('Area_Id', Area_Id);
-            }
-
-            if (City && City !== 'ALL') {
-                query += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
-                request.input('City', City);
-            }
-
-
-            query += ` ORDER BY rm.Retailer_Id DESC`;
-
-            const result = await request.query(query);
-
-            if (result.recordset.length) {
-                const parsed = result.recordset.map(o => ({
-                    ...o,
-                    VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
-                    AllLocations: JSON.parse(o.AllLocations || '[]'),
-                    imageUrl: getImage('retailers', o?.ImageName)
-                }));
-                dataFound(res, parsed);
-            } else {
-                noData(res);
-            }
-        } catch (e) {
-            servError(e, res);
+        if (Retailer_Id) {
+            query += ` AND rm.Retailer_Id = @Retailer_Id`;
+            request.input('Retailer_Id', Retailer_Id);
         }
-    };
+
+        if (PhoneNumber) {
+            query += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
+            request.input('PhoneNumber', PhoneNumber);
+        }
+
+        if (ContactPerson_Name) {
+            query += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
+            request.input('ContactPerson_Name', ContactPerson_Name);
+        }
+
+        if (Route_Id && Route_Id !== 'ALL') {
+            query += ` AND rm.Route_Id = @Route_Id`;
+            request.input('Route_Id', Route_Id);
+        }
+
+        if (Area_Id && Area_Id !== 'ALL') {
+            query += ` AND rm.Area_Id = @Area_Id`;
+            request.input('Area_Id', Area_Id);
+        }
+
+        if (City && City !== 'ALL') {
+            query += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
+            request.input('City', City);
+        }
+
+        // Added Del_Flag filter - Active (0) or Inactive (1)
+        if (Del_Flag !== undefined && Del_Flag !== null && Del_Flag !== '') {
+            query += ` AND rm.Del_Flag = @Del_Flag`;
+            request.input('Del_Flag', Del_Flag);
+        }
+
+        // Fixed: Removed Order_By since column doesn't exist
+        query += ` ORDER BY rm.Retailer_Id DESC`; 
+
+        const result = await request.query(query);
+
+        if (result.recordset.length) {
+            const parsed = result.recordset.map(o => ({
+                ...o,
+                VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
+                AllLocations: JSON.parse(o.AllLocations || '[]'),
+                imageUrl: getImage('retailers', o?.ImageName)
+            }));
+            dataFound(res, parsed);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        servError(e, res);
+    }
+};
 
     const getRetailerDropDown = async (req, res) => {
         const { isRetailer = 1, isVendor = 0 } = req.query;
@@ -418,7 +423,7 @@ const RetailerControll = () => {
                 Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id, PinCode,
                 Retailer_Class, Route_Id, Area_Id, Reatailer_Address, Reatailer_City,
                 State_Id, Branch_Id, Gstno, Latitude, Longitude,
-                Created_By, Company_Id, isRetailer = 1, isVendor = 0
+                Created_By, Company_Id, isRetailer = 1, isVendor = 0,Del_Flag,Order_By,Whatsapp
             } = req.body;
 
 
@@ -457,7 +462,7 @@ const RetailerControll = () => {
                 .input('createdby', Created_By)
                 .input('update', new Date())
                 .input('updateby', 0)
-                .input('dflag', 0)
+                .input('dflag', Del_Flag)
                 .input('filename', fileName ? fileName : null)
                 .input('filepath', filePath ? filePath : null)
                 .input('filetype', filetype ? filetype : null)
@@ -466,6 +471,8 @@ const RetailerControll = () => {
                 .input('company', Company_Id)
                 .input('isRetailer', isRetailer)
                 .input('isVendor', isVendor)
+                .input('Order_By', Order_By)
+                .input('Whatsapp', Whatsapp)
                 .query(`
                     INSERT INTO tbl_Retailers_Master (
                         Retailer_Id, Retailer_Code, Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id, 
@@ -474,7 +481,7 @@ const RetailerControll = () => {
                         ERP_Id, Latitude, Longitude, Profile_Pic, Created_Date,
                         Created_By, Updated_Date, Updated_By, Del_Flag, ImageName,
                         ImagePath, ImageType, ImageSize, Others_5, Company_Id,
-                        isRetailer, isVendor 
+                        isRetailer, isVendor,Order_By,Whatsapp
                     ) VALUES (
                         @MaxRetailerId, @code, @rname, @cperson, @mobile, @channel, 
                         @rclass, @route, @area, @address, @city, 
@@ -482,7 +489,7 @@ const RetailerControll = () => {
                         @erp, @lati, @long, @profile, @created, 
                         @createdby, @update, @updateby, @dflag, @filename, 
                         @filepath, @filetype, @filesize, @other5, @company,
-                        @isRetailer, @isVendor 
+                        @isRetailer, @isVendor,@Order_By,@Whatsapp
                     );
                     SELECT SCOPE_IDENTITY() AS Retailer_Id
                 `);
@@ -538,7 +545,7 @@ const RetailerControll = () => {
             const {
                 Retailer_Id, Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id,
                 Retailer_Class, Route_Id, Area_Id, Reatailer_Address, Reatailer_City, PinCode,
-                State_Id, Gstno, Updated_By, isRetailer = 1, isVendor = 0
+                State_Id, Gstno, Updated_By, isRetailer = 1, isVendor = 0,Del_Flag,Order_By,Whatsapp
             } = req.body;
 
             const updateQuery = `
@@ -563,7 +570,11 @@ const RetailerControll = () => {
                     Updated_Date = @updated,
 
                     isRetailer = @isRetailer,
-                    isVendor = @isVendor
+                    isVendor = @isVendor,
+                    Del_Flag=@Del_Flag,
+                    Order_By=@Order_By,
+                    Whatsapp=@Whatsapp
+
 
 
                     ${fileName ? ', Profile_Pic = @profile, ImageName = @imagename, ImagePath = @imagepath, ImageType = @imagetype, ImageSize = @imagesize' : ''}
@@ -589,6 +600,9 @@ const RetailerControll = () => {
                 .input('gst', Gstno)
                 .input('updatedby', Updated_By)
                 .input('updated', new Date())
+                .input('Del_Flag',Del_Flag)
+                .input('Order_By',Order_By)
+                .input('Whatsapp',Whatsapp)
 
                 .input('profile', fileName ? domain + '/imageURL/retailers/' + fileName : null)
                 .input('imagename', fileName ? fileName : null)
@@ -1362,6 +1376,35 @@ const RetailerControll = () => {
         }
     };
 
+    const getRetailerswithlol=async(req,res)=>{
+        try {
+        let query = `
+            select rm.*,lol.* from tbl_Retailers_master rm
+           left join tbl_Ledger_LOL lol ON lol.Ret_Id=rm.Retailer_Id
+        `;
+
+        const request = new sql.Request();
+
+        query += ` ORDER BY rm.Retailer_Id DESC`; 
+
+        const result = await request.query(query);
+
+        if (result.recordset.length) {
+            const parsed = result.recordset.map(o => ({
+                ...o,
+                VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
+                AllLocations: JSON.parse(o.AllLocations || '[]'),
+                imageUrl: getImage('retailers', o?.ImageName)
+            }));
+            dataFound(res, parsed);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        servError(e, res);
+    }
+    }
+
     return {
         getSFCustomers,
         getRetailerDropDown,
@@ -1378,7 +1421,8 @@ const RetailerControll = () => {
         posRetailesSync,
         retailerSoldProduct,
         getRetailersWhoHasClosingStock,
-        getSFCustomersPaginated
+        getSFCustomersPaginated,
+        getRetailerswithlol
     }
 }
 

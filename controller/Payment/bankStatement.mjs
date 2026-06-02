@@ -412,6 +412,48 @@ const getTokenEndpoint = async (req, res) => {
 };
 
 
+// const getBankStatement = async (req, res) => {
+//   const FromDate = req.query?.FromDate
+//     ? ISOString(req.query?.FromDate)
+//     : ISOString();
+//   const ToDate = req.query?.ToDate
+//     ? ISOString(req.query?.ToDate)
+//     : ISOString();
+//   const AccountNo = req.query.AccountNo;
+
+//   try {
+//     if (!FromDate || !ToDate) {
+//       return invalidInput(res, "FromDate and ToDate are required");
+//     }
+
+//     if (!AccountNo) {
+//       return invalidInput(res, "AccountNo is required");
+//     }
+
+//     const request = new sql.Request();
+//     request.input("FromDate", sql.DateTime, FromDate);
+//     request.input("ToDate", sql.DateTime, ToDate);
+//     request.input("AccountNo", sql.VarChar, AccountNo); 
+
+//     let query = `
+//     SELECT bt.*, ba.pay_id,ba.receipt_id,ba.contra_id
+//     FROM tbl_Bank_Transactions bt
+// left join tbl_Bank_Activity ba ON ba.Id=bt.Id
+//         WHERE TranDate BETWEEN @FromDate AND @ToDate 
+//           AND AccountNo = @AccountNo 
+//         ORDER BY TranDate DESC
+//     `;
+
+//     const result = await request.query(query);
+//     sentData(res, result.recordset);
+
+//   } catch (error) {
+//     console.error("Error fetching bank statement:", error);
+//     servError(error, res);
+//   }
+// };
+
+
 const getBankStatement = async (req, res) => {
   const FromDate = req.query?.FromDate
     ? ISOString(req.query?.FromDate)
@@ -436,23 +478,36 @@ const getBankStatement = async (req, res) => {
     request.input("AccountNo", sql.VarChar, AccountNo); 
 
     let query = `
-    SELECT bt.*, ba.pay_id,ba.receipt_id
-    FROM tbl_Bank_Transactions bt
-left join tbl_Bank_Activity ba ON ba.Id=bt.Id
-        WHERE TranDate BETWEEN @FromDate AND @ToDate 
-          AND AccountNo = @AccountNo 
-        ORDER BY TranDate DESC
+      SELECT 
+        bt.*, 
+        ba.pay_id,
+        ba.receipt_id,
+        ba.contra_id
+      FROM tbl_Bank_Transactions bt
+      LEFT JOIN tbl_Bank_Activity ba ON ba.Id = bt.Id
+      WHERE bt.TranDate BETWEEN @FromDate AND @ToDate 
+        AND bt.AccountNo = @AccountNo 
+      ORDER BY bt.TranDate DESC
     `;
 
     const result = await request.query(query);
-    sentData(res, result.recordset);
+    
+    // Process the results to ensure proper mapping
+    const processedResults = result.recordset.map(record => ({
+      ...record,
+      // Ensure these fields exist even if null
+      pay_id: record.pay_id || null,
+      receipt_id: record.receipt_id || null,
+      contra_id: record.contra_id || null
+    }));
+    
+    sentData(res, processedResults);
 
   } catch (error) {
     console.error("Error fetching bank statement:", error);
     servError(error, res);
   }
 };
-
 
 
 const getStatementFromBuffer = async (req, res) => {

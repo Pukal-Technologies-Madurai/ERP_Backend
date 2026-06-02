@@ -1,8 +1,9 @@
 import sql from 'mssql';
-import { checkIsNumber, Division, isEqualNumber, ISOString, Subraction, toArray, toNumber } from '../../../helper_functions.mjs';
+import { checkIsNumber, Division, isEqualNumber, ISOString, Multiplication, Subraction, toArray, toNumber } from '../../../helper_functions.mjs';
 import { servError, sentData, success, invalidInput, failed,dataFound,noData } from '../../../res.mjs';
 import { validateBody } from '../../../middleware/zodValidator.mjs';
 import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
+import { error } from 'console';
 import uploadFile from '../../../middleware/uploadMiddleware.mjs';
 import getImage from '../../../middleware/getImageIfExist.mjs';
 
@@ -195,7 +196,7 @@ export const multipleSalesInvoiceStaffUpdate = async (req, res) => {
             return;
         }
 
-        const { CostCategory, Do_Id, involvedStaffs, staffInvolvedStatus = 0, deliveryStatus = 5 } = req.body;
+        const { CostCategory, Do_Id, involvedStaffs, staffInvolvedStatus, deliveryStatus = 5 } = req.body;
         const invoiceIdsStr = Do_Id.join(',');
 
         await transaction.begin();
@@ -885,10 +886,12 @@ export const salesInvoicePaper = async (req, res) => {
     }
 }
 
+
+
 export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-        const status = req.query.staffStatus ? req.query.staffStatus : 0;
+        const status = req.query.staffStatus ? 1 : 0;
 
         const getSalesInvoice = new sql.Request()
             .input('reqDate', sql.Date, reqDate)
@@ -1016,6 +1019,8 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
         servError(e, res);
     }
 };
+
+
 
 export const lrReportUploadgetMobile = async (req, res) => {
     try {
@@ -1193,6 +1198,165 @@ ORDER BY Do_Id;
     }
 }
 
+
+
+// export const lrReportUploadMobile = async (req, res) => {
+
+//     const transaction = new sql.Transaction();
+
+//     try {
+//         await uploadFile(req, res, 6, 'LRReport');
+
+//         const fileName = req?.file?.filename;
+//         const filePath = req?.file?.path;
+
+//         const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus = 0, Uploaded_By } = req.body;
+
+//         if (!Do_Id) {
+//             return invalidInput(res, 'Do_Id is required');
+//         }
+
+//         await transaction.begin();
+
+
+//         const updateStatusRequest = new sql.Request(transaction);
+//         await updateStatusRequest
+//             .input('Do_Id', sql.BigInt, Do_Id)
+//             .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
+//             .query(`
+//                 UPDATE tbl_Sales_Delivery_Gen_Info
+//                 SET staffInvolvedStatus = @staffInvolvedStatus
+//                 WHERE Do_Id = @Do_Id;
+//             `);
+
+
+//         if (involvedStaffs && JSON.parse(involvedStaffs || '[]').length > 0) {
+//             const staffRequest = new sql.Request(transaction);
+//             await staffRequest
+//                 .input('Do_Id', sql.BigInt, Do_Id)
+//                 .input('involvedStaffs', sql.NVarChar, involvedStaffs)
+//                 .query(`
+//                     INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
+//                     SELECT 
+//                         @Do_Id,
+//                         JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
+//                         JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
+//                     FROM OPENJSON(@involvedStaffs);
+//                 `);
+//         }
+
+
+//         if (fileName) {
+
+//             const idRequest = new sql.Request(transaction);
+//             const idResult = await idRequest.query(`
+//                 SELECT ISNULL(MAX(Id), 0) + 1 AS NewId 
+//                 FROM tbl_LrReport WITH (UPDLOCK, HOLDLOCK)
+//             `);
+//             const newLrId = idResult.recordset[0].NewId;
+
+//             const imageRequest = new sql.Request(transaction);
+//             await imageRequest
+//                 .input('Id', sql.BigInt, newLrId)
+//                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
+//                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+//                 .input('ImageUrl', sql.NVarChar, filePath )
+//                 .input('Image_Name', fileName)
+//                 .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+//                 .query(`
+//                     INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl,Image_Name, Uploaded_By)
+//                     VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl,@Image_Name, @Uploaded_By);
+//                 `);
+//         }
+
+//         await transaction.commit();
+
+//         success(res, 'Changes saved successfully');
+//     } catch (e) {
+//         if (transaction._aborted === false) {
+//             await transaction.rollback();
+//         }
+//         servError(e, res);
+//     }
+// };
+
+// export const lrReportUpdateMobile = async (req, res) => {
+//     const transaction = new sql.Transaction();
+
+//     try {
+//         await uploadFile(req, res, 6, 'LRReport');
+
+//         const fileName = req?.file?.filename;
+//         const filePath = req?.file?.path;
+
+//         if (!fileName) {
+//             return invalidInput(res, 'New image is required');
+//         }
+
+//         const { Id, Do_Id, Do_Inv_No, Uploaded_By } = req.body;
+
+//         if (!Id) {
+//             return invalidInput(res, 'Id is required to update');
+//         }
+
+//         await transaction.begin();
+
+        
+//         const getOldImageRequest = new sql.Request(transaction);
+//         const oldImageResult = await getOldImageRequest
+//             .input('Id', sql.BigInt, Id)
+//             .query(`SELECT ImageUrl FROM tbl_LrReport WHERE Id = @Id`);
+
+//         if (oldImageResult.recordset.length === 0) {
+//             await transaction.rollback();
+//             return failed(res, 'LR Report record not found');
+//         }
+
+//         // Delete old image file
+//         const oldImagePath = oldImageResult.recordset[0].ImageUrl;
+//         if (oldImagePath) {
+//             try {
+//                 const fs = await import('fs');
+//                 if (fs.existsSync(oldImagePath)) {
+//                     fs.unlinkSync(oldImagePath);
+//                 }
+//             } catch (fileErr) {
+//                 console.error('Failed to delete old image file:', fileErr.message);
+//             }
+//         }
+
+//         // Delete the old record
+//         const deleteRequest = new sql.Request(transaction);
+//         await deleteRequest
+//             .input('Id', sql.BigInt, Id)
+//             .query(`DELETE FROM tbl_LrReport WHERE Id = @Id`);
+
+//         // Insert new record with same Id
+//         const insertRequest = new sql.Request(transaction);
+//         await insertRequest
+//             .input('Id', sql.BigInt, Id)
+//             .input('Do_Id', sql.NVarChar, Do_Id?.toString() || '')
+//             .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+//             .input('ImageUrl', sql.NVarChar, filePath)
+//             .input('Image_Name', sql.NVarChar, fileName)
+//             .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+//             .query(`
+//                 INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
+//                 VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By)
+//             `);
+
+//         await transaction.commit();
+//         success(res, 'LR Report image updated successfully');
+
+//     } catch (e) {
+//         if (transaction._aborted === false) {
+//             await transaction.rollback();
+//         }
+//         servError(e, res);
+//     }
+// };
+
+
 export const lrReportUploadMobile = async (req, res) => {
 
     const transaction = new sql.Transaction();
@@ -1353,6 +1517,264 @@ export const lrReportUpdateMobile = async (req, res) => {
         servError(e, res);
     }
 };
+
+export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
+    try {
+        const reqDate = req.query.reqDate ? req.query.reqDate : ISOString();
+        const status = req.query.staffStatus ? 1 : 0;
+
+        const getSalesOrder = new sql.Request()
+            .input('reqDate', sql.Date, new Date(reqDate))
+            .input('status', sql.Int, toNumber(status))
+            .query(`
+            -- filtered sales orders temp table
+                DECLARE @FilteredSalesOrder TABLE (So_Id BIGINT);
+            
+            -- inserting sales order data to temp table (all sales orders for the date)
+                INSERT INTO @FilteredSalesOrder (So_Id)
+                SELECT So_Id
+                FROM tbl_Sales_Order_Gen_Info
+                WHERE 
+                    CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)
+            
+            -- Debug: Return the count and sample data
+                SELECT 
+                    COUNT(*) AS TotalOrders,
+                    @reqDate AS RequestDate,
+                    (SELECT TOP 1 So_Date FROM tbl_Sales_Order_Gen_Info WHERE CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)) AS SampleDate,
+                    (SELECT TOP 1 Cancel_status FROM tbl_Sales_Order_Gen_Info WHERE CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)) AS SampleCancelStatus
+                FROM tbl_Sales_Order_Gen_Info
+                WHERE CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)
+            
+            -- Sales Orders with Conversion Status
+                SELECT 
+                    'SalesOrder' AS Document_Type,
+                    sog.So_Id AS So_Id,
+                    sog.So_Inv_No AS So_Inv_No,
+                    sog.VoucherType AS Voucher_Type,
+                    vt.Voucher_Type AS voucherTypeGet,
+                    sog.So_Date AS Document_Date,
+                    sog.Retailer_Id,
+                    ISNULL(r.Retailer_Name, 'Unknown') AS retailerNameGet,
+                    sog.Branch_Id,
+                    b.BranchName AS branchNameGet,
+                    sog.Total_Invoice_value,
+                    sog.Cancel_status,
+                    sog.Created_by,
+                    sog.Created_on,
+                    CONVERT(DATETIME, sog.Created_on) AS createdOn,
+                    sog.Narration,
+                    sog.isConverted,
+                    CASE 
+                        WHEN sog.Cancel_status = 0 THEN 'Canceled Order'
+                        WHEN EXISTS (
+                            SELECT 1 
+                            FROM tbl_Sales_Delivery_Gen_Info dgi 
+                            WHERE dgi.So_No = sog.So_Id
+                        ) THEN 'Converted to Delivery'
+                        ELSE 'Not Converted'
+                    END AS Conversion_Status,
+                    (
+                        SELECT TOP 1 
+                            dgi.Do_Id,
+                            dgi.Do_Inv_No,
+                            dgi.Do_Date,
+                            dgi.Delivery_Status
+                        FROM tbl_Sales_Delivery_Gen_Info dgi
+                        WHERE dgi.So_No = sog.So_Id
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ) AS Delivery_Details
+                FROM tbl_Sales_Order_Gen_Info AS sog
+                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = sog.VoucherType
+                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sog.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = sog.Branch_Id
+                WHERE sog.So_Id IN (SELECT So_Id FROM @FilteredSalesOrder)
+                ORDER BY sog.So_Date, sog.So_Id;
+            
+            -- Sales Order Staff Info
+                SELECT 
+                    'SalesOrder' AS Document_Type,
+                    sosi.So_Id AS So_Id,
+                    sosi.Involved_Emp_Id AS Emp_Id,
+                    sosi.Cost_Center_Type_Id AS Emp_Type_Id,
+                    e.Cost_Center_Name AS Emp_Name,
+                    cc.Cost_Category AS Involved_Emp_Type
+                FROM tbl_Sales_Order_Staff_Info AS sosi
+                LEFT JOIN tbl_ERP_Cost_Center AS e
+                    ON e.Cost_Center_Id = sosi.Involved_Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc
+                    ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+                WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredSalesOrder)
+                ORDER BY sosi.So_Id;
+            
+            -- Unique Cost Category IDs from Sales Orders
+                SELECT DISTINCT sosi.Cost_Center_Type_Id AS Emp_Type_Id
+                FROM tbl_Sales_Order_Staff_Info sosi
+                WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredSalesOrder);
+            
+            -- Cost Types
+                SELECT Cost_Category_Id, Cost_Category
+                FROM tbl_ERP_Cost_Category
+                ORDER BY Cost_Category;
+            
+            -- Sales Order Stock Details
+                SELECT 
+                    'SalesOrder' AS Document_Type,
+                    sosi.Sales_Order_Id AS So_Id,
+                    sosi.So_Date AS Document_Date,
+                    COALESCE(sosi.Bill_Qty, 0) AS Bill_Qty,
+                    COALESCE(sosi.Free_Qty, 0) AS Free_Qty,
+                    COALESCE(sosi.Total_Qty, 0) AS Total_Qty,
+                    COALESCE(sosi.Item_Rate, 0) AS Item_Rate,
+                    COALESCE(sosi.Taxable_Rate, 0) AS Taxable_Rate,
+                    COALESCE(sosi.Amount, 0) AS Amount,
+                    COALESCE(sosi.Tax_Rate, 0) AS Tax_Rate,
+                    COALESCE(sosi.Cgst, 0) AS Cgst,
+                    COALESCE(sosi.Cgst_Amo, 0) AS Cgst_Amo,
+                    COALESCE(sosi.Sgst, 0) AS Sgst,
+                    COALESCE(sosi.Sgst_Amo, 0) AS Sgst_Amo,
+                    COALESCE(sosi.Igst, 0) AS Igst,
+                    COALESCE(sosi.Igst_Amo, 0) AS Igst_Amo,
+                    COALESCE(sosi.Final_Amo, 0) AS Final_Amo,
+                    sosi.Item_Id,
+                    p.Product_Name,
+                    p.HSN_Code,
+                    pck.Pack AS Unit_Name,
+                    sosi.Taxble
+                FROM tbl_Sales_Order_Stock_Info sosi
+                LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sosi.Item_Id
+                LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                WHERE sosi.Sales_Order_Id IN (SELECT So_Id FROM @FilteredSalesOrder)
+                ORDER BY sosi.Sales_Order_Id, sosi.S_No;
+            
+            -- Get Delivery details for converted orders
+                SELECT 
+                    dgi.So_No AS Sales_Order_Id,
+                    dgi.Do_Id,
+                    dgi.Do_Inv_No AS Delivery_Invoice_No,
+                    dgi.Do_Date AS Delivery_Date,
+                    dgi.Delivery_Status,
+                    s.Status AS Delivery_Status_Name,
+                    dgi.Total_Invoice_value AS Delivery_Total_Value,
+                    dgi.Delivery_Person_Id
+                FROM tbl_Sales_Delivery_Gen_Info dgi
+                LEFT JOIN tbl_Status s ON s.Status_Id = dgi.Delivery_Status
+                WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredSalesOrder)
+                ORDER BY dgi.So_No;
+        `);
+
+        const result = await getSalesOrder;
+
+     
+        const debugInfo = result.recordsets[0] || [];
+        const orders = result.recordsets[1] || [];
+        const staffs = result.recordsets[2] || [];
+        const uniqueInvolvedStaffs = result.recordsets[3] || [];
+        const costTypes = result.recordsets[4] || [];
+        const stockDetails = result.recordsets[5] || [];
+        const deliveryDetails = result.recordsets[6] || [];
+
+   
+
+        if (orders.length === 0) {
+            return sentData(res, [], {
+                costTypes: [],
+                uniqueInvolvedStaffs: [],
+                summary: {
+                    total_orders: 0,
+                    converted_orders: 0,
+                    not_converted_orders: 0,
+                    canceled_orders: 0,
+                    total_order_value: 0,
+                    message: `No sales orders found for date: ${reqDate}.`
+                },
+                debug: debugInfo[0]
+            });
+        }
+
+        // Calculate additional fields for stock details
+        const calculatedStockDetails = stockDetails.map(stock => ({
+            ...stock,
+            Total_Amount: stock.Final_Amo || stock.Amount || 0,
+            Tax_Amount: (Number(stock.Cgst_Amo) || 0) + (Number(stock.Sgst_Amo) || 0) + (Number(stock.Igst_Amo) || 0),
+            Subtotal: (Number(stock.Item_Rate) || 0) * (Number(stock.Bill_Qty) || 0)
+        }));
+
+        // Group staff and stock details by order
+        const ordersWithDetails = orders.map(order => {
+            // Filter staffs using So_Id
+            const involvedStaffs = staffs.filter(stf =>
+                isEqualNumber(stf.So_Id, order.So_Id) && stf.Document_Type === order.Document_Type
+            );
+
+            // Filter stock details using So_Id
+            const orderStockDetails = calculatedStockDetails.filter(stk =>
+                isEqualNumber(stk.So_Id, order.So_Id) && stk.Document_Type === order.Document_Type
+            );
+
+            // Get delivery details for this order if converted
+            const deliveryInfo = deliveryDetails.find(del => 
+                isEqualNumber(del.Sales_Order_Id, order.So_Id)
+            );
+
+            // Parse Delivery_Details JSON if it exists
+            let parsedDeliveryDetails = null;
+            if (order.Delivery_Details) {
+                try {
+                    parsedDeliveryDetails = JSON.parse(order.Delivery_Details);
+                } catch(e) {
+                    console.error('Error parsing delivery details:', e);
+                }
+            }
+
+            return {
+                ...order,
+                involvedStaffs,
+                stockDetails: orderStockDetails,
+                // Add delivery information if converted
+                ...(deliveryInfo && {
+                    Delivery_Info: {
+                        Delivery_Id: deliveryInfo.Do_Id,
+                        Delivery_Invoice_No: deliveryInfo.Delivery_Invoice_No,
+                        Delivery_Date: deliveryInfo.Delivery_Date,
+                        Delivery_Status_Id: deliveryInfo.Delivery_Status,
+                        Delivery_Status: deliveryInfo.Delivery_Status_Name,
+                        Delivery_Total_Value: deliveryInfo.Delivery_Total_Value
+                    }
+                }),
+                // Include parsed delivery details
+                Delivery_Details_Info: parsedDeliveryDetails,
+                // Calculate summary statistics
+                Order_Summary: {
+                    Total_Items: orderStockDetails.length,
+                    Total_Quantity: orderStockDetails.reduce((sum, item) => sum + (Number(item.Bill_Qty) || 0), 0),
+                    Total_Free_Quantity: orderStockDetails.reduce((sum, item) => sum + (Number(item.Free_Qty) || 0), 0),
+                    Total_Amount: orderStockDetails.reduce((sum, item) => sum + (Number(item.Final_Amo) || 0), 0),
+                    Total_Tax: orderStockDetails.reduce((sum, item) => sum + (Number(item.Cgst_Amo) || 0) + (Number(item.Sgst_Amo) || 0) + (Number(item.Igst_Amo) || 0), 0)
+                }
+            };
+        });
+
+        // Prepare response
+        sentData(res, ordersWithDetails, {
+            costTypes: toArray(costTypes),
+            uniqueInvolvedStaffs: toArray(uniqueInvolvedStaffs).map(i => i.Emp_Type_Id).filter(Boolean),
+            summary: {
+                total_orders: ordersWithDetails.length,
+                converted_orders: ordersWithDetails.filter(o => o.Conversion_Status === 'Converted to Delivery').length,
+                not_converted_orders: ordersWithDetails.filter(o => o.Conversion_Status === 'Not Converted').length,
+                canceled_orders: ordersWithDetails.filter(o => o.Conversion_Status === 'Canceled Order').length,
+                total_order_value: ordersWithDetails.reduce((sum, o) => sum + (Number(o.Total_Invoice_value) || 0), 0)
+            },
+            debug: debugInfo[0]
+        });
+
+    } catch (e) {
+        console.error('Error in getSalesOrderForAssignCostCenterWhatsapp:', e);
+        servError(e, res);
+    }
+};
+
 
 // export const lrReportUploadMobile = async (req, res) => {
 //     const transaction = new sql.Transaction();

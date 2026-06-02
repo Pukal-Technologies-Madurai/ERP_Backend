@@ -16,8 +16,8 @@ import expences from '../controller/Masters/expences.mjs';
 import templateMobile from '../controller/Reports/templateMobile.mjs';
 import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
-    onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport
- ,StockValueGraph,StockValueReport,StaffBasedReport,costcenterList,StaffBasedReportLOS,OnlinePaymentReport,costingReport,DebtorsCreditors } from '../controller/Reports/externalAPI.mjs';
+    onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport,
+ StockValueGraph,StockValueReport,StaffBasedReport,costcenterList,StaffBasedReportLOS,OnlinePaymentReport,costingReport,DebtorsCreditors,StaffBasedCount  } from '../controller/Reports/externalAPI.mjs';
 import { MenuSettings, executeSP, saveReportSettings, getReportList, getReportEditData, updateReportSettings, getReportsByParent, executeReportByTemplate,deleteReport } from '../controller/Reports/reportsettings.mjs';
 
 const ReportRouter = express.Router();
@@ -222,6 +222,8 @@ ReportRouter.get('/externalAPI/debtorsCreditors', DebtorsCreditors);
 
 ReportRouter.get('/tallyReports/qPay/consolidate',tallyReport.getQpaysearchData)
 ReportRouter.get('/tallyReports/qPay/search',tallyReport.getQpaySalesInvoiceDetails)
+
+ReportRouter.get('/externalAPI/staffBasedCount',StaffBasedCount)
 
 
 export default ReportRouter;

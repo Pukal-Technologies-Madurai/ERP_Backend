@@ -126,4 +126,6 @@ inventoryRouter.get('/getLastObDate',inventoryReport.getLastObDate)
 inventoryRouter.get('/getStockAdjustment',inventoryReport.getStockAdjustmentPending)
 inventoryRouter.delete('/getStockAdjustment',inventoryReport.deleteStockAdjustment)
 
+inventoryRouter.post('/stockValueErpSync',rateValues.getStockValueErpReport)
+
 export default inventoryRouter;
