@@ -1999,31 +1999,31 @@ const SaleOrder = () => {
         }
     };
 
-    const getSaleOrderList = async (req, res) => {
-        try {
-            const {
-                Retailer_Id,
-                Cancel_status,
-                Created_by,
-                Sales_Person_Id,
-                VoucherType,
-                OrderStatus,
-                Branch_Id,
-                FromDate,
-                ToDate
-            } = req.query;
+ const getSaleOrderList = async (req, res) => {
+    try {
+        const {
+            Retailer_Id,
+            Cancel_status,
+            Created_by,
+            Sales_Person_Id,
+            VoucherType,
+            OrderStatus,
+            Branch_Id,
+            FromDate,
+            ToDate
+        } = req.query;
 
-            const request = new sql.Request()
-                .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
-                .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
-                .input('creater', checkIsNumber(Created_by) ? Created_by : null)
-                .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
-                .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
-                .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
-                .input('FromDate', FromDate)
-                .input('ToDate', ToDate);
+        const request = new sql.Request()
+            .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
+            .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
+            .input('creater', checkIsNumber(Created_by) ? Created_by : null)
+            .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
+            .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
+            .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
+            .input('FromDate', FromDate || null)
+            .input('ToDate', ToDate || null);
 
-            const result = await request.query(`
+        const result = await request.query(`
             /* ================================
                STEP 1 : FILTER SALES ORDERS
             ================================= */
@@ -2038,14 +2038,16 @@ const SaleOrder = () => {
                 AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
                 AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
                 AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
-                    AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
-    AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= CAST(@ToDate AS DATE));
+                AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
+                AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= DATEADD(DAY, 1, CAST(@ToDate AS DATE)));
+
             /* ================================
                STEP 2 : SALES ORDER HEADER
             ================================= */
             SELECT 
                 so.*,
                 COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                COALESCE(lol.Party_Mailing_Name, 'unknown') AS Retailers_Name,
                 COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
                 COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
                 COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
@@ -2056,7 +2058,10 @@ const SaleOrder = () => {
             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
             LEFT JOIN tbl_Users cb ON cb.UserId = so.Created_by
             LEFT JOIN tbl_Voucher_Type v ON v.Vocher_Type_Id = so.VoucherType
-            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+            LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ret_Id = rm.Retailer_Id
+            WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders)
+            ORDER BY so.Created_on DESC;
+
             /* ================================
                STEP 3 : ORDER PRODUCTS
             ================================= */
@@ -2072,6 +2077,7 @@ const SaleOrder = () => {
             LEFT JOIN tbl_UOM u ON u.Unit_Id = si.Unit_Id
             LEFT JOIN tbl_Brand_Master b ON b.Brand_Id = pm.Brand
             WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+
             /* ================================
                STEP 4 : STAFF INVOLVED
             ================================= */
@@ -2085,6 +2091,7 @@ const SaleOrder = () => {
             LEFT JOIN tbl_ERP_Cost_Center c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
             LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
             WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
             /* ================================
                STEP 5 : DELIVERY HEADER
             ================================= */
@@ -2103,6 +2110,7 @@ const SaleOrder = () => {
             LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = dgi.Branch_Id
             LEFT JOIN tbl_Status st ON st.Status_Id = dgi.Delivery_Status
             WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+
             /* ================================
                STEP 6 : DELIVERY PRODUCTS
             ================================= */
@@ -2121,8 +2129,9 @@ const SaleOrder = () => {
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
             );
+
             /* ================================ 
-                STEP 7 : ALTERATION HISTORY
+               STEP 7 : ALTERATION HISTORY
             ================================= */
             SELECT 
                 ah.*,
@@ -2134,77 +2143,92 @@ const SaleOrder = () => {
                 AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
         `);
 
-            const [
-                OrderData,
-                ProductDetails,
-                StaffInvolved,
-                DeliveryData,
-                DeliveryItems,
-                AlterHistory
-            ] = result.recordsets.map(toArray);
+        const [
+            OrderData,
+            ProductDetails,
+            StaffInvolved,
+            DeliveryData,
+            DeliveryItems,
+            AlterHistory
+        ] = result.recordsets;
 
-            if (!OrderData.length) return noData(res);
-
-            const resData = OrderData.map(order => {
-                const orderProducts = ProductDetails.filter(p =>
-                    isEqualNumber(p.Sales_Order_Id, order.So_Id)
-                );
-
-                const deliveryList = DeliveryData.filter(d =>
-                    isEqualNumber(d.So_No, order.So_Id)
-                );
-
-                const totalOrderedQty = orderProducts.reduce(
-                    (s, p) => s + toNumber(p.Bill_Qty), 0
-                );
-
-                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-                    const items = DeliveryItems.filter(i =>
-                        isEqualNumber(i.Delivery_Order_Id, d.Do_Id)
-                    );
-                    return sum + items.reduce((s, i) => s + toNumber(i.Bill_Qty), 0);
-                }, 0);
-
-                const status =
-                    totalDeliveredQty >= totalOrderedQty ? "completed" : "pending";
-
-                const alterHistory = AlterHistory.filter(ah =>
-                    isEqualNumber(ah.alteredRowId, order.So_Id)
-                );
-
-                return {
-                    ...order,
-                    OrderStatus: status,
-                    Products_List: orderProducts.map(p => ({
-                        ...p,
-                        ProductImageUrl: getImage("products", p.Product_Image_Name)
-                    })),
-                    Staff_Involved_List: StaffInvolved.filter(s =>
-                        isEqualNumber(s.So_Id, order.So_Id)
-                    ),
-                    ConvertedInvoice: deliveryList.map(d => ({
-                        ...d,
-                        InvoicedProducts: DeliveryItems
-                            .filter(i => isEqualNumber(i.Delivery_Order_Id, d.Do_Id))
-                            .map(p => ({
-                                ...p,
-                                ProductImageUrl: getImage("products", p.Product_Image_Name)
-                            }))
-                    })),
-                    alterHistoryDetails: alterHistory
-                };
+        if (!OrderData.length) {
+            return res.status(200).json({
+                success: true,
+                message: "No data found",
+                data: []
             });
-
-            const finalData = OrderStatus
-                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
-                : resData;
-
-            dataFound(res, finalData);
-
-        } catch (err) {
-            servError(err, res);
         }
-    };
+
+        const resData = OrderData.map(order => {
+            const orderProducts = ProductDetails.filter(p =>
+                Number(p.Sales_Order_Id) === Number(order.So_Id)
+            );
+
+            const deliveryList = DeliveryData.filter(d =>
+                Number(d.So_No) === Number(order.So_Id)
+            );
+
+            const totalOrderedQty = orderProducts.reduce(
+                (s, p) => s + (Number(p.Bill_Qty) || 0), 0
+            );
+
+            const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                const items = DeliveryItems.filter(i =>
+                    Number(i.Delivery_Order_Id) === Number(d.Do_Id)
+                );
+                return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
+            }, 0);
+
+            const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
+
+            const alterHistory = AlterHistory.filter(ah =>
+                Number(ah.alteredRowId) === Number(order.So_Id)
+            );
+
+            return {
+                ...order,
+                OrderStatus: status,
+                Products_List: orderProducts.map(p => ({
+                    ...p,
+                    ProductImageUrl: getImage("products", p.Product_Image_Name)
+                })),
+                Staff_Involved_List: StaffInvolved.filter(s =>
+                    Number(s.So_Id) === Number(order.So_Id)
+                ),
+                ConvertedInvoice: deliveryList.map(d => ({
+                    ...d,
+                    InvoicedProducts: DeliveryItems
+                        .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
+                        .map(p => ({
+                            ...p,
+                            ProductImageUrl: getImage("products", p.Product_Image_Name)
+                        }))
+                })),
+                alterHistoryDetails: alterHistory
+            };
+        });
+
+        const finalData = OrderStatus
+            ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+            : resData;
+
+        return res.status(200).json({
+            success: true,
+            message: "Data retrieved successfully",
+            data: finalData,
+            total: finalData.length
+        });
+
+    } catch (err) {
+        console.error('Error in getSaleOrderList:', err);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: err.message
+        });
+    }
+};
 
     return {
         saleOrderCreation,

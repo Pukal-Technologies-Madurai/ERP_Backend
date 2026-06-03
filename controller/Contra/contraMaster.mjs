@@ -394,8 +394,463 @@ const editContra = async (req, res) => {
 };
 
 
+
+// const createContraBank = async (req, res) => {
+//     const tx = new sql.Transaction();
+//     try {
+//         const {
+//             VoucherType,
+//             BranchId,
+//             DebitAccount,
+//             DebitAccountName,
+//             CreditAccount,
+//             CreditAccountName,
+//             Amount,
+//             Narration = null,
+//             BankName = '',
+//             ContraStatus,
+//             CreatedBy,
+//             Chequeno,
+//             TransactionType,
+//             bill_references = [],
+//         } = req.body || {};
+
+//         const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
+//         const ChequeDate = req.body?.ChequeDate ? ISOString(req.body.ChequeDate) : null;
+//         const ContraDate = req.body?.ContraDate ? ISOString(req.body.ContraDate) : ISOString();
+
+//         // Validation
+//         const errors = [];
+//         if (!VoucherType) errors.push("VoucherType");
+//         if (!TransactionType) errors.push("TransactionType");
+//         if (!BranchId) errors.push("BranchId");
+//         if (!DebitAccount) errors.push("DebitAccount");
+//         if (!CreditAccount) errors.push("CreditAccount");
+//         if (!(toNumber(Amount) > 0)) errors.push("Amount");
+//         if (!CreatedBy) errors.push("CreatedBy");
+//         if (ContraStatus === undefined || ContraStatus === null || ContraStatus === "") errors.push("ContraStatus");
+//         if (errors.length) return invalidInput(res, "Enter Required Fields", { errors });
+
+//         // Get Year
+//         const yearQ = await new sql.Request()
+//             .input("ContraDate", ContraDate)
+//             .query(
+//                 `SELECT Id AS Year_Id, Year_Desc
+//                 FROM tbl_Year_Master
+//                 WHERE Fin_Start_Date <= @ContraDate AND Fin_End_Date >= @ContraDate;`
+//             );
+//         if (yearQ.recordset.length === 0) throw new Error("Year_Id not found");
+//         const { Year_Id, Year_Desc } = yearQ.recordset[0];
+
+//         // Get Voucher Code
+//         const vcodeQ = await new sql.Request()
+//             .input("Vocher_Type_Id", VoucherType)
+//             .query(
+//                 `SELECT Voucher_Code
+//                 FROM tbl_Voucher_Type
+//                 WHERE Vocher_Type_Id = @Vocher_Type_Id;`
+//             );
+//         if (vcodeQ.recordset.length === 0) throw new Error("Voucher_Code not found");
+//         const Voucher_Code = vcodeQ.recordset[0]?.Voucher_Code || "";
+
+//         // Get ContraId
+//         const contraIdGet = await getNextId({ table: "tbl_Contra_General_Info", column: "ContraId" });
+//         if (!contraIdGet?.status || !Number.isFinite(Number(contraIdGet.MaxId))) throw new Error("Failed to get ContraId");
+//         const ContraId = Number(contraIdGet.MaxId);
+
+//         // Get Contra Number
+//         const noQ = await new sql.Request()
+//             .input("Year_Id", Year_Id)
+//             .input("VoucherType", VoucherType)
+//             .query(
+//                 `SELECT COALESCE(MAX(ContraNo),0) AS ContraNo
+//                 FROM dbo.tbl_Contra_General_Info
+//                 WHERE Year_Id = @Year_Id AND VoucherType = @VoucherType;`
+//             );
+//         const ContraNo = Number(noQ?.recordset?.[0]?.ContraNo || 0) + 1;
+
+//         // Generate Contra Voucher Number
+//         const ContraVoucherNo = `${Voucher_Code}/${createPadString(ContraNo, 6)}/${Year_Desc}`;
+//         const AlterId = randomNumber(6, 8);
+
+//         await tx.begin();
+
+//         // Insert into tbl_Contra_General_Info
+//         const ins = await new sql.Request(tx)
+//             .input("ContraId", ContraId)
+//             .input("Year_Id", Year_Id)
+//             .input("VoucherType", VoucherType)
+//             .input("ContraNo", ContraNo)
+//             .input("ContraVoucherNo", ContraVoucherNo)
+//             .input("ContraDate", ContraDate)
+//             .input("BranchId", BranchId)
+//             .input("DebitAccount", DebitAccount)
+//             .input("DebitAccountName", DebitAccountName || null)
+//             .input("CreditAccount", CreditAccount)
+//             .input("CreditAccountName", CreditAccountName || null)
+//             .input("Amount", Number(Amount))
+//             .input("Narration", Narration)
+//             .input("ContraStatus", ContraStatus)
+//             .input("BankName", BankName)
+//             .input("BankDate", BankDate)
+//             .input("Chequeno", Chequeno)
+//             .input("TransactionType", TransactionType)
+//             .input("ChequeDate", ChequeDate)
+//             .input("CreatedBy", CreatedBy)
+//             .input("AlterId", AlterId)
+//             .query(`
+//                 INSERT INTO dbo.tbl_Contra_General_Info(
+//                     ContraAutoId, ContraId, Year_Id, VoucherType, ContraNo, ContraVoucherNo, ContraDate, 
+//                     BranchId, DebitAccount, DebitAccountName, CreditAccount, CreditAccountName, Amount, 
+//                     Narration, ContraStatus, BankName, BankDate, Chequeno, TransactionType, ChequeDate, 
+//                     CreatedBy, CreatedAt, UpdatedAt, AlterId
+//                 ) OUTPUT inserted.ContraAutoId VALUES (
+//                     DEFAULT, @ContraId, @Year_Id, @VoucherType, @ContraNo, @ContraVoucherNo, @ContraDate, 
+//                     @BranchId, @DebitAccount, @DebitAccountName, @CreditAccount, @CreditAccountName, @Amount, 
+//                     @Narration, @ContraStatus, @BankName, @BankDate, @Chequeno, @TransactionType, @ChequeDate, 
+//                     @CreatedBy, GETDATE(), NULL, @AlterId
+//                 );`
+//             );
+
+//         const ContraAutoId = ins?.recordset?.[0]?.ContraAutoId;
+//         if (!ContraAutoId) throw new Error("Failed to capture ContraAutoId");
+
+//                       const bankActivityIdGet = await getNextId({ 
+//                   table: "tbl_Bank_Activity", 
+//                   column: "Id" 
+//               });
+//               if (!bankActivityIdGet?.status || !Number.isFinite(Number(bankActivityIdGet.MaxId))) 
+//                   throw new Error("Failed to get Bank Activity Id");
+//               const BankActivityId = Number(bankActivityIdGet.MaxId);
+              
+           
+//               await new sql.Request(tx)
+//                   .input("Id", BankActivityId)
+//                   .input("contra_id", ContraId)
+//                   .query(`
+//                       INSERT INTO tbl_Bank_Activity (Id, contra_id, receipt_id, pay_id)
+//                       VALUES (@Id, @contra_id, NULL, NULL)
+//                   `);
+
+//         // Process bill references
+//         if (Array.isArray(bill_references) && bill_references.length > 0) {
+//             for (const ref of bill_references) {
+//                 const updateQuery = ref.dr_cr === 'Dr' 
+//                     ? `
+//                     UPDATE tbl_Payment_General_Info 
+//                     SET bank_date = @BankDate, Alter_Id = (Alter_Id + 1), alterd_on = GETDATE() 
+//                     WHERE pay_id = @bill_id AND payment_invoice_no = @bill_no;`
+//                     : `
+//                     UPDATE tbl_Receipt_General_Info 
+//                     SET bank_date = @BankDate, Alter_Id = (Alter_Id + 1), alterd_on = GETDATE() 
+//                     WHERE receipt_id = @bill_id AND receipt_invoice_no = @bill_no;`;
+
+//                 await new sql.Request(tx)
+//                     .input('contra_id', ContraId)
+//                     .input('contra_no', ContraVoucherNo)
+//                     .input('dr_cr', ref.dr_cr)
+//                     .input('bill_id', ref.bill_id)
+//                     .input('bill_no', ref.bill_no)
+//                     .input('created_at', new Date())
+//                     .input('created_by', CreatedBy)
+//                     .input("BankDate", BankDate)
+//                     .query(`
+//                         INSERT INTO tbl_Contra_Bill_Info (
+//                             contra_id, contra_no, dr_cr, bill_id, bill_no, created_at, created_by
+//                         ) VALUES (
+//                             @contra_id, @contra_no, @dr_cr, @bill_id, @bill_no, @created_at, @created_by
+//                         );
+//                         ${updateQuery}`
+//                     );
+//             }
+//         }
+
+//         await tx.commit();
+
+//         return success(res, "Contra Created", {
+//             ContraAutoId,
+//             ContraId,
+//             Year_Id,
+//             VoucherType,
+//             ContraNo,
+//             ContraVoucherNo,
+//             ContraDate,
+//             BranchId,
+//             DebitAccount,
+//             DebitAccountName: DebitAccountName || null,
+//             CreditAccount,
+//             CreditAccountName: CreditAccountName || null,
+//             Amount: Number(Amount),
+//             Narration,
+//             ContraStatus,
+//             CreatedBy
+//         });
+
+//     } catch (e) {
+//         try { 
+//             if (tx._aborted !== true) await tx.rollback(); 
+//         } catch (rollbackError) {
+//             console.error("Rollback error:", rollbackError);
+//         }
+//         console.error("Error in createContraBank:", e);
+//         return servError(e, res);
+//     }
+// };
+
+
+const createContraBank = async (req, res) => {
+    const tx = new sql.Transaction();
+    try {
+        const {
+            VoucherType,
+            BranchId,
+            DebitAccount,
+            DebitAccountName,
+            CreditAccount,
+            CreditAccountName,
+            Amount,
+            Narration = null,
+            BankName = '',
+            ContraStatus,
+            CreatedBy,
+            Chequeno,
+            TransactionType,
+            bill_references = [],
+            BankTransactionId,  // ID from tbl_Bank_Transactions
+        } = req.body || {};
+
+        const BankDate = req.body?.BankDate ? ISOString(req.body.BankDate) : null;
+        const ChequeDate = req.body?.ChequeDate ? ISOString(req.body.ChequeDate) : null;
+        const ContraDate = req.body?.ContraDate ? ISOString(req.body.ContraDate) : ISOString();
+
+        // Validation
+        const errors = [];
+        if (!VoucherType) errors.push("VoucherType");
+        if (!TransactionType) errors.push("TransactionType");
+        if (!BranchId) errors.push("BranchId");
+        if (!DebitAccount) errors.push("DebitAccount");
+        if (!CreditAccount) errors.push("CreditAccount");
+        if (!(toNumber(Amount) > 0)) errors.push("Amount");
+        if (!CreatedBy) errors.push("CreatedBy");
+        if (ContraStatus === undefined || ContraStatus === null || ContraStatus === "") errors.push("ContraStatus");
+        if (!BankTransactionId) errors.push("BankTransactionId");
+        
+        if (errors.length) return invalidInput(res, "Enter Required Fields", { errors });
+
+        // Get Year
+        const yearQ = await new sql.Request()
+            .input("ContraDate", ContraDate)
+            .query(
+                `SELECT Id AS Year_Id, Year_Desc
+                FROM tbl_Year_Master
+                WHERE Fin_Start_Date <= @ContraDate AND Fin_End_Date >= @ContraDate;`
+            );
+        if (yearQ.recordset.length === 0) throw new Error("Year_Id not found");
+        const { Year_Id, Year_Desc } = yearQ.recordset[0];
+
+        // Get Voucher Code
+        const vcodeQ = await new sql.Request()
+            .input("Vocher_Type_Id", VoucherType)
+            .query(
+                `SELECT Voucher_Code
+                FROM tbl_Voucher_Type
+                WHERE Vocher_Type_Id = @Vocher_Type_Id;`
+            );
+        if (vcodeQ.recordset.length === 0) throw new Error("Voucher_Code not found");
+        const Voucher_Code = vcodeQ.recordset[0]?.Voucher_Code || "";
+
+        // Get ContraId
+        const contraIdGet = await getNextId({ table: "tbl_Contra_General_Info", column: "ContraId" });
+        if (!contraIdGet?.status || !Number.isFinite(Number(contraIdGet.MaxId))) throw new Error("Failed to get ContraId");
+        const ContraId = Number(contraIdGet.MaxId);
+
+        // Get Contra Number
+        const noQ = await new sql.Request()
+            .input("Year_Id", Year_Id)
+            .input("VoucherType", VoucherType)
+            .query(
+                `SELECT COALESCE(MAX(ContraNo),0) AS ContraNo
+                FROM dbo.tbl_Contra_General_Info
+                WHERE Year_Id = @Year_Id AND VoucherType = @VoucherType;`
+            );
+        const ContraNo = Number(noQ?.recordset?.[0]?.ContraNo || 0) + 1;
+
+        // Generate Contra Voucher Number
+        const ContraVoucherNo = `${Voucher_Code}/${createPadString(ContraNo, 6)}/${Year_Desc}`;
+        const AlterId = randomNumber(6, 8);
+
+        await tx.begin();
+
+        // Insert into tbl_Contra_General_Info
+        const ins = await new sql.Request(tx)
+            .input("ContraId", ContraId)
+            .input("Year_Id", Year_Id)
+            .input("VoucherType", VoucherType)
+            .input("ContraNo", ContraNo)
+            .input("ContraVoucherNo", ContraVoucherNo)
+            .input("ContraDate", ContraDate)
+            .input("BranchId", BranchId)
+            .input("DebitAccount", DebitAccount)
+            .input("DebitAccountName", DebitAccountName || null)
+            .input("CreditAccount", CreditAccount)
+            .input("CreditAccountName", CreditAccountName || null)
+            .input("Amount", Number(Amount))
+            .input("Narration", Narration)
+            .input("ContraStatus", ContraStatus)
+            .input("BankName", BankName)
+            .input("BankDate", BankDate)
+            .input("Chequeno", Chequeno)
+            .input("TransactionType", TransactionType)
+            .input("ChequeDate", ChequeDate)
+            .input("CreatedBy", CreatedBy)
+            .input("AlterId", AlterId)
+            .query(`
+                INSERT INTO dbo.tbl_Contra_General_Info(
+                    ContraAutoId, ContraId, Year_Id, VoucherType, ContraNo, ContraVoucherNo, ContraDate, 
+                    BranchId, DebitAccount, DebitAccountName, CreditAccount, CreditAccountName, Amount, 
+                    Narration, ContraStatus, BankName, BankDate, Chequeno, TransactionType, ChequeDate, 
+                    CreatedBy, CreatedAt, UpdatedAt, AlterId
+                ) OUTPUT inserted.ContraAutoId VALUES (
+                    DEFAULT, @ContraId, @Year_Id, @VoucherType, @ContraNo, @ContraVoucherNo, @ContraDate, 
+                    @BranchId, @DebitAccount, @DebitAccountName, @CreditAccount, @CreditAccountName, @Amount, 
+                    @Narration, @ContraStatus, @BankName, @BankDate, @Chequeno, @TransactionType, @ChequeDate, 
+                    @CreatedBy, GETDATE(), NULL, @AlterId
+                );`
+            );
+
+        const ContraAutoId = ins?.recordset?.[0]?.ContraAutoId;
+        if (!ContraAutoId) throw new Error("Failed to capture ContraAutoId");
+
+        // Check if the bank transaction exists
+        const bankTransactionCheck = await new sql.Request(tx)
+            .input("BankTransactionId", BankTransactionId)
+            .query(`SELECT Id FROM tbl_Bank_Transactions WHERE Id = @BankTransactionId`);
+
+        if (bankTransactionCheck.recordset.length === 0) {
+            throw new Error(`Bank Transaction with Id ${BankTransactionId} not found`);
+        }
+
+        // Check if this bank transaction already has a contra mapping
+        const existingMapping = await new sql.Request(tx)
+            .input("BankTransactionId", BankTransactionId)
+            .query(`SELECT * FROM tbl_Bank_Activity WHERE Id = @BankTransactionId`);
+
+        if (existingMapping.recordset.length > 0) {
+            // Update existing mapping
+            await new sql.Request(tx)
+                .input("Id", BankTransactionId)
+                .input("contra_id", ContraId)
+                .query(`
+                    UPDATE tbl_Bank_Activity 
+                    SET contra_id = @contra_id, 
+                        receipt_id = NULL, 
+                        pay_id = NULL,
+                        updated_at = GETDATE()
+                    WHERE Id = @Id
+                `);
+        } else {
+            // Insert new mapping using the existing Bank Transaction ID
+            await new sql.Request(tx)
+                .input("Id", BankTransactionId)
+                .input("contra_id", ContraId)
+                .query(`
+                    INSERT INTO tbl_Bank_Activity (Id, contra_id, receipt_id, pay_id)
+                    VALUES (@Id, @contra_id, NULL, NULL)
+                `);
+        }
+
+        // Process bill references
+        if (Array.isArray(bill_references) && bill_references.length > 0) {
+            for (const ref of bill_references) {
+                // Validate bill reference has required fields
+                if (!ref.bill_id || !ref.bill_no || !ref.dr_cr) {
+                    throw new Error(`Invalid bill reference: missing bill_id, bill_no, or dr_cr`);
+                }
+
+                const updateQuery = ref.dr_cr === 'Dr' 
+                    ? `
+                    UPDATE tbl_Payment_General_Info 
+                    SET bank_date = @BankDate, 
+                        Alter_Id = (Alter_Id + 1), 
+                        alterd_on = GETDATE() 
+                    WHERE pay_id = @bill_id AND payment_invoice_no = @bill_no;`
+                    : `
+                    UPDATE tbl_Receipt_General_Info 
+                    SET bank_date = @BankDate, 
+                        Alter_Id = (Alter_Id + 1), 
+                        alterd_on = GETDATE() 
+                    WHERE receipt_id = @bill_id AND receipt_invoice_no = @bill_no;`;
+
+                await new sql.Request(tx)
+                    .input('contra_id', ContraId)
+                    .input('contra_no', ContraVoucherNo)
+                    .input('dr_cr', ref.dr_cr)
+                    .input('bill_id', ref.bill_id)
+                    .input('bill_no', ref.bill_no)
+                    .input('created_at', new Date())
+                    .input('created_by', CreatedBy)
+                    .input("BankDate", BankDate)
+                    .query(`
+                        INSERT INTO tbl_Contra_Bill_Info (
+                            contra_id, contra_no, dr_cr, bill_id, bill_no, created_at, created_by
+                        ) VALUES (
+                            @contra_id, @contra_no, @dr_cr, @bill_id, @bill_no, @created_at, @created_by
+                        );
+                        ${updateQuery}`
+                    );
+            }
+        }
+
+        await tx.commit();
+
+        // Fetch the updated bank transaction details for response
+        const bankTransaction = await new sql.Request()
+            .input("BankTransactionId", BankTransactionId)
+            .query(`
+                SELECT bt.*, ba.contra_id 
+                FROM tbl_Bank_Transactions bt
+                LEFT JOIN tbl_Bank_Activity ba ON ba.Id = bt.Id
+                WHERE bt.Id = @BankTransactionId
+            `);
+
+        return success(res, "Contra Created Successfully", {
+            ContraAutoId,
+            ContraId,
+            ContraVoucherNo,
+            Year_Id,
+            VoucherType,
+            ContraNo,
+            ContraDate,
+            BranchId,
+            DebitAccount,
+            DebitAccountName: DebitAccountName || null,
+            CreditAccount,
+            CreditAccountName: CreditAccountName || null,
+            Amount: Number(Amount),
+            Narration,
+            ContraStatus,
+            ContraStatusValue: ContraStatus === 1 ? "Active" : "Inactive",
+            BankTransactionId: Number(BankTransactionId),
+            BankTransaction: bankTransaction.recordset[0] || null,
+            BillReferencesCount: bill_references?.length || 0,
+            CreatedBy,
+            CreatedAt: new Date()
+        });
+
+    } catch (e) {
+        try { 
+            if (tx._aborted !== true) await tx.rollback(); 
+        } catch (rollbackError) {
+            console.error("Rollback error:", rollbackError);
+        }
+        console.error("Error in createContraBank:", e);
+        return servError(e, res);
+    }
+};
+
 export default {
     getContra,
     createContra,
-    editContra
+    editContra,
+    createContraBank
 }

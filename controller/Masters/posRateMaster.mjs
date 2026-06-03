@@ -95,9 +95,17 @@ const getPosRateMaster = async (req, res) => {
     const postPosRateMaster = async (req, res) => {
         const { Rate_Date, Pos_Brand_Id, Item_Id, Rate, MinRate,MaxRate, Is_Active_Decative, Brand_Level, Item_Level, Short_Name } = req.body;
 
-        if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Rate || !Is_Active_Decative || !MaxRate || !MinRate) {
-            return invalidInput(res, 'Enter Required Fields');
-        }
+        // if (!Rate_Date || !Pos_Brand_Id || !Item_Id || !Rate || !Is_Active_Decative || !MaxRate || !MinRate) {
+        //     return invalidInput(res, 'Enter Required Fields');
+        // }
+
+          if (!Rate_Date || !Pos_Brand_Id || !Item_Id || 
+        Rate === undefined || Rate === null || Rate === '' ||
+        MaxRate === undefined || MaxRate === null || MaxRate === '' ||
+        MinRate === undefined || MinRate === null || MinRate === '' ||
+        Is_Active_Decative === undefined || Is_Active_Decative === null || Is_Active_Decative === '') {
+        return invalidInput(res, 'Enter Required Fields');
+    }
 
         try {
 
@@ -578,6 +586,8 @@ const bulkUpdatePosRateMaster = async (req, res) => {
             request3.input('Item_Id', sql.BigInt, Item_Id);
             request3.input('New_Rate', sql.Decimal(18, 2), Rate);
             request3.input('Old_Rate', sql.Decimal(18, 2), Old_Rate);
+              request3.input('New_Min_Rate', sql.Decimal(18, 2), Min_Rate);
+              request3.input('Old_Min_Rate', sql.Decimal(18, 2), Old_Min_Rate);
             request3.input('New_Max_Rate', sql.Decimal(18, 2), Max_Rate);
             request3.input('Old_Max_Rate', sql.Decimal(18, 2), Old_Max_Rate);
              request3.input('Gen_Id', sql.BigInt, rateGenId);
@@ -585,7 +595,7 @@ const bulkUpdatePosRateMaster = async (req, res) => {
             await request3.query(`
                 INSERT INTO tbl_Pos_Updated_Rate 
                 (Id,Updated_Date, Item_Id, New_Rate, Old_Rate, New_Min_Rate, Old_Min_Rate, New_Max_Rate, Old_Max_Rate, Updated_By,Gen_Id)
-                VALUES ( (SELECT ISNULL(MAX(Id), 0) + 1 FROM tbl_Pos_Updated_Rate),@Updated_Date, @Item_Id, @New_Rate, @Old_Rate, @New_Max_Rate, @Old_Max_Rate, @Updated_By,@Gen_Id)
+                VALUES ( (SELECT ISNULL(MAX(Id), 0) + 1 FROM tbl_Pos_Updated_Rate),@Updated_Date, @Item_Id, @New_Rate, @Old_Rate,@New_Min_Rate,@Old_Min_Rate, @New_Max_Rate, @Old_Max_Rate, @Updated_By,@Gen_Id)
             `);
         }
 
@@ -780,7 +790,8 @@ const bulkUpdatePosRateMaster = async (req, res) => {
     //     }
     // };
 
-const postbulkExport = async (req, res) => {
+const 
+postbulkExport = async (req, res) => {
     var { FromDate, NewDate, NewTime } = req.query;
     const { brandLevels, productLevels } = req.body;
 
@@ -837,6 +848,7 @@ const postbulkExport = async (req, res) => {
         let newId = getMaxId.MaxId;
 
         const insertResults = await insertRateMasterRecords(records, newId, transaction, dateOnly, timeOnly, brandLevels, productLevels, rateGenId);
+        
 
         if (insertResults.changedRecords.length > 0) {
             const getUpdatedRateMaxId = await getNextId({ table: "tbl_Pos_Updated_Rate", column: "Id", transaction });
@@ -925,11 +937,14 @@ const insertRateMasterRecords = async (records, startId, transaction, dateOnly, 
         
         const newRate = parseFloat(record.Rate) || 0;
         const newMaxRate = parseFloat(record.Max_Rate) || 0;
+        const newMinRate=parseFloat(record.Min_Rate) || 0;
+        const oldMinRate= existingRate ? parseFloat(existingRate.Min_Rate) || 0 : 0;
         const oldRate = existingRate ? parseFloat(existingRate.Rate) || 0 : 0;
         const oldMaxRate = existingRate ? parseFloat(existingRate.Max_Rate) || 0 : 0;
         
         const hasRateChanged = existingRate && oldRate !== newRate;
         const hasMaxRateChanged = existingRate && oldMaxRate !== newMaxRate;
+        const hasMinRateChanged = existingRate && oldMinRate !== newMinRate;
         
         const brandLevel = brandLevels?.[record.Pos_Brand_Id] || record.Brand_Level || null;
         const itemLevel = productLevels?.[`${record.Pos_Brand_Id}_${record.Item_Id}`] || record.Item_Level || null;
@@ -938,6 +953,7 @@ const insertRateMasterRecords = async (records, startId, transaction, dateOnly, 
         insertRequest.input("Pos_Brand_Id", sql.BigInt, record.Pos_Brand_Id);
         insertRequest.input("Item_Id", sql.BigInt, record.Item_Id);
         insertRequest.input("Rate", sql.Decimal(18, 2), newRate);
+        insertRequest.input("Min_Rate", sql.Decimal(18, 2), newMinRate);
         insertRequest.input("Max_Rate", sql.Decimal(18, 2), newMaxRate);
         insertRequest.input("Is_Active_Decative", sql.Int, record.Is_Active_Decative || 1);
         insertRequest.input("Brand_Level", sql.NVarChar, brandLevel);
@@ -946,20 +962,20 @@ const insertRateMasterRecords = async (records, startId, transaction, dateOnly, 
      
         const insertQuery = `
             INSERT INTO tbl_Pos_Rate_Master (
-                Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Max_Rate, 
+                Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,Min_Rate, Max_Rate, 
                 Is_Active_Decative, Brand_Level, Item_Level
             )
             VALUES (
                 @Id, 
                 '${dateOnly}',
-                @Pos_Brand_Id, @Item_Id, @Rate, @Max_Rate,
+                @Pos_Brand_Id, @Item_Id, @Rate,@Min_Rate, @Max_Rate,
                 @Is_Active_Decative, @Brand_Level, @Item_Level
             )
         `;
         
         await insertRequest.query(insertQuery);
         
-        if (hasRateChanged || hasMaxRateChanged) {
+        if (hasRateChanged || hasMaxRateChanged || hasMinRateChanged) {
             const key = `${record.Item_Id}`;
             
             if (!changedRecordsMap.has(key)) {
@@ -967,10 +983,13 @@ const insertRateMasterRecords = async (records, startId, transaction, dateOnly, 
                     Item_Id: record.Item_Id,
                     New_Rate: hasRateChanged ? newRate : (existingRate ? oldRate : newRate),
                     Old_Rate: hasRateChanged ? oldRate : (existingRate ? oldRate : newRate),
+                    New_Min_Rate : hasMinRateChanged ? newMinRate : (existingRate ? oldMinRate : newMinRate),
+                    Old_Min_Rate : hasMinRateChanged ? oldMinRate : (existingRate ? oldMinRate : newMinRate),
                     New_Max_Rate: hasMaxRateChanged ? newMaxRate : (existingRate ? oldMaxRate : newMaxRate),
                     Old_Max_Rate: hasMaxRateChanged ? oldMaxRate : (existingRate ? oldMaxRate : newMaxRate),
                     hasRateChanged: hasRateChanged,
                     hasMaxRateChanged: hasMaxRateChanged,
+                    hasMinRateChanged: hasMinRateChanged,
                     Gen_Id: rateGenId
                 });
             } else {
@@ -984,6 +1003,11 @@ const insertRateMasterRecords = async (records, startId, transaction, dateOnly, 
                     existing.New_Max_Rate = newMaxRate;
                     existing.Old_Max_Rate = oldMaxRate;
                     existing.hasMaxRateChanged = true;
+                }
+                if (hasMinRateChanged) {
+                    existing.New_Min_Rate = newMinRate;
+                    existing.Old_Min_Rate = oldMinRate;
+                    existing.hasMinRateChanged = true;
                 }
                 existing.Gen_Id = rateGenId;
             }
@@ -1009,16 +1033,18 @@ const insertUpdatedRateRecords = async (changedRecords, transaction, dateOnly, t
         insertRequest.input("Item_Id", sql.BigInt, record.Item_Id);
         insertRequest.input("New_Rate", sql.Decimal(18, 2), record.New_Rate);
         insertRequest.input("Old_Rate", sql.Decimal(18, 2), record.Old_Rate);
+        insertRequest.input("New_Min_Rate", sql.Decimal(18, 2), record.New_Min_Rate);
+        insertRequest.input("Old_Min_Rate", sql.Decimal(18, 2), record.Old_Min_Rate);
         insertRequest.input("New_Max_Rate", sql.Decimal(18, 2), record.New_Max_Rate);
         insertRequest.input("Old_Max_Rate", sql.Decimal(18, 2), record.Old_Max_Rate);
         insertRequest.input("Gen_Id", sql.BigInt, record.Gen_Id);
         
         const insertQuery = `
             INSERT INTO tbl_Pos_Updated_Rate (
-                Id, Updated_Date, Item_Id, New_Rate, Old_Rate, New_Max_Rate, Old_Max_Rate, Gen_Id
+                Id, Updated_Date, Item_Id, New_Rate, Old_Rate, New_Max_Rate, Old_Max_Rate,New_Min_Rate,Old_Min_Rate, Gen_Id
             )
             VALUES (
-                @Id, @Updated_Date, @Item_Id, @New_Rate, @Old_Rate, @New_Max_Rate, @Old_Max_Rate, @Gen_Id
+                @Id, @Updated_Date, @Item_Id, @New_Rate, @Old_Rate, @New_Max_Rate, @Old_Max_Rate,@New_Min_Rate,@Old_Min_Rate, @Gen_Id
             )
         `;
         

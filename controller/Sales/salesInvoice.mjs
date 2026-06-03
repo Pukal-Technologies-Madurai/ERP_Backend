@@ -4066,21 +4066,10 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
         transaction = new sql.Transaction();
         await transaction.begin();
 
-        // ── Get Next Pre_Ord_Id ──────────────────────────────────────────
-        const maxPreIdRequest = new sql.Request(transaction);
-        const maxPreIdResult = await maxPreIdRequest.query(`
-            SELECT ISNULL(MAX(Pre_Ord_Id), 0) + 1 AS NextId 
-            FROM [dbo].[tbl_Sales_Whats_up_Order_Gen_Info]
-        `);
-        const preOrderId = maxPreIdResult.recordset[0].NextId;
-
-        // ── Get Next So_Id ───────────────────────────────────────────────
-        const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
-        if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
-        const So_Id = So_Id_Get.MaxId;
-
-        // ── Get Financial Year ───────────────────────────────────────────
+        const So_Id = generalInfo.So_Id; // Use existing So_Id
         const So_Date = generalInfo.So_Date;
+
+        // Get Year info
         const So_Year_Master = await new sql.Request(transaction)
             .input('So_Date', So_Date)
             .query(`
@@ -4094,41 +4083,27 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
         if (So_Year_Master.recordset.length === 0) throw new Error('Year_Id not found');
         const { Year_Id, Year_Desc } = So_Year_Master.recordset[0];
 
-        // ── Get Voucher Code ─────────────────────────────────────────────
-        const voucherData = await new sql.Request(transaction)
-            .input('Voucher_Type', 200)
+        // Get existing So_Inv_No and So_Branch_Inv_Id
+        const existingOrder = await new sql.Request(transaction)
+            .input('So_Id', sql.Int, So_Id)
             .query(`
-                SELECT Voucher_Code 
-                FROM tbl_Voucher_Type 
-                WHERE Vocher_Type_Id = @Voucher_Type
-            `);
-
-        const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
-        if (!VoucherCode) throw new Error('Failed to fetch Voucher Code for Voucher_Type_Id = 0');
-
-        // ── Get Branch Invoice Id ────────────────────────────────────────
-        const So_Branch_Inv_Id_Result = await new sql.Request(transaction)
-            .input('So_Year', Year_Id)
-            .input('Voucher_Type', 200)
-            .query(`
-                SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
+                SELECT So_Inv_No, So_Branch_Inv_Id, Pre_Id
                 FROM tbl_Sales_Order_Gen_Info
-                WHERE 
-                    So_Year = @So_Year
-                    AND VoucherType = @Voucher_Type
+                WHERE So_Id = @So_Id
             `);
 
-        const So_Branch_Inv_Id = Number(So_Branch_Inv_Id_Result.recordset[0]?.So_Branch_Inv_Id || 0) + 1;
-        if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
+        if (existingOrder.recordset.length === 0) {
+            throw new Error('Order not found for update');
+        }
 
-        // ── Build Invoice Number ─────────────────────────────────────────
-        const createPadString = (num, length) => num.toString().padStart(length, '0');
-        const So_Inv_No = `${VoucherCode}/${createPadString(So_Branch_Inv_Id, 6)}/${Year_Desc}`;
+        const So_Inv_No = existingOrder.recordset[0].So_Inv_No;
+        const So_Branch_Inv_Id = existingOrder.recordset[0].So_Branch_Inv_Id;
+        const preOrderId = existingOrder.recordset[0].Pre_Id;
 
-        // ── Get Products ─────────────────────────────────────────────────
+        // Get products
         const productsData = (await getProducts()).dataArray;
 
-        // ── GST Flags ────────────────────────────────────────────────────
+        // GST Flags
         const GST_Inclusive = generalInfo.GST_Inclusive || 1;
         const IS_IGST = generalInfo.IS_IGST || 0;
 
@@ -4138,7 +4113,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
         const isIGST            = isEqualNumber(IS_IGST, 1);
         const taxType           = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
 
-        // ── Calculate Total Invoice Value ────────────────────────────────
+        // Calculate Total Invoice Value
         const Total_Invoice_value = RoundNumber(stockInfo.reduce((acc, item) => {
             const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
             const billQty  = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
@@ -4156,7 +4131,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             }
         }, 0));
 
-        // ── Calculate Tax Breakdown ──────────────────────────────────────
+        // Calculate Tax Breakdown
         const totalValueBeforeTax = stockInfo.reduce((acc, item) => {
             const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
             const billQty  = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
@@ -4181,34 +4156,9 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
         const Final_Total_Invoice_value = Math.round(Total_Invoice_value);
 
         // ────────────────────────────────────────────────────────────────
-        // 🗑️  DELETE existing So_Id records (child → parent order)
+        // ✅ UPDATE WhatsApp General Info (instead of DELETE + INSERT)
         // ────────────────────────────────────────────────────────────────
-
         await new sql.Request(transaction)
-            .input('So_Id', sql.Int, generalInfo.So_Id)
-            .query(`
-                DELETE FROM [dbo].[tbl_Sales_Order_Stock_Info]
-                WHERE Sales_Order_Id = @So_Id
-            `);
-
-        await new sql.Request(transaction)
-            .input('So_Id', sql.Int, generalInfo.So_Id)
-            .query(`
-                DELETE FROM [dbo].[tbl_Sales_Order_Staff_Info]
-                WHERE So_Id = @So_Id    
-            `);
-
-        await new sql.Request(transaction)
-            .input('So_Id', sql.Int, generalInfo.So_Id)
-            .query(`
-                DELETE FROM [dbo].[tbl_Sales_Order_Gen_Info]
-                WHERE So_Id = @So_Id
-            `);
-
-        // ────────────────────────────────────────────────────────────────
-        // ✅  INSERT WhatsApp General Info
-        // ────────────────────────────────────────────────────────────────
-        const whatsappGenRequest = new sql.Request(transaction)
             .input('Pre_Ord_Id',           sql.Int,           preOrderId)
             .input('Ord_Date',             sql.DateTime,      generalInfo.So_Date)
             .input('Customer_Name',        sql.NVarChar,      generalInfo.Customer_Name)
@@ -4222,34 +4172,35 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             .input('Shipp_Address',        sql.NVarChar,      generalInfo.Shipp_Address || '')
             .input('Deliv_Address',        sql.NVarChar,      generalInfo.Deliv_Address || '')
             .input('Rematks',              sql.NVarChar,      generalInfo.Rematks || '')
-            .input('Created_on',           sql.DateTime,      generalInfo.Created_on);
-
-        await whatsappGenRequest.query(`
-            INSERT INTO [dbo].[tbl_Sales_Whats_up_Order_Gen_Info] 
-            (Pre_Ord_Id, Ord_Date, Customer_Name, Custome_Id, Broker_Name, Broker_Id, 
-             Transporter_Name, Transporter_Id, Ord_Mobile_No, Total_Invoice_value, 
-             Shipp_Address, Deliv_Address, Rematks, Created_on)
-            VALUES (
-                @Pre_Ord_Id, @Ord_Date, @Customer_Name, @Custome_Id, @Broker_Name, @Broker_Id,
-                @Transporter_Name, @Transporter_Id, @Ord_Mobile_No, @Total_Invoice_value,
-                @Shipp_Address, @Deliv_Address, @Rematks, @Created_on
-            );
-        `);
+            .input('Created_on',           sql.DateTime,      generalInfo.Created_on)
+            .query(`
+                UPDATE [dbo].[tbl_Sales_Whats_up_Order_Gen_Info] 
+                SET 
+                    Ord_Date = @Ord_Date,
+                    Customer_Name = @Customer_Name,
+                    Custome_Id = @Custome_Id,
+                    Broker_Name = @Broker_Name,
+                    Broker_Id = @Broker_Id,
+                    Transporter_Name = @Transporter_Name,
+                    Transporter_Id = @Transporter_Id,
+                    Ord_Mobile_No = @Ord_Mobile_No,
+                    Total_Invoice_value = @Total_Invoice_value,
+                    Shipp_Address = @Shipp_Address,
+                    Deliv_Address = @Deliv_Address,
+                    Rematks = @Rematks,
+                    Created_on = @Created_on
+                WHERE Pre_Ord_Id = @Pre_Ord_Id
+            `);
 
         // ────────────────────────────────────────────────────────────────
-        // ✅  INSERT Main Sales Order General Info
+        // ✅ UPDATE Main Sales Order General Info (instead of DELETE + INSERT)
         // ────────────────────────────────────────────────────────────────
-        const mainGenRequest = new sql.Request(transaction)
+        await new sql.Request(transaction)
             .input('So_Id',               sql.Int,           So_Id)
-            .input('So_Inv_No',           sql.NVarChar,      So_Inv_No)
-            .input('So_Year',             sql.Int,           Year_Id)
-            .input('Pre_Id',              sql.Int,           preOrderId)
-            .input('So_Branch_Inv_Id',    sql.Int,           So_Branch_Inv_Id)
             .input('So_Date',             sql.Date,          So_Date)
             .input('Retailer_Id',         sql.Int,           generalInfo.Retailer_Id)
             .input('Sales_Person_Id',     sql.Int,           generalInfo.Sales_Person_Id || 0)
             .input('Branch_Id',           sql.Int,           generalInfo.Branch_Id || 1)
-            .input('VoucherType',         sql.Int,           200)
             .input('GST_Inclusive',       sql.Int,           GST_Inclusive)
             .input('IS_IGST',             sql.Int,           isIGST ? 1 : 0)
             .input('CSGT_Total',          sql.Decimal(18,2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
@@ -4260,37 +4211,58 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             .input('Total_Tax',           sql.Decimal(18,2), totalValueBeforeTax.TotalTax)
             .input('Total_Invoice_value', sql.Decimal(18,2), Final_Total_Invoice_value)
             .input('Narration',           sql.NVarChar,      generalInfo.Rematks || '')
-            .input('isConverted',         sql.Int,           0)
-            .input('Cancel_status',       sql.Int,           1)
-            .input('Created_by',          sql.Int,           generalInfo.Created_by || 0)
-            .input('Altered_by',          sql.Int,           '')
-            .input('Created_on',          sql.DateTime,      generalInfo.Created_on)
+            .input('Altered_by',          sql.Int,           generalInfo.Created_by || 0)
             .input('Alterd_on',           sql.DateTime,      generalInfo.Created_on)
-            .input('Trans_Type',          sql.NVarChar,      'INSERT')
-            .input('Alter_Id',            sql.Int,           Math.floor(Math.random() * 999999))
-            .input('Approved_By',         sql.Int,           null)
-            .input('Approve_Status',      sql.Int,           0);
-
-        await mainGenRequest.query(`
-            INSERT INTO [dbo].[tbl_Sales_Order_Gen_Info] 
-            (So_Id, So_Inv_No, So_Year, Pre_Id, So_Branch_Inv_Id, So_Date,
-             Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, GST_Inclusive, IS_IGST,
-             CSGT_Total, SGST_Total, IGST_Total, Round_off, Total_Before_Tax,
-             Total_Tax, Total_Invoice_value, Narration, isConverted, Cancel_status,
-             Created_by, Altered_by, Created_on, Alterd_on, Trans_Type, Alter_Id, 
-             Approved_By, Approve_Status)
-            VALUES (
-                @So_Id, @So_Inv_No, @So_Year, @Pre_Id, @So_Branch_Inv_Id, @So_Date,
-                @Retailer_Id, @Sales_Person_Id, @Branch_Id, @VoucherType, @GST_Inclusive, @IS_IGST,
-                @CSGT_Total, @SGST_Total, @IGST_Total, @Round_off, @Total_Before_Tax,
-                @Total_Tax, @Total_Invoice_value, @Narration, @isConverted, @Cancel_status,
-                @Created_by, @Altered_by, @Created_on, @Alterd_on, @Trans_Type, @Alter_Id,
-                @Approved_By, @Approve_Status
-            );
-        `);
+            .input('Trans_Type',          sql.NVarChar,      'UPDATE')
+            .query(`
+                UPDATE [dbo].[tbl_Sales_Order_Gen_Info] 
+                SET 
+                    So_Date = @So_Date,
+                    Retailer_Id = @Retailer_Id,
+                    Sales_Person_Id = @Sales_Person_Id,
+                    Branch_Id = @Branch_Id,
+                    GST_Inclusive = @GST_Inclusive,
+                    IS_IGST = @IS_IGST,
+                    CSGT_Total = @CSGT_Total,
+                    SGST_Total = @SGST_Total,
+                    IGST_Total = @IGST_Total,
+                    Round_off = @Round_off,
+                    Total_Before_Tax = @Total_Before_Tax,
+                    Total_Tax = @Total_Tax,
+                    Total_Invoice_value = @Total_Invoice_value,
+                    Narration = @Narration,
+                    Altered_by = @Altered_by,
+                    Alterd_on = @Alterd_on,
+                    Trans_Type = @Trans_Type
+                WHERE So_Id = @So_Id
+            `);
 
         // ────────────────────────────────────────────────────────────────
-        // ✅  INSERT Stock Info (WhatsApp + Main)
+        // ✅ DELETE existing Stock Info and Staff Info (for clean update)
+        // ────────────────────────────────────────────────────────────────
+        await new sql.Request(transaction)
+            .input('So_Id', sql.Int, So_Id)
+            .query(`
+                DELETE FROM [dbo].[tbl_Sales_Order_Stock_Info]
+                WHERE Sales_Order_Id = @So_Id
+            `);
+
+        await new sql.Request(transaction)
+            .input('Pre_Ord_Id', sql.Int, preOrderId)
+            .query(`
+                DELETE FROM [dbo].[tbl_Sales_Whats_up_Order_Stock_Info]
+                WHERE Pre_Ord_Id = @Pre_Ord_Id
+            `);
+
+        await new sql.Request(transaction)
+            .input('So_Id', sql.Int, So_Id)
+            .query(`
+                DELETE FROM [dbo].[tbl_Sales_Order_Staff_Info]
+                WHERE So_Id = @So_Id    
+            `);
+
+        // ────────────────────────────────────────────────────────────────
+        // ✅ INSERT Stock Info (with same IDs)
         // ────────────────────────────────────────────────────────────────
         if (stockInfo && stockInfo.length > 0) {
             for (let i = 0; i < stockInfo.length; i++) {
@@ -4375,7 +4347,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
         }
 
         // ────────────────────────────────────────────────────────────────
-        // ✅  INSERT Staff Info
+        // ✅ INSERT Staff Info (with same So_Id)
         // ────────────────────────────────────────────────────────────────
         if (generalInfo.Staff_Involved_List && generalInfo.Staff_Involved_List.length > 0) {
             for (const staff of generalInfo.Staff_Involved_List) {
@@ -4393,32 +4365,10 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             }
         }
 
-        // ── Commit Transaction ───────────────────────────────────────────
+        // Commit Transaction
         await transaction.commit();
 
-        // ────────────────────────────────────────────────────────────────
-        // 📦  Fetch inserted WhatsApp order for response
-        // ────────────────────────────────────────────────────────────────
-        const whatsappResult = await new sql.Request()
-            .input('Pre_Ord_Id', sql.Int, preOrderId)
-            .query(`
-                SELECT 
-                    g.*,
-                    s.S_No,
-                    s.Item_Id,
-                    s.Unit_Id,
-                    s.Bill_Qty,
-                    s.Rate,
-                    s.Amount
-                FROM [dbo].[tbl_Sales_Whats_up_Order_Gen_Info] g
-                LEFT JOIN [dbo].[tbl_Sales_Whats_up_Order_Stock_Info] s ON s.Pre_Ord_Id = g.Pre_Ord_Id
-                WHERE g.Pre_Ord_Id = @Pre_Ord_Id
-                ORDER BY s.S_No;
-            `);
-
-        // ────────────────────────────────────────────────────────────────
-        // 📦  Fetch created Sales Order for response
-        // ────────────────────────────────────────────────────────────────
+        // Fetch updated order for response
         const createdSaleOrder = await new sql.Request()
             .input('So_Id', So_Id)
             .query(`
@@ -4465,24 +4415,17 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
                 WHERE sosi.So_Id = @So_Id;
             `);
 
-        // ── Build Response ───────────────────────────────────────────────
+        // Build Response
         const processedData = {
             success: true,
-            message: "Order created successfully in all tables",
+            message: "Order updated successfully",
             data: {
-                whatsapp: {
-                    Pre_Ord_Id:   preOrderId,
-                    generalInfo:  generalInfo,
-                    stockInfo:    stockInfo,
-                    insertedData: whatsappResult.recordset
-                },
                 mainOrder: {
                     So_Id,
                     So_Inv_No,
                     So_Year:          Year_Id,
                     So_Branch_Inv_Id,
-                    VoucherType:      0,
-                    VoucherCode,
+                    VoucherType:      200,
                     generalInfo:      createdSaleOrder.recordsets[0] || {},
                     productDetails:   toArray(createdSaleOrder.recordsets[1]),
                     staffInvolved:    toArray(createdSaleOrder.recordsets[2])
@@ -4503,7 +4446,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
         return res.status(200).json(processedData);
 
     } catch (error) {
-        console.error('Error in salesInvoiceWhatsapp:', error);
+        console.error('Error in salesInvoiceWhatsappupdate:', error);
 
         if (transaction && transaction._aborted === false) {
             try {
@@ -4515,12 +4458,11 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to create order",
+            message: error.message || "Failed to update order",
             error:   error.toString()
         });
     }
 };
-
 
     return {
         getSalesInvoiceMobileFilter1,

@@ -170,7 +170,7 @@ const ReceiptMaster = () => {
                 .map(([key]) => key);
 
             if (!validateResult) {
-                console.log('Validation errors:', validationResult);
+             
                 return invalidInput(res, 'Enter Required Fields', { errors });
             }
 
@@ -384,7 +384,7 @@ const ReceiptMaster = () => {
                 .map(([key]) => key);
 
             if (!validateResult) {
-                console.log('Validation errors:', validationResult);
+             
                 return invalidInput(res, 'Enter Required Fields', { errors });
             }
 
@@ -789,7 +789,7 @@ const ReceiptMaster = () => {
             const alreadyExists = Number(existingCheck.recordset[0].ExistsCount) > 0;
         
             if (alreadyExists) {
-                console.log(`Transaction already processed: ${Id}`);
+             
                 continue;   
             }
         
@@ -933,13 +933,152 @@ const ReceiptMaster = () => {
     }
 };
 
+
+
+
+const getReceiptswithlol = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+        const { voucher, debit, credit, receipt_type, createdBy, status, transaction_type, Branch_Id } = req.query
+
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
+            .input('voucher', voucher)
+            .input('debit', debit)
+            .input('credit', credit)
+            .input('receipt_type', receipt_type)
+            .input('transaction_type', transaction_type)
+            .input('Branch_Id', Branch_Id)
+            .input('createdBy', createdBy)
+            .input('status', status)
+            .query(`
+                -- FILTER TABLE
+                DECLARE @FilteredReceipts TABLE (receipt_id INT);
+                INSERT INTO @FilteredReceipts (receipt_id)
+                SELECT receipt_id
+                FROM tbl_Receipt_General_Info AS rgi
+                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = rgi.receipt_voucher_type_id
+                WHERE 
+                    rgi.receipt_date BETWEEN @Fromdate AND @Todate
+                    ${checkIsNumber(voucher) ? ' AND rgi.receipt_voucher_type_id = @voucher ' : ''}
+                    ${checkIsNumber(debit) ? ' AND rgi.debit_ledger = @debit ' : ''}
+                    ${checkIsNumber(credit) ? ' AND rgi.credit_ledger = @credit ' : ''}
+                    ${checkIsNumber(receipt_type) ? ' AND rgi.receipt_bill_type = @receipt_type ' : ''}
+                    ${checkIsNumber(createdBy) ? ' AND rgi.created_by = @createdBy ' : ''}
+                    ${transaction_type ? ' AND rgi.transaction_type = @transaction_type ' : ''}
+                    ${checkIsNumber(Branch_Id) ? ' AND vt.Branch_Id = @Branch_Id ' : ''}
+                    ${checkIsNumber(status) ? ' AND rgi.status = @status ' : ''}
+                
+                SELECT 
+                    rgi.*,
+                    vt.Voucher_Type,
+                    vt.Branch_Id,
+                    COALESCE(debAcc.Account_name, 'Not found') AS DebitAccountGet,
+                    COALESCE(creAcc.Account_name, 'Not found') AS CreditAccountGet,
+                    COALESCE(u.Name, 'Not found') AS CreatedByGet,
+                    apb.Name AS approved_by_get,
+                    -- Get phone number from LOL table joined through Account -> Retailer -> LOL
+                    COALESCE(lol.A1, '') AS Customer_Phone,
+                    COALESCE(lol.A2, '') AS Alternate_Phone,
+                    COALESCE(lol.A3, '') AS Landline_Phone,
+                    COALESCE(retM.Retailer_Id, 0) AS Linked_Retailer_Id,
+                    COALESCE(retM.Retailer_Name, '') AS Retailer_Name,
+                    COALESCE(retM.Reatailer_Address, '') AS Retailer_Address,
+                    CASE 
+                        WHEN retM.Retailer_Id IS NOT NULL THEN 1 
+                        ELSE 0 
+                    END AS Is_Linked_To_Retailer,
+                    (
+                        SELECT COALESCE(SUM(Credit_Amo), 0)
+                        FROM tbl_Receipt_Bill_Info rbi
+                        WHERE 
+                            rbi.receipt_id = rgi.receipt_id
+                            AND rbi.receipt_no = rgi.receipt_invoice_no
+                    ) + (
+                        SELECT COALESCE(SUM(pb.Debit_Amo), 0) 
+                        FROM tbl_Payment_Bill_Info AS pb
+                        JOIN tbl_Payment_General_Info AS pgi ON pgi.pay_id = pb.payment_id
+                        WHERE 
+                            rgi.status <> 0
+                            AND pb.pay_bill_id = rgi.receipt_id
+                            AND pb.bill_name = rgi.receipt_invoice_no
+                    ) + (
+                        SELECT COALESCE(SUM(jr.Amount), 0)
+                        FROM dbo.tbl_Journal_Bill_Reference jr
+                        JOIN dbo.tbl_Journal_Entries_Info  je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+                        JOIN dbo.tbl_Journal_General_Info  jh ON jh.JournalAutoId = jr.JournalAutoId
+                        WHERE 
+                            jh.JournalStatus <> 0
+                            AND je.Acc_Id = rgi.credit_ledger
+                            AND je.DrCr   = 'Dr'
+                            AND jr.RefId = rgi.receipt_id 
+                            AND jr.RefNo = rgi.receipt_invoice_no
+                            AND jr.RefType = 'RECEIPT'
+                    ) AS TotalReferencedAmount
+                FROM tbl_Receipt_General_Info AS rgi
+                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = rgi.receipt_voucher_type_id
+                LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = rgi.debit_ledger
+                LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = rgi.credit_ledger
+                LEFT JOIN tbl_Users AS u ON u.UserId = rgi.created_by
+                LEFT JOIN tbl_Users AS apb ON apb.UserId = rgi.approved_by
+            
+            
+                LEFT JOIN tbl_Retailers_Master AS retM ON retM.AC_Id = creAcc.Acc_Id
+                -- Join Retailers Master with Ledger LOL using Ret_Id
+                LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ret_Id = retM.Retailer_Id
+                WHERE rgi.receipt_id IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)
+                ORDER BY 
+                    rgi.receipt_date DESC, rgi.created_on DESC;
+                
+                -- Alteration History
+                SELECT ah.*, u.Name AS alterByGet 
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                WHERE 
+                    alteredTable = 'tbl_Receipt_General_Info' 
+                    AND alteredRowId IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)
+                
+                -- STAFF INVOLVED
+                SELECT
+                    rsi.*,
+                    c.Cost_Center_Name AS Emp_Name,
+                    cc.Cost_Category AS Emp_Type_Name
+                FROM tbl_Receipt_Staff_Involved AS rsi
+                LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = rsi.Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = rsi.Emp_Type_Id
+                WHERE rsi.receipt_id IN (SELECT DISTINCT receipt_id FROM @FilteredReceipts)
+            `);
+
+        const result = await request;
+
+        const [receipts, alterHistory, staffDetails] = result.recordsets;
+
+        const receiptsMap = receipts.map(receipt => ({
+            ...receipt,
+            alterHistoryDetails: alterHistory.filter(ah => isEqualNumber(ah.alteredRowId, receipt.receipt_id)),
+            staffDetails: staffDetails.filter(sd => isEqualNumber(sd.receipt_id, receipt.receipt_id)),
+            Retailer_Id: receipt.Linked_Retailer_Id,
+            A1: receipt.Customer_Phone,
+            Retailer_Name: receipt.Retailer_Name,
+        }))
+
+        sentData(res, receiptsMap)
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+
     return {
         getReceipts,
         createReceipt,
         updateReceipt,
         addAgainstRef,
         getReceiptMobile,
-        syncSelectedWithReceipt
+        syncSelectedWithReceipt,
+        getReceiptswithlol
     }
 }
 

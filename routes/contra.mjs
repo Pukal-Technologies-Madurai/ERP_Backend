@@ -18,7 +18,7 @@ contraRouter.put(
 );
 
 contraRouter.get('/filtersValues', dependency.getFilterValues);
-
+contraRouter.post('/masterBank', contra.createContraBank);
 contraRouter.get('/receiptReference', dependency.getReceiptReference);
 contraRouter.get('/receiptReference/chequeAccounts', dependency.getChequeAccounts);
 
