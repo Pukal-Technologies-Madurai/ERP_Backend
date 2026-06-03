@@ -42,6 +42,8 @@ import processMaster from '../controller/Masters/processMaster.mjs';
 import accountMasterSales from "../controller/Masters/accountMasterSales.mjs";
 import accountUserMapping from "../controller/Masters/accountUserMapping.mjs";
 
+import abstractgroupType from '../controller/Masters/abstractgroupType.mjs';
+
 const MastersRouter = express.Router();
 
 MastersRouter.get('/company', company.getCompany);
@@ -362,6 +364,15 @@ MastersRouter.put('/posRateMaster/bulkUpdate',posRateMaster.bulkUpdatePosRateMas
 MastersRouter.get('/rateGen',posRateMaster.rateGen)
 
 MastersRouter.get('/retailerswithlol',retailers.getRetailerswithlol)
+
+
+
+
+MastersRouter.get('/abstractGroup',abstractgroupType.getAbstractGroup);
+MastersRouter.get('/abstractGroup/dropDown',abstractgroupType.getVoucherDropdown);
+MastersRouter.post('/abstractGroup', abstractgroupType.createAbstractGroup);
+MastersRouter.put('/abstractGroup',abstractgroupType.updateAbstractGroup);
+MastersRouter.delete('/abstractGroup',abstractgroupType.deleteAbstractGroup);
 
 
 // MastersRouter.post('/stockGroup',baseGroup.stockGroup);
