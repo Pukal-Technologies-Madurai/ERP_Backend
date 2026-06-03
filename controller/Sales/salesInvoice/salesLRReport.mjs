@@ -10,7 +10,7 @@ import getImage from '../../../middleware/getImageIfExist.mjs';
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-        const status = req.query.staffStatus ? req.query.staffStatus : 0;
+        const status = req.query.staffStatus ;
 
         const getSalesInvoice = new sql.Request()
             .input('reqDate', sql.Date, reqDate)
@@ -145,7 +145,7 @@ export const postAssignCostCenterToSalesInvoice = async (req, res) => {
     const transaction = new sql.Transaction();
 
     try {
-        const { Do_Id, involvedStaffs, staffInvolvedStatus = 0 } = req.body;
+        const { Do_Id, involvedStaffs, staffInvolvedStatus } = req.body;
 
         await transaction.begin();
 
@@ -891,7 +891,7 @@ export const salesInvoicePaper = async (req, res) => {
 export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-        const status = req.query.staffStatus ? 1 : 0;
+        const status = req.query.staffStatus;
 
         const getSalesInvoice = new sql.Request()
             .input('reqDate', sql.Date, reqDate)
@@ -1025,7 +1025,7 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
 export const lrReportUploadgetMobile = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-        const status = req.query.staffStatus ? req.query.staffStatus : 1;
+        const status = req.query.staffStatus;
 
         const getSalesInvoice = new sql.Request()
             .input('reqDate', sql.Date, reqDate)
@@ -1368,7 +1368,8 @@ export const lrReportUploadMobile = async (req, res) => {
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
 
-        const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus = 0, Uploaded_By } = req.body;
+        const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus, Uploaded_By } = req.body;
+       
 
         if (!Do_Id) {
             return invalidInput(res, 'Do_Id is required');
@@ -1378,16 +1379,7 @@ export const lrReportUploadMobile = async (req, res) => {
         transactionBegun = true;
 
 
-        const updateStatusRequest = new sql.Request(transaction);
-        await updateStatusRequest
-            .input('Do_Id', sql.BigInt, Do_Id)
-            .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
-            .query(`
-                UPDATE tbl_Sales_Delivery_Gen_Info
-                SET staffInvolvedStatus = @staffInvolvedStatus
-                WHERE Do_Id = @Do_Id;
-            `);
-
+     
 
         if (involvedStaffs && JSON.parse(involvedStaffs || '[]').length > 0) {
             const staffRequest = new sql.Request(transaction);
@@ -1512,7 +1504,7 @@ export const lrReportUpdateMobile = async (req, res) => {
 
     } catch (e) {
         if (transactionBegun) {
-            try { await transaction.rollback(); } catch (_) { /* already rolled back or aborted */ }
+            try { await transaction.rollback(); } catch (_) { }
         }
         servError(e, res);
     }
@@ -1521,7 +1513,7 @@ export const lrReportUpdateMobile = async (req, res) => {
 export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? req.query.reqDate : ISOString();
-        const status = req.query.staffStatus ? 1 : 0;
+        const status = req.query.staffStatus;
 
         const getSalesOrder = new sql.Request()
             .input('reqDate', sql.Date, new Date(reqDate))
