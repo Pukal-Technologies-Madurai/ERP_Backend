@@ -701,7 +701,7 @@ const ReceiptMaster = () => {
     const transaction = new sql.Transaction();
     
     try {
-        const { Acc, transactions, receiptDetails } = req.body;
+        const { Acc, transactions, receiptDetails,created_by } = req.body;
 
         if (!receiptDetails.receipt_bill_type || !receiptDetails.receipt_voucher_type_id)
             throw new Error('Missing required receipt details');
@@ -714,7 +714,7 @@ const ReceiptMaster = () => {
         await transaction.begin();
 
         const receipt_date = receiptDetails.receipt_date ? ISOString(receiptDetails.receipt_date) : ISOString();
-        const currentUser = req.user?.UserId || 1;
+        const currentUser = created_by;
         const debitLeger = Acc.Acc_Id;
         const dbitLedgerName = Acc.Account_name;
 

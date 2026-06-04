@@ -596,7 +596,7 @@ const syncSelectedWithPayment = async (req, res) => {
     const transaction = new sql.Transaction();
     
     try {
-        const { Acc, transactions, paymentDetails } = req.body;
+        const { Acc, transactions, paymentDetails,created_by } = req.body;
 
         if (!paymentDetails.pay_bill_type || !paymentDetails.payment_voucher_type_id)
             throw new Error('Missing required payment details');
@@ -609,7 +609,7 @@ const syncSelectedWithPayment = async (req, res) => {
         await transaction.begin();
 
         const payment_date = paymentDetails.payment_date ? ISOString(paymentDetails.payment_date) : ISOString();
-        const currentUser = req.user?.UserId || 1;
+        const currentUser = created_by;
         const creditLedger = Acc.Acc_Id;
         const creditLedgerName = Acc.Account_name;
 
