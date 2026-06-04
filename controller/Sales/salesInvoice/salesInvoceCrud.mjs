@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOString, isValidNumber, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../../helper_functions.mjs';
-import { invalidInput, servError, dataFound, noData, success } from '../../../res.mjs';
+import { invalidInput, servError, dataFound, noData, success, sentData } from '../../../res.mjs';
 import { getNextId, getProducts } from '../../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../../middleware/taxCalculator.mjs';
 
@@ -378,84 +378,103 @@ export const getSalesInvoiceByDoIds = async (req, res) => {
 
         const request = new sql.Request()
             .query(`
-                -- sales general details (retailer fields embedded — no separate API needed)
+                -- COMPANY DETAILS
+                SELECT TOP (1)
+                	Company_Name as companyName,
+                	Company_Address as companyAddress,
+                	Telephone_Number as compnayMobileNumber,
+                	Gst_Number as companyGstNumber
+                FROM tbl_Company_Master 
+                -- SALES INVOICE DETAILS
                 SELECT 
-                    sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
-                    sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
-                    sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences,
-                    sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
-                    sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
-                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
-                    COALESCE(sda.deliveryName, '') AS shippingName,
-                    COALESCE(sda.phoneNumber, '') AS shippingPhoneNumber,
-                    COALESCE(sda.cityName, '') AS shippingCityName,
-                    COALESCE(sda.gstNumber, '') AS shippingGstNumber,
-                    COALESCE(sda.stateName, '') AS shippingStateName,
-                    COALESCE(sda.deliveryAddress,'') AS shippingDeliveryAddress,
-                    ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
-                    ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
-                    ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
-                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
-                    COALESCE(rm.Mobile_No, '') AS Mobile_No,
-                    COALESCE(rm.Reatailer_Address, '') AS Reatailer_Address,
-                    COALESCE(rm.Reatailer_City, '') AS Reatailer_City,
-                    COALESCE(rm.PinCode, '') AS PinCode,
-                    COALESCE(rm.Gstno, '') AS Gstno,
-                    COALESCE(sm.State_Name, '') AS StateGet,
-                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
-                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                	sdgi.Retailer_Id as retailerId,
+                	r.Retailer_Name as retailerName,
+                	COALESCE(r.Mobile_No, '') as retailerMobile,
+                	COALESCE(r.Reatailer_Address, '') as retailerAddress,
+                	COALESCE(r.Reatailer_City, '') as retailerCity,
+                	COALESCE(stat.State_Name, '') as retailerState,
+                	COALESCE(r.Gstno, '') as retailerGstNumber,
+                	sdgi.Do_Id as invId,
+                	sdgi.Do_Inv_No as invoiceNumber,
+                	sdgi.Do_Date as invoiceDate,
+                	sdgi.CSGT_Total as invoiceCGST,
+                	sdgi.SGST_Total as invoiceSGST,
+                	sdgi.IGST_Total as invoiceIGST,
+                	sdgi.Round_off as invoiceRoundOff,
+                	sdgi.Total_Before_Tax as invoiceTaxableValue,
+                	sdgi.Total_Invoice_value as invoiceValue,
+                	COALESCE(sogi.So_Inv_No, '') as orderNumber,
+                	COALESCE(sogi.So_Date, '') as orderDate,
+                	COALESCE(salesPerson.Name, '') as salesPersonName,
+                	COALESCE(salesPerson.UserName, '') as salesPersonMobileNumber,
+                	COALESCE(deliveryPerson.Cost_Center_Name, '') as deliveryPersonName,
+                	COALESCE(deliveryPersonUser.UserName, '') as deliveryPersonMobileNumber,
+                	td.Trip_Id as tripId
                 FROM tbl_Sales_Delivery_Gen_Info AS sdgi
-                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
-                LEFT JOIN tbl_State_Master AS sm ON sm.State_Id = rm.State_Id
-                LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
-                LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
-                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
-                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.Id = sdgi.shipingAddressId
-                WHERE sdgi.Do_Id IN (${doIdList})
-                ORDER BY sdgi.Do_Id DESC;
-
-                -- product details
+                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_State_Master AS stat ON stat.State_Id = r.State_Id
+                LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No
+                LEFT JOIN tbl_Users AS salesPerson ON salesPerson.UserId = sogi.Sales_Person_Id
+                LEFT JOIN tbl_ERP_Cost_Center AS deliveryPerson ON deliveryPerson.Cost_Center_Id = sdgi.Delivery_Person_Id
+                LEFT JOIN tbl_Users AS deliveryPersonUser ON deliveryPersonUser.UserId = deliveryPerson.User_Id
+                LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
+                WHERE sdgi.Do_Id IN (${doIdList});
+                -- TRIP SHEET 
                 SELECT
-                    oi.*,
-                    pm.Product_Id,
-                    COALESCE(pm.Short_Name, 'not available') AS Short_Name,
-                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
-                    COALESCE(pm.Product_Name, 'not available') AS Item_Name,
-                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                    COALESCE(u.Units, 'not available') AS UOM,
-                    CASE
-                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-                             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-                        THEN 0
-                        ELSE CONVERT(
-                                     DECIMAL(18,2),
-                                     COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-                                  )
-                    END AS Bag,
-                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                FROM tbl_Sales_Delivery_Stock_Info AS oi
-                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
-                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
-                LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = pm.Pack_Id
-                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-                WHERE oi.Delivery_Order_Id IN (${doIdList})
-                ORDER BY oi.Delivery_Order_Id ASC, oi.S_No ASC;
-            `);
+                	td.Trip_Id as tripId,
+                	tm.Vehicle_No as vehicleNumber,
+                	td.Delivery_Id as invoiceId,
+                	te.Involved_Emp_Id as costCenterId,
+                	cct.Cost_Category_Id as costCatergoryId,
+                	cc.Cost_Center_Name as costCenterName,
+                	cct.Cost_Category as costCenterType
+                FROM tbl_Trip_Details AS td
+                LEFT JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = td.Trip_Id
+                LEFT JOIN tbl_Trip_Employees AS te ON te.Trip_Id = td.Trip_Id
+                LEFT JOIN tbl_ERP_Cost_Center AS cc ON cc.Cost_Center_Id = te.Involved_Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cct ON cct.Cost_Category_Id = cc.User_Type
+                WHERE td.Delivery_Id IN (${doIdList});
+                -- INVOICE PRODUCT DETAILS
+                SELECT
+	                sdsi.Delivery_Order_Id as invId,
+                	sdsi.Item_Id as productId,
+                	pm.Product_Name as productName,
+                	sdsi.HSN_Code as hsnCode,
+                	sdsi.Bill_Qty as quantity,
+                	sdsi.Taxable_Rate as itemRateWithoutTax,
+                	sdsi.Item_Rate as itemRateWithTax,
+                	sdsi.Amount as itemAmount,
+                	sdsi.Tax_Rate as gstPercentage,
+                	sdsi.Cgst as cgstPercentage,
+                	sdsi.Cgst_Amo as cgstAmount,
+                	sdsi.Sgst as sgstPercentage,
+                	sdsi.Sgst_Amo as sgstAmount,
+                	sdsi.Igst as igstPercentage,
+                	sdsi.Igst_Amo as igstAmount,
+                	sdsi.Item_Rate - sdsi.Taxable_Rate as taxAmount
+                FROM tbl_Sales_Delivery_Stock_Info AS sdsi
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = sdsi.Item_Id
+                WHERE sdsi.Delivery_Order_Id IN (${doIdList});`
+            );
 
         const result = await request;
 
-        const SalesGeneralInfo = toArray(result.recordsets[0]);
-        const Products_List = toArray(result.recordsets[1]);
+        const companydata = toArray(result.recordsets[0]);
+        const salesGeneralData = toArray(result.recordsets[1]);
+        const tripStaffsData = toArray(result.recordsets[2]);
+        const productData = toArray(result.recordsets[3]);
 
-        if (SalesGeneralInfo.length > 0) {
-            const resData = SalesGeneralInfo.map(row => ({
+        if (salesGeneralData.length > 0) {
+            const resData = salesGeneralData.map(row => ({
                 ...row,
-                Products_List: Products_List.filter(
-                    fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
+                productsDetails: productData.filter(
+                    fil => isEqualNumber(fil.invId, row.invId)
                 ),
+                tripStaffInfo: tripStaffsData.filter(
+                    fil => isEqualNumber(fil.tripId, row.tripId)
+                )
             }));
-            dataFound(res, resData);
+            sentData(res, resData, { companydata });
         } else {
             noData(res);
         }
@@ -637,7 +656,7 @@ export const getSalesInvoiceById = async (req, res) => {
 export const getLastSalesInvoiceByRetailerId = async (req, res) => {
     try {
         const { Retailer_Id } = req.query;
-        console.log(Retailer_Id )
+        console.log(Retailer_Id)
 
         if (!isValidNumber(Retailer_Id)) {
             return invalidInput(res, 'Valid Retailer_Id is required');
@@ -1514,7 +1533,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
             const {
                 Retailer_Id, Branch_Id, So_Id, Cancel_status = 1, Ref_Inv_Number = '',
                 Narration = null, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
-                Products_List = [], Expence_Array = [], 
+                Products_List = [], Expence_Array = [],
                 Delivery_Status = 1, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
             } = order;
 
@@ -1522,7 +1541,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
             const isInclusive = isEqualNumber(GST_Inclusive, 1);
             const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
             const isIGST = isEqualNumber(IS_IGST, 1);
-            
+
             const Do_Id = nextDoId++;
             const Do_No = nextDoNo++;
             const Do_Inv_No = `${VoucherCode}/${createPadString(Do_No, 6)}/${Year_Desc}`;
@@ -1538,12 +1557,12 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                         const itemRate = RoundNumber(item?.Item_Rate);
                         const billQty = RoundNumber(item?.Bill_Qty);
                         const Amount = Multiplication(billQty, itemRate);
-    
+
                         if (isNotTaxableBill) return Addition(acc, Amount);
-    
+
                         const product = findProductDetails(productsData, item.Item_Id);
                         const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-    
+
                         if (isInclusive) {
                             return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
                         } else {
@@ -1558,33 +1577,33 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                     const itemRate = RoundNumber(item?.Item_Rate);
                     const billQty = RoundNumber(item?.Bill_Qty);
                     const Amount = Multiplication(billQty, itemRate);
-    
+
                     if (isNotTaxableBill) return {
                         TotalValue: Addition(acc.TotalValue, Amount),
                         TotalTax: 0
                     }
-    
+
                     const product = findProductDetails(productsData, item.Item_Id);
                     const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-    
+
                     const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
                     const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
                     const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
-    
+
                     return { TotalValue, TotalTax };
                 }, { TotalValue: 0, TotalTax: 0 });
-    
+
                 const invoiceExpencesTaxTotal = toArray(Expence_Array).reduce((acc, exp) => {
                     if (isNotTaxableBill) return 0;
                     return Addition(acc, calculateGSTDetails(exp?.Expence_Value, exp?.percentageValue, 'remove').tax_amount)
                 }, 0);
-    
+
                 return {
                     TotalValue: productTax.TotalValue,
                     TotalTax: Addition(productTax.TotalTax, invoiceExpencesTaxTotal),
                 }
             };
-    
+
             const totalValueBeforeTaxValues = totalValueBeforeTax();
             const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
             const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
