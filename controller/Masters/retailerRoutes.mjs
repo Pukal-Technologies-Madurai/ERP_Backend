@@ -170,7 +170,19 @@ const retailerRoutes = () => {
             const result = await new sql.Request()
                 .input('date', date)
                 .input('User_Id', User_Id)
-                .query('select * from tbl_Route_setting where date=@date AND User_Id=@User_Id order by Id asc')
+                .query(`SELECT DISTINCT
+    tr.Id,
+    tr.User_Id,
+    tr.Route_Id,
+    tr.date,
+    tr.IsActive,
+    COUNT(ret.Retailer_Id) OVER() AS total_retailer_count
+FROM tbl_Route_setting tr
+LEFT JOIN tbl_Retailers_Master ret ON tr.Route_Id = ret.Route_Id
+WHERE tr.date = @date 
+  AND tr.User_Id = @User_Id
+  AND Del_Flag !=1
+ORDER BY tr.Id ASC`)
             if (result.recordset.length) {
                 dataFound(res, result.recordset);
             } else {
