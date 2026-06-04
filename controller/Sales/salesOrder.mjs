@@ -1999,31 +1999,31 @@ const SaleOrder = () => {
         }
     };
 
- const getSaleOrderList = async (req, res) => {
-    try {
-        const {
-            Retailer_Id,
-            Cancel_status,
-            Created_by,
-            Sales_Person_Id,
-            VoucherType,
-            OrderStatus,
-            Branch_Id,
-            FromDate,
-            ToDate
-        } = req.query;
+    const getSaleOrderList = async (req, res) => {
+        try {
+            const {
+                Retailer_Id,
+                Cancel_status,
+                Created_by,
+                Sales_Person_Id,
+                VoucherType,
+                OrderStatus,
+                Branch_Id,
+                FromDate,
+                ToDate
+            } = req.query;
 
-        const request = new sql.Request()
-            .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
-            .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
-            .input('creater', checkIsNumber(Created_by) ? Created_by : null)
-            .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
-            .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
-            .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
-            .input('FromDate', FromDate || null)
-            .input('ToDate', ToDate || null);
+            const request = new sql.Request()
+                .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
+                .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
+                .input('creater', checkIsNumber(Created_by) ? Created_by : null)
+                .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
+                .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
+                .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
+                .input('FromDate', FromDate || null)
+                .input('ToDate', ToDate || null);
 
-        const result = await request.query(`
+            const result = await request.query(`
             /* ================================
                STEP 1 : FILTER SALES ORDERS
             ================================= */
@@ -2143,92 +2143,92 @@ const SaleOrder = () => {
                 AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
         `);
 
-        const [
-            OrderData,
-            ProductDetails,
-            StaffInvolved,
-            DeliveryData,
-            DeliveryItems,
-            AlterHistory
-        ] = result.recordsets;
+            const [
+                OrderData,
+                ProductDetails,
+                StaffInvolved,
+                DeliveryData,
+                DeliveryItems,
+                AlterHistory
+            ] = result.recordsets;
 
-        if (!OrderData.length) {
+            if (!OrderData.length) {
+                return res.status(200).json({
+                    success: true,
+                    message: "No data found",
+                    data: []
+                });
+            }
+
+            const resData = OrderData.map(order => {
+                const orderProducts = ProductDetails.filter(p =>
+                    Number(p.Sales_Order_Id) === Number(order.So_Id)
+                );
+
+                const deliveryList = DeliveryData.filter(d =>
+                    Number(d.So_No) === Number(order.So_Id)
+                );
+
+                const totalOrderedQty = orderProducts.reduce(
+                    (s, p) => s + (Number(p.Bill_Qty) || 0), 0
+                );
+
+                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                    const items = DeliveryItems.filter(i =>
+                        Number(i.Delivery_Order_Id) === Number(d.Do_Id)
+                    );
+                    return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
+                }, 0);
+
+                const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
+
+                const alterHistory = AlterHistory.filter(ah =>
+                    Number(ah.alteredRowId) === Number(order.So_Id)
+                );
+
+                return {
+                    ...order,
+                    OrderStatus: status,
+                    Products_List: orderProducts.map(p => ({
+                        ...p,
+                        ProductImageUrl: getImage("products", p.Product_Image_Name)
+                    })),
+                    Staff_Involved_List: StaffInvolved.filter(s =>
+                        Number(s.So_Id) === Number(order.So_Id)
+                    ),
+                    ConvertedInvoice: deliveryList.map(d => ({
+                        ...d,
+                        InvoicedProducts: DeliveryItems
+                            .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
+                            .map(p => ({
+                                ...p,
+                                ProductImageUrl: getImage("products", p.Product_Image_Name)
+                            }))
+                    })),
+                    alterHistoryDetails: alterHistory
+                };
+            });
+
+            const finalData = OrderStatus
+                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+                : resData;
+
             return res.status(200).json({
                 success: true,
-                message: "No data found",
-                data: []
+                message: "Data retrieved successfully",
+                data: finalData,
+                total: finalData.length
+            });
+
+        } catch (err) {
+            console.error('Error in getSaleOrderList:', err);
+            return res.status(500).json({
+                success: false,
+                message: "Internal server error",
+                error: err.message
             });
         }
-
-        const resData = OrderData.map(order => {
-            const orderProducts = ProductDetails.filter(p =>
-                Number(p.Sales_Order_Id) === Number(order.So_Id)
-            );
-
-            const deliveryList = DeliveryData.filter(d =>
-                Number(d.So_No) === Number(order.So_Id)
-            );
-
-            const totalOrderedQty = orderProducts.reduce(
-                (s, p) => s + (Number(p.Bill_Qty) || 0), 0
-            );
-
-            const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-                const items = DeliveryItems.filter(i =>
-                    Number(i.Delivery_Order_Id) === Number(d.Do_Id)
-                );
-                return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
-            }, 0);
-
-            const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
-
-            const alterHistory = AlterHistory.filter(ah =>
-                Number(ah.alteredRowId) === Number(order.So_Id)
-            );
-
-            return {
-                ...order,
-                OrderStatus: status,
-                Products_List: orderProducts.map(p => ({
-                    ...p,
-                    ProductImageUrl: getImage("products", p.Product_Image_Name)
-                })),
-                Staff_Involved_List: StaffInvolved.filter(s =>
-                    Number(s.So_Id) === Number(order.So_Id)
-                ),
-                ConvertedInvoice: deliveryList.map(d => ({
-                    ...d,
-                    InvoicedProducts: DeliveryItems
-                        .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
-                        .map(p => ({
-                            ...p,
-                            ProductImageUrl: getImage("products", p.Product_Image_Name)
-                        }))
-                })),
-                alterHistoryDetails: alterHistory
-            };
-        });
-
-        const finalData = OrderStatus
-            ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
-            : resData;
-
-        return res.status(200).json({
-            success: true,
-            message: "Data retrieved successfully",
-            data: finalData,
-            total: finalData.length
-        });
-
-    } catch (err) {
-        console.error('Error in getSaleOrderList:', err);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: err.message
-        });
-    }
-};
+    };
 
     return {
         saleOrderCreation,

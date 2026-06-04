@@ -159,7 +159,8 @@ export const getSalesInvOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Dr'                       AS accountSide,
             pig.Do_Inv_No              AS BillRefNo,
-            pig.Total_Invoice_value - (COALESCE(rp.againstAmount, 0) + COALESCE(cn.creditNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            pig.Total_Invoice_value - (COALESCE(rp.againstAmount, 0) + COALESCE(cn.creditNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            pig.Narration              AS narration
         FROM @filteredSalesInv fs
         JOIN tbl_Sales_Delivery_Gen_Info pig ON fs.voucherId = pig.Do_Id AND fs.voucherNumber = pig.Do_Inv_No
         JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
@@ -218,7 +219,8 @@ export const getSalesObOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Dr'              AS accountSide,
             cb.bill_no        AS BillRefNo,
-            cb.dr_amount - (COALESCE(rp.againstAmount, 0) + COALESCE(cn.creditNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            cb.dr_amount - (COALESCE(rp.againstAmount, 0) + COALESCE(cn.creditNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            ''              AS narration
         FROM @filteredSalesOb fo
         JOIN tbl_Ledger_Opening_Balance cb ON fo.voucherId = cb.OB_Id AND fo.voucherNumber = cb.bill_no
         LEFT JOIN (
@@ -275,7 +277,8 @@ export const getReceiptOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Cr'                      AS accountSide,
             rgi.receipt_invoice_no    AS BillRefNo,
-            rgi.credit_amount - (COALESCE(rp.againstAmount, 0) + COALESCE(pba.againstAmount, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            rgi.credit_amount - (COALESCE(rp.againstAmount, 0) + COALESCE(pba.againstAmount, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            rgi.remarks               AS narration
         FROM @filteredReceipt fr
         JOIN tbl_Receipt_General_Info rgi ON fr.voucherId = rgi.receipt_id AND fr.voucherNumber = rgi.receipt_invoice_no
         LEFT JOIN (
@@ -332,7 +335,8 @@ export const getPurchaseInvOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Cr'                     AS accountSide,
             pig.Ref_Po_Inv_No        AS BillRefNo,
-            pig.Total_Invoice_value - (COALESCE(pb.againstAmount, 0) + COALESCE(dn.debitNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            pig.Total_Invoice_value - (COALESCE(pb.againstAmount, 0) + COALESCE(dn.debitNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            pig.Narration               AS narration
         FROM @filteredPurchaseInv fp
         JOIN tbl_Purchase_Order_Inv_Gen_Info pig ON fp.voucherId = pig.PIN_Id AND fp.voucherNumber = pig.Po_Inv_No
         JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
@@ -391,7 +395,8 @@ export const getPurchaseObOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Cr'            AS accountSide,
             cb.bill_no      AS BillRefNo,
-            cb.cr_amount - (COALESCE(pb.againstAmount, 0) + COALESCE(dn.debitNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            cb.cr_amount - (COALESCE(pb.againstAmount, 0) + COALESCE(dn.debitNoteAdjustment, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            ''              AS narration
         FROM @filteredPurchaseOb fo
         JOIN tbl_Ledger_Opening_Balance cb ON fo.voucherId = cb.OB_Id AND fo.voucherNumber = cb.bill_no
         LEFT JOIN (
@@ -448,7 +453,8 @@ export const getPaymentOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Dr'                     AS accountSide,
             pgi.payment_invoice_no   AS BillRefNo,
-            pgi.debit_amount - (COALESCE(rp.againstAmount, 0) + COALESCE(pb.againstAmount, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            pgi.debit_amount - (COALESCE(rp.againstAmount, 0) + COALESCE(pb.againstAmount, 0)) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            pgi.remarks              AS narration
         FROM @filteredPayment fp
         JOIN tbl_Payment_General_Info pgi ON fp.voucherId = pgi.pay_id AND fp.voucherNumber = pgi.payment_invoice_no
         LEFT JOIN (
@@ -504,7 +510,8 @@ SELECT * FROM (
         COALESCE(jr1.Amount, 0) + COALESCE(jr2.Amount, 0) AS journalAdjustment,
         jei.DrCr                 AS accountSide,
         jgi.JournalVoucherNo     AS BillRefNo,
-        jei.Amount - (COALESCE(rp.againstAmount, 0) + COALESCE(pb.againstAmount, 0)) - (COALESCE(jr1.Amount, 0) + COALESCE(jr2.Amount, 0)) AS BalanceAmount
+        jei.Amount - (COALESCE(rp.againstAmount, 0) + COALESCE(pb.againstAmount, 0)) - (COALESCE(jr1.Amount, 0) + COALESCE(jr2.Amount, 0)) AS BalanceAmount,
+        jgi.Narration            AS narration
     FROM @filteredJournal fj
     JOIN tbl_Journal_General_Info jgi ON fj.voucherId = jgi.JournalId AND fj.voucherNumber = jgi.JournalVoucherNo
     JOIN tbl_Journal_Entries_Info jei ON jgi.JournalAutoId = jei.JournalAutoId AND fj.DrCr = jei.DrCr AND jei.Acc_Id = @Acc_Id
@@ -580,7 +587,8 @@ export const getCreditNoteOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Cr'                     AS accountSide,
             cngi.CR_Inv_No           AS BillRefNo,
-            cngi.Total_Invoice_value - COALESCE(pb.againstAmount, 0) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            cngi.Total_Invoice_value - COALESCE(pb.againstAmount, 0) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            cngi.Narration           AS narration
         FROM @filteredCreditNote fc
         JOIN tbl_Credit_Note_Gen_Info cngi ON fc.voucherId = cngi.CR_Id AND fc.voucherNumber = cngi.CR_Inv_No
         JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = cngi.Retailer_Id
@@ -629,7 +637,8 @@ export const getDebitNoteOutstanding = (JournalAutoId) => `
             COALESCE(jr.journalAdjustment, 0) AS journalAdjustment,
             'Dr'                     AS accountSide,
             dngi.DB_Inv_No           AS BillRefNo,
-            dngi.Total_Invoice_value - COALESCE(rp.againstAmount, 0) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount
+            dngi.Total_Invoice_value - COALESCE(rp.againstAmount, 0) - COALESCE(jr.journalAdjustment, 0) AS BalanceAmount,
+            dngi.Narration           AS narration
         FROM @filteredDebitNote fd
         JOIN tbl_Debit_Note_Gen_Info dngi ON fd.voucherId = dngi.DB_Id AND fd.voucherNumber = dngi.DB_Inv_No
         JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = dngi.Retailer_Id

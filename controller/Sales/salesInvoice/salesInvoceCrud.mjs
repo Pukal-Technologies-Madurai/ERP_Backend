@@ -361,6 +361,110 @@ export const getSalesInvoice = async (req, res) => {
     }
 }
 
+export const getSalesInvoiceByDoIds = async (req, res) => {
+    try {
+        const { Do_Ids } = req.query;
+
+        if (!Do_Ids) return invalidInput(res, 'Do_Ids is required');
+
+        const doIdArray = String(Do_Ids)
+            .split(',')
+            .map(id => parseInt(id.trim(), 10))
+            .filter(id => !isNaN(id) && id > 0);
+
+        if (doIdArray.length === 0) return invalidInput(res, 'Valid Do_Ids are required');
+
+        const doIdList = doIdArray.join(', ');
+
+        const request = new sql.Request()
+            .query(`
+                -- sales general details (retailer fields embedded — no separate API needed)
+                SELECT 
+                    sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                    sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                    sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences,
+                    sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                    sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
+                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
+                    COALESCE(sda.deliveryName, '') AS shippingName,
+                    COALESCE(sda.phoneNumber, '') AS shippingPhoneNumber,
+                    COALESCE(sda.cityName, '') AS shippingCityName,
+                    COALESCE(sda.gstNumber, '') AS shippingGstNumber,
+                    COALESCE(sda.stateName, '') AS shippingStateName,
+                    COALESCE(sda.deliveryAddress,'') AS shippingDeliveryAddress,
+                    ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
+                    ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
+                    ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(rm.Mobile_No, '') AS Mobile_No,
+                    COALESCE(rm.Reatailer_Address, '') AS Reatailer_Address,
+                    COALESCE(rm.Reatailer_City, '') AS Reatailer_City,
+                    COALESCE(rm.PinCode, '') AS PinCode,
+                    COALESCE(rm.Gstno, '') AS Gstno,
+                    COALESCE(sm.State_Name, '') AS StateGet,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_State_Master AS sm ON sm.State_Id = rm.State_Id
+                LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Sales_Delivery_Address AS sda ON sda.Id = sdgi.shipingAddressId
+                WHERE sdgi.Do_Id IN (${doIdList})
+                ORDER BY sdgi.Do_Id DESC;
+
+                -- product details
+                SELECT
+                    oi.*,
+                    pm.Product_Id,
+                    COALESCE(pm.Short_Name, 'not available') AS Short_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Item_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    CASE
+                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                        THEN 0
+                        ELSE CONVERT(
+                                     DECIMAL(18,2),
+                                     COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                                  )
+                    END AS Bag,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Delivery_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = pm.Pack_Id
+                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                WHERE oi.Delivery_Order_Id IN (${doIdList})
+                ORDER BY oi.Delivery_Order_Id ASC, oi.S_No ASC;
+            `);
+
+        const result = await request;
+
+        const SalesGeneralInfo = toArray(result.recordsets[0]);
+        const Products_List = toArray(result.recordsets[1]);
+
+        if (SalesGeneralInfo.length > 0) {
+            const resData = SalesGeneralInfo.map(row => ({
+                ...row,
+                Products_List: Products_List.filter(
+                    fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
+                ),
+            }));
+            dataFound(res, resData);
+        } else {
+            noData(res);
+        }
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
 export const getSalesInvoiceById = async (req, res) => {
     try {
         const { Do_Id, Do_Inv_No, Retailer_Id } = req.query;
