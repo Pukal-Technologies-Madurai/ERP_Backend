@@ -49,12 +49,12 @@ const getPosRateMaster = async (req, res) => {
         let posRateQuery = `
             SELECT rm.Id, rm.Rate_Date,rm.Min_Rate, rm.Pos_Brand_Id, rm.Item_Id, rm.Rate, rm.Max_Rate, 
                    pb.POS_Brand_Name, pm.Product_Name, pm.Short_Name, 
-                   pm.isActive AS Is_Active_Decative, rm.Brand_Level, rm.Item_Level
+                   rm.Is_Active_Decative AS Is_Active_Decative, rm.Brand_Level, rm.Item_Level
             FROM tbl_Pos_Rate_Master rm
             LEFT JOIN tbl_POS_Brand pb ON pb.POS_Brand_Id = rm.Pos_Brand_Id
             LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = rm.Item_Id
             WHERE rm.Rate_Date = @FromDate
-            ORDER BY pm.IsActive DESC
+            ORDER BY rm.Is_Active_Decative DESC
         `;
 
         // Query for Rate Gen - Get only the fields that exist
@@ -367,7 +367,7 @@ const putPosRateMaster = async (req, res) => {
         
         const result = await request.query(updateQuery);
 
-       
+
         if (needsProductSync) {
             const productRequest = new sql.Request();
             productRequest.input('Item_Id', sql.Int, parseInt(Item_Id));
