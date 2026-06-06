@@ -1358,7 +1358,6 @@ ORDER BY Do_Id;
 
 
 export const lrReportUploadMobile = async (req, res) => {
-
     const transaction = new sql.Transaction();
     let transactionBegun = false;
 
@@ -1367,9 +1366,7 @@ export const lrReportUploadMobile = async (req, res) => {
 
         const fileName = req?.file?.filename;
         const filePath = req?.file?.path;
-
-        const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus, Uploaded_By } = req.body;
-       
+        const { Do_Id, Do_Inv_No, involvedStaffs, Uploaded_By } = req.body;
 
         if (!Do_Id) {
             return invalidInput(res, 'Do_Id is required');
@@ -1378,58 +1375,156 @@ export const lrReportUploadMobile = async (req, res) => {
         await transaction.begin();
         transactionBegun = true;
 
-
-     
-
-        if (involvedStaffs && JSON.parse(involvedStaffs || '[]').length > 0) {
-            const staffRequest = new sql.Request(transaction);
-            await staffRequest
-                .input('Do_Id', sql.BigInt, Do_Id)
-                .input('involvedStaffs', sql.NVarChar, involvedStaffs)
-                .query(`
+       
+        if (involvedStaffs) {
+            let staffArray = [];
+            try {
+                staffArray = JSON.parse(involvedStaffs);
+            } catch (e) {
+                console.error('Error parsing involvedStaffs:', e);
+            }
+            
+            if (staffArray.length > 0) {
+                const staffRequest = new sql.Request(transaction);
+                
+                // Delete existing
+                await staffRequest
+                    .input('Do_Id', sql.BigInt, Do_Id)
+                    .query(`DELETE FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = @Do_Id`);
+                
+                // Build bulk insert query
+                let valuesClause = '';
+                const parameters = {};
+                
+                staffArray.forEach((staff, index) => {
+                    valuesClause += valuesClause ? ',' : '';
+                    valuesClause += `(@Do_Id, @Emp_Type_Id_${index}, @Emp_Id_${index})`;
+                    parameters[`Emp_Type_Id_${index}`] = staff.Emp_Type_Id;
+                    parameters[`Emp_Id_${index}`] = staff.Emp_Id;
+                });
+                
+                const bulkRequest = new sql.Request(transaction);
+                bulkRequest.input('Do_Id', sql.BigInt, Do_Id);
+                
+                Object.keys(parameters).forEach(key => {
+                    bulkRequest.input(key, sql.BigInt, parameters[key]);
+                });
+                
+                await bulkRequest.query(`
                     INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
-                    SELECT 
-                        @Do_Id,
-                        JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
-                        JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
-                    FROM OPENJSON(@involvedStaffs);
+                    VALUES ${valuesClause}
                 `);
+            }
         }
 
-
+        // Handle file upload - Best practice with IDENTITY
         if (fileName) {
-
-            const idRequest = new sql.Request(transaction);
-            const idResult = await idRequest.query(`
-                SELECT ISNULL(MAX(Id), 0) + 1 AS NewId 
-                FROM tbl_LrReport WITH (UPDLOCK, HOLDLOCK)
-            `);
-            const newLrId = idResult.recordset[0].NewId;
-
             const imageRequest = new sql.Request(transaction);
-            await imageRequest
-                .input('Id', sql.BigInt, newLrId)
+            const result = await imageRequest
                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
-                .input('ImageUrl', sql.NVarChar, filePath )
-                .input('Image_Name', fileName)
+                .input('ImageUrl', sql.NVarChar, filePath)
+                .input('Image_Name', sql.NVarChar, fileName)
                 .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
                 .query(`
-                    INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl,Image_Name, Uploaded_By)
-                    VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl,@Image_Name, @Uploaded_By);
+                    INSERT INTO tbl_LrReport (Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
+                    VALUES (@Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By);
                 `);
         }
 
         await transaction.commit();
-
         success(res, 'Changes saved successfully');
+        
     } catch (e) {
+        console.error('Error:', e);
         if (transactionBegun) {
-            try { await transaction.rollback(); } catch (_) { /* already rolled back or aborted */ }
+            try { 
+                await transaction.rollback(); 
+            } catch (_) { 
+                // Ignore rollback error
+            }
         }
         servError(e, res);
     }
+
+
+
 };
+
+
+// export const lrReportUploadMobile = async (req, res) => {
+
+//     const transaction = new sql.Transaction();
+//     let transactionBegun = false;
+
+//     try {
+//         await uploadFile(req, res, 6, 'LRReport');
+
+//         const fileName = req?.file?.filename;
+//         const filePath = req?.file?.path;
+
+//         const { Do_Id, Do_Inv_No, involvedStaffs, staffInvolvedStatus, Uploaded_By } = req.body;
+       
+
+//         if (!Do_Id) {
+//             return invalidInput(res, 'Do_Id is required');
+//         }
+
+//         await transaction.begin();
+//         transactionBegun = true;
+
+
+     
+
+//         if (involvedStaffs && JSON.parse(involvedStaffs || '[]').length > 0) {
+//             const staffRequest = new sql.Request(transaction);
+//             await staffRequest
+//                 .input('Do_Id', sql.BigInt, Do_Id)
+//                 .input('involvedStaffs', sql.NVarChar, involvedStaffs)
+//                 .query(`
+//                     INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
+//                     SELECT 
+//                         @Do_Id,
+//                         JSON_VALUE(value, '$.Emp_Type_Id') AS Emp_Type_Id,
+//                         JSON_VALUE(value, '$.Emp_Id') AS Emp_Id
+//                     FROM OPENJSON(@involvedStaffs);
+//                 `);
+//         }
+
+
+//         if (fileName) {
+
+//             const idRequest = new sql.Request(transaction);
+//             const idResult = await idRequest.query(`
+//                 SELECT ISNULL(MAX(Id), 0) + 1 AS NewId 
+//                 FROM tbl_LrReport WITH (UPDLOCK, HOLDLOCK)
+//             `);
+//             const newLrId = idResult.recordset[0].NewId;
+
+//             const imageRequest = new sql.Request(transaction);
+//             await imageRequest
+//                 .input('Id', sql.BigInt, newLrId)
+//                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
+//                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+//                 .input('ImageUrl', sql.NVarChar, filePath )
+//                 .input('Image_Name', fileName)
+//                 .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+//                 .query(`
+//                     INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl,Image_Name, Uploaded_By)
+//                     VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl,@Image_Name, @Uploaded_By);
+//                 `);
+//         }
+
+//         await transaction.commit();
+
+//         success(res, 'Changes saved successfully');
+//     } catch (e) {
+//         if (transactionBegun) {
+//             try { await transaction.rollback(); } catch (_) { /* already rolled back or aborted */ }
+//         }
+//         servError(e, res);
+//     }
+// };
 
 export const lrReportUpdateMobile = async (req, res) => {
     const transaction = new sql.Transaction();

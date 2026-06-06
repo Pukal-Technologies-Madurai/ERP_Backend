@@ -44,6 +44,8 @@ import accountUserMapping from "../controller/Masters/accountUserMapping.mjs";
 
 import abstractgroupType from '../controller/Masters/abstractgroupType.mjs';
 
+import whatsapp from '../controller/Masters/whatsapp.mjs';
+
 const MastersRouter = express.Router();
 
 MastersRouter.get('/company', company.getCompany);
@@ -387,4 +389,12 @@ MastersRouter.delete('/abstractGroup',abstractgroupType.deleteAbstractGroup);
 // MastersRouter.put('/updateArrivalList',baseGroup.updateArrivalList)
 
 
+
+MastersRouter.put('/whatsappMethod',whatsapp.updateWhatsappMethod)
+MastersRouter.get('/whatsappTypes', whatsapp.getWhatsappTypes)
+MastersRouter.post('/whatsappMethod', whatsapp.addWhatsappMethod)
+MastersRouter.get('/whatsappServices', whatsapp.getWhatsappServices)
+MastersRouter.get('/whatsappMethod', whatsapp.getWhatsappMethod)
+
+    
 export default MastersRouter;
