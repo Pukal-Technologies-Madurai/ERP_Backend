@@ -133,7 +133,9 @@ const tripActivities = () => {
                         AND alteredRowId IN (SELECT Trip_Id FROM TRIP_MASTER)
                 ), CREDIT_NOTE AS (
                     SELECT
-                        td.*,
+                        td.Id AS TD_Id,
+                        td.Trip_Id,
+                        td.Credit_Note_Id,
                         cngi.CR_Id,
                         cngi.CR_Inv_No,
                         cngi.CR_Date,
@@ -147,9 +149,12 @@ const tripActivities = () => {
                     LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = cngi.Retailer_Id
                     LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = cngi.Voucher_Type
                     WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+                      AND td.Credit_Note_Id IS NOT NULL
                 ), DEBIT_NOTE AS (
                     SELECT
-                        td.*,
+                        td.Id AS TD_Id,
+                        td.Trip_Id,
+                        td.Debit_Note_Id,
                         dngi.DB_Id,
                         dngi.DB_Inv_No,
                         dngi.DB_Date,
@@ -163,6 +168,7 @@ const tripActivities = () => {
                     LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
                     LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = dngi.Voucher_Type
                     WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+                      AND td.Debit_Note_Id IS NOT NULL
                 )
                 SELECT 
                     tm.*,
@@ -191,13 +197,79 @@ const tripActivities = () => {
                         FOR JSON PATH
                     ), '[]') AS Alteration_History,
                     COALESCE((
-                        SELECT cn.* 
+                        SELECT
+                            cn.TD_Id,
+                            cn.Trip_Id,
+                            cn.Credit_Note_Id,
+                            cn.CR_Id,
+                            cn.CR_Inv_No,
+                            cn.CR_Date,
+                            cn.VoucherTypeGet,
+                            cn.Retailer_Id,
+                            cn.Retailer_Name,
+                            cn.Total_Invoice_value,
+                            COALESCE((
+                                SELECT
+                                    si.S_No,
+                                    si.Item_Id,
+                                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+                                    si.HSN_Code,
+                                    si.Bill_Qty AS QTY,
+                                    si.Item_Rate,
+                                    si.Taxable_Amount,
+                                    si.Tax_Rate AS Gst_Rate,
+                                    si.Cgst AS Cgst_P,
+                                    si.Sgst AS Sgst_P,
+                                    si.Igst AS Igst_P,
+                                    si.Cgst_Amo,
+                                    si.Sgst_Amo,
+                                    si.Igst_Amo,
+                                    si.Final_Amo AS Total_Value
+                                FROM tbl_Credit_Note_Stock_Info AS si
+                                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                                WHERE si.CR_Id = cn.CR_Id
+                                ORDER BY si.S_No
+                                FOR JSON PATH
+                            ), '[]') AS Products_List
                         FROM CREDIT_NOTE AS cn
                         WHERE cn.Trip_Id = tm.Trip_Id
                         FOR JSON PATH
                     ), '[]') AS Credit_Note_List,
                     COALESCE((
-                        SELECT dn.* 
+                        SELECT
+                            dn.TD_Id,
+                            dn.Trip_Id,
+                            dn.Debit_Note_Id,
+                            dn.DB_Id,
+                            dn.DB_Inv_No,
+                            dn.DB_Date,
+                            dn.VoucherTypeGet,
+                            dn.Retailer_Id,
+                            dn.Retailer_Name,
+                            dn.Total_Invoice_value,
+                            COALESCE((
+                                SELECT
+                                    si.S_No,
+                                    si.Item_Id,
+                                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+                                    si.HSN_Code,
+                                    si.Bill_Qty AS QTY,
+                                    si.Item_Rate,
+                                    si.Taxable_Amount,
+                                    si.Tax_Rate AS Gst_Rate,
+                                    si.Cgst AS Cgst_P,
+                                    si.Sgst AS Sgst_P,
+                                    si.Igst AS Igst_P,
+                                    si.Cgst_Amo,
+                                    si.Sgst_Amo,
+                                    si.Igst_Amo,
+                                    si.Final_Amo AS Total_Value
+                                FROM tbl_Debit_Note_Stock_Info AS si
+                                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                                WHERE si.DB_Id = dn.DB_Id
+                                ORDER BY si.S_No
+                                FOR JSON PATH
+                            ), '[]') AS Products_List
                         FROM DEBIT_NOTE AS dn
                         WHERE dn.Trip_Id = tm.Trip_Id
                         FOR JSON PATH
@@ -208,15 +280,29 @@ const tripActivities = () => {
 
             if (result.recordset.length > 0) {
 
-                const parsed = result.recordset.map(o => ({
-                    ...o,
-                    Products_List: JSON.parse(o?.Products_List),
-                    Employees_Involved: JSON.parse(o?.Employees_Involved),
-                    ConvertedPurchaseOrders: JSON.parse(o?.ConvertedPurchaseOrders),
-                    Alteration_History: JSON.parse(o?.Alteration_History),
-                    Credit_Note_List: JSON.parse(o?.Credit_Note_List),
-                    Debit_Note_List: JSON.parse(o?.Debit_Note_List),
-                }));
+                const parsed = result.recordset.map(o => {
+                    const creditNoteList = JSON.parse(o?.Credit_Note_List || '[]').map(cn => ({
+                        ...cn,
+                        Products_List: typeof cn.Products_List === 'string'
+                            ? JSON.parse(cn.Products_List)
+                            : (Array.isArray(cn.Products_List) ? cn.Products_List : [])
+                    }));
+                    const debitNoteList = JSON.parse(o?.Debit_Note_List || '[]').map(dn => ({
+                        ...dn,
+                        Products_List: typeof dn.Products_List === 'string'
+                            ? JSON.parse(dn.Products_List)
+                            : (Array.isArray(dn.Products_List) ? dn.Products_List : [])
+                    }));
+                    return {
+                        ...o,
+                        Products_List: JSON.parse(o?.Products_List || '[]'),
+                        Employees_Involved: JSON.parse(o?.Employees_Involved || '[]'),
+                        ConvertedPurchaseOrders: JSON.parse(o?.ConvertedPurchaseOrders || '[]'),
+                        Alteration_History: JSON.parse(o?.Alteration_History || '[]'),
+                        Credit_Note_List: creditNoteList,
+                        Debit_Note_List: debitNoteList,
+                    };
+                });
 
                 dataFound(res, parsed);
             } else {
@@ -444,6 +530,16 @@ const tripActivities = () => {
                                 @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
                                 @QTY, 'TRIP_SHEET', @reference_id, @Created_By, @openingId
                             );
+                        ` : ''}
+                        ${BillType === 'CREDIT_NOTE' ? `
+                        UPDATE tbl_Credit_Note_Gen_Info
+                        SET stockInwardDate = @Trip_Date
+                        WHERE CR_Id = @CR_Id;    
+                        ` : ''}
+                        ${BillType === 'DEBIT_NOTE' ? `
+                        UPDATE tbl_Debit_Note_Gen_Info
+                        SET stockOutwardDate = @Trip_Date
+                        WHERE DB_Id = @DB_Id;    
                         ` : ''}
                         `
                     );
@@ -685,6 +781,16 @@ const tripActivities = () => {
                                 @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
                                 @QTY, 'TRIP_SHEET', @reference_id, @Created_By, @openingId
                             );
+                        ` : ''}
+                        ${BillType === 'CREDIT_NOTE' ? `
+                        UPDATE tbl_Credit_Note_Gen_Info
+                        SET stockInwardDate = @Trip_Date
+                        WHERE CR_Id = @CR_Id;    
+                        ` : ''}
+                        ${BillType === 'DEBIT_NOTE' ? `
+                        UPDATE tbl_Debit_Note_Gen_Info
+                        SET stockOutwardDate = @Trip_Date
+                        WHERE DB_Id = @DB_Id;    
                         ` : ''}
                         `
                     );
