@@ -395,6 +395,6 @@ MastersRouter.get('/whatsappTypes', whatsapp.getWhatsappTypes)
 MastersRouter.post('/whatsappMethod', whatsapp.addWhatsappMethod)
 MastersRouter.get('/whatsappServices', whatsapp.getWhatsappServices)
 MastersRouter.get('/whatsappMethod', whatsapp.getWhatsappMethod)
+MastersRouter.get('/whatsappLanguages', whatsapp.getWhatsappLanguages)
 
-    
 export default MastersRouter;
