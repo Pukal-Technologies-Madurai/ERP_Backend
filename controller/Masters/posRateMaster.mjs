@@ -790,8 +790,7 @@ const bulkUpdatePosRateMaster = async (req, res) => {
     //     }
     // };
 
-const 
-postbulkExport = async (req, res) => {
+const postbulkExport = async (req, res) => {
     var { FromDate, NewDate, NewTime } = req.query;
     const { brandLevels, productLevels } = req.body;
 
@@ -927,69 +926,74 @@ const getExistingRate = async (itemId, posBrandId, transaction) => {
 const insertRateMasterRecords = async (records, startId, transaction, dateOnly, timeOnly, brandLevels, productLevels, rateGenId) => {
     const changedRecordsMap = new Map();
     let currentId = startId;
-    
-    const [hours, minutes] = timeOnly.split(':');
-    
+
     for (const record of records) {
         const insertRequest = new sql.Request(transaction);
-        
+        console.log("existingrecord", record);
+
         const existingRate = await getExistingRate(record.Item_Id, record.Pos_Brand_Id, transaction);
-        
+
         const newRate = parseFloat(record.Rate) || 0;
         const newMaxRate = parseFloat(record.Max_Rate) || 0;
-        const newMinRate=parseFloat(record.Min_Rate) || 0;
-        const oldMinRate= existingRate ? parseFloat(existingRate.Min_Rate) || 0 : 0;
+        const newMinRate = parseFloat(record.Min_Rate) || 0;
+        const oldMinRate = existingRate ? parseFloat(existingRate.Min_Rate) || 0 : 0;
         const oldRate = existingRate ? parseFloat(existingRate.Rate) || 0 : 0;
         const oldMaxRate = existingRate ? parseFloat(existingRate.Max_Rate) || 0 : 0;
-        
+
+     
+        const isActiveDecative = (record.Is_Active_Decative !== null && record.Is_Active_Decative !== undefined)
+            ? record.Is_Active_Decative
+            : 1;
+
+    
+
         const hasRateChanged = existingRate && oldRate !== newRate;
         const hasMaxRateChanged = existingRate && oldMaxRate !== newMaxRate;
         const hasMinRateChanged = existingRate && oldMinRate !== newMinRate;
-        
+
         const brandLevel = brandLevels?.[record.Pos_Brand_Id] || record.Brand_Level || null;
         const itemLevel = productLevels?.[`${record.Pos_Brand_Id}_${record.Item_Id}`] || record.Item_Level || null;
-        
+
         insertRequest.input("Id", sql.BigInt, currentId);
         insertRequest.input("Pos_Brand_Id", sql.BigInt, record.Pos_Brand_Id);
         insertRequest.input("Item_Id", sql.BigInt, record.Item_Id);
         insertRequest.input("Rate", sql.Decimal(18, 2), newRate);
         insertRequest.input("Min_Rate", sql.Decimal(18, 2), newMinRate);
         insertRequest.input("Max_Rate", sql.Decimal(18, 2), newMaxRate);
-        insertRequest.input("Is_Active_Decative", sql.Int, record.Is_Active_Decative || 1);
+        insertRequest.input("Is_Active_Decative", sql.Int, isActiveDecative); // ✅
         insertRequest.input("Brand_Level", sql.NVarChar, brandLevel);
         insertRequest.input("Item_Level", sql.NVarChar, itemLevel);
-        
-     
+
         const insertQuery = `
             INSERT INTO tbl_Pos_Rate_Master (
-                Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,Min_Rate, Max_Rate, 
+                Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate, Min_Rate, Max_Rate,
                 Is_Active_Decative, Brand_Level, Item_Level
             )
             VALUES (
-                @Id, 
+                @Id,
                 '${dateOnly}',
-                @Pos_Brand_Id, @Item_Id, @Rate,@Min_Rate, @Max_Rate,
+                @Pos_Brand_Id, @Item_Id, @Rate, @Min_Rate, @Max_Rate,
                 @Is_Active_Decative, @Brand_Level, @Item_Level
             )
         `;
-        
+
         await insertRequest.query(insertQuery);
-        
+
         if (hasRateChanged || hasMaxRateChanged || hasMinRateChanged) {
             const key = `${record.Item_Id}`;
-            
+
             if (!changedRecordsMap.has(key)) {
                 changedRecordsMap.set(key, {
                     Item_Id: record.Item_Id,
                     New_Rate: hasRateChanged ? newRate : (existingRate ? oldRate : newRate),
                     Old_Rate: hasRateChanged ? oldRate : (existingRate ? oldRate : newRate),
-                    New_Min_Rate : hasMinRateChanged ? newMinRate : (existingRate ? oldMinRate : newMinRate),
-                    Old_Min_Rate : hasMinRateChanged ? oldMinRate : (existingRate ? oldMinRate : newMinRate),
+                    New_Min_Rate: hasMinRateChanged ? newMinRate : (existingRate ? oldMinRate : newMinRate),
+                    Old_Min_Rate: hasMinRateChanged ? oldMinRate : (existingRate ? oldMinRate : newMinRate),
                     New_Max_Rate: hasMaxRateChanged ? newMaxRate : (existingRate ? oldMaxRate : newMaxRate),
                     Old_Max_Rate: hasMaxRateChanged ? oldMaxRate : (existingRate ? oldMaxRate : newMaxRate),
-                    hasRateChanged: hasRateChanged,
-                    hasMaxRateChanged: hasMaxRateChanged,
-                    hasMinRateChanged: hasMinRateChanged,
+                    hasRateChanged,
+                    hasMaxRateChanged,
+                    hasMinRateChanged,
                     Gen_Id: rateGenId
                 });
             } else {
@@ -1012,13 +1016,114 @@ const insertRateMasterRecords = async (records, startId, transaction, dateOnly, 
                 existing.Gen_Id = rateGenId;
             }
         }
-        
+
         currentId++;
     }
-    
+
     const changedRecords = Array.from(changedRecordsMap.values());
     return { changedRecords, lastId: currentId - 1 };
 };
+
+// const insertRateMasterRecords = async (records, startId, transaction, dateOnly, timeOnly, brandLevels, productLevels, rateGenId) => {
+//     const changedRecordsMap = new Map();
+//     let currentId = startId;
+    
+//     const [hours, minutes] = timeOnly.split(':');
+   
+//     for (const record of records) {
+//         const insertRequest = new sql.Request(transaction);
+//                console.log("existingrecord", record);
+//         const existingRate = await getExistingRate(record.Item_Id, record.Pos_Brand_Id, transaction);
+        
+//         const newRate = parseFloat(record.Rate) || 0;
+//         const newMaxRate = parseFloat(record.Max_Rate) || 0;
+//         const newMinRate=parseFloat(record.Min_Rate) || 0;
+//         const oldMinRate= existingRate ? parseFloat(existingRate.Min_Rate) || 0 : 0;
+//         const oldRate = existingRate ? parseFloat(existingRate.Rate) || 0 : 0;
+//         const oldMaxRate = existingRate ? parseFloat(existingRate.Max_Rate) || 0 : 0;
+          
+//         const isActiveDecative = existingRate
+//             ? existingRate.Is_Active_Decative
+//             : record.Is_Active_Decative;
+
+
+//         const hasRateChanged = existingRate && oldRate !== newRate;
+//         const hasMaxRateChanged = existingRate && oldMaxRate !== newMaxRate;
+//         const hasMinRateChanged = existingRate && oldMinRate !== newMinRate;
+        
+//         const brandLevel = brandLevels?.[record.Pos_Brand_Id] || record.Brand_Level || null;
+//         const itemLevel = productLevels?.[`${record.Pos_Brand_Id}_${record.Item_Id}`] || record.Item_Level || null;
+        
+//         insertRequest.input("Id", sql.BigInt, currentId);
+//         insertRequest.input("Pos_Brand_Id", sql.BigInt, record.Pos_Brand_Id);
+//         insertRequest.input("Item_Id", sql.BigInt, record.Item_Id);
+//         insertRequest.input("Rate", sql.Decimal(18, 2), newRate);
+//         insertRequest.input("Min_Rate", sql.Decimal(18, 2), newMinRate);
+//         insertRequest.input("Max_Rate", sql.Decimal(18, 2), newMaxRate);
+//         insertRequest.input("Is_Active_Decative", sql.Int, isActiveDecative);
+//         insertRequest.input("Brand_Level", sql.NVarChar, brandLevel);
+//         insertRequest.input("Item_Level", sql.NVarChar, itemLevel);
+        
+     
+//         const insertQuery = `
+//             INSERT INTO tbl_Pos_Rate_Master (
+//                 Id, Rate_Date, Pos_Brand_Id, Item_Id, Rate,Min_Rate, Max_Rate, 
+//                 Is_Active_Decative, Brand_Level, Item_Level
+//             )
+//             VALUES (
+//                 @Id, 
+//                 '${dateOnly}',
+//                 @Pos_Brand_Id, @Item_Id, @Rate,@Min_Rate, @Max_Rate,
+//                 @Is_Active_Decative, @Brand_Level, @Item_Level
+//             )
+//         `;
+        
+//         await insertRequest.query(insertQuery);
+        
+//         if (hasRateChanged || hasMaxRateChanged || hasMinRateChanged) {
+//             const key = `${record.Item_Id}`;
+            
+//             if (!changedRecordsMap.has(key)) {
+//                 changedRecordsMap.set(key, {
+//                     Item_Id: record.Item_Id,
+//                     New_Rate: hasRateChanged ? newRate : (existingRate ? oldRate : newRate),
+//                     Old_Rate: hasRateChanged ? oldRate : (existingRate ? oldRate : newRate),
+//                     New_Min_Rate : hasMinRateChanged ? newMinRate : (existingRate ? oldMinRate : newMinRate),
+//                     Old_Min_Rate : hasMinRateChanged ? oldMinRate : (existingRate ? oldMinRate : newMinRate),
+//                     New_Max_Rate: hasMaxRateChanged ? newMaxRate : (existingRate ? oldMaxRate : newMaxRate),
+//                     Old_Max_Rate: hasMaxRateChanged ? oldMaxRate : (existingRate ? oldMaxRate : newMaxRate),
+//                     hasRateChanged: hasRateChanged,
+//                     hasMaxRateChanged: hasMaxRateChanged,
+//                     hasMinRateChanged: hasMinRateChanged,
+//                     Gen_Id: rateGenId
+//                 });
+//             } else {
+//                 const existing = changedRecordsMap.get(key);
+//                 if (hasRateChanged) {
+//                     existing.New_Rate = newRate;
+//                     existing.Old_Rate = oldRate;
+//                     existing.hasRateChanged = true;
+//                 }
+//                 if (hasMaxRateChanged) {
+//                     existing.New_Max_Rate = newMaxRate;
+//                     existing.Old_Max_Rate = oldMaxRate;
+//                     existing.hasMaxRateChanged = true;
+//                 }
+//                 if (hasMinRateChanged) {
+//                     existing.New_Min_Rate = newMinRate;
+//                     existing.Old_Min_Rate = oldMinRate;
+//                     existing.hasMinRateChanged = true;
+//                 }
+//                 existing.Gen_Id = rateGenId;
+//             }
+//         }
+        
+//         currentId++;
+//     }
+    
+//     const changedRecords = Array.from(changedRecordsMap.values());
+//     return { changedRecords, lastId: currentId - 1 };
+// };
 
 const insertUpdatedRateRecords = async (changedRecords, transaction, dateOnly, timeOnly, startId) => {
     let currentId = startId;
@@ -1066,14 +1171,6 @@ const getNextId = async ({ table, column, transaction }) => {
 const checkIsNumber = (value) => {
     return !isNaN(value) && isFinite(value);
 };
-
-
-
-
-
-
-
-
 
 
 
