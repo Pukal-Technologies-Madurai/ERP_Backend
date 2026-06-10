@@ -31,13 +31,15 @@ const tripActivities = () => {
                         COALESCE(gmm.Godown_Name, 'unknown') AS addressGodown_Name,
                         COALESCE(gmm.Godown_Address, 'unknown') AS addressGodownAddress,
                         COALESCE(gmm.Gst_No, 'unknown') AS addressGodownGst_No,
-                        COALESCE(gmm.Phone_No, 'unknown') AS addressGodownPhone_No
+                        COALESCE(gmm.Phone_No, 'unknown') AS addressGodownPhone_No,
+                        COALESCE(rm.Retailer_Name, '') AS concernGet
                     FROM tbl_Trip_Master AS tm
                     LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = tm.Branch_Id
                     LEFT JOIN tbl_Users AS cb_created ON cb_created.UserId = tm.Created_By
                     LEFT JOIN tbl_Users AS cb_updated ON cb_updated.UserId = tm.Updated_By
                     LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = tm.VoucherType
                     LEFT JOIN tbl_Godown_Master AS gmm ON gmm.Godown_Id = tm.addressGodown
+                    LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = tm.concern
                     WHERE tm.Trip_Date BETWEEN @FromDate AND @ToDate
                     AND tm.BillType IN (
                         'MATERIAL INWARD',
@@ -338,6 +340,7 @@ const tripActivities = () => {
                 TripStatus = 'New',
                 Product_Array = [],
                 EmployeesInvolved = [],
+                concern = null
             } = req.body;
 
             const Trip_Date = req.body?.Trip_Date ? ISOString(req.body.Trip_Date) : ISOString();
@@ -453,6 +456,7 @@ const tripActivities = () => {
                 .input('Trip_ST_KM', Number(Trip_ST_KM))
                 .input('Trip_EN_KM', Number(Trip_EN_KM))
                 .input('Trip_Tot_Kms', toNumber(Trip_Tot_Kms))
+                .input('concern', BillType === 'MATERIAL INWARD' ? concern : null)
                 .input('Created_By', Created_By)
                 .input('Created_At', new Date())
                 .query(`
@@ -460,12 +464,12 @@ const tripActivities = () => {
                        Trip_Id, TR_INV_ID, Branch_Id, T_No, VoucherType, Year_Id, Challan_No, Trip_Date, Vehicle_No,
                        PhoneNumber, LoadingLoad, LoadingEmpty, UnloadingLoad, UnloadingEmpty, Narration, BillType,
                        StartTime, EndTime, Trip_No, Trip_ST_KM, Trip_Tot_Kms, Trip_EN_KM, Godownlocation, addressGodown, TripStatus,
-                       Created_At, Created_By
+                       concern, Created_At, Created_By
                     ) VALUES (
                        @Trip_Id, @TR_INV_ID, @Branch_Id, @T_No, @VoucherType, @Year_Id, @Challan_No, @Trip_Date, @Vehicle_No,
                        @PhoneNumber, @LoadingLoad, @LoadingEmpty, @UnloadingLoad, @UnloadingEmpty, @Narration, @BillType,
                        @StartTime, @EndTime, @Trip_No, @Trip_ST_KM, @Trip_Tot_Kms, @Trip_EN_KM, @Godownlocation, @addressGodown, @TripStatus,
-                       @Created_At, @Created_By
+                       @concern, @Created_At, @Created_By
                     );`
                 );
 
@@ -595,7 +599,8 @@ const tripActivities = () => {
                 Updated_By = '',
                 TripStatus = 'New',
                 Product_Array = [],
-                EmployeesInvolved = []
+                EmployeesInvolved = [],
+                concern = null
             } = req.body;
 
             const StartTime = isValidDate(req.body.StartTime) ? new Date(req.body.StartTime) : null,
@@ -643,6 +648,7 @@ const tripActivities = () => {
                 .input('Trip_Tot_Kms', Trip_Tot_Kms)
                 .input('Godownlocation', Godownlocation)
                 .input('addressGodown', toNumber(addressGodown))
+                .input('concern', BillType === 'MATERIAL INWARD' ? concern : null)
                 .input('Updated_By', Updated_By)
                 .input('Updated_At', new Date())
                 .query(`
@@ -667,7 +673,8 @@ const tripActivities = () => {
                         Narration = @Narration,
                         TripStatus = @TripStatus,
                         Updated_By = @Updated_By,
-                        Updated_At = @Updated_At
+                        Updated_At = @Updated_At,
+                        concern = @concern
                     WHERE Trip_Id = @Trip_Id
                `);
 
