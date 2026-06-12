@@ -104,7 +104,8 @@ const PurchaseInvoice = () => {
             Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
             Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
             Voucher_Type = '', Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
-            QualityCondition = '', PaymentDays = 0, Expence_Array = []
+            QualityCondition = '', PaymentDays = 0, Expence_Array = [],
+            Trip_Details = []
         } = req.body;
 
         const Po_Inv_Date = req?.body?.Po_Inv_Date ? ISOString(req?.body?.Po_Inv_Date) : ISOString();
@@ -511,6 +512,21 @@ const PurchaseInvoice = () => {
                 }
             }
 
+            if (Trip_Details.length > 0) {
+                for (const trip of toArray(Trip_Details)) {
+                    await new sql.Request(transaction)
+                        .input('pin', PIN_Id)
+                        .input('tripid', trip.tripid)
+                        .query(`
+                        INSERT INTO tbl_Purchase_Order_Inv_Trip_Info (
+                            pin, tripid
+                        ) VALUES (
+                            @pin, @tripid
+                        );`
+                        );
+                }
+            }
+
             await transaction.commit();
 
             success(res, 'Order Created!')
@@ -530,7 +546,7 @@ const PurchaseInvoice = () => {
                 PIN_Id, Retailer_Id, Branch_Id, Ref_Po_Inv_No = '',
                 Narration = null, Created_by, Product_Array = [], StaffArray = [], GST_Inclusive = 1, IS_IGST = 0,
                 Stock_Item_Ledger_Name = '', Round_off, Discount = 0,
-                QualityCondition = '', PaymentDays = 0, Expence_Array = []
+                QualityCondition = '', PaymentDays = 0, Expence_Array = [], Trip_Details = []
             } = req.body;
 
             const Po_Inv_Date = ISOString(req?.body?.Po_Inv_Date);
@@ -927,6 +943,21 @@ const PurchaseInvoice = () => {
                 const result = await request;
 
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to save data entry id')
+            }
+
+            if (Trip_Details.length > 0) {
+                for (const trip of toArray(Trip_Details)) {
+                    await new sql.Request(transaction)
+                        .input('pin', PIN_Id)
+                        .input('tripid', trip.tripid)
+                        .query(`
+                            INSERT INTO tbl_Purchase_Order_Inv_Trip_Info (
+                                pin, tripid
+                            ) VALUES (
+                                @pin, @tripid
+                            );`
+                        );
+                }
             }
 
             await transaction.commit();

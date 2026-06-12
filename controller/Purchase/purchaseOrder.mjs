@@ -138,9 +138,8 @@ const PurchaseOrder = () => {
             Retailer_Id, Branch_Id,
             Narration = null, Created_by, Po_Status = 1,
             Product_Array = [], GST_Inclusive = 1, IS_IGST = 0,
-            VoucherType = '',
-            Staff_Involved_List = [],
-            Parameter_Array = [],
+            VoucherType = '', Staff_Involved_List = [], Parameter_Array = [],
+            Trip_Details = []
         } = req.body;
 
         const Po_Date = ISOString(req?.body?.Po_Date);
@@ -400,13 +399,13 @@ const PurchaseOrder = () => {
             // 4. Insert Parameters
             for (const param of toArray(Parameter_Array)) {
                 await new sql.Request(transaction)
-                    .input('PO_Id',              sql.BigInt,    PO_Id)
-                    .input('po_uid',             po_uid)
-                    .input('ItemId',             sql.BigInt,    param?.ItemId)
-                    .input('ParameterId',        sql.BigInt,    param?.ParameterId)
-                    .input('ParameterValueOne',  sql.NVarChar,  param?.ParameterValueOne || '')
-                    .input('ParameterValueTwo',  sql.NVarChar,  param?.ParameterValueTwo || '')
-                    .input('CreatedAt',          sql.DateTimeOffset, new Date())
+                    .input('PO_Id', sql.BigInt, PO_Id)
+                    .input('po_uid', po_uid)
+                    .input('ItemId', sql.BigInt, param?.ItemId)
+                    .input('ParameterId', sql.BigInt, param?.ParameterId)
+                    .input('ParameterValueOne', sql.NVarChar, param?.ParameterValueOne || '')
+                    .input('ParameterValueTwo', sql.NVarChar, param?.ParameterValueTwo || '')
+                    .input('CreatedAt', sql.DateTimeOffset, new Date())
                     .query(`
                         INSERT INTO tbl_Purchase_Order_Parameter_Info (
                             PO_Id, po_uid, ItemId, ParameterId,
@@ -416,6 +415,21 @@ const PurchaseOrder = () => {
                             @ParameterValueOne, @ParameterValueTwo, @CreatedAt
                         );
                     `);
+            }
+
+            if (Trip_Details.length > 0) {
+                for (const trip of toArray(Trip_Details))
+                    await new sql.Request(transaction)
+                        .input('PO_Id', PO_Id)
+                        .input('po_uid', po_uid)
+                        .input('trip_id', trip.trip_id)
+                        .query(`
+                            INSERT INTO tbl_Purchase_Order_Trip_Info (
+                                PO_Id, po_uid, trip_id
+                            ) VALUES (
+                                @PO_Id, @po_uid, @trip_id
+                            );`
+                        );
             }
 
             await transaction.commit();
@@ -442,7 +456,7 @@ const PurchaseOrder = () => {
                 Narration = null, Created_by,
                 Product_Array = [], GST_Inclusive = 1, IS_IGST = 0,
                 Staff_Involved_List = [],
-                Parameter_Array = [],
+                Parameter_Array = [], Trip_Details = []
             } = req.body;
 
             const Po_Date = ISOString(req?.body?.Po_Date);
@@ -654,13 +668,13 @@ const PurchaseOrder = () => {
             // Re-insert parameters
             for (const param of toArray(Parameter_Array)) {
                 await new sql.Request(transaction)
-                    .input('PO_Id',              sql.BigInt,    PO_Id)
-                    .input('po_uid',             po_uid)
-                    .input('ItemId',             sql.BigInt,    param?.ItemId)
-                    .input('ParameterId',        sql.BigInt,    param?.ParameterId)
-                    .input('ParameterValueOne',  sql.NVarChar,  param?.ParameterValueOne || '')
-                    .input('ParameterValueTwo',  sql.NVarChar,  param?.ParameterValueTwo || '')
-                    .input('CreatedAt',          sql.DateTimeOffset, new Date())
+                    .input('PO_Id', sql.BigInt, PO_Id)
+                    .input('po_uid', po_uid)
+                    .input('ItemId', sql.BigInt, param?.ItemId)
+                    .input('ParameterId', sql.BigInt, param?.ParameterId)
+                    .input('ParameterValueOne', sql.NVarChar, param?.ParameterValueOne || '')
+                    .input('ParameterValueTwo', sql.NVarChar, param?.ParameterValueTwo || '')
+                    .input('CreatedAt', sql.DateTimeOffset, new Date())
                     .query(`
                         INSERT INTO tbl_Purchase_Order_Parameter_Info (
                             PO_Id, po_uid, ItemId, ParameterId,
@@ -670,6 +684,21 @@ const PurchaseOrder = () => {
                             @ParameterValueOne, @ParameterValueTwo, @CreatedAt
                         );
                     `);
+            }
+
+            if (Trip_Details.length > 0) {
+                for (const trip of toArray(Trip_Details))
+                    await new sql.Request(transaction)
+                        .input('PO_Id', PO_Id)
+                        .input('po_uid', po_uid)
+                        .input('trip_id', trip.trip_id)
+                        .query(`
+                            INSERT INTO tbl_Purchase_Order_Trip_Info (
+                                PO_Id, po_uid, trip_id
+                            ) VALUES (
+                                @PO_Id, @po_uid, @trip_id
+                            );`
+                        );
             }
 
             await transaction.commit();
