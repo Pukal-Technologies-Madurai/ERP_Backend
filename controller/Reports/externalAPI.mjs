@@ -567,14 +567,14 @@ export const DayStockAbstractReport = async (req, res) => {
             .input("Todate", toDate)
             .query(`EXEC Day_Stock_Abstract_Report @Predate, @Fromdate, @Todate`);
 
-        const [Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8] = result.recordsets || [];
+        const [Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9] = result.recordsets || [];
 
         if (!Data1 || Data1.length === 0) {
             return noData(res);
         }
 
         dataFound(res, {
-            Data1,Data2,Data3,Data4,Data5,Data6,Data7,Data8
+            Data1, Data2, Data3, Data4, Data5, Data6, Data7, Data8, Data9
         });
 
     } catch (error) {
