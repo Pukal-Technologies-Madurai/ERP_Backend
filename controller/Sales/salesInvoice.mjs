@@ -4464,6 +4464,144 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
     }
 };
 
+
+const getSalesOrderDetails = async (req, res) => {
+    try {
+        const { So_Inv_No } = req.query;
+
+        const getCurrespondingAccount = new sql.Request()
+            .query(`
+                SELECT Acc_Id, AC_Reason 
+                FROM tbl_Default_AC_Master 
+                WHERE 
+                    Type = 'DEFAULT' 
+                    AND Acc_Id IS NOT NULL;
+            `);
+
+        const expData = (await getCurrespondingAccount).recordset;
+
+        const request = new sql.Request()
+            .input('So_Inv_No', So_Inv_No)
+            .query(`
+                DECLARE @FilteredInvoice TABLE (So_Id INT);
+                
+                INSERT INTO @FilteredInvoice (So_Id)
+                SELECT So_Id
+                FROM tbl_Sales_Order_Gen_Info
+                WHERE 1=1
+                ${!stringCompare(So_Inv_No, '') ? ' AND So_Inv_No = @So_Inv_No ' : ''};
+                
+
+                SELECT 
+                    sdgi.So_Id, sdgi.So_Inv_No, sdgi.VoucherType, sdgi.So_Year,
+                    sdgi.So_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.Cancel_status,
+                    sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, 
+                    sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value,
+                    sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on,
+        
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+                FROM 
+                    tbl_Sales_Order_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm 
+                    ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS bm 
+                    ON bm.BranchId = sdgi.Branch_Id
+                LEFT JOIN tbl_Users AS cb 
+                    ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_Voucher_Type AS v
+                    ON v.Vocher_Type_Id = sdgi.VoucherType
+                WHERE sdgi.So_Id IN (SELECT So_Id FROM @FilteredInvoice)
+                ORDER BY sdgi.So_Id DESC;   -- ✅ was Do_Id
+                
+                
+                SELECT
+                    oi.*,
+                    pm.Product_Id,
+                    COALESCE(pm.Short_Name, 'not available') AS Short_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Item_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    CASE 
+                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                             OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                        THEN 0
+                        ELSE CONVERT(
+                                     DECIMAL(18,2),
+                                     COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                                  )
+                    END AS Bag,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Order_Stock_Info AS oi   -- ✅ was tbl_Sales_Delivery_Stock_Info
+                LEFT JOIN tbl_Product_Master AS pm 
+                    ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u 
+                    ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Pack_Master AS pck
+                    ON pck.Pack_Id = pm.Pack_Id
+                LEFT JOIN tbl_Brand_Master AS b 
+                    ON b.Brand_Id = pm.Brand
+                WHERE oi.Sales_Order_Id IN (SELECT DISTINCT So_Id FROM @FilteredInvoice)
+                ORDER BY oi.S_No ASC;
+                
+               SELECT 
+                    stf.*,
+                    e.Cost_Center_Name AS Emp_Name,
+                    cc.Cost_Category AS Involved_Emp_Type
+                FROM tbl_Sales_Order_Staff_Info AS stf  
+                LEFT JOIN tbl_ERP_Cost_Center AS e
+                    ON e.Cost_Center_Id = stf.Involved_Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc
+                    ON cc.Cost_Category_Id = stf.Cost_Center_Type_Id
+                WHERE stf.So_Id IN (SELECT DISTINCT So_Id FROM @FilteredInvoice); 
+                
+                -- Alteration History
+                SELECT ah.*, u.Name AS alterByGet 
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                WHERE 
+                    alteredTable = 'tbl_Sales_Order_Gen_Info' 
+                    AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredInvoice);
+            `);
+
+        const result = await request;
+
+        const SalesGeneralInfo = toArray(result.recordsets[0]);
+        const Products_List    = toArray(result.recordsets[1]);
+        const Expence_Array    = toArray(result.recordsets[2]);
+        const Staffs_Array     = toArray(result.recordsets[3]);
+        const Alteration_History = toArray(result.recordsets[4]);
+
+        if (SalesGeneralInfo.length > 0) {
+            const resData = SalesGeneralInfo.map(row => ({
+                ...row,
+                Products_List: Products_List.filter(
+                    fil => isEqualNumber(fil.Sales_Order_Id, row.So_Id)  // ✅ was Delivery_Order_Id / Do_Id
+                ),
+                Expence_Array: Expence_Array.filter(
+                    fil => isEqualNumber(fil.So_Id, row.So_Id)           // ✅ was Do_Id
+                ),
+                Staffs_Array: Staffs_Array.filter(
+                    fil => isEqualNumber(fil.So_Id, row.So_Id)           // ✅ was Do_Id
+                ),
+                alterationHistory: Alteration_History.filter(
+                    fil => isEqualNumber(fil.alteredRowId, row.So_Id)    // ✅ was Do_Id
+                )
+            }));
+
+            dataFound(res, resData);
+        } else {
+            noData(res);
+        }
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
     return {
         getSalesInvoiceMobileFilter1,
         getSalesInvoiceMobileFilter2,
@@ -4476,7 +4614,8 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
         downloadGeneratedPdf,
         salesInvoiceWhatsapp,
         getInvoiceDetails,
-        salesInvoiceWhatsappupdate
+        salesInvoiceWhatsappupdate,
+        getSalesOrderDetails
       
     }
 }

@@ -6,6 +6,7 @@ import { multipleSalesInvoiceStaffUpdateSchema } from './validationSchema.mjs';
 import { error } from 'console';
 import uploadFile from '../../../middleware/uploadMiddleware.mjs';
 import getImage from '../../../middleware/getImageIfExist.mjs';
+import { getNextId } from '../../../middleware/miniAPIs.mjs';
 
 export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
     try {
@@ -1420,18 +1421,27 @@ export const lrReportUploadMobile = async (req, res) => {
         // Handle file upload - Best practice with IDENTITY
         if (fileName) {
             const imageRequest = new sql.Request(transaction);
+                let soId = null;
+
+               const So_Id_Get = await getNextId({ table: 'tbl_LrReport', column: 'Id' });
+                            if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get Id');
+                            soId = So_Id_Get.MaxId;
+
+
             const result = await imageRequest
+                .input('Id', sql.BigInt, soId)
                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
                 .input('ImageUrl', sql.NVarChar, filePath)
                 .input('Image_Name', sql.NVarChar, fileName)
                 .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
                 .query(`
-                    INSERT INTO tbl_LrReport (Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
-                    VALUES (@Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By);
+                    INSERT INTO tbl_LrReport (Id,Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
+                    VALUES (@Id,@Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By);
                 `);
+           
         }
-
+           
         await transaction.commit();
         success(res, 'Changes saved successfully');
         
@@ -1580,7 +1590,7 @@ export const lrReportUpdateMobile = async (req, res) => {
             .input('Id', sql.BigInt, Id)
             .query(`DELETE FROM tbl_LrReport WHERE Id = @Id`);
 
-        // Insert new record with same Id
+      
         const insertRequest = new sql.Request(transaction);
         await insertRequest
             .input('Id', sql.BigInt, Id)

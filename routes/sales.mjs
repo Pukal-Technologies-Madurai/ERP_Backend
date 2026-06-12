@@ -70,6 +70,8 @@ SalesRouter.get('/salesInvoice/bulkByIds', getSalesInvoiceByDoIds);
 
 SalesRouter.get('/getInvoiceDetails',salesInvoice.getInvoiceDetails)
 
+SalesRouter.get('/getSalesOrderDetails',salesInvoice.getSalesOrderDetails)
+
 SalesRouter.get('/presaleOrder/getList', salesOrder.getPresaleOrder)
 SalesRouter.post('/presaleOrder/saleOrderCreationWithPso', salesOrder.saleOrderCreationWithPso)
 SalesRouter.put('/presaleOrder/saleOrderCreationWithPso', salesOrder.updatesaleOrderWithPso)
