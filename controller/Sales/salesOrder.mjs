@@ -373,8 +373,8 @@ const SaleOrder = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('Unit_Id', product.UOM ?? '')
-                    .input('Unit_Name', product.Units ?? '')
+                    .input('Unit_Id', product.Unit_Id || product.UOM || null)
+                    .input('Unit_Name', product.Unit_Name || product.Units || null)
                     .input('GoDown_Id', toNumber(product.GoDown_Id) || null)
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', gstPercentage)
@@ -652,8 +652,8 @@ const SaleOrder = () => {
                     .input('Taxble', Taxble)
                     .input('Taxable_Rate', itemRateGst.base_amount)
                     .input('HSN_Code', productDetails.HSN_Code)
-                    .input('Unit_Id', product.UOM ?? '')
-                    .input('Unit_Name', product.Units ?? '')
+                    .input('Unit_Id', product.Unit_Id || product.UOM || null)
+                    .input('Unit_Name', product.Unit_Name || product.Units || null)
                     .input('GoDown_Id', toNumber(product.GoDown_Id) || null)
                     .input('Taxable_Amount', gstInfo.base_amount)
                     .input('Tax_Rate', gstPercentage)
@@ -2230,6 +2230,76 @@ const SaleOrder = () => {
         }
     };
 
+    const getSaleOrderById = async (req, res) => {
+        try {
+            const { So_Id } = req.query;
+
+            if (!checkIsNumber(So_Id)) {
+                return invalidInput(res, 'So_Id is required');
+            }
+
+            const result = await new sql.Request()
+                .input('So_Id', So_Id)
+                .query(`
+                    SELECT
+                        so.So_Id,
+                        so.So_Inv_No,
+                        so.So_Date,
+                        COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                        COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+                        so.Total_Invoice_value,
+                        so.GST_Inclusive,
+                        so.IS_IGST
+                    FROM tbl_Sales_Order_Gen_Info AS so
+                    LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = so.Retailer_Id
+                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
+                    WHERE so.So_Id = @So_Id;
+
+                    SELECT
+                        si.S_No,
+                        si.Item_Id,
+                        si.Bill_Qty,
+                        si.Item_Rate,
+                        si.Amount,
+                        si.Unit_Id,
+                        si.Unit_Name,
+                        si.GoDown_Id,
+                        si.Cgst,
+                        si.Sgst,
+                        si.Igst,
+                        si.Cgst_Amo,
+                        si.Sgst_Amo,
+                        si.Igst_Amo,
+                        si.Tax_Rate,
+                        si.HSN_Code,
+                        COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                        COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                        COALESCE(u.Units, 'not available') AS UOM,
+                        COALESCE(b.Brand_Name, 'not available') AS BrandGet,
+                        COALESCE(gd.Godown_Name, '') AS Godown_Name
+                    FROM tbl_Sales_Order_Stock_Info AS si
+                    LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                    LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
+                    LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                    LEFT JOIN tbl_Godown_Master AS gd ON gd.Godown_Id = si.GoDown_Id
+                    WHERE si.Sales_Order_Id = @So_Id
+                    ORDER BY si.S_No;
+                `);
+
+            const generalInfo = isValidObject(result.recordsets[0][0]) ? result.recordsets[0][0] : null;
+            const products = toArray(result.recordsets[1]);
+
+            if (!generalInfo) {
+                return noData(res);
+            }
+
+            sentData(res, [], { generalInfo, products });
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
     return {
         saleOrderCreation,
         getSaleOrder,
@@ -2243,7 +2313,8 @@ const SaleOrder = () => {
         getSaleOrderMobile,
         saleOrderReport,
         getSalesOrderPending,
-        getSaleOrderList
+        getSaleOrderList,
+        getSaleOrderById
     }
 }
 

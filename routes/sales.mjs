@@ -8,7 +8,8 @@ import {
     bulkCreateSalesInvoice, getSalesInvoiceByDoIds
 } from '../controller/Sales/salesInvoice/salesInvoceCrud.mjs';
 import {
-    getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount
+    getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount,
+    getGodownStockDetails
 } from '../controller/Sales/salesInvoice/invoiceDependency.mjs';
 import { getSalesInvoiceForAssignCostCenter, invoiceCopyPrintOut, katchathCopyPrintOut, multipleSalesInvoiceStaffUpdate, postAssignCostCenterToSalesInvoice,deliverySlipPrintOut, salesInvoicePaper, multipleSalesInvoiceStaffDelete, PendingSalesInvoice,getSalesInvoiceForAssignCostCenterWhatsapp,
 lrReportUploadgetMobile,lrReportUploadMobile,lrReportUpdateMobile,getSalesOrderForAssignCostCenterWhatsapp
@@ -21,6 +22,7 @@ import { alterHistory } from '../middleware/alterHistory.mjs';
 const SalesRouter = express.Router();
 
 SalesRouter.get('/saleOrder', salesOrder.getSaleOrder);
+SalesRouter.get('/saleOrder/getById', salesOrder.getSaleOrderById);
 SalesRouter.post('/saleOrder', salesOrder.saleOrderCreation);
 SalesRouter.put(
     '/saleOrder',
@@ -67,6 +69,7 @@ SalesRouter.get('/salesInvoiceById', getSalesInvoiceById);
 SalesRouter.get('/salesInvoice/lastInvoice', getLastSalesInvoiceByRetailerId);
 SalesRouter.get('/salesInvoice/adjacentInvoice', getAdjacentSalesInvoice);
 SalesRouter.get('/salesInvoice/bulkByIds', getSalesInvoiceByDoIds);
+SalesRouter.get('/salesInvoice/godownStockDetails', getGodownStockDetails);
 
 SalesRouter.get('/getInvoiceDetails',salesInvoice.getInvoiceDetails)
 

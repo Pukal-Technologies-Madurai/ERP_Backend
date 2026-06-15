@@ -101,3 +101,21 @@ export const getSalesExpenceAccount = async (req, res) => {
         servError(e, res);
     }
 }
+
+export const getGodownStockDetails = async (req, res) => {
+    try {
+        const { Godown_Id } = req.query;
+        const reqDate = req.query?.reqDate ? ISOString(req.query?.reqDate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Todate', sql.Date, reqDate)
+            .input('Godown_Id', sql.Int, toNumber(Godown_Id))
+            .execute('Godown_Stock_Sales_Page');
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+    } catch (e) {
+        servError(e, res);
+    }
+}
