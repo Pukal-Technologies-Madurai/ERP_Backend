@@ -397,4 +397,11 @@ MastersRouter.get('/whatsappServices', whatsapp.getWhatsappServices)
 MastersRouter.get('/whatsappMethod', whatsapp.getWhatsappMethod)
 MastersRouter.get('/whatsappLanguages', whatsapp.getWhatsappLanguages)
 
+MastersRouter.get('/whatsappFilter',whatsapp.FilterdisplayColumn)
+
+
+MastersRouter.get('/FilterWhatsappSettingColumn',whatsapp.FilterWhatsappSettingColumn)
+MastersRouter.post('/saveWhatsappColumnSettings',whatsapp.saveWhatsappColumnSettings)
+
+
 export default MastersRouter;
