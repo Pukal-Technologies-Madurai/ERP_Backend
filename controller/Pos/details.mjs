@@ -596,7 +596,7 @@ SELECT
     stl.POS_Item_Name,
     
     COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
-    COALESCE(pg.Pro_Group, 'NOT FOUND') AS Pro_Group,
+   COALESCE(stl.Pos_Group, 'NOT FOUND') AS Pro_Group,
     COALESCE(u.Units, 'NOT FOUND') AS Units,
     COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
     COALESCE(p.Product_Rate, 0) AS Item_Rate,
@@ -611,7 +611,7 @@ SELECT
 FROM 
     tbl_Product_Master AS p
     LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
-    LEFT JOIN tbl_Product_Group AS pg ON pg.Pro_Group_Id = p.Product_Group
+
     LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = p.Product_Id
     LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
     LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
