@@ -87,7 +87,8 @@ const DebitorsCreditors = () => {
             const result1 = await new sql.Request()
                 .input("fromDate", sql.Date, fromDate)
                 .input("toDate", sql.Date, toDate)
-                .execute("Transaction_Debtors_Creditors_Reort_VW");
+                // .execute("Transaction_Debtors_Creditors_Reort_VW");
+                .execute("Reporting_Debtors_Creditors_VW");
 
             const balances = result1.recordset;
 
@@ -96,43 +97,43 @@ const DebitorsCreditors = () => {
             }
 
 
-            const query2 = `
-                WITH RecursiveGroups AS (
-                    SELECT group_id, parent_Ac_id, 'Creditor' as Account_Types
-                    FROM tbl_Accounting_Group
-                    WHERE Group_Id IN (16)
-			    UNION
-                    SELECT group_id, parent_Ac_id, 'Debtor' as Account_Types
-                    FROM tbl_Accounting_Group
-                    WHERE Group_Id IN (20)
-                UNION ALL
-                    SELECT rg.group_id, rg.Parent_AC_id, Account_Types
-                    FROM RecursiveGroups AS yd
-                    JOIN tbl_Accounting_Group AS rg ON rg.Parent_AC_id = yd.Group_Id
-                )
-	            SELECT DISTINCT am.Acc_Id, am.Account_Name,  rg1.Account_Types
-                FROM tbl_Account_Master am, tbl_Accounting_Group G, RecursiveGroups rg1 
-		        WHERE 
-                    am.Group_Id =G.Group_Id 
-		            AND g.Group_Id = rg1 .Group_Id 
-		            AND am.Group_Id IN (select Group_Id from RecursiveGroups rg)`;
+            // const query2 = `
+            //     WITH RecursiveGroups AS (
+            //         SELECT group_id, parent_Ac_id, 'Creditor' as Account_Types
+            //         FROM tbl_Accounting_Group
+            //         WHERE Group_Id IN (16)
+			//     UNION
+            //         SELECT group_id, parent_Ac_id, 'Debtor' as Account_Types
+            //         FROM tbl_Accounting_Group
+            //         WHERE Group_Id IN (20)
+            //     UNION ALL
+            //         SELECT rg.group_id, rg.Parent_AC_id, Account_Types
+            //         FROM RecursiveGroups AS yd
+            //         JOIN tbl_Accounting_Group AS rg ON rg.Parent_AC_id = yd.Group_Id
+            //     )
+	        //     SELECT DISTINCT am.Acc_Id, am.Account_Name,  rg1.Account_Types
+            //     FROM tbl_Account_Master am, tbl_Accounting_Group G, RecursiveGroups rg1 
+		    //     WHERE 
+            //         am.Group_Id =G.Group_Id 
+		    //         AND g.Group_Id = rg1 .Group_Id 
+		    //         AND am.Group_Id IN (select Group_Id from RecursiveGroups rg)`;
 
-            const result2 = await new sql.Request().query(query2);
-            const accountTypes = result2.recordset;
+            // const result2 = await new sql.Request().query(query2);
+            // const accountTypes = result2.recordset;
 
 
-            const merged = balances.map((bal) => {
-                const accType = accountTypes.find(
-                    (at) => String(at.Acc_Id) === String(bal.Acc_Id)
-                );
-                return {
-                    ...bal,
-                    Account_Types: accType ? accType.Account_Types : null,
-                    Account_Name: accType ? accType.Account_Name : bal.Account_name,
-                };
-            });
+            // const merged = balances.map((bal) => {
+            //     const accType = accountTypes.find(
+            //         (at) => String(at.Acc_Id) === String(bal.Acc_Id)
+            //     );
+            //     return {
+            //         ...bal,
+            //         Account_Types: accType ? accType.Account_Types : null,
+            //         Account_Name: accType ? accType.Account_Name : bal.Account_name,
+            //     };
+            // });
 
-            return sentData(res, merged);
+            return sentData(res, balances);
         } catch (err) {
             servError(err, res);
         }
