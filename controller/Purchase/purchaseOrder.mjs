@@ -3,7 +3,8 @@ import { dataFound, invalidInput, noData, sentData, servError, success } from '.
 import {
     checkIsNumber, isEqualNumber, ISOString,
     Multiplication, RoundNumber, Addition,
-    toNumber, toArray, isValidObject, isValidNumber
+    toNumber, toArray, isValidObject, isValidNumber,
+    Subraction
 } from '../../helper_functions.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -27,7 +28,7 @@ LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pogi.VoucherType
 WHERE 
 	pogi.Po_Date BETWEEN @Fromdate AND @Todate
     ${isValidNumber(Retailer_Id) ? ' AND pogi.Retailer_Id = @retailer ' : ''}
-    ${isValidNumber(Created_by) ? ' AND pogi.Created_by  = @creater ' : ''}
+    ${isValidNumber(Created_by)  ? ' AND pogi.Created_by  = @creater '  : ''}
     ${isValidNumber(VoucherType) ? ' AND pogi.VoucherType = @VoucherType ' : ''};
 -- ******************** 1: Purchase Order General Info ********************
 SELECT
@@ -75,6 +76,36 @@ SELECT
 FROM tbl_Purchase_Order_Parameter_Info AS popi
 JOIN tbl_Paramet_Master AS pm ON pm.Paramet_Id = popi.ParameterId
 JOIN (SELECT DISTINCT id FROM @filters) AS fil ON fil.id = popi.po_uid
+-- ******************** 5: Purchase Order Trip Info ********************
+SELECT
+	poTrip.PO_Id AS orderId,
+	ta.Product_Id AS productId,
+	pm.Product_Name AS productNameGet,
+	ta.QTY AS quantity,
+	ta.Gst_Rate AS itemRate,
+	ta.To_Location AS godownId,
+	gm.Godown_Name As godownName
+FROM tbl_Purchase_Order_Trip_Info AS poTrip
+JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = poTrip.trip_id AND tm.TripStatus <> 'Canceled'
+JOIN tbl_Trip_Details AS td ON td.Trip_Id = tm.Trip_Id
+JOIN tbl_Trip_Arrival AS ta ON ta.Arr_Id = td.Arrival_Id
+JOIN tbl_Product_Master AS pm ON pm.Product_Id = ta.Product_Id
+JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = ta.To_Location
+-- ******************** 6: Purchase Invoice Info ********************
+SELECT
+	pioi.Order_Id AS orderId,
+	pisi.Item_Id AS productId,
+	pm.Product_Name AS productNameGet,
+	pisi.Bill_Qty AS quantity,
+	pisi.Item_Rate AS itemRate,
+	pisi.Location_Id AS godownId,
+	gm.Godown_Name As godownName
+FROM tbl_Purchase_Order_Inv_Gen_Order AS pioi
+JOIN @filters AS fltr ON fltr.PO_Id = pioi.Order_Id
+JOIN tbl_Purchase_Order_Inv_Gen_Info AS pigi ON pigi.PIN_Id = pioi.PIN_Id AND pigi.Cancel_status = 0
+JOIN tbl_Purchase_Order_Inv_Stock_Info AS pisi ON pisi.PIN_Id = pigi.PIN_Id
+JOIN tbl_Product_Master AS pm ON pm.Product_Id = pisi.Item_Id
+JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = pisi.Location_Id
 `;
 
 // ─── Controller ────────────────────────────────────────────────────────────────
@@ -103,18 +134,29 @@ const PurchaseOrder = () => {
                 purchaseOrderGeneralResult,
                 purchaseOrderStockResult,
                 purchaseOrderStaffResult,
-                purchaseOrderParameter
+                purchaseOrderParameter,
+                purchaseOrderTripResult,
+                purchaseInvoiceResult,
             ] = result.recordsets.map(toArray);
 
             const output = purchaseOrderGeneralResult.map(row => {
                 const stockItems = purchaseOrderStockResult.filter(item => isEqualNumber(item.PO_Id, row.PO_Id));
                 const staffInvolved = purchaseOrderStaffResult.filter(staff => isEqualNumber(staff.PO_Id, row.PO_Id));
                 const parameterInvolved = purchaseOrderParameter.filter(param => isEqualNumber(param.PO_Id, row.PO_Id));
+                const tripProducts = purchaseOrderTripResult.filter(trip => isEqualNumber(trip.orderId, row.PO_Id));
+                const invoicedProduct = purchaseInvoiceResult.filter(invoice => isEqualNumber(invoice.orderId, row.PO_Id));
 
-                const stockWithParameter = stockItems.map(stock => ({
-                    ...stock,
-                    parameters: parameterInvolved.filter(param => isEqualNumber(param.ItemId, stock.Item_Id))
-                }))
+                const stockWithParameter = stockItems.map(stock => {
+                    const invProduct = invoicedProduct.filter(pro => isEqualNumber(pro.productId, stock.Item_Id));
+                    const invProQuantity = invProduct.reduce((acc, item) => Addition(acc, item.quantity), 0)
+                    return {
+                        ...stock,
+                        parameters: parameterInvolved.filter(param => isEqualNumber(param.ItemId, stock.Item_Id)),
+                        tripAssigned: tripProducts.filter(trip => isEqualNumber(trip.productId, stock.Item_Id)),
+                        invoicedDetails: invProduct,
+                        pendingInvoiceWeight: Subraction(stock.Bill_Qty, invProQuantity)
+                    }
+                })
 
                 return {
                     ...row,

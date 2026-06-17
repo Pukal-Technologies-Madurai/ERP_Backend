@@ -1076,7 +1076,6 @@ const PurchaseInvoice = () => {
                     WHERE 
                         PIN_Id IN (SELECT DISTINCT PIN_Id FROM @FilteredPurchase)
                         AND COALESCE(Order_Id, 0) <> 0;
-
                     -- Step 7: Get Expense Details
                     SELECT 
                         exp.*, 
