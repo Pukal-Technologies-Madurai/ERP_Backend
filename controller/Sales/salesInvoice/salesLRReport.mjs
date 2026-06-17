@@ -888,7 +888,6 @@ export const salesInvoicePaper = async (req, res) => {
 }
 
 
-
 export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
     try {
         const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
@@ -908,6 +907,8 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
                     -- FIX: Convert both sides to DATE for comparison
                     CONVERT(DATE, Do_Date) = @reqDate
                     ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
+                
+                -- Sales Invoices with Ledger LOL details
                 SELECT 
                     gen.Do_Id,
                     gen.Do_Inv_No,
@@ -929,14 +930,18 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
                     gen.Created_on,
                     ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
                     CONVERT(DATETIME, gen.Created_on) AS createdOn,
-                    gen.Narration
+                    gen.Narration,
+                    -- Select all columns from Ledger_LOL
+                    ll.*
                 FROM tbl_Sales_Delivery_Gen_Info AS gen
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
                 LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
+                LEFT JOIN tbl_Ledger_LOL AS ll ON ll.Ret_Id = gen.Retailer_Id
                 WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY Do_Id;
+                
             -- involved staffs
                 SELECT 
                     stf.*,
@@ -949,14 +954,17 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
                     ON cc.Cost_Category_Id = stf.Emp_Type_Id
                 WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
                 ORDER BY stf.Do_Id;
+                
             -- Unique Cost Category IDs
                 SELECT DISTINCT Emp_Type_Id
                 FROM tbl_Sales_Delivery_Staff_Info
                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
+                
             -- Cost Types
                 SELECT Cost_Category_Id, Cost_Category
                 FROM tbl_ERP_Cost_Category
                 ORDER BY Cost_Category;
+                
             -- Stock Details
                 SELECT 
                     sdsi.Do_Date,
@@ -990,7 +998,6 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
 
         const calculatedStockDetails = stockDetails.map(stock => ({
             ...stock,
-
             Alt_Act_Qty: Division(stock.Act_Qty, stock.unitValue),
             quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
         }));
@@ -1004,10 +1011,36 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
                 isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
             );
 
+            // Extract all Ledger LOL details
+            const ledgerLOLDetails = {};
+            const ledgerColumns = [
+                'Ret_Id', 'Ledger_Id', 'Ledger_Tally_Id', 'Ledger_Name', 'Ledger_Alias',
+                'Ledger_Group', 'Parent_Group', 'OP_Bal', 'OP_Bal_Type', 'Import_Date',
+                'Accounting_Unit', 'Bill_Cut_Off_Day', 'Bill_Cut_Off_Date', 'City', 'State',
+                'Pin_Code', 'Country', 'GST_Treatment', 'GSTIN_No', 'Place_Of_Supply',
+                'Pan_No', 'Aadhar_No', 'Email_Id', 'A1', 'A2', 'A3', 'A4', 'A5',
+                'A6 - LOL-[20]', 'A7', 'A8', 'A9', 'A10', 'Remarks', 'Credit_Limit',
+                'Credit_Period', 'Interest_Rate', 'Overdue_Interest_Rate', 'Currency',
+                'Bank_Name', 'Account_No', 'IFSC_Code', 'UPI_Id', 'Payment_Terms',
+                'Shipping_Address', 'Billing_Address', 'Delivery_Instructions',
+                'Contact_Person', 'Contact_Number', 'Alternate_Number', 'Website',
+                'Social_Media', 'Customer_Segment', 'Price_Level', 'Discount_Percentage',
+                'Tax_Classification', 'Is_Active', 'Created_Date', 'Modified_Date',
+                'Created_By', 'Modified_By'
+            ];
+            
+            ledgerColumns.forEach(col => {
+                if (invoice[col] !== undefined) {
+                    ledgerLOLDetails[col] = invoice[col];
+                    delete invoice[col]; // Remove from main invoice object
+                }
+            });
+
             return {
                 ...invoice,
                 involvedStaffs,
-                stockDetails: invoiceStockDetails
+                stockDetails: invoiceStockDetails,
+                ledgerLOLDetails // Add ledger LOL details
             };
         });
 
@@ -1634,16 +1667,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                 WHERE 
                     CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)
             
-            -- Debug: Return the count and sample data
-                SELECT 
-                    COUNT(*) AS TotalOrders,
-                    @reqDate AS RequestDate,
-                    (SELECT TOP 1 So_Date FROM tbl_Sales_Order_Gen_Info WHERE CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)) AS SampleDate,
-                    (SELECT TOP 1 Cancel_status FROM tbl_Sales_Order_Gen_Info WHERE CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)) AS SampleCancelStatus
-                FROM tbl_Sales_Order_Gen_Info
-                WHERE CAST(So_Date AS DATE) = CAST(@reqDate AS DATE)
-            
-            -- Sales Orders with Conversion Status
+            -- Sales Orders with Conversion Status and ALL Ledger LOL details
                 SELECT 
                     'SalesOrder' AS Document_Type,
                     sog.So_Id AS So_Id,
@@ -1671,20 +1695,13 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                         ) THEN 'Converted to Delivery'
                         ELSE 'Not Converted'
                     END AS Conversion_Status,
-                    (
-                        SELECT TOP 1 
-                            dgi.Do_Id,
-                            dgi.Do_Inv_No,
-                            dgi.Do_Date,
-                            dgi.Delivery_Status
-                        FROM tbl_Sales_Delivery_Gen_Info dgi
-                        WHERE dgi.So_No = sog.So_Id
-                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
-                    ) AS Delivery_Details
+                    -- ALL columns from Ledger_LOL directly
+                    ll.*
                 FROM tbl_Sales_Order_Gen_Info AS sog
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = sog.VoucherType
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sog.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = sog.Branch_Id
+                LEFT JOIN tbl_Ledger_LOL AS ll ON ll.Ret_Id = sog.Retailer_Id
                 WHERE sog.So_Id IN (SELECT So_Id FROM @FilteredSalesOrder)
                 ORDER BY sog.So_Date, sog.So_Id;
             
@@ -1762,16 +1779,12 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
 
         const result = await getSalesOrder;
 
-     
-        const debugInfo = result.recordsets[0] || [];
-        const orders = result.recordsets[1] || [];
-        const staffs = result.recordsets[2] || [];
-        const uniqueInvolvedStaffs = result.recordsets[3] || [];
-        const costTypes = result.recordsets[4] || [];
-        const stockDetails = result.recordsets[5] || [];
-        const deliveryDetails = result.recordsets[6] || [];
-
-   
+        const orders = result.recordsets[0] || [];
+        const staffs = result.recordsets[1] || [];
+        const uniqueInvolvedStaffs = result.recordsets[2] || [];
+        const costTypes = result.recordsets[3] || [];
+        const stockDetails = result.recordsets[4] || [];
+        const deliveryDetails = result.recordsets[5] || [];
 
         if (orders.length === 0) {
             return sentData(res, [], {
@@ -1784,8 +1797,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                     canceled_orders: 0,
                     total_order_value: 0,
                     message: `No sales orders found for date: ${reqDate}.`
-                },
-                debug: debugInfo[0]
+                }
             });
         }
 
@@ -1798,6 +1810,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
         }));
 
         // Group staff and stock details by order
+        // ALL LOL columns are already in the order object from ll.*
         const ordersWithDetails = orders.map(order => {
             // Filter staffs using So_Id
             const involvedStaffs = staffs.filter(stf =>
@@ -1814,16 +1827,6 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                 isEqualNumber(del.Sales_Order_Id, order.So_Id)
             );
 
-            // Parse Delivery_Details JSON if it exists
-            let parsedDeliveryDetails = null;
-            if (order.Delivery_Details) {
-                try {
-                    parsedDeliveryDetails = JSON.parse(order.Delivery_Details);
-                } catch(e) {
-                    console.error('Error parsing delivery details:', e);
-                }
-            }
-
             return {
                 ...order,
                 involvedStaffs,
@@ -1839,8 +1842,6 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                         Delivery_Total_Value: deliveryInfo.Delivery_Total_Value
                     }
                 }),
-                // Include parsed delivery details
-                Delivery_Details_Info: parsedDeliveryDetails,
                 // Calculate summary statistics
                 Order_Summary: {
                     Total_Items: orderStockDetails.length,
@@ -1862,8 +1863,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                 not_converted_orders: ordersWithDetails.filter(o => o.Conversion_Status === 'Not Converted').length,
                 canceled_orders: ordersWithDetails.filter(o => o.Conversion_Status === 'Canceled Order').length,
                 total_order_value: ordersWithDetails.reduce((sum, o) => sum + (Number(o.Total_Invoice_value) || 0), 0)
-            },
-            debug: debugInfo[0]
+            }
         });
 
     } catch (e) {
@@ -1871,7 +1871,6 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
         servError(e, res);
     }
 };
-
 
 // export const lrReportUploadMobile = async (req, res) => {
 //     const transaction = new sql.Transaction();
