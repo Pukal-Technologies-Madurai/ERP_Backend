@@ -404,4 +404,10 @@ MastersRouter.get('/FilterWhatsappSettingColumn',whatsapp.FilterWhatsappSettingC
 MastersRouter.post('/saveWhatsappColumnSettings',whatsapp.saveWhatsappColumnSettings)
 
 
+MastersRouter.get('/webhook/whatsapp',  whatsapp.verifyWebhook);
+MastersRouter.post('/webhook/whatsapp', whatsapp.receiveWebhook);
+
+MastersRouter.get('/whatsapp/incoming', whatsapp.getIncomingMessages);
+
+
 export default MastersRouter;

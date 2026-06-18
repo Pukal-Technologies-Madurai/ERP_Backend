@@ -217,7 +217,7 @@ const getWhatsappLanguages = async (req, res) => {
         const { WhatsappType, company_id } = req.query;
 
         if (!WhatsappType) {
-            return error(res, "WhatsappType is required");
+            return failed(res, "WhatsappType is required");
         }
 
         const typeQuery = `
@@ -305,7 +305,8 @@ const getWhatsappLanguages = async (req, res) => {
 
         // Validate required fields
         if (!company_id || !whatsapp_type_id || !enabled_columns || !enabled_columns.length) {
-            return error(res, "Missing required fields: company_id, whatsapp_type_id, or enabled_columns");
+             return failed(res, "Missing required fields: company_id, whatsapp_type_id, or enabled_columns");
+
         }
 
         // Start transaction
@@ -383,6 +384,129 @@ const getWhatsappLanguages = async (req, res) => {
         servError(e, res);
     }
 };
+
+  const verifyWebhook = (req, res) => {
+        const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'your_verify_token';
+
+        const mode      = req.query['hub.mode'];
+        const token     = req.query['hub.verify_token'];
+        const challenge = req.query['hub.challenge'];
+
+        if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+            
+            return res.status(200).send(challenge);
+        }
+        return res.status(403).json({ success: false, message: 'Verification failed' });
+    };
+
+    const receiveWebhook = async (req, res) => {
+        try {
+            const body = req.body;
+
+           
+            res.status(200).send('EVENT_RECEIVED');
+
+            if (body.object !== 'whatsapp_business_account') return;
+
+            for (const entry of body.entry || []) {
+                for (const change of entry.changes || []) {
+                    if (change.field !== 'messages') continue;
+
+                    const value    = change.value;
+                    const messages = value?.messages || [];
+                    const contacts = value?.contacts || [];
+                    const metadata = value?.metadata  || {};
+
+                    for (const message of messages) {
+                        const senderPhone   = message.from;                          // e.g. "15557654321"
+                        const senderName    = contacts.find(c => c.wa_id === message.from)?.profile?.name || null;
+                        const messageType   = message.type;                          // "text", "image", etc.
+                        const messageText   = message.text?.body || null;
+                        const messageId     = message.id;
+                        const timestamp     = message.timestamp;
+                        const phoneNumberId = metadata.phone_number_id;
+
+                        await saveIncomingMessage({
+                            senderPhone,
+                            senderName,
+                            messageType,
+                            messageText,
+                            messageId,
+                            timestamp,
+                            phoneNumberId
+                        });
+                    }
+                }
+            }
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+  
+    const saveIncomingMessage = async ({ senderPhone, senderName, messageType, messageText, messageId, timestamp, phoneNumberId }) => {
+        try {
+            await new sql.Request()
+                .input('SenderPhone',   sql.NVarChar(20),  senderPhone)
+                .input('SenderName',    sql.NVarChar(255), senderName)
+                .input('MessageType',   sql.NVarChar(50),  messageType)
+                .input('MessageText',   sql.NVarChar(sql.MAX), messageText)
+                .input('MessageId',     sql.NVarChar(255), messageId)
+                .input('Timestamp',     sql.BigInt,        timestamp)
+                .input('PhoneNumberId', sql.NVarChar(50),  phoneNumberId)
+                .query(`
+                    INSERT INTO tbl_Whatsapp_Incoming 
+                        (SenderPhone, SenderName, MessageType, MessageText, MessageId, Timestamp, PhoneNumberId, Created_Time)
+                    VALUES 
+                        (@SenderPhone, @SenderName, @MessageType, @MessageText, @MessageId, @Timestamp, @PhoneNumberId, GETDATE())
+                `);
+        } catch (e) {
+            console.error('Failed to save incoming message:', e);
+        }
+    };
+
+    
+    const getIncomingMessages = async (req, res) => {
+        try {
+            const { SenderPhone, from_date, to_date } = req.query;
+
+            let query = `
+                SELECT 
+                    Id, SenderPhone, SenderName, MessageType,
+                    MessageText, MessageId, Timestamp, PhoneNumberId, Created_Time
+                FROM tbl_Whatsapp_Incoming
+                WHERE 1=1
+            `;
+
+            const request = new sql.Request();
+
+            if (SenderPhone) {
+                query += ` AND SenderPhone = @SenderPhone`;
+                request.input('SenderPhone', sql.NVarChar(20), SenderPhone);
+            }
+            if (from_date) {
+                query += ` AND Created_Time >= @from_date`;
+                request.input('from_date', sql.DateTime, new Date(from_date));
+            }
+            if (to_date) {
+                query += ` AND Created_Time <= @to_date`;
+                request.input('to_date', sql.DateTime, new Date(to_date));
+            }
+
+            query += ` ORDER BY Created_Time DESC`;
+
+            const result = await request.query(query);
+
+            if (result.recordset.length) {
+                return dataFound(res, result.recordset);
+            }
+            return noData(res);
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
 
 
 // const getWhatsappColumnSettings = async (req, res) => {
@@ -468,6 +592,9 @@ const getWhatsappLanguages = async (req, res) => {
 // };
 
     return {
+                verifyWebhook,
+        receiveWebhook,
+        getIncomingMessages,
         // getWhatsappMethod,
         updateWhatsappMethod,
         getWhatsappTypes,
