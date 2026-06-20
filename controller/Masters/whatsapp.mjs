@@ -591,6 +591,116 @@ const getWhatsappLanguages = async (req, res) => {
 //     }
 // };
 
+ const logWhatsappSend = async (req, res) => {
+    try {
+        const { documentType, referenceId, retailerId, retailerName, mobileNo, messageTemplate, sentBy } = req.body;
+
+        if (!documentType || !referenceId) {
+            return res.status(400).json({ success: false, message: "documentType and referenceId are required" });
+        }
+
+        await new sql.Request()
+            .input('documentType', sql.VarChar(50), documentType)
+            .input('referenceId', sql.VarChar(100), String(referenceId))
+            .input('retailerId', sql.VarChar(50), retailerId ? String(retailerId) : null)
+            .input('retailerName', sql.VarChar(200), retailerName || null)
+            .input('mobileNo', sql.VarChar(20), mobileNo || null)
+            .input('messageTemplate', sql.VarChar(100), messageTemplate || null)
+            .input('sentBy', sql.Int, sentBy || null)
+            .query(`
+                INSERT INTO tbl_Whatsapp_Details
+                    (Document_Type, Reference_Id, Retailer_Id, Retailer_Name, Mobile_No, Message_Template, Sent_By, Status)
+                VALUES
+                    (@documentType, @referenceId, @retailerId, @retailerName, @mobileNo, @messageTemplate, @sentBy, 'Sent')
+            `);
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Error in logWhatsappSend:', e);
+        servError(e, res);
+    }
+};
+
+const getWhatsappCounts = async (req, res) => {
+    try {
+        const { documentType, referenceIds } = req.query;
+        if (!documentType || !referenceIds) {
+            return res.json({ success: true, data: [] });
+        }
+        const ids = String(referenceIds).split(',').map(s => s.trim()).filter(Boolean);
+        if (ids.length === 0) return res.json({ success: true, data: [] });
+
+        const placeholders = ids.map((_, i) => `@id${i}`).join(',');
+        const request = new sql.Request();
+
+        ids.forEach((id, i) => {
+            request.input(`id${i}`, sql.VarChar(100), id);
+        });
+        request.input('documentType', sql.VarChar(50), documentType);
+
+        // PriceList counts reset daily — only count sends made today.
+        // Everything else keeps the existing all-time count.
+        const isDateScoped = documentType === 'PriceList';
+
+        const dateFilter = isDateScoped
+            ? `AND CAST(Sent_On AS DATE) = CAST(GETDATE() AS DATE)`
+            : '';
+
+        const result = await request.query(`
+            SELECT Reference_Id, COUNT(*) AS Sent_Count
+            FROM tbl_Whatsapp_Details
+            WHERE Document_Type = @documentType
+              AND Reference_Id IN (${placeholders})
+              ${dateFilter}
+            GROUP BY Reference_Id
+        `);
+
+        res.json({
+            success: true,
+            data: result.recordset || []
+        });
+    } catch (e) {
+        console.error('Error in getWhatsappCounts:', e);
+        res.json({ success: true, data: [] });
+    }
+};
+// const getWhatsappCounts = async (req, res) => {
+//     try {
+//         const { documentType, referenceIds } = req.query;
+//         if (!documentType || !referenceIds) {
+//             return res.json({ success: true, data: [] });
+//         }
+//         const ids = String(referenceIds).split(',').map(s => s.trim()).filter(Boolean);
+//         if (ids.length === 0) return res.json({ success: true, data: [] });
+
+       
+//         const placeholders = ids.map((_, i) => `@id${i}`).join(',');
+//         const request = new sql.Request();
+        
+        
+//         ids.forEach((id, i) => {
+//             request.input(`id${i}`, sql.VarChar(100), id);
+//         });
+//         request.input('documentType', sql.VarChar(50), documentType);
+
+//         const result = await request.query(`
+//             SELECT Reference_Id, COUNT(*) AS Sent_Count
+//             FROM tbl_Whatsapp_Details
+//             WHERE Document_Type = @documentType
+//               AND Reference_Id IN (${placeholders})
+//             GROUP BY Reference_Id
+//         `);
+
+//         res.json({ 
+//             success: true, 
+//             data: result.recordset || [] 
+//         });
+//     } catch (e) {
+//         console.error('Error in getWhatsappCounts:', e);
+//         res.json({ success: true, data: [] });
+//     }
+// };
+
     return {
                 verifyWebhook,
         receiveWebhook,
@@ -604,7 +714,9 @@ const getWhatsappLanguages = async (req, res) => {
         getWhatsappLanguages,
         FilterdisplayColumn,
         FilterWhatsappSettingColumn,
-        saveWhatsappColumnSettings
+        saveWhatsappColumnSettings,
+        logWhatsappSend,
+        getWhatsappCounts
         
 
     }
