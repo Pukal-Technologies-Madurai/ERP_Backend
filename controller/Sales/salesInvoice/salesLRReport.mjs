@@ -890,60 +890,87 @@ export const salesInvoicePaper = async (req, res) => {
 
 export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
     try {
-        const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
-        const status = req.query.staffStatus;
-
-        const getSalesInvoice = new sql.Request()
-            .input('reqDate', sql.Date, reqDate)
-            .input('status', sql.Int, toNumber(status))
+        const Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+        
+        const request = new sql.Request()
+            .input('Fromdate', Fromdate)
+            .input('Todate', Todate)
             .query(`
-            -- filtered invoices ids temp table
+                -- declaring table variable
                 DECLARE @FilteredInvoice TABLE (Do_Id BIGINT);
-            -- inserting data to temp table
+                -- inserting data to temp table
                 INSERT INTO @FilteredInvoice (Do_Id)
                 SELECT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
-                WHERE 
-                    -- FIX: Convert both sides to DATE for comparison
-                    CONVERT(DATE, Do_Date) = @reqDate
-                    ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
-                
-                -- Sales Invoices with Ledger LOL details
-                SELECT 
-                    gen.Do_Id,
-                    gen.Do_Inv_No,
-                    gen.Voucher_Type,
-                    vt.Voucher_Type AS voucherTypeGet,
-                    gen.Do_Date,
-                    gen.Retailer_Id,
-                    s.Status AS Delivery_Status, 
-                    s.Status_Id AS Delivery_Status_Id,
-                    CASE  
-                        WHEN gen.Cancel_status = 0 THEN 'Canceled Invoice' 
-                        ELSE r.Retailer_Name
-                    END AS retailerNameGet,
-                    gen.Branch_Id,
-                    b.BranchName AS branchNameGet,
-                    gen.Total_Invoice_value,
-                    gen.Cancel_status,
-                    gen.Created_by,
-                    gen.Created_on,
-                    ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
-                    CONVERT(DATETIME, gen.Created_on) AS createdOn,
-                    gen.Narration,
+                WHERE
+                    CONVERT(DATE, Do_Date) BETWEEN @Fromdate AND @Todate;
+
+                -- sales general details
+                SELECT
+                    sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
+                    sdgi.Do_Date, sdgi.Branch_Id, sdgi.Retailer_Id, sdgi.Narration, sdgi.So_No, sdgi.Cancel_status,
+                    sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences,
+                    sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value, sdgi.Delivery_Person_Id,
+                    sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
+                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
+                    ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
+                    ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
+                    ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
+                    COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+                    COALESCE(delBy.Cost_Center_Name, 'unknown') AS Delivery_Person_Name,
+                    COALESCE(salPer.Name, 'unknown') AS Sales_Person_Name,
+                    CONVERT(DATETIME, sdgi.Created_on) AS createdOn,
                     -- Select all columns from Ledger_LOL
                     ll.*
-                FROM tbl_Sales_Delivery_Gen_Info AS gen
-                LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
-                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
-                LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
-                LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
-                LEFT JOIN tbl_Ledger_LOL AS ll ON ll.Ret_Id = gen.Retailer_Id
-                WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
-                ORDER BY Do_Id;
-                
-            -- involved staffs
-                SELECT 
+                FROM
+                    tbl_Sales_Delivery_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = sdgi.Branch_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = sdgi.Created_by
+                LEFT JOIN tbl_ERP_Cost_Center AS delBy ON delBy.Cost_Center_Id = sdgi.Delivery_Person_Id
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No
+                LEFT JOIN tbl_Users AS salPer ON salPer.UserId = sogi.Sales_Person_Id
+                LEFT JOIN tbl_Ledger_LOL AS ll ON ll.Ret_Id = sdgi.Retailer_Id
+                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+                ORDER BY sdgi.Do_Id DESC;
+
+                -- product details
+                SELECT
+                    oi.*,
+                    pm.Product_Id,
+                    COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+                    COALESCE(pm.Product_Name, 'not available') AS Item_Name,
+                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+                    COALESCE(u.Units, 'not available') AS UOM,
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
+                FROM tbl_Sales_Delivery_Stock_Info AS oi
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
+                LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
+                LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                ORDER BY oi.S_No ASC;
+
+                -- expence details
+                SELECT
+                    exp.*,
+                    em.Account_name AS Expence_Name,
+                    CASE
+                        WHEN exp.Expence_Value_DR > 0 THEN exp.Expence_Value_DR
+                        ELSE -exp.Expence_Value_CR
+                    END AS Expence_Value
+                FROM tbl_Sales_Delivery_Expence_Info AS exp
+                LEFT JOIN tbl_Account_Master AS em
+                    ON em.Acc_Id = exp.Expense_Id
+                WHERE
+                    exp.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+
+                -- staff involved
+                SELECT
                     stf.*,
                     e.Cost_Center_Name AS Emp_Name,
                     cc.Cost_Category AS Involved_Emp_Type
@@ -952,27 +979,33 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
                     ON e.Cost_Center_Id = stf.Emp_Id
                 LEFT JOIN tbl_ERP_Cost_Category AS cc
                     ON cc.Cost_Category_Id = stf.Emp_Type_Id
-                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
-                ORDER BY stf.Do_Id;
-                
-            -- Unique Cost Category IDs
+                WHERE stf.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+
+                -- Alteration History
+                SELECT ah.*, u.Name AS alterByGet
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                WHERE
+                    alteredTable = 'tbl_Sales_Delivery_Gen_Info'
+                    AND alteredRowId IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice);
+
+                -- Unique Cost Category IDs
                 SELECT DISTINCT Emp_Type_Id
                 FROM tbl_Sales_Delivery_Staff_Info
                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
-                
-            -- Cost Types
+
+                -- Cost Types
                 SELECT Cost_Category_Id, Cost_Category
                 FROM tbl_ERP_Cost_Category
                 ORDER BY Cost_Category;
-                
-            -- Stock Details
-                SELECT 
+
+                -- Stock Details (for Bill_Qty / Alt_Act_Qty rollups used by WhatsApp UI)
+                SELECT
                     sdsi.Do_Date,
                     sdsi.Delivery_Order_Id,
                     COALESCE(sdsi.Bill_Qty, 0) AS Bill_Qty,
                     COALESCE(sdsi.Act_Qty, 0) AS Act_Qty,
-                    -- Calculated Alt_Act_Qty (SAFE)
-                    CASE 
+                    CASE
                         WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
                              OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
                         THEN 0
@@ -981,7 +1014,6 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
                             COALESCE(sdsi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
                         )
                     END AS Alt_Act_Qty,
-                    -- Unit value (numeric)
                     TRY_CAST(pck.Pack AS DECIMAL(18,2)) AS unitValue,
                     COALESCE(p.Product_Rate, 0) AS itemRate,
                     COALESCE(sdsi.Item_Rate, 0) AS billedRate
@@ -989,12 +1021,21 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdsi.Item_Id
                 LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
                 WHERE sdsi.Delivery_Order_Id IN (SELECT Do_Id FROM @FilteredInvoice)
-                ORDER BY sdsi.S_No`
+                ORDER BY sdsi.S_No;`
             );
 
-        const result = await getSalesInvoice;
+        const result = await request;
 
-        const [invoices = [], staffs = [], uniqeInvolvedStaffs = [], costTypes = [], stockDetails = []] = result.recordsets;
+        const [
+            SalesGeneralInfo = [],
+            Products_List = [],
+            Expence_Array = [],
+            Staffs_Array = [],
+            Alteration_History = [],
+            uniqeInvolvedStaffs = [],
+            costTypes = [],
+            stockDetails = []
+        ] = result.recordsets;
 
         const calculatedStockDetails = stockDetails.map(stock => ({
             ...stock,
@@ -1002,52 +1043,64 @@ export const getSalesInvoiceForAssignCostCenterWhatsapp = async (req, res) => {
             quantityDifference: Subraction(stock.Bill_Qty, stock.Act_Qty)
         }));
 
-        const invoicesWithStaffs = invoices.map(invoice => {
-            const involvedStaffs = staffs.filter(stf =>
-                isEqualNumber(stf.Do_Id, invoice.Do_Id)
-            );
+        // Ledger_LOL columns to pull out of the flattened invoice row
+        const ledgerColumns = [
+            'Ret_Id', 'Ledger_Id', 'Ledger_Tally_Id', 'Ledger_Name', 'Ledger_Alias',
+            'Ledger_Group', 'Parent_Group', 'OP_Bal', 'OP_Bal_Type', 'Import_Date',
+            'Accounting_Unit', 'Bill_Cut_Off_Day', 'Bill_Cut_Off_Date', 'City', 'State',
+            'Pin_Code', 'Country', 'GST_Treatment', 'GSTIN_No', 'Place_Of_Supply',
+            'Pan_No', 'Aadhar_No', 'Email_Id', 'A1', 'A2', 'A3', 'A4', 'A5',
+            'A6 - LOL-[20]', 'A7', 'A8', 'A9', 'A10', 'Remarks', 'Credit_Limit',
+            'Credit_Period', 'Interest_Rate', 'Overdue_Interest_Rate', 'Currency',
+            'Bank_Name', 'Account_No', 'IFSC_Code', 'UPI_Id', 'Payment_Terms',
+            'Shipping_Address', 'Billing_Address', 'Delivery_Instructions',
+            'Contact_Person', 'Contact_Number', 'Alternate_Number', 'Website',
+            'Social_Media', 'Customer_Segment', 'Price_Level', 'Discount_Percentage',
+            'Tax_Classification', 'Is_Active', 'Created_Date', 'Modified_Date',
+            'Created_By', 'Modified_By'
+        ];
 
-            const invoiceStockDetails = calculatedStockDetails.filter(stk =>
-                isEqualNumber(stk.Delivery_Order_Id, invoice.Do_Id)
-            );
-
-            // Extract all Ledger LOL details
+        const SalesGeneralInfoWithLOL = SalesGeneralInfo.map(row => {
             const ledgerLOLDetails = {};
-            const ledgerColumns = [
-                'Ret_Id', 'Ledger_Id', 'Ledger_Tally_Id', 'Ledger_Name', 'Ledger_Alias',
-                'Ledger_Group', 'Parent_Group', 'OP_Bal', 'OP_Bal_Type', 'Import_Date',
-                'Accounting_Unit', 'Bill_Cut_Off_Day', 'Bill_Cut_Off_Date', 'City', 'State',
-                'Pin_Code', 'Country', 'GST_Treatment', 'GSTIN_No', 'Place_Of_Supply',
-                'Pan_No', 'Aadhar_No', 'Email_Id', 'A1', 'A2', 'A3', 'A4', 'A5',
-                'A6 - LOL-[20]', 'A7', 'A8', 'A9', 'A10', 'Remarks', 'Credit_Limit',
-                'Credit_Period', 'Interest_Rate', 'Overdue_Interest_Rate', 'Currency',
-                'Bank_Name', 'Account_No', 'IFSC_Code', 'UPI_Id', 'Payment_Terms',
-                'Shipping_Address', 'Billing_Address', 'Delivery_Instructions',
-                'Contact_Person', 'Contact_Number', 'Alternate_Number', 'Website',
-                'Social_Media', 'Customer_Segment', 'Price_Level', 'Discount_Percentage',
-                'Tax_Classification', 'Is_Active', 'Created_Date', 'Modified_Date',
-                'Created_By', 'Modified_By'
-            ];
-            
+            const cleaned = { ...row };
+
             ledgerColumns.forEach(col => {
-                if (invoice[col] !== undefined) {
-                    ledgerLOLDetails[col] = invoice[col];
-                    delete invoice[col]; // Remove from main invoice object
+                if (cleaned[col] !== undefined) {
+                    ledgerLOLDetails[col] = cleaned[col];
+                    delete cleaned[col];
                 }
             });
 
-            return {
-                ...invoice,
-                involvedStaffs,
-                stockDetails: invoiceStockDetails,
-                ledgerLOLDetails // Add ledger LOL details
-            };
+            return { ...cleaned, ledgerLOLDetails };
         });
 
-        sentData(res, invoicesWithStaffs, {
-            costTypes: toArray(costTypes),
-            uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
-        });
+        if (SalesGeneralInfoWithLOL.length > 0) {
+            const resData = SalesGeneralInfoWithLOL.map(row => ({
+                ...row,
+                Products_List: Products_List.filter(
+                    fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
+                ),
+                Expence_Array: Expence_Array.filter(
+                    fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                ),
+                Staffs_Array: Staffs_Array.filter(
+                    fil => isEqualNumber(fil.Do_Id, row.Do_Id)
+                ),
+                alterationHistory: Alteration_History.filter(
+                    fil => isEqualNumber(fil.alteredRowId, row.Do_Id)
+                ),
+                stockDetails: calculatedStockDetails.filter(
+                    fil => isEqualNumber(fil.Delivery_Order_Id, row.Do_Id)
+                )
+            }));
+
+            sentData(res, resData, {
+                costTypes: toArray(costTypes),
+                uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
+            });
+        } else {
+            noData(res);
+        }
 
     } catch (e) {
         servError(e, res);
@@ -1695,7 +1748,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                         ) THEN 'Converted to Delivery'
                         ELSE 'Not Converted'
                     END AS Conversion_Status,
-                    -- ALL columns from Ledger_LOL directly
+                    
                     ll.*
                 FROM tbl_Sales_Order_Gen_Info AS sog
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = sog.VoucherType
