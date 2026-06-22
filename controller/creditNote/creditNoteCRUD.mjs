@@ -3,6 +3,7 @@ import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOS
 import { invalidInput, servError, dataFound, noData, success } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
+import { insertMultipleBatch, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
@@ -546,6 +547,22 @@ export const createCreditNote = async (req, res) => {
 
         await productInsertingRequest;
 
+        const batchInsertResultEdit = await insertMultipleBatch(
+            transaction,
+            stockRows.map(b => ({
+                batch: b.Batch_Name,
+                trans_date: new Date(CR_Date),
+                item_id: b.Item_Id,
+                godown_id: b.GoDown_Id,
+                quantity: b.Bill_Qty,
+                rate: b.Item_Rate,
+                type: 'CREDIT NOTE',
+                reference_id: CR_Id,
+                created_by: Created_by
+            }))
+        );
+        if (!batchInsertResultEdit) throw new Error('Batch creation failed');
+
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
             for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                 const exp = Expence_Array[expInd];
@@ -829,6 +846,33 @@ export const updateCreditNote = async (req, res) => {
             throw new Error('Failed to update general info in credit note')
         }
 
+        const existingBatchRows = (await new sql.Request(transaction)
+            .input('CR_Id', CR_Id)
+            .query(`
+                SELECT Batch_Name, Item_Id, GoDown_Id, Bill_Qty
+                FROM tbl_Credit_Note_Stock_Info
+                WHERE CR_Id = @CR_Id
+                    AND Batch_Name IS NOT NULL
+                    AND Batch_Name <> ''`
+            )
+        ).recordset;
+
+        if (existingBatchRows.length > 0) {
+            const batchReversalResult = await reverseMultipleBatch(
+                transaction,
+                existingBatchRows.map(row => ({
+                    pre_batch: row.Batch_Name,
+                    pre_item_id: row.Item_Id,
+                    pre_godown_id: row.GoDown_Id,
+                    pre_quantity: row.Bill_Qty,
+                    pre_type: 'CREDIT_NOTE',
+                    pre_reference_id: CR_Id,
+                    created_by: Altered_by
+                }))
+            );
+            if (!batchReversalResult) throw new Error('Batch reversal failed');
+        }
+
         const deleteDetailsRows = new sql.Request(transaction)
             .input('CR_Id', CR_Id)
             .query(`
@@ -903,6 +947,22 @@ export const updateCreditNote = async (req, res) => {
             );
 
         await productInsertingRequest;
+
+        const batchInsertResultEdit = await insertMultipleBatch(
+            transaction,
+            stockRows.map(b => ({
+                batch: b.Batch_Name,
+                trans_date: new Date(CR_Date),
+                item_id: b.Item_Id,
+                godown_id: b.GoDown_Id,
+                quantity: b.Bill_Qty,
+                rate: b.Item_Rate,
+                type: 'CREDIT_NOTE',
+                reference_id: CR_Id,
+                created_by: Altered_by
+            }))
+        );
+        if (!batchInsertResultEdit) throw new Error('Batch creation failed');
 
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
             for (let expInd = 0; expInd < Expence_Array.length; expInd++) {

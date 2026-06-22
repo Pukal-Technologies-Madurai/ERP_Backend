@@ -3,6 +3,7 @@ import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOS
 import { invalidInput, servError, dataFound, noData, success } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
+import { insertMultipleBatchUsageDetails, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
@@ -545,6 +546,23 @@ export const createDebitNote = async (req, res) => {
 
         await productInsertingRequest;
 
+        if (stockRows.length > 0) {
+            const batchInsertResult = await insertMultipleBatchUsageDetails(
+                transaction,
+                stockRows.map(b => ({
+                    batch: b.Batch_Name,
+                    trans_date: new Date(DB_Date),
+                    item_id: b.Item_Id,
+                    godown_id: b.GoDown_Id,
+                    quantity: b.Bill_Qty,
+                    type: 'DEBIT_NOTE',
+                    reference_id: DB_Id,
+                    created_by: Created_by
+                }))
+            );
+            if (!batchInsertResult) throw new Error('Batch usage details creation failed');
+        }
+
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
             for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
                 const exp = Expence_Array[expInd];
@@ -828,6 +846,33 @@ export const updateDebitNote = async (req, res) => {
             throw new Error('Failed to update general info in debit note')
         }
 
+        // Fetch existing batch rows for reversal
+        const existingBatchRows = (await new sql.Request(transaction)
+            .input('DB_Id', DB_Id)
+            .query(`
+                SELECT Batch_Name, Item_Id, GoDown_Id, Bill_Qty
+                FROM tbl_Debit_Note_Stock_Info
+                WHERE DB_Id = @DB_Id
+                    AND Batch_Name IS NOT NULL
+                    AND Batch_Name <> ''`
+            )).recordset;
+
+        if (existingBatchRows.length > 0) {
+            const batchReversalResult = await reverseMultipleBatch(
+                transaction,
+                existingBatchRows.map(row => ({
+                    pre_batch: row.Batch_Name,
+                    pre_item_id: row.Item_Id,
+                    pre_godown_id: row.GoDown_Id,
+                    pre_quantity: row.Bill_Qty,
+                    pre_type: 'DEBIT_NOTE',
+                    pre_reference_id: DB_Id,
+                    created_by: Altered_by
+                }))
+            );
+            if (!batchReversalResult) throw new Error('Batch reversal failed');
+        }
+
         const deleteDetailsRows = new sql.Request(transaction)
             .input('DB_Id', DB_Id)
             .query(`
@@ -902,6 +947,23 @@ export const updateDebitNote = async (req, res) => {
             );
 
         await productInsertingRequest;
+
+        if (stockRows.length > 0) {
+            const batchInsertResult = await insertMultipleBatchUsageDetails(
+                transaction,
+                stockRows.map(b => ({
+                    batch: b.Batch_Name,
+                    trans_date: new Date(DB_Date),
+                    item_id: b.Item_Id,
+                    godown_id: b.GoDown_Id,
+                    quantity: b.Bill_Qty,
+                    type: 'DEBIT_NOTE',
+                    reference_id: DB_Id,
+                    created_by: Altered_by
+                }))
+            );
+            if (!batchInsertResult) throw new Error('Batch usage details creation failed');
+        }
 
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
             for (let expInd = 0; expInd < Expence_Array.length; expInd++) {

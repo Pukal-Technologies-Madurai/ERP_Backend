@@ -1,6 +1,7 @@
 import sql from 'mssql'
 import { servError, success, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber, getDaysBetween, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
+import { insertMultipleBatch, insertMultipleBatchUsageDetails } from '../../middleware/batchTransactions.mjs';
 
 // material inward
 
@@ -98,12 +99,10 @@ const postBatchInMaterialInward = async (req, res) => {
 
         await transaction.begin();
 
-        const request = new sql.Request(transaction)
+        // Update Trip Arrival batch numbers
+        await new sql.Request(transaction)
             .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
-            .input('createdBy', sql.Int, createdBy)
-            .input('trans_date', sql.Date, trans_date)
             .query(`
-            -- Parse JSON to temp table
                 CREATE TABLE #Parsed (
                     batch NVARCHAR(50),
                     item_id BIGINT,
@@ -124,28 +123,30 @@ const postBatchInMaterialInward = async (req, res) => {
                     created_by NVARCHAR(100),
                     uniquId BIGINT
                 );
-            -- Validate parsed rows
                 IF EXISTS (SELECT 1 FROM #Parsed WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
                 THROW 50000, 'Invalid or missing fields in JSON input.', 1;
-            -- Merge to Batch Master
-                MERGE tbl_Batch_Master AS target
-                USING #Parsed AS source
-                ON target.batch = source.batch
-                    AND target.item_id = source.item_id
-                    AND target.godown_id = source.godown_id
-                WHEN MATCHED THEN
-                    UPDATE SET target.quantity = target.quantity + source.quantity
-                WHEN NOT MATCHED THEN
-                    INSERT (batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                    VALUES (source.batch, source.item_id, source.godown_id, @trans_date, source.quantity, source.rate, @createdBy);
-            -- Update Trip Arrival
                 UPDATE t
                 SET t.Batch_No = p.batch
                 FROM tbl_Trip_Arrival t
                 JOIN #Parsed p ON t.Arr_Id = p.uniquId;
                 DROP TABLE #Parsed;`);
 
-        await request;
+        // Batch master upsert via centralized function
+        const batchResult = await insertMultipleBatch(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                rate: toNumber(item.rate),
+                type: 'MATERIAL_INWARD',
+                reference_id: toNumber(item.uniquId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Batch creation failed');
 
         await transaction.commit();
         success(res, 'Batch and Trip Arrival updated successfully');
@@ -240,14 +241,10 @@ const postBatchInProcessingSource = async (req, res) => {
         const jsonData = JSON.stringify(itemBatch);
         await transaction.begin();
 
+        // Update source details batch numbers
         await new sql.Request(transaction)
             .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
-            .input('createdBy', sql.Int, createdBy)
-            .input('trans_date', sql.Date, trans_date)
             .query(`
-            -- latest obid
-                DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-            -- Parse input JSON into temp table
                 CREATE TABLE #Parsed (
                     batch_id NVARCHAR(150),
                     batch NVARCHAR(50),
@@ -272,19 +269,27 @@ const postBatchInProcessingSource = async (req, res) => {
                     uniquId BIGINT,
                     moduleId BIGINT
                 );
-            -- Insert transfer out transaction
-                INSERT INTO tbl_Batch_Transaction (
-                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
-                )
-                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'CONSUMPTION', moduleId, @createdBy, @openingId
-                FROM #Parsed;
-            -- Update Sales
                 UPDATE pr
                 SET pr.Sour_Batch_Lot_No = p.batch
                 FROM tbl_Processing_Source_Details pr
                 JOIN #Parsed p ON pr.PRS_Id = p.uniquId;
-                DROP TABLE #Parsed;`
-            );
+                DROP TABLE #Parsed;`);
+
+        // Batch usage via centralized function
+        const batchResult = await insertMultipleBatchUsageDetails(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                type: 'CONSUMPTION',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Batch consumption failed');
 
         await transaction.commit();
         success(res, 'Godown transfer completed successfully');
@@ -381,12 +386,10 @@ const postBatchInProcessing = async (req, res) => {
 
         await transaction.begin();
 
-        const request = new sql.Request(transaction)
+        // Update destination details batch numbers
+        await new sql.Request(transaction)
             .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
-            .input('createdBy', sql.Int, createdBy)
-            .input('trans_date', sql.Date, trans_date)
             .query(`
-            -- Parse JSON to temp table
                 CREATE TABLE #Parsed (
                     batch NVARCHAR(50),
                     item_id BIGINT,
@@ -407,29 +410,30 @@ const postBatchInProcessing = async (req, res) => {
                     created_by NVARCHAR(100),
                     uniquId BIGINT
                 );
-            -- Validate parsed rows
                 IF EXISTS (SELECT 1 FROM #Parsed WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
                 THROW 50000, 'Invalid or missing fields in JSON input.', 1;
-            -- Merge to Batch Master
-                MERGE tbl_Batch_Master AS target
-                USING #Parsed AS source
-                ON target.batch = source.batch
-                    AND target.item_id = source.item_id
-                    AND target.godown_id = source.godown_id
-                WHEN MATCHED THEN
-                    UPDATE SET target.quantity = target.quantity + source.quantity
-                WHEN NOT MATCHED THEN
-                    INSERT (batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                    VALUES (source.batch, source.item_id, source.godown_id, @trans_date, source.quantity, source.rate, @createdBy);
-            -- Update Trip Arrival
                 UPDATE pr
                 SET pr.Dest_Batch_Lot_No = p.batch
                 FROM tbl_Processing_Destin_Details pr
                 JOIN #Parsed p ON pr.PRD_Id = p.uniquId;
-                DROP TABLE #Parsed;`
-            );
+                DROP TABLE #Parsed;`);
 
-        await request;
+        // Batch master upsert via centralized function
+        const batchResult = await insertMultipleBatch(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                rate: toNumber(item.rate),
+                type: 'PRODUCTION',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Batch creation failed');
 
         await transaction.commit();
         success(res, 'Batch and Processing updated successfully');
@@ -537,14 +541,10 @@ const postOtherGodownTransfer = async (req, res) => {
         const jsonData = JSON.stringify(itemBatch);
         await transaction.begin();
 
+        // Update Trip Arrival batch numbers
         await new sql.Request(transaction)
             .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
-            .input('createdBy', sql.Int, createdBy)
-            .input('trans_date', sql.Date, trans_date)
             .query(`
-            -- latest obid
-                DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-            -- Parse input JSON into temp table
                 CREATE TABLE #Parsed (
                     batch_id NVARCHAR(150),
                     batch NVARCHAR(50),
@@ -569,31 +569,44 @@ const postOtherGodownTransfer = async (req, res) => {
                     uniquId BIGINT,
                     moduleId BIGINT
                 );
-            -- Insert transfer out transaction
-                INSERT INTO tbl_Batch_Transaction (
-                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
-                )
-                SELECT batch_id, batch, @trans_date, item_id, from_godown, quantity, 'OTHER GODOWN', moduleId, @createdBy, @openingId
-                FROM #Parsed;
-            -- Ensure the batch exists in destination godown (if not, insert)
-                MERGE tbl_Batch_Master AS target
-                USING #Parsed AS source
-                ON 
-                    target.batch = source.batch
-                    AND target.item_id = source.item_id
-                    AND target.godown_id = source.to_godown
-                WHEN MATCHED THEN
-                    UPDATE SET target.quantity = target.quantity + source.quantity
-                WHEN NOT MATCHED THEN
-                    INSERT (batch, trans_date, item_id, godown_id, quantity, rate, created_by)
-                    VALUES (source.batch, @trans_date, source.item_id, source.to_godown, source.quantity, source.rate, @createdBy);
-            -- Update Trip Arrival
                 UPDATE t
                 SET t.Batch_No = p.batch
                 FROM tbl_Trip_Arrival t
                 JOIN #Parsed p ON t.Arr_Id = p.uniquId;
-                DROP TABLE #Parsed;`
-            );
+                DROP TABLE #Parsed;`);
+
+        // Transfer out: batch consumption from source godown
+        const usageResult = await insertMultipleBatchUsageDetails(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.fromGodownId),
+                quantity: toNumber(item.quantity),
+                type: 'OTHER_GODOWN',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!usageResult) throw new Error('Batch consumption failed');
+
+        // Transfer in: batch master upsert in destination godown
+        const batchResult = await insertMultipleBatch(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                rate: toNumber(item.rate),
+                type: 'OTHER_GODOWN',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Batch creation in destination failed');
 
         await transaction.commit();
         success(res, 'Godown transfer completed successfully');
@@ -693,14 +706,10 @@ const postSalesUsage = async (req, res) => {
         const jsonData = JSON.stringify(itemBatch);
         await transaction.begin();
 
+        // Update sales delivery batch names
         await new sql.Request(transaction)
             .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
-            .input('createdBy', sql.Int, createdBy)
-            .input('trans_date', sql.Date, trans_date)
             .query(`
-            -- latest obid
-                DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-            -- Parse input JSON into temp table
                 CREATE TABLE #Parsed (
                     batch_id NVARCHAR(150),
                     batch NVARCHAR(50),
@@ -725,19 +734,27 @@ const postSalesUsage = async (req, res) => {
                     uniquId BIGINT,
                     moduleId BIGINT
                 );
-            -- Insert transfer out transaction
-                INSERT INTO tbl_Batch_Transaction (
-                    batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
-                )
-                SELECT batch_id, batch, @trans_date, item_id, to_godown, quantity, 'SALES', moduleId, @createdBy, @openingId
-                FROM #Parsed;
-            -- Update Sales
                 UPDATE s
                 SET s.Batch_Name = p.batch
                 FROM tbl_Sales_Delivery_Stock_Info s
                 JOIN #Parsed p ON s.DO_St_Id = p.uniquId;
-                DROP TABLE #Parsed;`
-            );
+                DROP TABLE #Parsed;`);
+
+        // Batch usage via centralized function
+        const batchResult = await insertMultipleBatchUsageDetails(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                type: 'SALES',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Sales batch usage failed');
 
         await transaction.commit();
         success(res, 'Sales usage update successfully');
@@ -836,12 +853,10 @@ const postPurchaseBatch = async (req, res) => {
 
         await transaction.begin();
 
-        const request = new sql.Request(transaction)
+        // Update purchase stock info batch numbers
+        await new sql.Request(transaction)
             .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
-            .input('createdBy', sql.Int, createdBy)
-            .input('trans_date', sql.Date, trans_date)
             .query(`
-            -- Parse JSON to temp table
                 CREATE TABLE #Parsed (
                     batch NVARCHAR(50),
                     item_id BIGINT,
@@ -862,31 +877,322 @@ const postPurchaseBatch = async (req, res) => {
                     created_by NVARCHAR(100),
                     uniquId BIGINT
                 );
-            -- Validate parsed rows
                 IF EXISTS (SELECT 1 FROM #Parsed WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
                 THROW 50000, 'Invalid or missing fields in JSON input.', 1;
-            -- Merge to Batch Master
-                MERGE tbl_Batch_Master AS target
-                USING #Parsed AS source
-                ON target.batch = source.batch
-                    AND target.item_id = source.item_id
-                    AND target.godown_id = source.godown_id
-                WHEN MATCHED THEN
-                    UPDATE SET target.quantity = target.quantity + source.quantity
-                WHEN NOT MATCHED THEN
-                    INSERT (batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                    VALUES (source.batch, source.item_id, source.godown_id, @trans_date, source.quantity, source.rate, @createdBy);
-            -- Update Trip Arrival
                 UPDATE pid
                 SET pid.Batch_No = p.batch
                 FROM tbl_Purchase_Order_Inv_Stock_Info pid
                 JOIN #Parsed p ON pid.POI_St_Id = p.uniquId;
                 DROP TABLE #Parsed;`);
 
-        await request;
+        // Batch master upsert via centralized function
+        const batchResult = await insertMultipleBatch(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                rate: toNumber(item.rate),
+                type: 'PURCHASE',
+                reference_id: toNumber(item.uniquId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Batch creation failed');
 
         await transaction.commit();
         success(res, 'Changes saved');
+
+    } catch (err) {
+        if (!transaction._aborted) await transaction.rollback();
+        servError(err, res);
+    }
+};
+
+// credit note
+
+const getUnAssignedBatchCreditNote = async (req, res) => {
+    try {
+        const
+            Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+            Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const { toGodown = null, item = null } = req.query;
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
+            .query(`
+                SELECT 
+                	csi.CR_St_Id AS uniquId,
+                	cr.CR_Id AS moduleId,
+                	cr.CR_Date AS eventDate,
+                    cr.CR_Inv_No AS voucherNumber,
+                	csi.Item_Id AS productId,
+                	p.Product_Name AS productNameGet,
+                    csi.GoDown_Id AS godownId, 
+                	'' AS fromGodownGet,
+                	tg.Godown_Name AS toGodownGet,
+                	COALESCE(csi.Bill_Qty, 0) AS quantity,
+                	COALESCE(csi.Item_Rate, 0) AS rate,
+                	COALESCE(csi.Final_Amo, 0) AS amount,
+                	COALESCE(cb.Name, 'Not found') AS createdByGet,
+                	cr.Created_on AS createdAt,
+                	'CREDIT_NOTE' AS moduleName
+                FROM tbl_Credit_Note_Stock_Info AS csi
+                LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = csi.Item_Id
+                LEFT JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = csi.GoDown_Id
+                JOIN tbl_Credit_Note_Gen_Info AS cr ON cr.CR_Id = csi.CR_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = cr.Created_by
+                WHERE 
+                	TRIM(COALESCE(csi.Batch_Name, '')) = ''
+                	AND cr.CR_Date BETWEEN @Fromdate AND @Todate
+                    AND cr.Cancel_status <> 0
+                    ${checkIsNumber(toGodown) ? ` AND csi.GoDown_Id = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND csi.Item_Id = @item ` : ''}
+                ORDER BY cr.CR_Date ASC;
+                -- filter values
+                -- To godowns
+                SELECT DISTINCT ta.GoDown_Id AS value, tg.Godown_Name AS label
+                FROM tbl_Credit_Note_Stock_Info AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.GoDown_Id
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Item_Id AS value, p.Product_Name AS label
+                FROM tbl_Credit_Note_Stock_Info AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Item_Id
+                ORDER BY p.Product_Name;`
+            );
+
+        const result = await request;
+
+        const [outstanding, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodown: [],
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+const postCreditNoteBatch = async (req, res) => {
+    const transaction = new sql.Transaction();
+
+    try {
+        const { itemBatch = [], createdBy = '' } = req.body;
+
+        const trans_date = req.body.trans_date ? ISOString(req.body.trans_date) : ISOString();
+
+        if (!itemBatch.length || !checkIsNumber(createdBy)) return invalidInput(res);
+
+        const jsonData = JSON.stringify(itemBatch);
+
+        await transaction.begin();
+
+        // Update credit note stock info batch names
+        await new sql.Request(transaction)
+            .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
+            .query(`
+                CREATE TABLE #Parsed (
+                    batch NVARCHAR(50),
+                    item_id BIGINT,
+                    godown_id BIGINT,
+                    quantity DECIMAL(18,2),
+                    rate DECIMAL(18,2),
+                    created_by NVARCHAR(100),
+                    uniquId BIGINT
+                );
+                INSERT INTO #Parsed (batch, item_id, godown_id, quantity, rate, created_by, uniquId)
+                SELECT * FROM OPENJSON(@jsonData)
+                WITH (
+                    batch NVARCHAR(50),
+                    productId BIGINT,
+                    godownId BIGINT,
+                    quantity DECIMAL(18,2),
+                    rate DECIMAL(18,2),
+                    created_by NVARCHAR(100),
+                    uniquId BIGINT
+                );
+                IF EXISTS (SELECT 1 FROM #Parsed WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
+                THROW 50000, 'Invalid or missing fields in JSON input.', 1;
+                UPDATE csi
+                SET csi.Batch_Name = p.batch
+                FROM tbl_Credit_Note_Stock_Info csi
+                JOIN #Parsed p ON csi.CR_St_Id = p.uniquId;
+                DROP TABLE #Parsed;`);
+
+        // Batch master upsert via centralized function (credit note = stock coming back IN)
+        const batchResult = await insertMultipleBatch(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                rate: toNumber(item.rate),
+                type: 'CREDIT_NOTE',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Batch creation failed');
+
+        await transaction.commit();
+        success(res, 'Credit note batch updated successfully');
+
+    } catch (err) {
+        if (!transaction._aborted) await transaction.rollback();
+        servError(err, res);
+    }
+};
+
+// debit note
+
+const getUnAssignedBatchDebitNote = async (req, res) => {
+    try {
+        const
+            Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+            Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const { toGodown = null, item = null } = req.query;
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
+            .query(`
+                SELECT 
+                	dsi.DB_St_Id AS uniquId,
+                	db.DB_Id AS moduleId,
+                	db.DB_Date AS eventDate,
+                    db.DB_Inv_No AS voucherNumber,
+                	dsi.Item_Id AS productId,
+                	p.Product_Name AS productNameGet,
+                    dsi.GoDown_Id AS godownId, 
+                	'' AS fromGodownGet,
+                	tg.Godown_Name AS toGodownGet,
+                	COALESCE(dsi.Bill_Qty, 0) AS quantity,
+                	COALESCE(dsi.Item_Rate, 0) AS rate,
+                	COALESCE(dsi.Final_Amo, 0) AS amount,
+                	COALESCE(cb.Name, 'Not found') AS createdByGet,
+                	db.Created_on AS createdAt,
+                	'DEBIT_NOTE' AS moduleName
+                FROM tbl_Debit_Note_Stock_Info AS dsi
+                LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = dsi.Item_Id
+                LEFT JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = dsi.GoDown_Id
+                JOIN tbl_Debit_Note_Gen_Info AS db ON db.DB_Id = dsi.DB_Id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = db.Created_by
+                WHERE 
+                	TRIM(COALESCE(dsi.Batch_Name, '')) = ''
+                	AND db.DB_Date BETWEEN @Fromdate AND @Todate
+                    AND db.Cancel_status <> 0
+                    ${checkIsNumber(toGodown) ? ` AND dsi.GoDown_Id = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND dsi.Item_Id = @item ` : ''}
+                ORDER BY db.DB_Date ASC;
+                -- filter values
+                -- To godowns
+                SELECT DISTINCT ta.GoDown_Id AS value, tg.Godown_Name AS label
+                FROM tbl_Debit_Note_Stock_Info AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.GoDown_Id
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Item_Id AS value, p.Product_Name AS label
+                FROM tbl_Debit_Note_Stock_Info AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Item_Id
+                ORDER BY p.Product_Name;`
+            );
+
+        const result = await request;
+
+        const [outstanding, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodown: [],
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+const postDebitNoteUsage = async (req, res) => {
+    const transaction = new sql.Transaction();
+
+    try {
+        const { itemBatch = [], createdBy = '' } = req.body;
+
+        const trans_date = req.body.trans_date ? ISOString(req.body.trans_date) : ISOString();
+
+        if (!itemBatch.length || !checkIsNumber(createdBy))
+            return invalidInput(res);
+
+        const jsonData = JSON.stringify(itemBatch);
+        await transaction.begin();
+
+        // Update debit note stock info batch names
+        await new sql.Request(transaction)
+            .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
+            .query(`
+                CREATE TABLE #Parsed (
+                    batch_id NVARCHAR(150),
+                    batch NVARCHAR(50),
+                    item_id BIGINT,
+                    from_godown BIGINT,
+                    to_godown BIGINT,
+                    quantity DECIMAL(18,2),
+                    rate DECIMAL(18,2),
+                    uniquId BIGINT,
+                    moduleId BIGINT
+                );
+                INSERT INTO #Parsed (batch_id, batch, item_id, from_godown, to_godown, quantity, rate, uniquId, moduleId)
+                SELECT * FROM OPENJSON(@jsonData)
+                WITH (
+                    id NVARCHAR(150),
+                    batch NVARCHAR(50),
+                    productId BIGINT,
+                    fromGodownId BIGINT,
+                    godownId BIGINT,
+                    quantity DECIMAL(18,2),
+                    rate DECIMAL(18,2),
+                    uniquId BIGINT,
+                    moduleId BIGINT
+                );
+                UPDATE dsi
+                SET dsi.Batch_Name = p.batch
+                FROM tbl_Debit_Note_Stock_Info dsi
+                JOIN #Parsed p ON dsi.DB_St_Id = p.uniquId;
+                DROP TABLE #Parsed;`);
+
+        // Batch usage via centralized function (debit note = stock going OUT)
+        const batchResult = await insertMultipleBatchUsageDetails(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                type: 'DEBIT_NOTE',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!batchResult) throw new Error('Debit note batch usage failed');
+
+        await transaction.commit();
+        success(res, 'Debit note batch updated successfully');
 
     } catch (err) {
         if (!transaction._aborted) await transaction.rollback();
@@ -923,8 +1229,8 @@ const getBatchStockBalance = async (req, res) => {
                 WHERE 
                     bm.id IS NOT NULL
                     AND bm.ob_id = @openingId
-                    AND LTRIM(RTRIM(bm.batch)) <> '' 
                     AND bm.batch IS NOT NULL
+                    AND LTRIM(RTRIM(bm.batch)) <> '' 
                 ${stringCompare(dateBased, 'yes') ? ` AND CONVERT(DATE, bm.trans_date) BETWEEN @Fromdate AND @Todate ` : ''}
                 ${checkIsNumber(Product_Id) ? ` AND bm.item_id = @Product_Id ` : ''}
                 GROUP BY bm.id, bm.quantity
@@ -1002,5 +1308,9 @@ export default {
     postSalesUsage,
     getUnAssignedBatchPurchase,
     postPurchaseBatch,
+    getUnAssignedBatchCreditNote,
+    postCreditNoteBatch,
+    getUnAssignedBatchDebitNote,
+    postDebitNoteUsage,
     getBatchStockBalance,
 }

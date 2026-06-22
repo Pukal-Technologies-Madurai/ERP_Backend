@@ -91,6 +91,12 @@ inventoryRouter.post('/batchMaster/sales', batchProcess.postSalesUsage);
 inventoryRouter.get('/batchMaster/purchase', batchProcess.getUnAssignedBatchPurchase);
 inventoryRouter.post('/batchMaster/purchase', batchProcess.postPurchaseBatch);
 
+inventoryRouter.get('/batchMaster/creditNote', batchProcess.getUnAssignedBatchCreditNote);
+inventoryRouter.post('/batchMaster/creditNote', batchProcess.postCreditNoteBatch);
+
+inventoryRouter.get('/batchMaster/debitNote', batchProcess.getUnAssignedBatchDebitNote);
+inventoryRouter.post('/batchMaster/debitNote', batchProcess.postDebitNoteUsage);
+
 inventoryRouter.get('/batchMaster/stockBalance', batchProcess.getBatchStockBalance);
 
 inventoryRouter.get('/trunoverRatio', inventoryReport.getInventoryReport);

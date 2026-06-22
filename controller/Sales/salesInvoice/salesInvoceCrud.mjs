@@ -3,6 +3,7 @@ import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOS
 import { invalidInput, servError, dataFound, noData, success, sentData } from '../../../res.mjs';
 import { getNextId, getProducts } from '../../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../../middleware/taxCalculator.mjs';
+import { insertMultipleBatchUsageDetails, reverseMultipleBatch } from '../../../middleware/batchTransactions.mjs';
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
@@ -1295,45 +1296,20 @@ export const createSalesInvoice = async (req, res) => {
         );
 
         if (batchCreationDetails.length > 0) {
-            const batchConsumptionAddRequest = new sql.Request(transaction)
-                .input('Do_Date', sql.DateTime, new Date(Do_Date))
-                .input('batchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchCreationDetails }))
-                .input('Created_by', sql.BigInt, Created_by)
-                .query(`
-                    -- latest obid
-                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
-                    )
-                    SELECT b.*
-                    FROM (
-                        SELECT 
-                            COALESCE((
-                                SELECT TOP (1) id 
-                                FROM tbl_Batch_Master 
-                                WHERE item_id = p.Item_Id AND godown_id = p.GoDown_Id AND batch = p.Batch_Name
-                            ), NULL) AS batch_id,
-                            p.Batch_Name AS batch,
-                            @Do_Date     AS trans_date,
-                            p.Item_Id    AS item_id,
-                            p.GoDown_Id  AS godown_id,
-                            ISNULL(p.Bill_Qty, 0) AS quantity,
-                            'SALES' AS type,
-                            p.DO_St_Id AS reference_id,
-                            @Created_by  AS created_by,
-                            @openingId
-                        FROM OPENJSON(@batchJson, '$.rows')
-                        WITH (
-                            DO_St_Id   INT            '$.DO_St_Id',
-                            Item_Id    BIGINT         '$.Item_Id',
-                            Bill_Qty   DECIMAL(18,2)  '$.Bill_Qty',   -- kept just in case; we don't use it
-                            GoDown_Id  BIGINT         '$.GoDown_Id',
-                            Batch_Name NVARCHAR(200)  '$.Batch_Name'
-                        ) p
-                    ) b
-                    WHERE b.batch_id IS NOT NULL; `);
-
-            await batchConsumptionAddRequest;
+            const batchInsertResult = await insertMultipleBatchUsageDetails(
+                transaction,
+                batchCreationDetails.map(b => ({
+                    batch: b.Batch_Name,
+                    trans_date: new Date(Do_Date),
+                    item_id: b.Item_Id,
+                    godown_id: b.GoDown_Id,
+                    quantity: b.Bill_Qty,
+                    type: 'SALES',
+                    reference_id: b.DO_St_Id,
+                    created_by: Created_by
+                }))
+            );
+            if (!batchInsertResult) throw new Error('Batch usage details creation failed');
         }
 
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
@@ -2002,25 +1978,41 @@ export const updateSalesInvoice = async (req, res) => {
             throw new Error('Failed to create general info in sales invoice')
         }
 
-        const deleteDetailsRows = new sql.Request(transaction)
+        // Fetch existing batch rows for reversal
+        const existingBatchRows = (await new sql.Request(transaction)
             .input('Do_Id', Do_Id)
-            .input('created_by', sql.BigInt, Altered_by)
             .query(`
-                DELETE FROM tbl_Batch_Transaction 
-                WHERE reference_id IN (
-                    SELECT Delivery_Order_Id 
-                    FROM tbl_Sales_Delivery_Stock_Info AS sd
-                    WHERE 
-                        sd.Delivery_Order_Id = @Do_Id 
-                        AND sd.Batch_Name IS NOT NULL 
-                        AND LTRIM(RTRIM(sd.Batch_Name)) <> ''
-                )
+                SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Bill_Qty
+                FROM tbl_Sales_Delivery_Stock_Info
+                WHERE Delivery_Order_Id = @Do_Id
+                    AND Batch_Name IS NOT NULL
+                    AND LTRIM(RTRIM(Batch_Name)) <> ''
+            `)).recordset;
+
+        if (existingBatchRows.length > 0) {
+            const batchReversalResult = await reverseMultipleBatch(
+                transaction,
+                existingBatchRows.map(row => ({
+                    pre_batch: row.Batch_Name,
+                    pre_item_id: row.Item_Id,
+                    pre_godown_id: row.GoDown_Id,
+                    pre_quantity: row.Bill_Qty,
+                    pre_type: 'SALES',
+                    pre_reference_id: Do_Id,
+                    created_by: Altered_by
+                }))
+            );
+            if (!batchReversalResult) throw new Error('Batch reversal failed');
+        }
+
+        // removing previous data
+        await new sql.Request(transaction)
+            .input('Do_Id', Do_Id)
+            .query(`
                 DELETE FROM tbl_Sales_Delivery_Stock_Info WHERE Delivery_Order_Id = @Do_Id;
                 DELETE FROM tbl_Sales_Delivery_Expence_Info WHERE Do_Id = @Do_Id;
-                DELETE FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = @Do_Id;`
-            );
-
-        await deleteDetailsRows;
+                DELETE FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = @Do_Id;
+            `);
 
         const isSO = checkIsNumber(So_No)
 
@@ -2111,45 +2103,20 @@ export const updateSalesInvoice = async (req, res) => {
         );
 
         if (batchCreationDetails.length > 0) {
-            const batchConsumptionAddRequest = new sql.Request(transaction)
-                .input('Do_Date', sql.DateTime, new Date(Do_Date))
-                .input('batchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchCreationDetails }))
-                .input('Created_by', sql.BigInt, Altered_by)
-                .query(`
-                    -- latest obid
-                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
-                    )
-                    SELECT b.*
-                    FROM (
-                        SELECT 
-                            COALESCE((
-                                SELECT TOP (1) id 
-                                FROM tbl_Batch_Master 
-                                WHERE item_id = p.Item_Id AND godown_id = p.GoDown_Id AND batch = p.Batch_Name
-                            ), NULL) AS batch_id,
-                            p.Batch_Name AS batch,
-                            @Do_Date     AS trans_date,
-                            p.Item_Id    AS item_id,
-                            p.GoDown_Id  AS godown_id,
-                            ISNULL(p.Bill_Qty, 0) AS quantity,
-                            'SALES' AS type,
-                            p.DO_St_Id AS reference_id,
-                            @Created_by  AS created_by,
-                            @openingId
-                        FROM OPENJSON(@batchJson, '$.rows')
-                        WITH (
-                            DO_St_Id   INT            '$.DO_St_Id',
-                            Item_Id    BIGINT         '$.Item_Id',
-                            Bill_Qty   DECIMAL(18,2)  '$.Bill_Qty',   
-                            GoDown_Id  BIGINT         '$.GoDown_Id',
-                            Batch_Name NVARCHAR(200)  '$.Batch_Name'
-                        ) p
-                    ) b
-                    WHERE b.batch_id IS NOT NULL; `);
-
-            await batchConsumptionAddRequest;
+            const batchInsertResult = await insertMultipleBatchUsageDetails(
+                transaction,
+                batchCreationDetails.map(b => ({
+                    batch: b.Batch_Name,
+                    trans_date: new Date(Do_Date),
+                    item_id: b.Item_Id,
+                    godown_id: b.GoDown_Id,
+                    quantity: b.Bill_Qty,
+                    type: 'SALES',
+                    reference_id: b.DO_St_Id,
+                    created_by: Altered_by
+                }))
+            );
+            if (!batchInsertResult) throw new Error('Batch usage details creation failed');
         }
 
         if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {

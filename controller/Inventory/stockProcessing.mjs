@@ -1,6 +1,7 @@
 import sql from 'mssql';
 import { servError, dataFound, noData, success, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber, createPadString, filterableText, isEqualNumber, ISOString, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
+import { insertMultipleBatch, insertMultipleBatchUsageDetails, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
 
 const StockManagement = () => {
 
@@ -307,7 +308,7 @@ const StockManagement = () => {
                 throw new Error('Failed to insert Processing details');
             }
 
-            await new sql.Request(transaction)
+            const processingResult = await new sql.Request(transaction)
                 .input('PR_Id', sql.BigInt, PR_Id)
                 .input('createdBy', Created_By)
                 .input('trans_date', Process_date)
@@ -317,15 +318,12 @@ const StockManagement = () => {
                     StaffInvolve
                 }))
                 .query(`
-                    -- latest obid
-                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                     DECLARE @SourceOut TABLE (
                         PRS_Id BIGINT,
                         Sour_Item_Id BIGINT,
                         Sour_Goodown_Id BIGINT,
                         Sour_Batch_Lot_No NVARCHAR(200),
-                        Quantity DECIMAL(18,2),
-                        Batch_Id UNIQUEIDENTIFIER NULL
+                        Quantity DECIMAL(18,2)
                     );
                     DECLARE @DestOut TABLE (
                         PRD_Id BIGINT,
@@ -368,34 +366,7 @@ const StockManagement = () => {
                         Sour_Rate          DECIMAL(18,2)      '$.Sour_Rate',
                         Sour_Amt           DECIMAL(18,2)      '$.Sour_Amt'
                     ) AS j;
-                    /* Fill Source Batch_Id by joining Batch_Master */
-                    UPDATE s
-                    SET s.Batch_Id = bm.id
-                    FROM @SourceOut s
-                    JOIN tbl_Batch_Master bm ON 
-                        bm.batch = s.Sour_Batch_Lot_No 
-                        AND bm.item_id = s.Sour_Item_Id 
-                        AND bm.godown_id = s.Sour_Goodown_Id
-                    WHERE bm.batch IS NOT NULL AND bm.batch <> '';
-                    /* =================== Source batch consumption =================== */
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by, ob_id
-                    )
-                    SELECT 
-                        s.Batch_Id, s.Sour_Batch_Lot_No, @trans_date, s.Sour_Item_Id, s.Sour_Goodown_Id, 
-                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy, @openingId
-                    FROM (
-                        SELECT * 
-                        FROM @SourceOut
-                        WHERE 
-                            Batch_Id IS NOT NULL 
-                            AND Sour_Batch_Lot_No IS NOT NULL 
-                            AND Sour_Batch_Lot_No <> ''
-                    ) s
-                    /* ====================================== */
                     /* =================== Destination =================== */
-                    /* ====================================== */
                     INSERT INTO tbl_Processing_Destin_Details (
                         PR_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty,
                         Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
@@ -429,27 +400,7 @@ const StockManagement = () => {
                         Dest_Rate          DECIMAL(18,2)      '$.Dest_Rate',
                         Dest_Amt           DECIMAL(18,2)      '$.Dest_Amt'
                     ) AS j;
-                    /* ==================== Destination Batch production (upsert) ==================== */
-                    MERGE tbl_Batch_Master AS target
-                    USING (
-                        SELECT *
-                        FROM @DestOut
-                        WHERE Dest_Batch_Lot_No IS NOT NULL AND Dest_Batch_Lot_No <> ''
-                    ) AS d
-                    ON  target.batch    = d.Dest_Batch_Lot_No
-                    AND target.item_id  = d.Dest_Item_Id
-                    AND target.godown_id= d.Dest_Goodown_Id
-                    WHEN MATCHED THEN
-                        UPDATE SET 
-                            target.quantity = target.quantity + d.Quantity
-                            --target.rate     = d.Rate,                -- adjust if you want to keep existing
-                            --target.trans_date = @trans_date
-                    WHEN NOT MATCHED THEN
-                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                        VALUES (NEWID(), d.Dest_Batch_Lot_No, d.Dest_Item_Id, d.Dest_Goodown_Id, @trans_date, d.Quantity, d.Rate, @createdBy);
-                    /* ====================================== */
                     /* =================== Staff involved =================== */
-                    /* ====================================== */
                     INSERT INTO tbl_Processing_Staff_Involved (PR_Id, Staff_Type_Id, Staff_Id)
                     SELECT
                         @PR_Id,
@@ -459,8 +410,53 @@ const StockManagement = () => {
                     WITH (
                         Staff_Type_Id  BIGINT '$.Staff_Type_Id',
                         Staff_Id       BIGINT '$.Staff_Id'
-                    );`
+                    );
+
+                    SELECT * FROM @SourceOut;
+                    SELECT * FROM @DestOut;
+                `);
+
+            const insertedSource = toArray(processingResult.recordsets[0]);
+            const insertedDest = toArray(processingResult.recordsets[1]);
+
+            // Source consumption
+            const batchSource = insertedSource.filter(s => filterableText(s.Sour_Batch_Lot_No));
+            if (batchSource.length > 0) {
+                const batchResult = await insertMultipleBatchUsageDetails(
+                    transaction,
+                    batchSource.map(s => ({
+                        batch: s.Sour_Batch_Lot_No,
+                        trans_date: new Date(Process_date),
+                        item_id: toNumber(s.Sour_Item_Id),
+                        godown_id: toNumber(s.Sour_Goodown_Id),
+                        quantity: toNumber(s.Quantity),
+                        type: 'CONSUMPTION',
+                        reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Created_By)
+                    }))
                 );
+                if (!batchResult) throw new Error('Source batch consumption failed');
+            }
+
+            // Destination production
+            const batchDest = insertedDest.filter(d => filterableText(d.Dest_Batch_Lot_No));
+            if (batchDest.length > 0) {
+                const batchResult = await insertMultipleBatch(
+                    transaction,
+                    batchDest.map(d => ({
+                        batch: d.Dest_Batch_Lot_No,
+                        trans_date: new Date(Process_date),
+                        item_id: toNumber(d.Dest_Item_Id),
+                        godown_id: toNumber(d.Dest_Goodown_Id),
+                        quantity: toNumber(d.Quantity),
+                        rate: toNumber(d.Rate),
+                        type: 'PRODUCTION',
+                        reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Created_By)
+                    }))
+                );
+                if (!batchResult) throw new Error('Destination batch creation failed');
+            }
 
             await transaction.commit();
 
@@ -577,7 +573,56 @@ const StockManagement = () => {
                 throw new Error('Failed to update General Info');
             }
 
-            await new sql.Request(transaction)
+            // 1. Revert previous batches
+            const oldRecordsQuery = await new sql.Request(transaction)
+                .input('PR_Id', PR_Id)
+                .query(`
+                    SELECT s.PRS_Id, s.Sour_Item_Id, s.Sour_Goodown_Id, s.Sour_Batch_Lot_No, s.Sour_Qty
+                    FROM tbl_Processing_Source_Details s
+                    WHERE s.PR_Id = @PR_Id AND s.Sour_Batch_Lot_No IS NOT NULL AND s.Sour_Batch_Lot_No <> '';
+
+                    SELECT d.PRD_Id, d.Dest_Item_Id, d.Dest_Goodown_Id, d.Dest_Batch_Lot_No, d.Dest_Qty, d.Dest_Rate
+                    FROM tbl_Processing_Destin_Details d
+                    WHERE d.PR_Id = @PR_Id AND d.Dest_Batch_Lot_No IS NOT NULL AND d.Dest_Batch_Lot_No <> '';
+                `);
+            
+            const oldSource = toArray(oldRecordsQuery.recordsets[0]);
+            const oldDest = toArray(oldRecordsQuery.recordsets[1]);
+
+            if (oldSource.length > 0) {
+                const reverseSource = await reverseMultipleBatch(
+                    transaction,
+                    oldSource.map(s => ({
+                        pre_batch: s.Sour_Batch_Lot_No,
+                        pre_item_id: toNumber(s.Sour_Item_Id),
+                        pre_godown_id: toNumber(s.Sour_Goodown_Id),
+                        pre_quantity: toNumber(s.Sour_Qty),
+                        pre_type: 'CONSUMPTION',
+                        pre_reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Updated_By)
+                    }))
+                );
+                if (!reverseSource) throw new Error('Source reversal failed');
+            }
+
+            if (oldDest.length > 0) {
+                const reverseDest = await reverseMultipleBatch(
+                    transaction,
+                    oldDest.map(d => ({
+                        pre_batch: d.Dest_Batch_Lot_No,
+                        pre_item_id: toNumber(d.Dest_Item_Id),
+                        pre_godown_id: toNumber(d.Dest_Goodown_Id),
+                        pre_quantity: toNumber(d.Dest_Qty),
+                        pre_type: 'PRODUCTION',
+                        pre_reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Updated_By)
+                    }))
+                );
+                if (!reverseDest) throw new Error('Destination reversal failed');
+            }
+
+            // 2. Insert new and delete old in one query
+            const processingResult = await new sql.Request(transaction)
                 .input('PR_Id', sql.BigInt, PR_Id)
                 .input('createdBy', Updated_By)
                 .input('trans_date', Process_date)
@@ -587,70 +632,6 @@ const StockManagement = () => {
                     StaffInvolve
                 }))
                 .query(`
-                    -- latest obid
-                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-                    -- removing previous quantity in batch
-                    DECLARE @OldSource TABLE (
-                        PRS_Id BIGINT,
-                        Item_Id BIGINT,
-                        Godown_Id BIGINT,
-                        Batch NVARCHAR(200),
-                        Qty DECIMAL(18,2),
-                        Batch_Id UNIQUEIDENTIFIER NULL
-                    );
-                    INSERT @OldSource (PRS_Id, Item_Id, Godown_Id, Batch, Qty, Batch_Id)
-                    SELECT  s.PRS_Id,
-                            s.Sour_Item_Id,
-                            s.Sour_Goodown_Id,
-                            s.Sour_Batch_Lot_No,
-                            s.Sour_Qty,
-                            bm.id
-                    FROM tbl_Processing_Source_Details s
-                    LEFT JOIN tbl_Batch_Master bm
-                    ON bm.batch = s.Sour_Batch_Lot_No AND bm.item_id = s.Sour_Item_Id AND bm.godown_id = s.Sour_Goodown_Id
-                    WHERE s.PR_Id = @PR_Id;
-                    DECLARE @OldDest TABLE (
-                        PRD_Id BIGINT,
-                        Item_Id BIGINT,
-                        Godown_Id BIGINT,
-                        Batch NVARCHAR(200),
-                        Qty DECIMAL(18,2),
-                        Rate DECIMAL(18,2),
-                        Batch_Id UNIQUEIDENTIFIER NULL
-                    );
-                    INSERT @OldDest (PRD_Id, Item_Id, Godown_Id, Batch, Qty, Rate, Batch_Id)
-                    SELECT  d.PRD_Id,
-                            d.Dest_Item_Id,
-                            d.Dest_Goodown_Id,
-                            d.Dest_Batch_Lot_No,
-                            d.Dest_Qty,
-                            d.Dest_Rate,
-                            bm.id
-                    FROM tbl_Processing_Destin_Details d
-                    LEFT JOIN tbl_Batch_Master bm
-                    ON bm.batch = d.Dest_Batch_Lot_No
-                    AND bm.item_id = d.Dest_Item_Id
-                    AND bm.godown_id = d.Dest_Goodown_Id
-                    WHERE d.PR_Id = @PR_Id;
-                    /* ===================== negative quantity inserting ================== */
-                    -- If you historically wrote a CONSUMPTION row with +Qty, the negative here cancels it out.
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
-                    )
-                    SELECT
-                        os.Batch_Id, os.Batch, @trans_date, os.Item_Id, os.Godown_Id,
-                        -os.Qty, 'REVERSAL_CONSUMPTION', os.PRS_Id, @createdBy, @openingId
-                    FROM @OldSource os
-                    WHERE os.Batch_Id IS NOT NULL;
-                    /* ===================== destination removal ================== */
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, quantity, type, reference_id, created_by, ob_id
-                    )
-                    SELECT
-                        od.Batch_Id, od.Batch, @trans_date, od.Item_Id, od.Godown_Id,
-                        -od.Qty, 'REVERSAL_PRODUCTION', od.PRD_Id, @createdBy, @openingId
-                    FROM @OldDest od
-                    WHERE od.Batch_Id IS NOT NULL;
                     /* ===================== Deleting Previous Data ===================== */
                     DELETE FROM tbl_Processing_Staff_Involved WHERE PR_Id = @PR_Id;
                     DELETE FROM tbl_Processing_Source_Details WHERE PR_Id = @PR_Id;
@@ -663,8 +644,7 @@ const StockManagement = () => {
                         Sour_Item_Id BIGINT,
                         Sour_Goodown_Id BIGINT,
                         Sour_Batch_Lot_No NVARCHAR(200),
-                        Quantity DECIMAL(18,2),
-                        Batch_Id UNIQUEIDENTIFIER NULL
+                        Quantity DECIMAL(18,2)
                     );
                     DECLARE @DestOut TABLE (
                         PRD_Id BIGINT,
@@ -707,24 +687,7 @@ const StockManagement = () => {
                         Sour_Rate          DECIMAL(18,2)      '$.Sour_Rate',
                         Sour_Amt           DECIMAL(18,2)      '$.Sour_Amt'
                     ) AS j;
-                    /* Fill Source Batch_Id by joining Batch_Master */
-                    UPDATE s
-                    SET s.Batch_Id = bm.id
-                    FROM @SourceOut s
-                    JOIN tbl_Batch_Master bm ON bm.batch = s.Sour_Batch_Lot_No AND bm.item_id = s.Sour_Item_Id AND bm.godown_id = s.Sour_Goodown_Id;
-                    /* =================== Source batch consumption =================== */
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by, ob_id
-                    )
-                    SELECT 
-                        s.Batch_Id, s.Sour_Batch_Lot_No, @trans_date, s.Sour_Item_Id, s.Sour_Goodown_Id, 
-                        s.Quantity, 'CONSUMPTION', s.PRS_Id, @createdBy, @openingId
-                    FROM @SourceOut s
-                    WHERE s.Batch_Id IS NOT NULL;
-                    /* ====================================== */
                     /* =================== Destination =================== */
-                    /* ====================================== */
                     INSERT INTO tbl_Processing_Destin_Details (
                         PR_Id, Dest_Item_Id, Dest_Goodown_Id, Dest_Batch_Lot_No, Dest_Qty,
                         Dest_Unit_Id, Dest_Unit, Dest_Rate, Dest_Amt
@@ -758,32 +721,7 @@ const StockManagement = () => {
                         Dest_Rate          DECIMAL(18,2)      '$.Dest_Rate',
                         Dest_Amt           DECIMAL(18,2)      '$.Dest_Amt'
                     ) AS j;
-                    /* ==================== Destination Batch production (upsert) ==================== */
-                    MERGE tbl_Batch_Master AS target
-                    USING (
-                        SELECT 
-                            Dest_Batch_Lot_No,
-                            Dest_Item_Id,
-                            Dest_Goodown_Id,
-                            SUM(Quantity) AS TotalQty,
-                            MAX(Rate) AS Rate
-                        FROM @DestOut
-                        GROUP BY Dest_Batch_Lot_No, Dest_Item_Id, Dest_Goodown_Id
-                    ) AS d
-                    ON  target.batch    = d.Dest_Batch_Lot_No
-                    AND target.item_id  = d.Dest_Item_Id
-                    AND target.godown_id= d.Dest_Goodown_Id
-                    WHEN MATCHED THEN
-                        UPDATE SET 
-                            target.quantity = target.quantity + d.TotalQty
-                            --target.rate = d.Rate,
-                            --target.trans_date = @trans_date
-                    WHEN NOT MATCHED THEN
-                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                        VALUES (NEWID(), d.Dest_Batch_Lot_No, d.Dest_Item_Id, d.Dest_Goodown_Id, @trans_date, d.TotalQty, d.Rate, @createdBy);
-                    /* ====================================== */
                     /* =================== Staff involved =================== */
-                    /* ====================================== */
                     INSERT INTO tbl_Processing_Staff_Involved (PR_Id, Staff_Type_Id, Staff_Id)
                     SELECT
                         @PR_Id,
@@ -793,8 +731,53 @@ const StockManagement = () => {
                     WITH (
                         Staff_Type_Id  BIGINT '$.Staff_Type_Id',
                         Staff_Id       BIGINT '$.Staff_Id'
-                    );`
+                    );
+
+                    SELECT * FROM @SourceOut;
+                    SELECT * FROM @DestOut;
+                `);
+
+            const insertedSource = toArray(processingResult.recordsets[0]);
+            const insertedDest = toArray(processingResult.recordsets[1]);
+
+            // Source consumption
+            const batchSource = insertedSource.filter(s => filterableText(s.Sour_Batch_Lot_No));
+            if (batchSource.length > 0) {
+                const batchResult = await insertMultipleBatchUsageDetails(
+                    transaction,
+                    batchSource.map(s => ({
+                        batch: s.Sour_Batch_Lot_No,
+                        trans_date: new Date(Process_date),
+                        item_id: toNumber(s.Sour_Item_Id),
+                        godown_id: toNumber(s.Sour_Goodown_Id),
+                        quantity: toNumber(s.Quantity),
+                        type: 'CONSUMPTION',
+                        reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Updated_By)
+                    }))
                 );
+                if (!batchResult) throw new Error('Source batch consumption failed');
+            }
+
+            // Destination production
+            const batchDest = insertedDest.filter(d => filterableText(d.Dest_Batch_Lot_No));
+            if (batchDest.length > 0) {
+                const batchResult = await insertMultipleBatch(
+                    transaction,
+                    batchDest.map(d => ({
+                        batch: d.Dest_Batch_Lot_No,
+                        trans_date: new Date(Process_date),
+                        item_id: toNumber(d.Dest_Item_Id),
+                        godown_id: toNumber(d.Dest_Goodown_Id),
+                        quantity: toNumber(d.Quantity),
+                        rate: toNumber(d.Rate),
+                        type: 'PRODUCTION',
+                        reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Updated_By)
+                    }))
+                );
+                if (!batchResult) throw new Error('Destination batch creation failed');
+            }
 
             await transaction.commit();
             return success(res, 'Journal Updated Successfully');

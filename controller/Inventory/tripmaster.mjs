@@ -2,6 +2,7 @@
 import sql from 'mssql'
 import { servError, dataFound, noData, success, invalidInput } from '../../res.mjs';
 import { checkIsNumber, ISOString, Subraction, createPadString, isValidDate, toNumber, filterableText } from '../../helper_functions.mjs'
+import { insertMultipleBatch, insertMultipleBatchUsageDetails, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
 
 const tripActivities = () => {
 
@@ -493,9 +494,6 @@ const tripActivities = () => {
                     .input('To_Location', toNumber(product?.To_Location))
                     .input('Created_By', toNumber(Created_By))
                     .query(`
-                    -- trip update
-                        DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-                        DECLARE @reference_id INT;
                         ${(filterableText(product?.Batch_No) && BillType !== 'CREDIT_NOTE' && BillType !== 'DEBIT_NOTE') ? `
                     -- batch update in arrival
                             UPDATE tbl_Trip_Arrival
@@ -507,34 +505,6 @@ const tripActivities = () => {
                         ) VALUES (
                             @Trip_Id, ${BillType === 'CREDIT_NOTE' ? '@CR_Id' : BillType === 'DEBIT_NOTE' ? '@DB_Id' : '@Arrival_Id'}
                         );
-                        SET @reference_id = SCOPE_IDENTITY();
-                        ${(BillType === 'MATERIAL INWARD' && filterableText(product?.Batch_No)) ? `
-                    -- Batch details
-                            MERGE tbl_Batch_Master AS target
-                            USING (SELECT @Batch_No AS batch, @Product_Id AS item_id, @To_Location AS godown_id) AS src
-                            ON  target.batch         = src.batch
-                                AND target.item_id   = src.item_id
-                                AND target.godown_id = src.godown_id
-                            WHEN MATCHED THEN 
-                                UPDATE SET target.quantity = target.quantity + @QTY
-                            WHEN NOT MATCHED THEN
-                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by, ob_id)
-                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By, @openingId);`
-                            : ''}
-                    -- if the bill type is Godown transfer
-                        ${(BillType === 'OTHER GODOWN' && filterableText(product?.Batch_No)) ? `
-                            DECLARE @batch_id uniqueidentifier = (
-                                SELECT TOP(1) id FROM tbl_Batch_Master
-                                WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
-                            );
-                            INSERT INTO tbl_Batch_Transaction (
-                                batch_id, batch, trans_date, item_id, godown_id, 
-                                quantity, type, reference_id, created_by, ob_id
-                            ) VALUES (
-                                @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
-                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By, @openingId
-                            );
-                        ` : ''}
                         ${BillType === 'CREDIT_NOTE' ? `
                         UPDATE tbl_Credit_Note_Gen_Info
                         SET stockInwardDate = @Trip_Date
@@ -549,6 +519,44 @@ const tripActivities = () => {
                     );
 
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to insert into Trip Details');
+            }
+
+            // Batch operations in bulk (outside loop for better performance)
+            const batchProducts = Product_Array.filter(p => filterableText(p?.Batch_No));
+
+            if (BillType === 'MATERIAL INWARD' && batchProducts.length > 0) {
+                const batchResult = await insertMultipleBatch(
+                    transaction,
+                    batchProducts.map(p => ({
+                        batch: p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.To_Location),
+                        quantity: toNumber(p.QTY),
+                        rate: toNumber(p.Gst_Rate),
+                        type: 'MATERIAL_INWARD',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Created_By)
+                    }))
+                );
+                if (!batchResult) throw new Error('Batch creation failed');
+            }
+
+            if (BillType === 'OTHER GODOWN' && batchProducts.length > 0) {
+                const batchResult = await insertMultipleBatchUsageDetails(
+                    transaction,
+                    batchProducts.map(p => ({
+                        batch: p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.From_Location),
+                        quantity: toNumber(p.QTY),
+                        type: 'OTHER_GODOWN',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Created_By)
+                    }))
+                );
+                if (!batchResult) throw new Error('Batch usage details creation failed');
             }
 
             for (let i = 0; i < EmployeesInvolved.length; i++) {
@@ -682,42 +690,39 @@ const tripActivities = () => {
                 throw new Error('Failed to update Trip Master');
             }
 
+            // Fetch existing batch rows for reversal
+            const existingBatchRows = (await new sql.Request(transaction)
+                .input('Trip_Id', Trip_Id)
+                .query(`
+                    SELECT ta.Batch_No, ta.Product_Id, ta.To_Location, ta.QTY
+                    FROM tbl_Trip_Details AS td
+                    LEFT JOIN tbl_Trip_Arrival AS ta ON ta.Arr_Id = td.Arrival_Id
+                    WHERE 
+                        td.Trip_Id = @Trip_Id
+                        AND ta.Batch_No IS NOT NULL
+                        AND ta.Batch_No <> ''
+                `)).recordset;
+
+            if (existingBatchRows.length > 0) {
+                const batchReversalResult = await reverseMultipleBatch(
+                    transaction,
+                    existingBatchRows.map(row => ({
+                        pre_batch: row.Batch_No,
+                        pre_item_id: row.Product_Id,
+                        pre_godown_id: row.To_Location,
+                        pre_quantity: row.QTY,
+                        pre_type: 'TRIP_SHEET',
+                        pre_reference_id: Trip_Id,
+                        created_by: Updated_By
+                    }))
+                );
+                if (!batchReversalResult) throw new Error('Batch reversal failed');
+            }
+
+            // Clean up old records
             await new sql.Request(transaction)
                 .input('Trip_Id', Trip_Id)
-                .input('Updated_By', Updated_By)
                 .query(`
-                -- latest obid
-                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by, ob_id
-                    ) 
-                    SELECT *
-                    FROM ( 
-                        SELECT
-                            (
-                                SELECT TOP(1) id FROM tbl_Batch_Master
-                                WHERE batch = ta.Batch_No AND item_id = ta.Product_Id AND godown_id = ta.To_Location
-                                ORDER BY id DESC
-                            ) batch_id,
-                            ta.Batch_No batch,
-                            GETDATE() trans_date,
-                            ta.Product_Id item_id,
-                            ta.To_Location godown_id,
-                            -ta.QTY quantity,
-                            'REVERSAL_TRIP_SHEET' type,
-                            td.Id reference_id,
-                            @Updated_By created_by,
-                            @openingId as ob_id
-                        FROM tbl_Trip_Details AS td
-                        LEFT JOIN tbl_Trip_Arrival as ta
-                            ON ta.Arr_Id = td.Arrival_Id
-                        WHERE 
-                            td.Trip_Id = @Trip_Id
-                            AND ta.Batch_No IS NOT NULL
-                            AND ta.Batch_No <> ''
-                    ) AS batchDetails
-                    WHERE batchDetails.batch_id IS NOT NULL;
                     UPDATE tbl_Trip_Arrival
                     SET Batch_No = null
                     WHERE Arr_Id IN (
@@ -725,10 +730,9 @@ const tripActivities = () => {
                         FROM tbl_Trip_Details
                         WHERE Trip_Id = @Trip_Id
                     );
-                -- deleteing for new insert
                     DELETE FROM tbl_Trip_Details WHERE Trip_Id = @Trip_Id;
-                    DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @Trip_Id;`
-                );
+                    DELETE FROM tbl_Trip_Employees WHERE Trip_Id = @Trip_Id;
+                `);
 
             for (let i = 0; i < Product_Array.length; i++) {
                 const product = Product_Array[i];
@@ -746,10 +750,6 @@ const tripActivities = () => {
                     .input('To_Location', toNumber(product?.To_Location))
                     .input('Created_By', toNumber(Updated_By))
                     .query(`
-                    -- trip update
-                        DECLARE @reference_id INT;
-                    -- latest obid
-                        DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
                         ${(filterableText(product?.Batch_No) && BillType !== 'CREDIT_NOTE' && BillType !== 'DEBIT_NOTE') ? `
                     -- batch update in arrival
                         UPDATE tbl_Trip_Arrival
@@ -761,34 +761,6 @@ const tripActivities = () => {
                         ) VALUES (
                             @Trip_Id, ${BillType === 'CREDIT_NOTE' ? '@CR_Id' : BillType === 'DEBIT_NOTE' ? '@DB_Id' : '@Arrival_Id'}
                         );
-                        SET @reference_id = SCOPE_IDENTITY();
-                        ${(BillType === 'MATERIAL INWARD' && filterableText(product?.Batch_No)) ? `
-                    -- Batch details
-                            MERGE tbl_Batch_Master AS target
-                            USING (SELECT @Batch_No AS batch, @Product_Id AS item_id, @To_Location AS godown_id) AS src
-                            ON  target.batch         = src.batch
-                                AND target.item_id   = src.item_id
-                                AND target.godown_id = src.godown_id
-                            WHEN MATCHED THEN 
-                                UPDATE SET target.quantity = target.quantity + @QTY
-                            WHEN NOT MATCHED THEN
-                                INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by, ob_id)
-                                VALUES (NEWID(), @Batch_No, @Product_Id, @To_Location, @Trip_Date, @QTY, @Gst_Rate, @Created_By, @openingId);`
-                            : ''}
-                    -- if the bill type is Godown transfer
-                        ${(BillType === 'OTHER GODOWN' && filterableText(product?.Batch_No)) ? `
-                            DECLARE @batch_id uniqueidentifier = (
-                                SELECT TOP(1) id FROM tbl_Batch_Master
-                                WHERE batch = @Batch_No AND item_id = @Product_Id AND godown_id = @From_Location
-                            );
-                            INSERT INTO tbl_Batch_Transaction (
-                                batch_id, batch, trans_date, item_id, godown_id, 
-                                quantity, type, reference_id, created_by, ob_id
-                            ) VALUES (
-                                @batch_id, @Batch_No, @Trip_Date, @Product_Id, @From_Location, 
-                                @QTY, 'TRIP_SHEET', @reference_id, @Created_By, @openingId
-                            );
-                        ` : ''}
                         ${BillType === 'CREDIT_NOTE' ? `
                         UPDATE tbl_Credit_Note_Gen_Info
                         SET stockInwardDate = @Trip_Date
@@ -803,6 +775,44 @@ const tripActivities = () => {
                     );
 
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to insert into Trip Details');
+            }
+
+            // Batch operations in bulk (outside loop for better performance)
+            const batchProductsEdit = Product_Array.filter(p => filterableText(p?.Batch_No));
+
+            if (BillType === 'MATERIAL INWARD' && batchProductsEdit.length > 0) {
+                const batchResult = await insertMultipleBatch(
+                    transaction,
+                    batchProductsEdit.map(p => ({
+                        batch: p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.To_Location),
+                        quantity: toNumber(p.QTY),
+                        rate: toNumber(p.Gst_Rate),
+                        type: 'MATERIAL_INWARD',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Updated_By)
+                    }))
+                );
+                if (!batchResult) throw new Error('Batch creation failed');
+            }
+
+            if (BillType === 'OTHER GODOWN' && batchProductsEdit.length > 0) {
+                const batchResult = await insertMultipleBatchUsageDetails(
+                    transaction,
+                    batchProductsEdit.map(p => ({
+                        batch: p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.From_Location),
+                        quantity: toNumber(p.QTY),
+                        type: 'OTHER_GODOWN',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Updated_By)
+                    }))
+                );
+                if (!batchResult) throw new Error('Batch usage details creation failed');
             }
 
             for (let i = 0; i < EmployeesInvolved.length; i++) {

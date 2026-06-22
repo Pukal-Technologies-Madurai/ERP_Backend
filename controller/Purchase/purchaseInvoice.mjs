@@ -4,6 +4,7 @@ import { checkIsNumber, isEqualNumber, ISOString, RoundNumber, createPadString, 
 import getImage from '../../middleware/getImageIfExist.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
+import { insertMultipleBatch, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
 
 
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
@@ -356,30 +357,21 @@ const PurchaseInvoice = () => {
                     ) AS p;`
                 );
 
-            await new sql.Request(transaction)
-                .input('Po_Inv_Date', sql.DateTime, new Date(Po_Inv_Date))
-                .input('Created_by', sql.Int, Created_by)
-                .input('BatchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchRows }))
-                .query(`
-                    MERGE tbl_Batch_Master AS target
-                    USING (
-                        SELECT p.batch, p.item_id, p.godown_id, p.quantity, p.rate
-                        FROM OPENJSON(@BatchJson, '$.rows')
-                        WITH (
-                            batch NVARCHAR(200) '$.batch',
-                            item_id BIGINT '$.item_id',
-                            godown_id BIGINT '$.godown_id',
-                            quantity DECIMAL(18,2) '$.quantity',
-                            rate DECIMAL(18,2) '$.rate'
-                        ) AS p
-                    ) AS src
-                    ON  target.batch = src.batch AND target.item_id = src.item_id AND target.godown_id = src.godown_id
-                    WHEN MATCHED THEN 
-                        UPDATE SET target.quantity = target.quantity + src.quantity
-                    WHEN NOT MATCHED THEN
-                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                        VALUES (NEWID(), src.batch, src.item_id, src.godown_id, @Po_Inv_Date, src.quantity, src.rate, @Created_by);`
-                );
+            const batchInsertResult = await insertMultipleBatch(
+                transaction,
+                batchRows.map(b => ({
+                    batch: b.batch,
+                    trans_date: new Date(Po_Inv_Date),
+                    item_id: b.item_id,
+                    godown_id: b.godown_id,
+                    quantity: b.quantity,
+                    rate: b.rate,
+                    type: 'PURCHASE',
+                    reference_id: PIN_Id,
+                    created_by: Created_by
+                }))
+            );
+            if (!batchInsertResult) throw new Error('Batch creation failed');
 
             for (let i = 0; i < StaffArray.length; i++) {
                 const staff = StaffArray[i];
@@ -683,45 +675,41 @@ const PurchaseInvoice = () => {
                 throw new Error('Failed to update order, Try again')
             }
 
+            // Fetch existing batch rows for reversal
+            const existingBatchRows = (await new sql.Request(transaction)
+                .input('PIN_Id', PIN_Id)
+                .query(`
+                    SELECT POI_St_Id, Batch_No, Item_Id, Location_Id, Bill_Qty
+                    FROM tbl_Purchase_Order_Inv_Stock_Info
+                    WHERE PIN_Id = @PIN_Id
+                        AND Batch_No IS NOT NULL
+                        AND Batch_No <> ''
+                `)).recordset;
+
+            if (existingBatchRows.length > 0) {
+                const batchReversalResult = await reverseMultipleBatch(
+                    transaction,
+                    existingBatchRows.map(row => ({
+                        pre_batch: row.Batch_No,
+                        pre_item_id: row.Item_Id,
+                        pre_godown_id: row.Location_Id,
+                        pre_quantity: row.Bill_Qty,
+                        pre_type: 'PURCHASE',
+                        pre_reference_id: PIN_Id,
+                        created_by: Created_by
+                    }))
+                );
+                if (!batchReversalResult) throw new Error('Batch reversal failed');
+            }
+
+            // removing previous data
             await new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
-                .input('Created_by', Created_by)
                 .query(`
-                -- latest obid
-                    DECLARE @openingId INT = (SELECT MAX(OB_Id) FROM tbl_OB_ST_Date);
-                    INSERT INTO tbl_Batch_Transaction (
-                        batch_id, batch, trans_date, item_id, godown_id, 
-                        quantity, type, reference_id, created_by, ob_id
-                    ) 
-                    SELECT *
-                    FROM ( 
-                        SELECT
-                            (
-                                SELECT TOP(1) id FROM tbl_Batch_Master
-                                WHERE batch = pis.Batch_No AND item_id = pis.Item_Id AND godown_id = pis.Location_Id
-                                ORDER BY id DESC
-                            ) batch_id,
-                            pis.Batch_No batch,
-                            GETDATE() trans_date,
-                            pis.Item_Id item_id,
-                            pis.Location_Id godown_id,
-                            -pis.Bill_Qty quantity,
-                            'REVERSAL_PURCHASE' type,
-                            pis.POI_St_Id reference_id,
-                            @Created_by created_by,
-                            @openingId ob_id
-                        FROM tbl_Purchase_Order_Inv_Stock_Info AS pis
-                        WHERE 
-                            pis.PIN_Id = @PIN_Id
-                            AND pis.Batch_No IS NOT NULL
-                            AND pis.Batch_No <> ''
-                    ) AS batchDetails
-                    WHERE batchDetails.batch_id IS NOT NULL;
-                -- removing previous data
-                    DELETE FROM tbl_Purchase_Order_Inv_Stock_Info WHERE PIN_Id = @PIN_Id
-                    DELETE FROM tbl_Purchase_Order_Inv_Gen_Order WHERE PIN_Id = @PIN_Id
-                    DELETE FROM tbl_Purchase_Order_Inv_Staff_Details WHERE PIN_Id = @PIN_Id
-                    DELETE FROM tbl_Purchase_Order_Inv_Expense_info WHERE PIN_Id = @PIN_Id
+                    DELETE FROM tbl_Purchase_Order_Inv_Stock_Info WHERE PIN_Id = @PIN_Id;
+                    DELETE FROM tbl_Purchase_Order_Inv_Gen_Order WHERE PIN_Id = @PIN_Id;
+                    DELETE FROM tbl_Purchase_Order_Inv_Staff_Details WHERE PIN_Id = @PIN_Id;
+                    DELETE FROM tbl_Purchase_Order_Inv_Expense_info WHERE PIN_Id = @PIN_Id;
                 `);
 
             if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
@@ -877,30 +865,21 @@ const PurchaseInvoice = () => {
                     ) AS p;`
                 );
 
-            await new sql.Request(transaction)
-                .input('Po_Inv_Date', sql.DateTime, new Date(Po_Inv_Date))
-                .input('Created_by', sql.Int, Created_by)
-                .input('BatchJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: batchRows }))
-                .query(`
-                    MERGE tbl_Batch_Master AS target
-                    USING (
-                        SELECT p.batch, p.item_id, p.godown_id, p.quantity, p.rate
-                        FROM OPENJSON(@BatchJson, '$.rows')
-                        WITH (
-                            batch NVARCHAR(200) '$.batch',
-                            item_id BIGINT '$.item_id',
-                            godown_id BIGINT '$.godown_id',
-                            quantity DECIMAL(18,2) '$.quantity',
-                            rate DECIMAL(18,2) '$.rate'
-                        ) AS p
-                    ) AS src
-                    ON  target.batch = src.batch AND target.item_id = src.item_id AND target.godown_id = src.godown_id
-                    WHEN MATCHED THEN 
-                        UPDATE SET target.quantity = target.quantity + src.quantity
-                    WHEN NOT MATCHED THEN
-                        INSERT (id, batch, item_id, godown_id, trans_date, quantity, rate, created_by)
-                        VALUES (NEWID(), src.batch, src.item_id, src.godown_id, @Po_Inv_Date, src.quantity, src.rate, @Created_by);`
-                );
+            const batchInsertResultEdit = await insertMultipleBatch(
+                transaction,
+                batchRows.map(b => ({
+                    batch: b.batch,
+                    trans_date: new Date(Po_Inv_Date),
+                    item_id: b.item_id,
+                    godown_id: b.godown_id,
+                    quantity: b.quantity,
+                    rate: b.rate,
+                    type: 'PURCHASE',
+                    reference_id: PIN_Id,
+                    created_by: Created_by
+                }))
+            );
+            if (!batchInsertResultEdit) throw new Error('Batch creation failed');
 
             for (let i = 0; i < StaffArray.length; i++) {
                 const staff = StaffArray[i];
