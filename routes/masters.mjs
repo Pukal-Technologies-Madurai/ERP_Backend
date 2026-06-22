@@ -409,5 +409,8 @@ MastersRouter.post('/webhook/whatsapp', whatsapp.receiveWebhook);
 
 MastersRouter.get('/whatsapp/incoming', whatsapp.getIncomingMessages);
 
+MastersRouter.post('/whatsapp/logSend',whatsapp.logWhatsappSend)
+MastersRouter.get('/whatsapp/getWhatsappCounts',whatsapp.getWhatsappCounts)
+
 
 export default MastersRouter;
