@@ -17,7 +17,8 @@ import templateMobile from '../controller/Reports/templateMobile.mjs';
 import { createReportColumnGroupingState, getReportColumnGroupingState } from '../controller/Reports/reportColumnGrouping.mjs';
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
     onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport,
- StockValueGraph,StockValueReport,StaffBasedReport,costcenterList,StaffBasedReportLOS,OnlinePaymentReport,costingReport,DebtorsCreditors,StaffBasedCount,DayAbstractReport,DayStockAbstractReport  } from '../controller/Reports/externalAPI.mjs';
+ StockValueGraph,StockValueReport,StaffBasedReport,costcenterList,StaffBasedReportLOS,OnlinePaymentReport,costingReport,DebtorsCreditors,StaffBasedCount,DayAbstractReport,DayStockAbstractReport,
+CashBoxReport,PendingSaleOrderReport,PendingSaleOrderReportItem} from '../controller/Reports/externalAPI.mjs';
 import { MenuSettings, executeSP, saveReportSettings, getReportList, getReportEditData, updateReportSettings, getReportsByParent, executeReportByTemplate,deleteReport } from '../controller/Reports/reportsettings.mjs';
 
 const ReportRouter = express.Router();
@@ -226,5 +227,11 @@ ReportRouter.get('/tallyReports/qPay/search',tallyReport.getQpaySalesInvoiceDeta
 ReportRouter.get('/externalAPI/staffBasedCount',StaffBasedCount)
 ReportRouter.get('/externalAPI/dayAbstract', DayAbstractReport)
 ReportRouter.get('/externalAPI/dayStockAbstract', DayStockAbstractReport)
+
+
+ReportRouter.get('/externalAPI/cashbox', CashBoxReport);
+
+ReportRouter.get('/externalAPI/pendingSaleOrder', PendingSaleOrderReport);
+ReportRouter.get('/externalAPI/pendingSaleOrderItem', PendingSaleOrderReportItem);
 
 export default ReportRouter;
