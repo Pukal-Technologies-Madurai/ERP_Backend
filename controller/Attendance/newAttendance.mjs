@@ -493,6 +493,36 @@ const newAttendance = () => {
         }
     };
 
+    const attendanceSync=async(req,res)=>{
+       try {
+        const { startDate, endDate } = req.body;
+
+        if (!startDate || !endDate) {
+            return res.status(400).json({
+                error: "startDate and endDate are required"
+            });
+        }
+
+       
+        await new sql.Request()
+            .execute("Online_Attendnace_Employee_SP");
+
+      
+        await new sql.Request()
+            .input("Start_Date", sql.VarChar(50), startDate)
+            .input("To_Date", sql.NVarChar(100), endDate)
+            .execute("Online_AttendanceLogs_SP");
+
+        dataFound(res, [], "Attendance sync completed successfully", {
+            startDate,
+            endDate
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+    }
+
     return {
         addAttendance,
         getMyLastAttendance,
@@ -501,6 +531,7 @@ const newAttendance = () => {
         getDepartment,
         employeewise,
         getEmployeesByDepartment,
+        attendanceSync
     }
 }
 
