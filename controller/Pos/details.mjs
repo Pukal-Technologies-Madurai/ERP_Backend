@@ -698,6 +698,7 @@ const getRetailersOptRetailerId = async (req, res) => {
                 r.Retailer_Name AS Short_Name,
                 r.Contact_Person AS Billl_Name,
                 r.Mobile_No,
+                r.AC_Id,
                 ISNULL(lol.Party_Location, r.Reatailer_City) AS Address,
                 r.Reatailer_City AS City,
                 ISNULL(lol.Party_Mailing_Name, r.Contact_Person) AS Party_Mailing_Name,
