@@ -286,11 +286,13 @@ export const getSalesInvoice = async (req, res) => {
                     COALESCE(pm.Product_Name, 'not available') AS Item_Name,
                     COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
                     COALESCE(u.Units, 'not available') AS UOM,
-                    COALESCE(b.Brand_Name, 'not available') AS BrandGet
-                FROM tbl_Sales_Delivery_Stock_Info AS oi
+                    COALESCE(b.Brand_Name, 'not available') AS BrandGet,
+                    COALESCE(gm.Godown_Name, 'not available') AS GoDown_Name
+                FROM tbl_Sales_Delivery_Stock_Info AS oi 
                 LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = oi.Item_Id
                 LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
                 LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
+                LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = oi.GoDown_Id
                 WHERE oi.Delivery_Order_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
                 ORDER BY oi.S_No ASC;
                 -- expence details
