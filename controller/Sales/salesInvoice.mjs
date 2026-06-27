@@ -3621,6 +3621,7 @@ ORDER BY llos.Pro_Id;
     const salesInvoiceWhatsapp = async (req, res) => {
         const { generalInfo, stockInfo } = req.body;
         let transaction;
+    
 
         try {
             transaction = new sql.Transaction();
@@ -3758,7 +3759,7 @@ ORDER BY llos.Pro_Id;
                 .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
                 .input('Shipp_Address', sql.NVarChar, generalInfo.Shipp_Address || '')
                 .input('Deliv_Address', sql.NVarChar, generalInfo.Deliv_Address || '')
-                .input('Rematks', sql.NVarChar, generalInfo.Rematks || '')
+                .input('Rematks', sql.NVarChar, generalInfo.Narration || '')
                 .input('Created_on', sql.DateTime, generalInfo.Created_on);
 
             await whatsappGenRequest.query(`
@@ -3800,7 +3801,7 @@ ORDER BY llos.Pro_Id;
                 .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
 
 
-                .input('Narration', sql.NVarChar, generalInfo.Rematks || '')
+                .input('Narration', sql.NVarChar, generalInfo.Narration || '')
                 .input('isConverted', sql.Int, 0)
                 .input('Cancel_status', sql.Int, 1)
 
@@ -4062,6 +4063,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
     const { generalInfo, stockInfo } = req.body;
     let transaction;
 
+
     try {
         transaction = new sql.Transaction();
         await transaction.begin();
@@ -4171,7 +4173,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             .input('Total_Invoice_value',  sql.Decimal(18,2), Final_Total_Invoice_value)
             .input('Shipp_Address',        sql.NVarChar,      generalInfo.Shipp_Address || '')
             .input('Deliv_Address',        sql.NVarChar,      generalInfo.Deliv_Address || '')
-            .input('Rematks',              sql.NVarChar,      generalInfo.Rematks || '')
+            .input('Rematks',              sql.NVarChar,      generalInfo.Narration || '')
             .input('Created_on',           sql.DateTime,      generalInfo.Created_on)
             .query(`
                 UPDATE [dbo].[tbl_Sales_Whats_up_Order_Gen_Info] 
@@ -4210,7 +4212,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             .input('Total_Before_Tax',    sql.Decimal(18,2), totalValueBeforeTax.TotalValue)
             .input('Total_Tax',           sql.Decimal(18,2), totalValueBeforeTax.TotalTax)
             .input('Total_Invoice_value', sql.Decimal(18,2), Final_Total_Invoice_value)
-            .input('Narration',           sql.NVarChar,      generalInfo.Rematks || '')
+            .input('Narration',           sql.NVarChar,      generalInfo.Narration || '')
             .input('Altered_by',          sql.Int,           generalInfo.Created_by || 0)
             .input('Alterd_on',           sql.DateTime,      generalInfo.Created_on)
             .input('Trans_Type',          sql.NVarChar,      'UPDATE')
@@ -4346,9 +4348,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             }
         }
 
-        // ────────────────────────────────────────────────────────────────
-        // ✅ INSERT Staff Info (with same So_Id)
-        // ────────────────────────────────────────────────────────────────
+      
         if (generalInfo.Staff_Involved_List && generalInfo.Staff_Involved_List.length > 0) {
             for (const staff of generalInfo.Staff_Involved_List) {
                 await new sql.Request(transaction)
@@ -4579,16 +4579,16 @@ const getSalesOrderDetails = async (req, res) => {
             const resData = SalesGeneralInfo.map(row => ({
                 ...row,
                 Products_List: Products_List.filter(
-                    fil => isEqualNumber(fil.Sales_Order_Id, row.So_Id)  // ✅ was Delivery_Order_Id / Do_Id
+                    fil => isEqualNumber(fil.Sales_Order_Id, row.So_Id)  
                 ),
                 Expence_Array: Expence_Array.filter(
-                    fil => isEqualNumber(fil.So_Id, row.So_Id)           // ✅ was Do_Id
+                    fil => isEqualNumber(fil.So_Id, row.So_Id)         
                 ),
                 Staffs_Array: Staffs_Array.filter(
-                    fil => isEqualNumber(fil.So_Id, row.So_Id)           // ✅ was Do_Id
+                    fil => isEqualNumber(fil.So_Id, row.So_Id)          
                 ),
                 alterationHistory: Alteration_History.filter(
-                    fil => isEqualNumber(fil.alteredRowId, row.So_Id)    // ✅ was Do_Id
+                    fil => isEqualNumber(fil.alteredRowId, row.So_Id)   
                 )
             }));
 

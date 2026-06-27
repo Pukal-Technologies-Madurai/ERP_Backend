@@ -23,4 +23,7 @@ AttendanceRouter.get('/department',newAttendance.getDepartment);
 AttendanceRouter.get('/departmentwise',newAttendance.employeewise);
 AttendanceRouter.post('/employeesByDepartment',newAttendance.getEmployeesByDepartment);
 
+
+AttendanceRouter.post('/fingerprintSync',newAttendance.attendanceSync)
+
 export default AttendanceRouter;

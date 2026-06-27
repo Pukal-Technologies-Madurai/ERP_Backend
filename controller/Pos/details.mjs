@@ -678,12 +678,11 @@ const getRetailersOptRetailerId = async (req, res) => {
 
         let whereClause = 'WHERE 1=1';
 
-        
         if (customerId) {
             whereClause += ' AND r.Retailer_Id = @customerId';
             request.input('customerId', sql.Int, parseInt(customerId));
         }
-     
+
         if (search) {
             whereClause += ` AND (r.Retailer_Name LIKE '%' + @search + '%' OR 
                                   r.Contact_Person LIKE '%' + @search + '%' OR
@@ -691,39 +690,41 @@ const getRetailersOptRetailerId = async (req, res) => {
             request.input('search', sql.NVarChar, search);
         }
 
-      
-        if (customerId) {
-            const query = `
-             SELECT 
-    r.Retailer_Id AS Customer_Id,
-    r.Retailer_Name AS Short_Name,
-    r.Contact_Person AS Billl_Name,
-    r.Mobile_No,
-   
-    r.Reatailer_City AS City,
-    ISNULL(lol.Party_Location, r.Reatailer_City) AS Address,
-    ISNULL(lol.Party_Mailing_Name, r.Contact_Person) AS Party_Mailing_Name,
-    ISNULL(lol.Ledger_Name, r.Retailer_Name) AS Ledger_Name,
-    ISNULL(lol.Ledger_Tally_Id, '') AS Ledger_Tally_Id,
-    ISNULL(pos.Broker, '') AS Broker,
-    ISNULL(pos.Transporter, '') AS Transporter,
-    ISNULL(pos.Broker_Id, 0) AS Broker_Id,
-    ISNULL(pos.Transporter_Id, 0) AS Transporter_Id,
-    ISNULL(pos.Total_Outstanding, 0) AS Total_Outstanding,
-    ISNULL(pos.Above_30Days, 0) AS Above_30Days,
-    ISNULL(pos.QPay, 0) AS QPay,
-    ISNULL(pos.Frequency_Days, 0) AS Frequency_Days,
-    ISNULL(pos.LastBilling_Amount, 0) AS LastBilling_Amount,
-    ISNULL(pos.Month_Avg_Ton, 0) AS Month_Avg_Ton,
-    ISNULL(pos.Month_Avg_Amo, 0) AS Month_Avg_Amo,
-    '' AS Land_Line,
-    '' AS Lorry_Shed
-FROM dbo.tbl_Retailers_Master r
-LEFT JOIN dbo.tbl_ERP_POS_Master pos ON r.Retailer_Id = pos.Retailer_Id
-LEFT JOIN dbo.tbl_Ledger_LOL lol ON r.Retailer_Id = lol.Ret_Id
-${whereClause}
-            `;
+        // FIX: Add the LEFT JOIN to tbl_Ledger_LOL for both queries
+        // The paginated query needs the same joins as the customer-specific query
+        const baseQuery = `
+            SELECT 
+                r.Retailer_Id AS Customer_Id,
+                r.Retailer_Name AS Short_Name,
+                r.Contact_Person AS Billl_Name,
+                r.Mobile_No,
+                r.AC_Id,
+                ISNULL(lol.Party_Location, r.Reatailer_City) AS Address,
+                r.Reatailer_City AS City,
+                ISNULL(lol.Party_Mailing_Name, r.Contact_Person) AS Party_Mailing_Name,
+                ISNULL(lol.Ledger_Name, r.Retailer_Name) AS Ledger_Name,
+                ISNULL(lol.Ledger_Tally_Id, '') AS Ledger_Tally_Id,
+                ISNULL(pos.Broker, '') AS Broker,
+                ISNULL(pos.Transporter, '') AS Transporter,
+                ISNULL(pos.Broker_Id, 0) AS Broker_Id,
+                ISNULL(pos.Transporter_Id, 0) AS Transporter_Id,
+                ISNULL(pos.Total_Outstanding, 0) AS Total_Outstanding,
+                ISNULL(pos.Above_30Days, 0) AS Above_30Days,
+                ISNULL(pos.QPay, 0) AS QPay,
+                ISNULL(pos.Frequency_Days, 0) AS Frequency_Days,
+                ISNULL(pos.LastBilling_Amount, 0) AS LastBilling_Amount,
+                ISNULL(pos.Month_Avg_Ton, 0) AS Month_Avg_Ton,
+                ISNULL(pos.Month_Avg_Amo, 0) AS Month_Avg_Amo,
+                '' AS Land_Line,
+                '' AS Lorry_Shed
+            FROM dbo.tbl_Retailers_Master r
+            LEFT JOIN dbo.tbl_ERP_POS_Master pos ON r.Retailer_Id = pos.Retailer_Id
+            LEFT JOIN dbo.tbl_Ledger_LOL lol ON r.Retailer_Id = lol.Ret_Id
+        `;
 
+        // If specific customerId is provided, return just that customer
+        if (customerId) {
+            const query = `${baseQuery} ${whereClause}`;
             const result = await request.query(query);
             const data = result.recordset || [];
 
@@ -741,28 +742,7 @@ ${whereClause}
         const totalPages = Math.ceil(totalRecords / limit);
 
         const query = `
-            SELECT 
-                r.Retailer_Id AS Customer_Id,
-                r.Retailer_Name AS Short_Name,
-                r.Contact_Person AS Billl_Name,
-                r.Mobile_No,
-                ISNULL(lol.Party_Location, r.Reatailer_City) AS Address,
-                r.Reatailer_City AS City,
-                ISNULL(pos.Broker, '') AS Broker,
-                ISNULL(pos.Transporter, '') AS Transporter,
-                ISNULL(pos.Broker_Id, 0) AS Broker_Id,
-                ISNULL(pos.Transporter_Id, 0) AS Transporter_Id,
-                ISNULL(pos.Total_Outstanding, 0) AS Total_Outstanding,
-                ISNULL(pos.Above_30Days, 0) AS Above_30Days,
-                ISNULL(pos.QPay, 0) AS QPay,
-                ISNULL(pos.Frequency_Days, 0) AS Frequency_Days,
-                ISNULL(pos.LastBilling_Amount, 0) AS LastBilling_Amount,
-                ISNULL(pos.Month_Avg_Ton, 0) AS Month_Avg_Ton,
-                ISNULL(pos.Month_Avg_Amo, 0) AS Month_Avg_Amo,
-                '' AS Land_Line,
-                '' AS Lorry_Shed
-            FROM dbo.tbl_Retailers_Master r
-            LEFT JOIN dbo.tbl_ERP_POS_Master pos ON r.Retailer_Id = pos.Retailer_Id
+            ${baseQuery}
             ${whereClause}
             ORDER BY r.Retailer_Id
             OFFSET @offset ROWS
@@ -788,6 +768,7 @@ ${whereClause}
 
         res.status(200).json(response);
     } catch (e) {
+        console.error('Error in getRetailersOptRetailerId:', e);
         res.status(500).json({
             success: false,
             message: 'Server error',
@@ -795,7 +776,6 @@ ${whereClause}
         });
     }
 };
-
 
 
     return {

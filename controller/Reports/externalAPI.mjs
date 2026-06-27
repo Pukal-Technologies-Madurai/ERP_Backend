@@ -581,3 +581,71 @@ export const DayStockAbstractReport = async (req, res) => {
         servError(error, res);
     }
 };
+
+
+
+
+export const CashBoxReport = async (req, res) => {
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Cash_List_VW @Fromdate, @Todate`);
+
+        const [OB, Data1, Cash, Bank, LedgerGrp, DEX, IDEX] = result.recordsets || [];
+
+        if (!Data1 || Data1.length === 0) {
+            return noData(res);
+        }
+
+        dataFound(res, {
+            OB, Data1, Cash, Bank, LedgerGrp, DEX, IDEX
+        });
+
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
+export const PendingSaleOrderReport = async (req, res) => {
+    try {
+        const { Todate } = req.query;
+
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Sales_Order_Pending_LOL_VW  @Todate`);
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
+export const PendingSaleOrderReportItem = async (req, res) => {
+    try {
+        const { Todate } = req.query;
+
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Sales_Order_Pending_Item_LOL_VW  @Todate`);
+
+        const recordset = result.recordset ?? [];
+        if (!recordset.length) return noData(res);
+
+        dataFound(res, recordset);
+    } catch (error) {
+        servError(error, res);
+    }
+}

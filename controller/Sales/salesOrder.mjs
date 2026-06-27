@@ -1999,50 +1999,117 @@ const SaleOrder = () => {
         }
     };
 
-    const getSaleOrderList = async (req, res) => {
-        try {
-            const {
-                Retailer_Id,
-                Cancel_status,
-                Created_by,
-                Sales_Person_Id,
-                VoucherType,
-                OrderStatus,
-                Branch_Id,
-                FromDate,
-                ToDate
-            } = req.query;
 
-            const request = new sql.Request()
-                .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
-                .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
-                .input('creater', checkIsNumber(Created_by) ? Created_by : null)
-                .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
-                .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
-                .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
-                .input('FromDate', FromDate || null)
-                .input('ToDate', ToDate || null);
+const getSaleOrderList = async (req, res) => {
+    try {
+        const {
+            Retailer_Id,
+            Cancel_status,
+            Created_by,
+            Sales_Person_Id,
+            VoucherType,
+            OrderStatus,
+            Branch_Id,
+            FromDate,
+            ToDate,
+            Mobile_No
+        } = req.query;
 
-            const result = await request.query(`
+        // Convert empty string to null for proper handling
+        const createdByValue = (Created_by !== undefined && Created_by !== null && Created_by !== '') 
+            ? parseInt(Created_by) 
+            : null;
+        
+        const mobileNoValue = (Mobile_No !== undefined && Mobile_No !== null && Mobile_No !== '') 
+            ? Mobile_No 
+            : null;
+
+        const request = new sql.Request()
+            .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
+            .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
+            .input('creater', createdByValue !== null ? createdByValue : null)
+            .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
+            .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
+            .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
+            .input('FromDate', FromDate || null)
+            .input('ToDate', ToDate || null)
+            .input('Mobile_No', mobileNoValue);
+
+        const result = await request.query(`
             /* ================================
-               STEP 1 : FILTER SALES ORDERS
+               STEP 0 : DETERMINE FILTERING LOGIC
             ================================= */
             DECLARE @FilteredOrders TABLE (So_Id INT);
-            INSERT INTO @FilteredOrders (So_Id)
-            SELECT so.So_Id
-            FROM tbl_Sales_Order_Gen_Info so
-            WHERE 
-                (@retailer IS NULL OR so.Retailer_Id = @retailer)
-                AND (@cancel IS NULL OR so.Cancel_status = @cancel)
-                AND (@creater IS NULL OR so.Created_by = @creater)
-                AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
-                AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
-                AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
-                AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
-                AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= DATEADD(DAY, 1, CAST(@ToDate AS DATE)));
+            
+            -- Case 1: Created_by is provided and NOT 0 - Filter by Created_by
+            IF @creater IS NOT NULL AND @creater != 0
+            BEGIN
+                INSERT INTO @FilteredOrders (So_Id)
+                SELECT so.So_Id
+                FROM tbl_Sales_Order_Gen_Info so
+                WHERE 
+                    (@retailer IS NULL OR so.Retailer_Id = @retailer)
+                    AND (@cancel IS NULL OR so.Cancel_status = @cancel)
+                    AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
+                    AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
+                    AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
+                    AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
+                    AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= DATEADD(DAY, 1, CAST(@ToDate AS DATE)))
+                    AND so.Created_by = @creater; 
+            END
+            -- Case 2: Created_by is NULL or 0 AND Mobile_No is provided - Find retailers by mobile
+            ELSE IF (@creater IS NULL OR @creater = 0) AND @Mobile_No IS NOT NULL AND @Mobile_No != ''
+            BEGIN
+                DECLARE @RetailerIds TABLE (Ret_Id INT);
+                
+                -- Get all Ret_Id from Ledger_LOL where A1 matches Mobile_No
+                INSERT INTO @RetailerIds (Ret_Id)
+                SELECT DISTINCT Ret_Id
+                FROM tbl_Ledger_LOL
+                WHERE A1 = @Mobile_No;
+                
+                -- If retailers found, get their orders
+                IF EXISTS (SELECT 1 FROM @RetailerIds)
+                BEGIN
+                    INSERT INTO @FilteredOrders (So_Id)
+                    SELECT so.So_Id
+                    FROM tbl_Sales_Order_Gen_Info so
+                    WHERE 
+                        (@retailer IS NULL OR so.Retailer_Id = @retailer)
+                        AND (@cancel IS NULL OR so.Cancel_status = @cancel)
+                        AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
+                        AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
+                        AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
+                        AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
+                        AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= DATEADD(DAY, 1, CAST(@ToDate AS DATE)))
+                        AND so.Retailer_Id IN (SELECT Ret_Id FROM @RetailerIds);
+                END
+                ELSE
+                BEGIN
+                    -- No retailers found, return empty result
+                    INSERT INTO @FilteredOrders (So_Id)
+                    SELECT NULL WHERE 1 = 0;
+                END
+            END
+            -- Case 3: Default - Return all orders with filters
+            ELSE
+            BEGIN
+                INSERT INTO @FilteredOrders (So_Id)
+                SELECT so.So_Id
+                FROM tbl_Sales_Order_Gen_Info so
+                WHERE 
+                    (@retailer IS NULL OR so.Retailer_Id = @retailer)
+                    AND (@cancel IS NULL OR so.Cancel_status = @cancel)
+                    AND (@creater IS NULL OR so.Created_by = @creater)
+                    AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
+                    AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
+                    AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
+                    AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
+                    AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= DATEADD(DAY, 1, CAST(@ToDate AS DATE)));
+            END
 
             /* ================================
-               STEP 2 : SALES ORDER HEADER
+               STEP 1 : SALES ORDER HEADER
             ================================= */
             SELECT 
                 so.*,
@@ -2063,7 +2130,7 @@ const SaleOrder = () => {
             ORDER BY so.Created_on DESC;
 
             /* ================================
-               STEP 3 : ORDER PRODUCTS
+               STEP 2 : ORDER PRODUCTS
             ================================= */
             SELECT 
                 si.*,
@@ -2079,7 +2146,7 @@ const SaleOrder = () => {
             WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
 
             /* ================================
-               STEP 4 : STAFF INVOLVED
+               STEP 3 : STAFF INVOLVED
             ================================= */
             SELECT 
                 sosi.So_Id,
@@ -2093,7 +2160,7 @@ const SaleOrder = () => {
             WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
 
             /* ================================
-               STEP 5 : DELIVERY HEADER
+               STEP 4 : DELIVERY HEADER
             ================================= */
             SELECT 
                 dgi.*,
@@ -2112,7 +2179,7 @@ const SaleOrder = () => {
             WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
 
             /* ================================
-               STEP 6 : DELIVERY PRODUCTS
+               STEP 5 : DELIVERY PRODUCTS
             ================================= */
             SELECT 
                 oi.*,
@@ -2131,7 +2198,7 @@ const SaleOrder = () => {
             );
 
             /* ================================ 
-               STEP 7 : ALTERATION HISTORY
+               STEP 6 : ALTERATION HISTORY
             ================================= */
             SELECT 
                 ah.*,
@@ -2143,92 +2210,325 @@ const SaleOrder = () => {
                 AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
         `);
 
-            const [
-                OrderData,
-                ProductDetails,
-                StaffInvolved,
-                DeliveryData,
-                DeliveryItems,
-                AlterHistory
-            ] = result.recordsets;
+        const [
+            OrderData,
+            ProductDetails,
+            StaffInvolved,
+            DeliveryData,
+            DeliveryItems,
+            AlterHistory
+        ] = result.recordsets;
 
-            if (!OrderData.length) {
-                return res.status(200).json({
-                    success: true,
-                    message: "No data found",
-                    data: []
-                });
-            }
-
-            const resData = OrderData.map(order => {
-                const orderProducts = ProductDetails.filter(p =>
-                    Number(p.Sales_Order_Id) === Number(order.So_Id)
-                );
-
-                const deliveryList = DeliveryData.filter(d =>
-                    Number(d.So_No) === Number(order.So_Id)
-                );
-
-                const totalOrderedQty = orderProducts.reduce(
-                    (s, p) => s + (Number(p.Bill_Qty) || 0), 0
-                );
-
-                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-                    const items = DeliveryItems.filter(i =>
-                        Number(i.Delivery_Order_Id) === Number(d.Do_Id)
-                    );
-                    return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
-                }, 0);
-
-                const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
-
-                const alterHistory = AlterHistory.filter(ah =>
-                    Number(ah.alteredRowId) === Number(order.So_Id)
-                );
-
-                return {
-                    ...order,
-                    OrderStatus: status,
-                    Products_List: orderProducts.map(p => ({
-                        ...p,
-                        ProductImageUrl: getImage("products", p.Product_Image_Name)
-                    })),
-                    Staff_Involved_List: StaffInvolved.filter(s =>
-                        Number(s.So_Id) === Number(order.So_Id)
-                    ),
-                    ConvertedInvoice: deliveryList.map(d => ({
-                        ...d,
-                        InvoicedProducts: DeliveryItems
-                            .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
-                            .map(p => ({
-                                ...p,
-                                ProductImageUrl: getImage("products", p.Product_Image_Name)
-                            }))
-                    })),
-                    alterHistoryDetails: alterHistory
-                };
-            });
-
-            const finalData = OrderStatus
-                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
-                : resData;
-
+        if (!OrderData || OrderData.length === 0) {
             return res.status(200).json({
                 success: true,
-                message: "Data retrieved successfully",
-                data: finalData,
-                total: finalData.length
-            });
-
-        } catch (err) {
-            console.error('Error in getSaleOrderList:', err);
-            return res.status(500).json({
-                success: false,
-                message: "Internal server error",
-                error: err.message
+                message: "No data found",
+                data: []
             });
         }
-    };
+
+        const resData = OrderData.map(order => {
+            const orderProducts = ProductDetails.filter(p =>
+                Number(p.Sales_Order_Id) === Number(order.So_Id)
+            );
+
+            const deliveryList = DeliveryData.filter(d =>
+                Number(d.So_No) === Number(order.So_Id)
+            );
+
+            const totalOrderedQty = orderProducts.reduce(
+                (s, p) => s + (Number(p.Bill_Qty) || 0), 0
+            );
+
+            const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                const items = DeliveryItems.filter(i =>
+                    Number(i.Delivery_Order_Id) === Number(d.Do_Id)
+                );
+                return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
+            }, 0);
+
+            const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
+
+            const alterHistory = AlterHistory.filter(ah =>
+                Number(ah.alteredRowId) === Number(order.So_Id)
+            );
+
+            return {
+                ...order,
+                OrderStatus: status,
+                Products_List: orderProducts.map(p => ({
+                    ...p,
+                    ProductImageUrl: getImage("products", p.Product_Image_Name)
+                })),
+                Staff_Involved_List: StaffInvolved.filter(s =>
+                    Number(s.So_Id) === Number(order.So_Id)
+                ),
+                ConvertedInvoice: deliveryList.map(d => ({
+                    ...d,
+                    InvoicedProducts: DeliveryItems
+                        .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
+                        .map(p => ({
+                            ...p,
+                            ProductImageUrl: getImage("products", p.Product_Image_Name)
+                        }))
+                })),
+                alterHistoryDetails: alterHistory
+            };
+        });
+
+        const finalData = OrderStatus
+            ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+            : resData;
+
+        return res.status(200).json({
+            success: true,
+            message: "Data retrieved successfully",
+            data: finalData,
+            total: finalData.length
+        });
+
+    } catch (err) {
+        console.error('Error in getSaleOrderList:', err);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: err.message
+        });
+    }
+};
+
+    // const getSaleOrderList = async (req, res) => {
+    //     try {
+    //         const {
+    //             Retailer_Id,
+    //             Cancel_status,
+    //             Created_by,
+    //             Sales_Person_Id,
+    //             VoucherType,
+    //             OrderStatus,
+    //             Branch_Id,
+    //             FromDate,
+    //             ToDate,
+    //             Mobile_No
+    //         } = req.query;
+
+    //         const request = new sql.Request()
+    //             .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
+    //             .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
+    //             .input('creater', checkIsNumber(Created_by) ? Created_by : null)
+    //             .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
+    //             .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
+    //             .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
+    //             .input('FromDate', FromDate || null)
+    //             .input('ToDate', ToDate || null)
+    //             .input('Mobile_No', Mobile_No || null); 
+
+    //         const result = await request.query(`
+    //         /* ================================
+    //            STEP 1 : FILTER SALES ORDERS
+    //         ================================= */
+    //         DECLARE @FilteredOrders TABLE (So_Id INT);
+    //         INSERT INTO @FilteredOrders (So_Id)
+    //         SELECT so.So_Id
+    //         FROM tbl_Sales_Order_Gen_Info so
+    //         WHERE 
+    //             (@retailer IS NULL OR so.Retailer_Id = @retailer)
+    //             AND (@cancel IS NULL OR so.Cancel_status = @cancel)
+    //             AND (@creater IS NULL OR so.Created_by = @creater)
+    //             AND (@salesPerson IS NULL OR so.Sales_Person_Id = @salesPerson)
+    //             AND (@VoucherType IS NULL OR so.VoucherType = @VoucherType)
+    //             AND (@Branch_Id IS NULL OR so.Branch_Id = @Branch_Id)
+    //             AND (@FromDate IS NULL OR CAST(so.Created_on AS DATE) >= CAST(@FromDate AS DATE))
+    //             AND (@ToDate IS NULL OR CAST(so.Created_on AS DATE) <= DATEADD(DAY, 1, CAST(@ToDate AS DATE)));
+
+    //         /* ================================
+    //            STEP 2 : SALES ORDER HEADER
+    //         ================================= */
+    //         SELECT 
+    //             so.*,
+    //             COALESCE(rm.Retailer_Name, 'unknown') AS Retailer_Name,
+    //             COALESCE(lol.Party_Mailing_Name, 'unknown') AS Retailers_Name,
+    //             COALESCE(sp.Name, 'unknown') AS Sales_Person_Name,
+    //             COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+    //             COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+    //             COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet
+    //         FROM tbl_Sales_Order_Gen_Info so
+    //         LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = so.Retailer_Id
+    //         LEFT JOIN tbl_Users sp ON sp.UserId = so.Sales_Person_Id
+    //         LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = so.Branch_Id
+    //         LEFT JOIN tbl_Users cb ON cb.UserId = so.Created_by
+    //         LEFT JOIN tbl_Voucher_Type v ON v.Vocher_Type_Id = so.VoucherType
+    //         LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ret_Id = rm.Retailer_Id
+    //         WHERE so.So_Id IN (SELECT So_Id FROM @FilteredOrders)
+    //         ORDER BY so.Created_on DESC;
+
+    //         /* ================================
+    //            STEP 3 : ORDER PRODUCTS
+    //         ================================= */
+    //         SELECT 
+    //             si.*,
+    //             COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+    //             COALESCE(pm.Short_Name, 'not available') AS Product_Short_Name,
+    //             COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+    //             COALESCE(u.Units, 'not available') AS UOM,
+    //             COALESCE(b.Brand_Name, 'not available') AS BrandGet
+    //         FROM tbl_Sales_Order_Stock_Info si
+    //         LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = si.Item_Id
+    //         LEFT JOIN tbl_UOM u ON u.Unit_Id = si.Unit_Id
+    //         LEFT JOIN tbl_Brand_Master b ON b.Brand_Id = pm.Brand
+    //         WHERE si.Sales_Order_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+    //         /* ================================
+    //            STEP 4 : STAFF INVOLVED
+    //         ================================= */
+    //         SELECT 
+    //             sosi.So_Id,
+    //             sosi.Involved_Emp_Id,
+    //             sosi.Cost_Center_Type_Id,
+    //             c.Cost_Center_Name AS EmpName,
+    //             cc.Cost_Category AS EmpType
+    //         FROM tbl_Sales_Order_Staff_Info sosi
+    //         LEFT JOIN tbl_ERP_Cost_Center c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
+    //         LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
+    //         WHERE sosi.So_Id IN (SELECT So_Id FROM @FilteredOrders);
+
+    //         /* ================================
+    //            STEP 5 : DELIVERY HEADER
+    //         ================================= */
+    //         SELECT 
+    //             dgi.*,
+    //             rm.Retailer_Name,
+    //             bm.BranchName AS Branch_Name,
+    //             st.Status AS DeliveryStatusName,
+    //             COALESCE((
+    //                 SELECT SUM(collected_amount)
+    //                 FROM tbl_Sales_Receipt_Details_Info
+    //                 WHERE bill_id = dgi.Do_Id
+    //             ), 0) AS receiptsTotalAmount
+    //         FROM tbl_Sales_Delivery_Gen_Info dgi
+    //         LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = dgi.Retailer_Id
+    //         LEFT JOIN tbl_Branch_Master bm ON bm.BranchId = dgi.Branch_Id
+    //         LEFT JOIN tbl_Status st ON st.Status_Id = dgi.Delivery_Status
+    //         WHERE dgi.So_No IN (SELECT So_Id FROM @FilteredOrders);
+
+    //         /* ================================
+    //            STEP 6 : DELIVERY PRODUCTS
+    //         ================================= */
+    //         SELECT 
+    //             oi.*,
+    //             COALESCE(pm.Product_Name, 'not available') AS Product_Name,
+    //             COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
+    //             COALESCE(u.Units, 'not available') AS UOM,
+    //             COALESCE(b.Brand_Name, 'not available') AS BrandGet
+    //         FROM tbl_Sales_Delivery_Stock_Info oi
+    //         LEFT JOIN tbl_Product_Master pm ON pm.Product_Id = oi.Item_Id
+    //         LEFT JOIN tbl_UOM u ON u.Unit_Id = oi.Unit_Id
+    //         LEFT JOIN tbl_Brand_Master b ON b.Brand_Id = pm.Brand
+    //         WHERE oi.Delivery_Order_Id IN (
+    //             SELECT Do_Id
+    //             FROM tbl_Sales_Delivery_Gen_Info
+    //             WHERE So_No IN (SELECT So_Id FROM @FilteredOrders)
+    //         );
+
+    //         /* ================================ 
+    //            STEP 7 : ALTERATION HISTORY
+    //         ================================= */
+    //         SELECT 
+    //             ah.*,
+    //             u.Name AS alterByGet
+    //         FROM tbl_Alteration_History AS ah
+    //         LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+    //         WHERE 
+    //             alteredTable = 'tbl_Sales_Order_Gen_Info' 
+    //             AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
+    //     `);
+
+    //         const [
+    //             OrderData,
+    //             ProductDetails,
+    //             StaffInvolved,
+    //             DeliveryData,
+    //             DeliveryItems,
+    //             AlterHistory
+    //         ] = result.recordsets;
+
+    //         if (!OrderData.length) {
+    //             return res.status(200).json({
+    //                 success: true,
+    //                 message: "No data found",
+    //                 data: []
+    //             });
+    //         }
+
+    //         const resData = OrderData.map(order => {
+    //             const orderProducts = ProductDetails.filter(p =>
+    //                 Number(p.Sales_Order_Id) === Number(order.So_Id)
+    //             );
+
+    //             const deliveryList = DeliveryData.filter(d =>
+    //                 Number(d.So_No) === Number(order.So_Id)
+    //             );
+
+    //             const totalOrderedQty = orderProducts.reduce(
+    //                 (s, p) => s + (Number(p.Bill_Qty) || 0), 0
+    //             );
+
+    //             const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+    //                 const items = DeliveryItems.filter(i =>
+    //                     Number(i.Delivery_Order_Id) === Number(d.Do_Id)
+    //                 );
+    //                 return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
+    //             }, 0);
+
+    //             const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
+
+    //             const alterHistory = AlterHistory.filter(ah =>
+    //                 Number(ah.alteredRowId) === Number(order.So_Id)
+    //             );
+
+    //             return {
+    //                 ...order,
+    //                 OrderStatus: status,
+    //                 Products_List: orderProducts.map(p => ({
+    //                     ...p,
+    //                     ProductImageUrl: getImage("products", p.Product_Image_Name)
+    //                 })),
+    //                 Staff_Involved_List: StaffInvolved.filter(s =>
+    //                     Number(s.So_Id) === Number(order.So_Id)
+    //                 ),
+    //                 ConvertedInvoice: deliveryList.map(d => ({
+    //                     ...d,
+    //                     InvoicedProducts: DeliveryItems
+    //                         .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
+    //                         .map(p => ({
+    //                             ...p,
+    //                             ProductImageUrl: getImage("products", p.Product_Image_Name)
+    //                         }))
+    //                 })),
+    //                 alterHistoryDetails: alterHistory
+    //             };
+    //         });
+
+    //         const finalData = OrderStatus
+    //             ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+    //             : resData;
+
+    //         return res.status(200).json({
+    //             success: true,
+    //             message: "Data retrieved successfully",
+    //             data: finalData,
+    //             total: finalData.length
+    //         });
+
+    //     } catch (err) {
+    //         console.error('Error in getSaleOrderList:', err);
+    //         return res.status(500).json({
+    //             success: false,
+    //             message: "Internal server error",
+    //             error: err.message
+    //         });
+    //     }
+    // };
 
     const getSaleOrderById = async (req, res) => {
         try {
