@@ -239,7 +239,7 @@ export const getSalesInvoice = async (req, res) => {
                 DECLARE @FilteredInvoice TABLE (Do_Id INT);
                 -- inserting data to temp table
                 INSERT INTO @FilteredInvoice (Do_Id)
-                SELECT Do_Id
+                SELECT DISTINCT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 
                     Do_Date BETWEEN @Fromdate AND @Todate
@@ -276,8 +276,8 @@ export const getSalesInvoice = async (req, res) => {
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No
                 LEFT JOIN tbl_Users AS salPer ON salPer.UserId = sogi.Sales_Person_Id
-                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
-                ORDER BY  sdgi.Do_Id desc;
+                WHERE sdgi.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
+                ORDER BY sdgi.Do_Id desc;
                 -- product details
                 SELECT
                     oi.*,
@@ -512,13 +512,12 @@ export const getSalesInvoiceById = async (req, res) => {
                 
                 -- inserting data to temp table
                 INSERT INTO @FilteredInvoice (Do_Id)
-                SELECT Do_Id
+                SELECT DISTINCT Do_Id
                 FROM tbl_Sales_Delivery_Gen_Info
                 WHERE 1=1
                 ${isValidNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
                 ${!stringCompare(Do_Inv_No, '') ? ' AND Do_Inv_No = @Do_Inv_No ' : ''}
                 ${isValidNumber(Retailer_Id) ? ' AND Retailer_Id = @Retailer_Id ' : ''}
-                
                 -- sales general details
                 SELECT 
                     sdgi.Do_Id, sdgi.Do_Inv_No, sdgi.Voucher_Type, sdgi.Do_No, sdgi.Do_Year,
@@ -552,7 +551,7 @@ export const getSalesInvoiceById = async (req, res) => {
                     ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Sales_Delivery_Address AS sda
                     ON sda.Id = sdgi.shipingAddressId
-                WHERE sdgi.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+                WHERE sdgi.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
                 ORDER BY sdgi.Do_Id DESC;
                 
                 -- product details
@@ -569,9 +568,9 @@ export const getSalesInvoiceById = async (req, res) => {
                              OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
                         THEN 0
                         ELSE CONVERT(
-                                     DECIMAL(18,2),
-                                     COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-                                  )
+                            DECIMAL(18,2),
+                            COALESCE(oi.Bill_Qty, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                        )
                     END AS Bag,
                     COALESCE(b.Brand_Name, 'not available') AS BrandGet
                 FROM tbl_Sales_Delivery_Stock_Info AS oi

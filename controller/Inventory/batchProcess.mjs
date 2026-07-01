@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, success, invalidInput, sentData } from '../../res.mjs';
-import { checkIsNumber, getDaysBetween, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, getDaysBetween, isEqualNumber, ISOString, stringCompare, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
 import { insertMultipleBatch, insertMultipleBatchUsageDetails } from '../../middleware/batchTransactions.mjs';
 
 // material inward
@@ -164,7 +164,7 @@ const getUnAssignedBatchProcessingSource = async (req, res) => {
         const
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-        
+
         const { fromGodown = null, toGodown = null, item = null } = req.query;
 
         const request = new sql.Request()
@@ -521,7 +521,7 @@ const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
             toGodowns: toArray(toGodowns),
             items: toArray(items)
         });
-        
+
     } catch (e) {
         servError(e, res);
     }
@@ -1294,6 +1294,160 @@ const getBatchStockBalance = async (req, res) => {
     }
 }
 
+const previousAndNextStages = async (req, res) => {
+    try {
+        const { item_id, batch_name, godown_id } = req.query;
+
+        const request = new sql.Request()
+            .input('reqItem', sql.Int, item_id)
+            .input('batchName', sql.NVarChar, batch_name)
+            .input('godown_id', sql.Int, godown_id)
+            .query(`
+                --DECLARE @reqItem INT = 340, @batchName NVARCHAR(50) = 'GULABI PRODUCTION';
+                -- ****************************** batch details ******************************
+                SELECT 
+                	bm.id,
+                	bm.item_id,
+                	pm.Product_Name item_Name,
+                	bm.batch,
+                	bm.godown_id,
+                	gm.Godown_Name godown_name,
+                	bm.quantity,
+                	COALESCE(bm.rate, 0) rate,
+                	bm.created_at,
+                	bm.created_by,
+                	cb.Name creater_name,
+                	bm.ob_id
+                FROM tbl_Batch_Master as bm
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = bm.item_id
+                LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = bm.godown_id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = bm.created_by
+                WHERE bm.item_id = @reqItem AND bm.batch = @batchName
+                ORDER BY bm.ob_id DESC, bm.created_at DESC
+                -- ****************************** batch usage ******************************
+                SELECT 
+                	bt.batch_id,
+                	bt.batch,
+                	bt.trans_date,
+                	bt.item_id,
+                	bt.godown_id,
+                	bt.quantity,
+                	bt.type,
+                	bt.reference_id,
+                	bt.created_at,
+                	bt.created_by,
+                	cb.Name creater_name,
+                	bt.ob_id
+                FROM tbl_Batch_Transaction AS bt
+                LEFT JOIN tbl_Users AS cb ON bt.created_by = cb.UserId
+                WHERE bt.item_id = @reqItem AND batch = @batchName;
+                -- ****************************** next stage ******************************
+                SELECT *
+                FROM dbo.getBatchAfterState(@reqItem, @batchName);
+                -- ****************************** previous stage ******************************
+                SELECT *
+                FROM dbo.getBatchBeforeState(@reqItem, @batchName);    
+            `);
+
+        const result = await request;
+
+        const [batch_master, batch_transaction, next_stage, previous_stage] = result.recordsets;
+
+        const merged = batch_master.map(masterRow => {
+
+            const transactionRows = batch_transaction.filter(
+                transactionRow => stringCompare(transactionRow.batch_id, masterRow.id)
+            );
+
+            const nextStg = next_stage.filter(
+                nexRow => isEqualNumber(nexRow.itemId, masterRow.item_id) && 
+                isEqualNumber(nexRow.godownId, masterRow.godown_id)
+            );
+
+            const consumedQuantity = transactionRows.reduce((acc, curr) => Addition(acc, curr.quantity), 0)
+
+            const pendingQuantity = Subraction(masterRow?.quantity, consumedQuantity);
+
+            return {
+                ...masterRow,
+                consumedQuantity,
+                pendingQuantity,
+                transaction: transactionRows,
+                prevStg: previous_stage,
+                nextStg: next_stage
+            };
+        });
+
+        sentData(res, merged);
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+const previousBatchDetails = async (req, res) => {
+    try {
+        const { item_id, batch_name, godown_id } = req.query;
+
+        const request = new sql.Request()
+            .input('reqItem', sql.Int, item_id)
+            .input('batchName', sql.NVarChar, batch_name)
+            .input('godown_id', sql.Int, godown_id)
+            .query(`
+                SELECT *
+                FROM dbo.getBatchBeforeState(@reqItem, @batchName);
+            `);
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+const nextBatchDetails = async (req, res) => {
+    try {
+        const { item_id, batch_name, godown_id } = req.query;
+
+        const request = new sql.Request()
+            .input('reqItem', sql.Int, item_id)
+            .input('batchName', sql.NVarChar, batch_name)
+            .input('godown_id', sql.Int, godown_id)
+            .query(`
+                SELECT *
+                FROM dbo.getBatchAfterState(@reqItem, @batchName);
+            `);
+
+        const result = await request;
+
+        sentData(res, result.recordset);
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+const batchTransaction = async (req, res) => {
+    try {
+        const { batch_id } = req.query;
+
+        const request = new sql.Request()
+            .input('batch_id', sql.UniqueIdentifier, batch_id)
+            .query(`
+                DECLARE @batch_id UniqueIdentifier = '80340c87-485e-4984-9432-c632787f7a9f';
+                SELECT * FROM tbl_Batch_Master bm WHERE bm.id = @batch_id;
+                SELECT * FROM tbl_Batch_Transaction WHERE batch_id = @batch_id;
+            `);
+
+        const result = await request;
+
+        
+    } catch (e) {
+        servError(e, res);
+    }
+}
 
 export default {
     getUnAssignedBatchFromMaterialInward,
@@ -1313,4 +1467,8 @@ export default {
     getUnAssignedBatchDebitNote,
     postDebitNoteUsage,
     getBatchStockBalance,
+    previousAndNextStages,
+    previousBatchDetails,
+    nextBatchDetails,
+    batchTransaction
 }

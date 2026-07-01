@@ -711,7 +711,7 @@ const tripActivities = () => {
                         pre_item_id: row.Product_Id,
                         pre_godown_id: row.To_Location,
                         pre_quantity: row.QTY,
-                        pre_type: 'TRIP_SHEET',
+                        pre_type: BillType === 'MATERIAL INWARD' ? 'MATERIAL_INWARD' : 'OTHER_GODOWN',
                         pre_reference_id: Trip_Id,
                         created_by: Updated_By
                     }))

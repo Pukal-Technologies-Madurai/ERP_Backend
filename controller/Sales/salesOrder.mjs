@@ -42,6 +42,7 @@ LEFT JOIN tbl_Users AS cb ON cb.UserId = so.Created_by
 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = so.VoucherType
 LEFT JOIN tbl_Status AS sts ON sts.Status_Id = so.Cancel_status 
 JOIN (SELECT DISTINCT orderId FROM @Filtered) AS fltr ON fltr.orderId = so.So_Id
+ORDER BY so.So_Date DESC, so.Created_on DESC;
 -- ******************** 2: Product Details ********************
 SELECT 
     si.*,

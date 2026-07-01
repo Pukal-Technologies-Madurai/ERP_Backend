@@ -89,8 +89,8 @@ export const insertMultipleBatch = async (
             return true;
         }
 
-        const batchPromises = batchArray.map(async (batch) => {
-            return await insertSingleBatch(
+        for (const batch of batchArray) {
+            const result = await insertSingleBatch(
                 transaction,
                 batch.batch,
                 batch.trans_date,
@@ -102,12 +102,7 @@ export const insertMultipleBatch = async (
                 batch.reference_id,
                 batch.created_by
             );
-        });
-
-        const result = await Promise.all(batchPromises);
-
-        if (result.some((value) => !value)) {
-            return false;
+            if (!result) return false;
         }
 
         return true;
@@ -204,8 +199,8 @@ export const reverseMultipleBatch = async (transaction, batchArray) => {
             return true;
         }
 
-        const updatePromises = batchArray.map(async (batch) => {
-            return await reverseBatch(
+        for (const batch of batchArray) {
+            const result = await reverseBatch(
                 transaction,
                 batch.pre_batch,
                 batch.pre_item_id,
@@ -215,12 +210,7 @@ export const reverseMultipleBatch = async (transaction, batchArray) => {
                 batch.pre_reference_id,
                 batch.created_by
             );
-        });
-
-        const result = await Promise.all(updatePromises);
-
-        if (result.some((value) => !value)) {
-            return false;
+            if (!result) return false;
         }
 
         return true;
@@ -320,8 +310,8 @@ export const insertMultipleBatchUsageDetails = async (
             return true;
         }
 
-        const batchPromises = batchArray.map(async (batch) => {
-            return await insertBatchUsageDetails(
+        for (const batch of batchArray) {
+            const result = await insertBatchUsageDetails(
                 transaction,
                 batch.batch,
                 batch.trans_date,
@@ -332,12 +322,7 @@ export const insertMultipleBatchUsageDetails = async (
                 batch.reference_id,
                 batch.created_by
             );
-        });
-
-        const result = await Promise.all(batchPromises);
-
-        if (result.some((value) => !value)) {
-            return false;
+            if (!result) return false;
         }
 
         return true;

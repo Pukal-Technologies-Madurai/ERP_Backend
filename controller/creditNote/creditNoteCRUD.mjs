@@ -556,7 +556,7 @@ export const createCreditNote = async (req, res) => {
                 godown_id: b.GoDown_Id,
                 quantity: b.Bill_Qty,
                 rate: b.Item_Rate,
-                type: 'CREDIT NOTE',
+                type: 'CREDIT_NOTE',
                 reference_id: CR_Id,
                 created_by: Created_by
             }))
