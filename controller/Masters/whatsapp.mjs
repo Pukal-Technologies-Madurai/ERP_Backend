@@ -1,7 +1,7 @@
 import sql from 'mssql';
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs'
 import { checkIsNumber, filterableText, isEqualNumber, randomNumber } from '../../helper_functions.mjs';
-
+import { getNextId } from '../../middleware/miniAPIs.mjs';
 const whatsapp = () => {
 
     const getWhatsappTypes =async(req,res)=>{
@@ -591,15 +591,21 @@ const getWhatsappLanguages = async (req, res) => {
 //     }
 // };
 
- const logWhatsappSend = async (req, res) => {
+const logWhatsappSend = async (req, res) => {
     try {
         const { documentType, referenceId, retailerId, retailerName, mobileNo, messageTemplate, sentBy } = req.body;
-
         if (!documentType || !referenceId) {
             return res.status(400).json({ success: false, message: "documentType and referenceId are required" });
         }
 
+        const getMaxId = await getNextId({ table: 'tbl_Whatsapp_Details', column: 'Whatsapp_Detail_Id' });
+        if (!checkIsNumber(getMaxId.MaxId)) {
+            return failed(res, 'Error generating Whatsapp Detail ID');
+        }
+        const Whatsapp_Detail_Id = getMaxId.MaxId;
+
         await new sql.Request()
+            .input('whatsappDetailId', sql.Int, Whatsapp_Detail_Id)
             .input('documentType', sql.VarChar(50), documentType)
             .input('referenceId', sql.VarChar(100), String(referenceId))
             .input('retailerId', sql.VarChar(50), retailerId ? String(retailerId) : null)
@@ -609,12 +615,12 @@ const getWhatsappLanguages = async (req, res) => {
             .input('sentBy', sql.Int, sentBy || null)
             .query(`
                 INSERT INTO tbl_Whatsapp_Details
-                    (Document_Type, Reference_Id, Retailer_Id, Retailer_Name, Mobile_No, Message_Template, Sent_By, Status)
+                    (Whatsapp_Detail_Id, Document_Type, Reference_Id, Retailer_Id, Retailer_Name, Mobile_No, Message_Template, Sent_By, Status)
                 VALUES
-                    (@documentType, @referenceId, @retailerId, @retailerName, @mobileNo, @messageTemplate, @sentBy, 'Sent')
+                    (@whatsappDetailId, @documentType, @referenceId, @retailerId, @retailerName, @mobileNo, @messageTemplate, @sentBy, 'Sent')
             `);
 
-        res.json({ success: true });
+        res.json({ success: true, Whatsapp_Detail_Id });
     } catch (e) {
         console.error('Error in logWhatsappSend:', e);
         servError(e, res);

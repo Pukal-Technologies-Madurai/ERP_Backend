@@ -734,7 +734,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
         const groupFilter2 = req.query.groupFilter2?.split(',').map(f => f.trim()).filter(Boolean) || [];
         const groupFilter3 = req.query.groupFilter3?.split(',').map(f => f.trim()).filter(Boolean) || [];
 
-        const Godown_Id = req.query.godown_Id || 0;
+        const Godown_Id = toNumber(req.query.Godown_Id || req.query.godown_Id || 0);
 
         const formatDate = (date) => {
             const d = new Date(date);
@@ -743,12 +743,12 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
 
         const formatFilterValues = (values) => {
             if (!values.length) return '';
-            return values.map(v => `''${v.replace(/'/g, "''")}''`).join(',');
+            return values.map(v => `'${v.replace(/'/g, "''")}'`).join(',');
         };
 
         const escapeColumnName = (name) => name ? name.replace(/'/g, "''") : '';
 
-        // 🔥 CACHE FILTER METADATA
+
         if (!cachedFilters) {
             const mobileFilters = await new sql.Request().query(`
                 SELECT 
@@ -797,26 +797,26 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
 
         const { filter1Column, filter2Column, filter3Column, groupFilterColumns } = cachedFilters;
 
-        // ✅ FORMAT VALUES
+
         const filter1Value = formatFilterValues(filter1);
         const filter2Value = formatFilterValues(filter2);
         const filter3Value = formatFilterValues(filter3);
 
-        // ✅ CALL SP
+      
         const request = new sql.Request();
 
-        request.input('Fromdate', formatDate(Fromdate));
-        request.input('Todate', formatDate(Todate));
-        request.input('Godown_Id', Godown_Id);
+        request.input('Fromdate', sql.VarChar(50), formatDate(Fromdate));
+        request.input('Todate', sql.VarChar(50), formatDate(Todate));
+        request.input('Godown_Id', sql.Int, Godown_Id);
 
-        request.input('Filter_1', escapeColumnName(filter1Column));
-        request.input('Filter_1_Value', filter1Value);
+        request.input('Filter_1', sql.VarChar(50), escapeColumnName(filter1Column));
+        request.input('Filter_1_Value', sql.NVarChar('max'), filter1Value);
 
-        request.input('Filter_2', escapeColumnName(filter2Column));
-        request.input('Filter_2_Value', filter2Value);
+        request.input('Filter_2', sql.VarChar(50), escapeColumnName(filter2Column));
+        request.input('Filter_2_Value', sql.NVarChar('max'), filter2Value);
 
-        request.input('Filter_3', escapeColumnName(filter3Column));
-        request.input('Filter_3_Value', filter3Value);
+        request.input('Filter_3', sql.VarChar(50), escapeColumnName(filter3Column));
+        request.input('Filter_3_Value', sql.NVarChar('max'), filter3Value);
 
         const result = await request.execute('Stock_Summarry_Search_Godown_Mobile_Search');
 
@@ -828,7 +828,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
         const col2 = groupFilterColumns[2];
         const col3 = groupFilterColumns[3];
 
-        // 🔥 SINGLE PASS FILTER (FAST)
+ 
         const filteredData = result.recordset.filter(row => {
 
             // Group filters
@@ -845,7 +845,7 @@ const getStorageStockGodownWiseMobile = async (req, res) => {
                 (row.Pur_Qty || 0) === 0 &&
                 (row.Sal_Qty || 0) === 0 &&
                 (row.Bal_Qty || 0) === 0 &&
-                (row.Act_Bal_Qty || 0) === 0
+                (row.Bal_Act_Qty || 0) === 0
             ) return false;
 
             return true;
