@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { servError, success, invalidInput, sentData } from '../../res.mjs';
+import { servError, success, invalidInput, sentData, noData } from '../../res.mjs';
 import { Addition, checkIsNumber, getDaysBetween, isEqualNumber, ISOString, stringCompare, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
 import { insertMultipleBatch, insertMultipleBatchUsageDetails } from '../../middleware/batchTransactions.mjs';
 
@@ -1294,6 +1294,30 @@ const getBatchStockBalance = async (req, res) => {
     }
 }
 
+const batchDropDown = async (req, res) => {
+    try {
+        const request = new sql.Request()
+            .query(`
+                SELECT 
+                	bm.batch, 
+                	bm.item_id,
+                	pm.Product_Name AS item_name,
+                	bm.godown_id,
+                	gm.Godown_Name AS godown_name
+                FROM tbl_Batch_Master AS bm
+                JOIN tbl_Product_Master AS pm ON pm.Product_Id = bm.item_id
+                JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = bm.godown_id
+                GROUP BY bm.batch, bm.item_id, pm.Product_Name, bm.godown_id, gm.Godown_Name;`
+            );
+
+        const result = await request;
+
+        sentData(res, result.recordsets);
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 const previousAndNextStages = async (req, res) => {
     try {
         const { item_id, batch_name, godown_id } = req.query;
@@ -1360,8 +1384,8 @@ const previousAndNextStages = async (req, res) => {
             );
 
             const nextStg = next_stage.filter(
-                nexRow => isEqualNumber(nexRow.itemId, masterRow.item_id) && 
-                isEqualNumber(nexRow.godownId, masterRow.godown_id)
+                nexRow => isEqualNumber(nexRow.itemId, masterRow.item_id) &&
+                    isEqualNumber(nexRow.godownId, masterRow.godown_id)
             );
 
             const consumedQuantity = transactionRows.reduce((acc, curr) => Addition(acc, curr.quantity), 0)
@@ -1435,15 +1459,284 @@ const batchTransaction = async (req, res) => {
 
         const request = new sql.Request()
             .input('batch_id', sql.UniqueIdentifier, batch_id)
+            // .input('batch_name', sql.NVarChar, batch_name)
+            // .input('item_id', sql.Int, item_id)
             .query(`
-                DECLARE @batch_id UniqueIdentifier = '80340c87-485e-4984-9432-c632787f7a9f';
-                SELECT * FROM tbl_Batch_Master bm WHERE bm.id = @batch_id;
-                SELECT * FROM tbl_Batch_Transaction WHERE batch_id = @batch_id;
+                DECLARE @target_batch_id UNIQUEIDENTIFIER = @batch_id;
+                -- ********************************* batch master ********************************* 
+                SELECT 
+                	bm.id,
+                	bm.batch,
+                	bm.trans_date,
+                	bm.item_id,
+                	COALESCE(pm.Product_Name, 'Not found') AS item_get,
+                	bm.godown_id,
+                	COALESCE(gm.Godown_Name, 'Not found') AS godown_get,
+                	bm.quantity,
+                	bm.rate,
+                	bm.created_at,
+                	bm.created_by,
+                	COALESCE(cb.Name, 'Not found') AS created_by_get,
+                	bm.ob_id
+                FROM tbl_Batch_Master AS bm
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = bm.item_id
+                LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = bm.godown_id
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = bm.created_by
+                WHERE bm.id = @batch_id
+                -- ********************************* batch transaction *********************************
+                SELECT 
+                	bt.*
+                FROM tbl_Batch_Transaction AS bt
+                WHERE bt.batch_id = @batch_id
+                -- ********************************* sales - OUT ********************************* 
+                SELECT 
+                	bt.batch_id AS batchId,
+                	sdgi.Do_Id AS voucherId,
+                	sdgi.Do_Date AS voucherDate,
+                	sdgi.Do_Inv_No AS voucherNumber,
+                	COALESCE(rm.Retailer_Name, 'Not found') partyName,
+                	SUM(sdsi.Bill_Qty) AS voucherQuantity,
+                	SUM(bt.quantity) AS batchQuantity,
+                	bt.type AS transType,
+                	sdgi.Created_on AS createdAt
+                FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                JOIN tbl_Sales_Delivery_Stock_Info AS sdsi ON sdgi.Do_Id = sdsi.Delivery_Order_Id
+                JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.item_id = sdsi.Item_Id 
+                	AND bt.godown_id = sdsi.GoDown_Id 
+                	AND bt.reference_id = sdgi.Do_Id
+                	AND bt.batch = sdsi.Batch_Name
+                	AND (bt.type = 'SALES' OR bt.type = 'SALES_REVERSAL')
+                WHERE sdgi.Cancel_status <> 0
+                GROUP BY bt.batch_id, sdgi.Do_Id, sdgi.Do_Date, sdgi.Do_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
+                -- ********************************* purchase - IN ********************************* 
+                SELECT 
+                	bm.id AS batchId,
+                	sdgi.PIN_Id AS voucherId,
+                	sdgi.Po_Entry_Date AS voucherDate,
+                	sdgi.Po_Inv_No AS voucherNumber,
+                	COALESCE(rm.Retailer_Name, 'Not found') partyName,
+                	SUM(sdsi.Bill_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
+                	SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                	'PURCHASE' AS transType,
+                	sdgi.Created_on AS createdAt
+                FROM tbl_Purchase_Order_Inv_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                JOIN tbl_Purchase_Order_Inv_Stock_Info AS sdsi ON sdgi.PIN_Id = sdsi.PIN_Id
+                JOIN tbl_Batch_Master AS bm ON 
+                	bm.item_id = sdsi.Item_Id
+                	AND bm.godown_id = sdsi.Location_Id
+                	AND bm.batch = sdsi.Batch_No
+                	AND bm.id = @batch_id
+                LEFT JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.batch_id = bm.id 
+                	AND bt.type = 'PURCHASE_REVERSAL'
+                	AND bt.reference_id = sdgi.PIN_Id
+                WHERE sdgi.Cancel_status = 0
+                GROUP BY bm.id, sdgi.PIN_Id, sdgi.Po_Entry_Date, sdgi.Po_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
+                -- ********************************* CONSUMPTION - OUT ********************************* 
+                SELECT 
+                	bt.batch_id AS batchId,
+                	sdgi.PR_Id AS voucherId,
+                	sdgi.Process_date AS voucherDate,
+                	sdgi.PR_Inv_Id AS voucherNumber,
+                	'Not applicable' partyName,
+                	SUM(sdsi.Sour_Qty) AS voucherQuantity,
+                	SUM(bt.quantity) AS batchQuantity,
+                	 bt.type AS transType,
+                	sdgi.Created_At AS createdAt
+                FROM tbl_Processing_Gen_Info AS sdgi
+                JOIN tbl_Processing_Source_Details AS sdsi ON sdsi.PR_Id = sdgi.PR_Id
+                JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.item_id = sdsi.Sour_Item_Id 
+                	AND bt.godown_id = sdsi.Sour_Goodown_Id 
+                	AND bt.reference_id = sdgi.PR_Id
+                	AND bt.batch = sdsi.Sour_Batch_Lot_No
+                	AND (bt.type = 'CONSUMPTION' OR bt.type = 'CONSUMPTION_REVERSAL')
+                WHERE sdgi.PR_Status <> 'Canceled'
+                GROUP BY bt.batch_id, sdgi.PR_Id, sdgi.Process_date, sdgi.PR_Inv_Id, bt.type, sdgi.Created_At;
+                -- ********************************* PRODUCTION - IN ********************************* 
+                SELECT 
+                	bm.id AS batchId,
+                	sdgi.PR_Id AS voucherId,
+                	sdgi.Process_date AS voucherDate,
+                	sdgi.Process_no AS voucherNumber,
+                	'Not applicable' partyName,
+                	SUM(sdsi.Dest_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
+                	SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                	'PRODUCTION' AS transType,
+                	sdgi.Created_At AS createdAt
+                FROM tbl_Processing_Gen_Info AS sdgi
+                JOIN tbl_Processing_Destin_Details AS sdsi ON sdgi.PR_Id = sdsi.PR_Id
+                JOIN tbl_Batch_Master AS bm ON 
+                	bm.item_id = sdsi.Dest_Item_Id
+                	AND bm.godown_id = sdsi.Dest_Goodown_Id
+                	AND bm.batch = sdsi.Dest_Batch_Lot_No
+                	AND bm.id = @batch_id
+                LEFT JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.batch_id = bm.id 
+                	AND bt.type = 'PRODUCTION_REVERSAL'
+                	AND bt.reference_id = sdgi.PR_Id
+                WHERE sdgi.PR_Status <> 'Canceled'
+                GROUP BY bm.id, sdgi.PR_Id, sdgi.Process_date, sdgi.Process_no, bt.type, sdgi.Created_At;
+                -- ********************************* debit_note - OUT ********************************* 
+                SELECT 
+                	bt.batch_id AS batchId,
+                	sdgi.DB_Id AS voucherId,
+                	sdgi.DB_Date AS voucherDate,
+                	sdgi.DB_Inv_No AS voucherNumber,
+                	COALESCE(rm.Retailer_Name, 'Not found') partyName,
+                	SUM(sdsi.Bill_Qty) AS voucherQuantity,
+                	SUM(bt.quantity) AS batchQuantity,
+                	bt.type AS transType,
+                	sdgi.Created_on AS createdAt
+                FROM tbl_Debit_Note_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                JOIN tbl_Debit_Note_Stock_Info AS sdsi ON sdgi.DB_Id = sdsi.DB_Id
+                JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.item_id = sdsi.Item_Id 
+                	AND bt.godown_id = sdsi.GoDown_Id 
+                	AND bt.reference_id = sdgi.DB_Id
+                	AND bt.batch = sdsi.Batch_Name
+                	AND (bt.type = 'DEBIT_NOTE' OR bt.type = 'DEBIT_NOTE_REVERSAL')
+                WHERE sdgi.Cancel_status <> 0
+                GROUP BY bt.batch_id, sdgi.DB_Id, sdgi.DB_Date, sdgi.DB_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
+                -- ********************************* credit_note - IN ********************************* 
+                SELECT 
+                	bm.id AS batchId,
+                	sdgi.CR_Id AS voucherId,
+                	sdgi.CR_Date AS voucherDate,
+                	sdgi.CR_Inv_No AS voucherNumber,
+                	COALESCE(rm.Retailer_Name, 'Not found') partyName,
+                	SUM(sdsi.Bill_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
+                	SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                	'CREDIT_NOTE' AS transType,
+                	sdgi.Created_on AS createdAt
+                FROM tbl_Credit_Note_Gen_Info AS sdgi
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
+                JOIN tbl_Credit_Note_Stock_Info AS sdsi ON sdgi.CR_Id = sdsi.CR_Id
+                JOIN tbl_Batch_Master AS bm ON 
+                	bm.item_id = sdsi.Item_Id
+                	AND bm.godown_id = sdsi.GoDown_Id
+                	AND bm.batch = sdsi.Batch_Name
+                	AND bm.id = @batch_id
+                LEFT JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.batch_id = bm.id 
+                	AND bt.type = 'CREDIT_NOTE_REVERSAL'
+                	AND bt.reference_id = sdgi.CR_Id
+                WHERE sdgi.Cancel_status = 0
+                GROUP BY bm.id, sdgi.CR_Id, sdgi.CR_Date, sdgi.CR_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
+                -- ********************************* godown_transfer - OUT ********************************* 
+                SELECT 
+                	bt.batch_id AS batchId,
+                	sdsi.Arr_Id AS voucherId,
+                	sdgi.Trip_Date AS voucherDate,
+                	sdgi.TR_INV_ID AS voucherNumber,
+                	'Not applicable' partyName,
+                	SUM(sdsi.QTY) AS voucherQuantity,
+                	SUM(bt.quantity) AS batchQuantity,
+                	bt.type AS transType,
+                	sdgi.Created_At AS createdAt
+                FROM tbl_Trip_Master AS sdgi
+                JOIN tbl_Trip_Details AS tripDetails ON tripDetails.Trip_Id = sdgi.Trip_Id
+                JOIN tbl_Trip_Arrival AS sdsi ON sdsi.Arr_Id = tripDetails.Arrival_Id
+                JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.item_id = sdsi.Product_Id 
+                	AND bt.godown_id = sdsi.From_Location 
+                	AND bt.reference_id = sdsi.Arr_Id
+                	AND bt.batch = sdsi.Batch_No
+                	AND (bt.type = 'OTHER_GODOWN' OR bt.type = 'OTHER_GODOWN_REVERSAL')
+                WHERE sdgi.TripStatus <> 'Canceled'
+                GROUP BY bt.batch_id, sdsi.Arr_Id, sdgi.Trip_Date, sdgi.TR_INV_ID, bt.type, sdgi.Created_At;
+                -- ********************************* material_inward - IN ********************************* 
+                SELECT 
+                	bm.id AS batchId,
+                	sdgi.Trip_Id AS voucherId,
+                	sdgi.Trip_Date AS voucherDate,
+                	sdgi.TR_INV_ID AS voucherNumber,
+                	COALESCE(rm.Retailer_Name, 'Not found') partyName,
+                	SUM(sdsi.QTY) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
+                	SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                	'MATERIAL_INWARD' AS transType,
+                	sdgi.Created_At AS createdAt
+                FROM tbl_Trip_Master AS sdgi
+                JOIN tbl_Trip_Details AS tripDetails ON tripDetails.Trip_Id = sdgi.Trip_Id
+                JOIN tbl_Trip_Arrival AS sdsi ON sdsi.Arr_Id = tripDetails.Arrival_Id
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.concern
+                JOIN tbl_Batch_Master AS bm ON 
+                	bm.item_id = sdsi.Product_Id 
+                	AND bm.godown_id = sdsi.To_Location 
+                	AND bm.batch = sdsi.Batch_No
+                	AND bm.id = @batch_id
+                LEFT JOIN tbl_Batch_Transaction AS bt ON 
+                	bt.batch_id = bm.id 
+                	AND bt.type = 'MATERIAL_INWARD_REVERSAL'
+                	AND bt.reference_id = sdsi.Arr_Id
+                WHERE sdgi.TripStatus <> 'Canceled'
+                GROUP BY bm.id, sdgi.Trip_Id, sdgi.Trip_Date, sdgi.TR_INV_ID, rm.Retailer_Name, bt.type, sdgi.Created_At;
             `);
 
         const result = await request;
 
-        
+        const [
+            batch,
+            batch_transaction,
+            sales,
+            purchase,
+            consumption,
+            production,
+            debit_note,
+            credit_note,
+            godown_transfer,
+            material_inward
+        ] = result.recordsets;
+
+        if (!batch[0]) return noData(res);
+
+        const rawVouchers = [
+            ...(sales || []),
+            ...(purchase || []),
+            ...(consumption || []),
+            ...(production || []),
+            ...(debit_note || []),
+            ...(credit_note || []),
+            ...(godown_transfer || []),
+            ...(material_inward || [])
+        ];
+
+        const groupedVouchers = rawVouchers.reduce((acc, item) => {
+            const baseType = item.transType.replace('_REVERSAL', '');
+
+            const currentVoucher = acc.find(i =>
+                i.voucherId === item.voucherId && i.transType.replace('_REVERSAL', '') === baseType
+            );
+
+            if (currentVoucher) {
+                currentVoucher.batchQuantity = (Number(currentVoucher.batchQuantity) || 0) + (Number(item.batchQuantity) || 0);
+                currentVoucher.voucherQuantity = (Number(currentVoucher.voucherQuantity) || 0) + (Number(item.voucherQuantity) || 0);
+                if (!item.transType.includes('_REVERSAL')) {
+                    currentVoucher.transType = item.transType;
+                }
+                return acc;
+            }
+
+            acc.push({
+                ...item,
+                transType: baseType
+            });
+
+            return acc;
+        }, []);
+
+        const allVouchers = groupedVouchers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+        const batchDetails = batch[0];
+        batchDetails.transaction = allVouchers;
+        batchDetails.raw_transactions = batch_transaction;
+
+        sentData(res, [batchDetails]);
+
     } catch (e) {
         servError(e, res);
     }
@@ -1467,6 +1760,7 @@ export default {
     getUnAssignedBatchDebitNote,
     postDebitNoteUsage,
     getBatchStockBalance,
+    batchDropDown,
     previousAndNextStages,
     previousBatchDetails,
     nextBatchDetails,

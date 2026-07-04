@@ -98,9 +98,11 @@ inventoryRouter.get('/batchMaster/debitNote', batchProcess.getUnAssignedBatchDeb
 inventoryRouter.post('/batchMaster/debitNote', batchProcess.postDebitNoteUsage);
 
 inventoryRouter.get('/batchMaster/stockBalance', batchProcess.getBatchStockBalance);
+inventoryRouter.get('/batchMaster/dropDown', batchProcess.batchDropDown);
 inventoryRouter.get('/batchMaster/previousAndNextStages', batchProcess.previousAndNextStages);
 inventoryRouter.get('/batchMaster/batchPreviousStage', batchProcess.previousBatchDetails);
 inventoryRouter.get('/batchMaster/batchNextStage', batchProcess.nextBatchDetails);
+inventoryRouter.get('/batchMaster/batchTransactions', batchProcess.batchTransaction);
 
 inventoryRouter.get('/trunoverRatio', inventoryReport.getInventoryReport);
 

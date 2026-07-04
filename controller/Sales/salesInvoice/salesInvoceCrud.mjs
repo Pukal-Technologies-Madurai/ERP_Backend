@@ -1306,7 +1306,7 @@ export const createSalesInvoice = async (req, res) => {
                     godown_id: b.GoDown_Id,
                     quantity: b.Bill_Qty,
                     type: 'SALES',
-                    reference_id: b.DO_St_Id,
+                    reference_id: Do_Id,
                     created_by: Created_by
                 }))
             );
@@ -2113,7 +2113,7 @@ export const updateSalesInvoice = async (req, res) => {
                     godown_id: b.GoDown_Id,
                     quantity: b.Bill_Qty,
                     type: 'SALES',
-                    reference_id: b.DO_St_Id,
+                    reference_id: Do_Id,
                     created_by: Altered_by
                 }))
             );
