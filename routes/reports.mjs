@@ -18,7 +18,7 @@ import { createReportColumnGroupingState, getReportColumnGroupingState } from '.
 import { onlineSalesReport, onlineSalesReportItem, unitEconomicsReport,onlineSalesReportLOL,onlineSalesReportItemLOL,SalesGraphCard,onlinePurchaseReport,
     onlinePurchaseReportItem,PurchaseGraphCard,SaleOrderReport,SaleOrderReportItem,PurchaseOrderReport,PurchaseOrderItemReport,
  StockValueGraph,StockValueReport,StaffBasedReport,costcenterList,StaffBasedReportLOS,OnlinePaymentReport,costingReport,DebtorsCreditors,StaffBasedCount,DayAbstractReport,DayStockAbstractReport,
-CashBoxReport,PendingSaleOrderReport,PendingSaleOrderReportItem} from '../controller/Reports/externalAPI.mjs';
+CashBoxReport,PendingSaleOrderReport,PendingSaleOrderReportItem,adminunitEconomicsReport,adminunitEconomicsReportsync} from '../controller/Reports/externalAPI.mjs';
 import { MenuSettings, executeSP, saveReportSettings, getReportList, getReportEditData, updateReportSettings, getReportsByParent, executeReportByTemplate,deleteReport } from '../controller/Reports/reportsettings.mjs';
 
 const ReportRouter = express.Router();
@@ -233,5 +233,8 @@ ReportRouter.get('/externalAPI/cashbox', CashBoxReport);
 
 ReportRouter.get('/externalAPI/pendingSaleOrder', PendingSaleOrderReport);
 ReportRouter.get('/externalAPI/pendingSaleOrderItem', PendingSaleOrderReportItem);
+
+ReportRouter.get('/externalAPI/adminunitEconomics', adminunitEconomicsReport);
+ReportRouter.get('/externalAPI/adminunitEconomicsSync', adminunitEconomicsReportsync);
 
 export default ReportRouter;
