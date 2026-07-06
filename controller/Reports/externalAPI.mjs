@@ -491,10 +491,16 @@ export const DebtorsCreditors = async (req, res) => {
             .input("Todate", toDate)
             .query(`EXEC Reporting_Debtors_Creditors_VW @Fromdate, @Todate`);
 
-        const recordset = result.recordset ?? [];
-        if (!recordset.length) return noData(res);
+        const [Data1, Creditors, Debtors] = result.recordsets || [];
 
-        dataFound(res, recordset);
+        if (!Data1 || Data1.length === 0) {
+            return noData(res);
+        }
+
+        dataFound(res, {
+            Data1, Creditors, Debtors
+        });
+
     } catch (error) {
         servError(error, res);
     }
@@ -649,3 +655,60 @@ export const PendingSaleOrderReportItem = async (req, res) => {
         servError(error, res);
     }
 }
+
+
+export const adminunitEconomicsReport = async (req, res) => {
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Admin_Unit_Eco_VW @Fromdate, @Todate`);
+
+        const [rows, meta] = result.recordsets || [];
+
+        if (!rows || rows.length === 0) {
+            return noData(res);
+        }
+
+        dataFound(res, {
+            rows,
+            lastStockValueDate: meta?.[0] ?? null
+        });
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
+export const adminunitEconomicsReportsync = async (req, res) => {
+    try {
+        const { Fromdate, Todate } = req.query;
+
+        const fromDate = Fromdate ? ISOString(Fromdate) : ISOString();
+        const toDate = Todate ? ISOString(Todate) : ISOString();
+
+        const result = await new sql.Request()
+            .input("Fromdate", fromDate)
+            .input("Todate", toDate)
+            .query(`EXEC Reporting_Online_Admin_Unit_Eco_SYNC @Fromdate, @Todate`);
+
+        const [rows, meta] = result.recordsets || [];
+
+        if (!rows || rows.length === 0) {
+            return noData(res);
+        }
+
+        dataFound(res, {
+            rows,
+            lastStockValueDate: meta?.[0] ?? null
+        });
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
