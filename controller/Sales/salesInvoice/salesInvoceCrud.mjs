@@ -1450,7 +1450,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
             Created_by
         } = req.body;
 
-        if (!Voucher_Type || !Do_Date || !Array.isArray(SaleOrders) || SaleOrders.length === 0 || !Created_by) {
+        if (!checkIsNumber(Voucher_Type) || !Do_Date || !Array.isArray(SaleOrders) || SaleOrders.length === 0 || !Created_by) {
             return invalidInput(res, 'Missing required fields for bulk conversion');
         }
 
