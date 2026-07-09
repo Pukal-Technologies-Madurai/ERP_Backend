@@ -1,7 +1,7 @@
 
 import sql from 'mssql'
 import { servError, dataFound, noData, success, invalidInput } from '../../res.mjs';
-import { checkIsNumber, ISOString, Subraction, createPadString, isValidDate, toNumber, filterableText } from '../../helper_functions.mjs'
+import { checkIsNumber, ISOString, Subraction, createPadString, isValidDate, toNumber, filterableText, toArray, isEqualNumber, isValidNumber } from '../../helper_functions.mjs'
 import { insertMultipleBatch, insertMultipleBatchUsageDetails, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
 
 const tripActivities = () => {
@@ -21,287 +21,262 @@ const tripActivities = () => {
 
             const result = await request.query(
                 `
-                -- main table
-                WITH TRIP_MASTER AS (
-                    SELECT
-                        tm.*,
-                        COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
-                        COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
-                        COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User,
-                        COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
-                        COALESCE(gmm.Godown_Name, 'unknown') AS addressGodown_Name,
-                        COALESCE(gmm.Godown_Address, 'unknown') AS addressGodownAddress,
-                        COALESCE(gmm.Gst_No, 'unknown') AS addressGodownGst_No,
-                        COALESCE(gmm.Phone_No, 'unknown') AS addressGodownPhone_No,
-                        COALESCE(rm.Retailer_Name, '') AS concernGet
-                    FROM tbl_Trip_Master AS tm
-                    LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = tm.Branch_Id
-                    LEFT JOIN tbl_Users AS cb_created ON cb_created.UserId = tm.Created_By
-                    LEFT JOIN tbl_Users AS cb_updated ON cb_updated.UserId = tm.Updated_By
-                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = tm.VoucherType
-                    LEFT JOIN tbl_Godown_Master AS gmm ON gmm.Godown_Id = tm.addressGodown
-                    LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = tm.concern
-                    WHERE tm.Trip_Date BETWEEN @FromDate AND @ToDate
-                    AND tm.BillType IN (
+                -- declaring table variable
+                DECLARE @FilteredTrip TABLE (Trip_Id INT);
+                -- inserting data to temp table
+                INSERT INTO @FilteredTrip (Trip_Id)
+                SELECT Trip_Id
+                FROM tbl_Trip_Master
+                WHERE Trip_Date BETWEEN @FromDate AND @ToDate
+                    AND BillType IN (
                         'MATERIAL INWARD',
                         'OTHER GODOWN',
                         'CREDIT_NOTE',
                         'DEBIT_NOTE'
-                    )
-                ), TRIP_DETAILS AS (
-                    SELECT
-                        td.*, ta.*,
-                        COALESCE(pm.Product_Rate, 0) AS Product_Rate,
-                        CASE 
-                            WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
-                                 OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
-                            THEN 0
-                            ELSE CONVERT(
-                                DECIMAL(18,2),
-                                COALESCE(QTY, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
-                            )
-                        END AS Bag,
-                        COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
-                        -- Modified FromLocation logic
-                        CASE 
-                            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodown_Name, 'Unknown')
-                            ELSE COALESCE(gm_from.Godown_Name, 'Unknown')
-                        END AS FromLocation,
-                        CASE 
-                            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownAddress, 'Unknown')
-                            ELSE COALESCE(gm_from.Godown_Address, 'Unknown')
-                        END AS FromAddress,
-                        CASE 
-                            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownGst_No, 'Unknown')
-                            ELSE COALESCE(gm_from.Gst_No, 'Unknown')
-                        END AS FromGst,
-                        CASE 
-                            WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownPhone_No, 'Unknown')
-                            ELSE COALESCE(gm_from.Phone_No, 'Unknown')
-                        END AS FromPhone,
-                        -- Modified ToLocation logic
-                        CASE 
-                            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodown_Name, 'Unknown')
-                            ELSE COALESCE(gm_to.Godown_Name, 'Unknown')
-                        END AS ToLocation,
-                        CASE 
-                            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownAddress, 'Unknown')
-                            ELSE COALESCE(gm_to.Godown_Address, 'Unknown')
-                        END AS ToAddress,
-                        CASE 
-                            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownPhone_No, 'Unknown')
-                            ELSE COALESCE(gm_to.Phone_No, 'Unknown')
-                        END AS ToPhone,
-                        CASE 
-                            WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownGst_No, 'Unknown')
-                            ELSE COALESCE(gm_to.Gst_No, 'Unknown')
-                        END AS ToGst,
-                        po.OrderId AS arrivalOrderId
-                    FROM
-                        tbl_Trip_Details AS td
-                    LEFT JOIN tbl_Trip_Arrival as ta ON ta.Arr_Id = td.Arrival_Id
-                    LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = ta.Product_Id
-                    LEFT JOIN tbl_Godown_Master AS gm_from ON gm_from.Godown_Id = ta.From_Location
-                    LEFT JOIN tbl_Godown_Master AS gm_to ON gm_to.Godown_Id = ta.To_Location
-                    LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po ON po.Trip_Id = td.Trip_Id AND po.Trip_Item_SNo = td.Arrival_Id
-                    LEFT JOIN tbl_Pack_Master as pck ON pck.Pack_Id = pm.Pack_Id
-                    LEFT JOIN TRIP_MASTER AS tm ON tm.Trip_Id = td.Trip_Id
-                    WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
-                ), MAPED_ARRIVALS AS (
+                    );
+                -- 0. main table
+                SELECT
+                    tm.*,
+                    COALESCE(bm.BranchName, 'unknown') AS Branch_Name,
+                    COALESCE(cb_created.Name, 'unknown') AS Created_By_User,
+                    COALESCE(cb_updated.Name, 'unknown') AS Updated_By_User,
+                    COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
+                    COALESCE(gmm.Godown_Name, 'unknown') AS addressGodown_Name,
+                    COALESCE(gmm.Godown_Address, 'unknown') AS addressGodownAddress,
+                    COALESCE(gmm.Gst_No, 'unknown') AS addressGodownGst_No,
+                    COALESCE(gmm.Phone_No, 'unknown') AS addressGodownPhone_No,
+                    COALESCE(rm.Retailer_Name, '') AS concernGet
+                FROM tbl_Trip_Master AS tm
+                LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = tm.Branch_Id
+                LEFT JOIN tbl_Users AS cb_created ON cb_created.UserId = tm.Created_By
+                LEFT JOIN tbl_Users AS cb_updated ON cb_updated.UserId = tm.Updated_By
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = tm.VoucherType
+                LEFT JOIN tbl_Godown_Master AS gmm ON gmm.Godown_Id = tm.addressGodown
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = tm.concern
+                WHERE tm.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip);
+                -- 1. TRIP_DETAILS
+                SELECT
+                    td.*, ta.*,
+                    COALESCE(pm.Product_Rate, 0) AS Product_Rate,
+                    CASE 
+                        WHEN TRY_CAST(pck.Pack AS DECIMAL(18,2)) IS NULL
+                                OR TRY_CAST(pck.Pack AS DECIMAL(18,2)) = 0
+                        THEN 0
+                        ELSE CONVERT(
+                            DECIMAL(18,2),
+                            COALESCE(QTY, 0) / TRY_CAST(pck.Pack AS DECIMAL(18,2))
+                        )
+                    END AS Bag,
+                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+                    -- Modified FromLocation logic
+                    CASE 
+                        WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodown_Name, 'Unknown')
+                        ELSE COALESCE(gm_from.Godown_Name, 'Unknown')
+                    END AS FromLocation,
+                    CASE 
+                        WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownAddress, 'Unknown')
+                        ELSE COALESCE(gm_from.Godown_Address, 'Unknown')
+                    END AS FromAddress,
+                    CASE 
+                        WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownGst_No, 'Unknown')
+                        ELSE COALESCE(gm_from.Gst_No, 'Unknown')
+                    END AS FromGst,
+                    CASE 
+                        WHEN ta.From_Location = 35 THEN COALESCE(tm.addressGodownPhone_No, 'Unknown')
+                        ELSE COALESCE(gm_from.Phone_No, 'Unknown')
+                    END AS FromPhone,
+                    -- Modified ToLocation logic
+                    CASE 
+                        WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodown_Name, 'Unknown')
+                        ELSE COALESCE(gm_to.Godown_Name, 'Unknown')
+                    END AS ToLocation,
+                    CASE 
+                        WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownAddress, 'Unknown')
+                        ELSE COALESCE(gm_to.Godown_Address, 'Unknown')
+                    END AS ToAddress,
+                    CASE 
+                        WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownPhone_No, 'Unknown')
+                        ELSE COALESCE(gm_to.Phone_No, 'Unknown')
+                    END AS ToPhone,
+                    CASE 
+                        WHEN ta.To_Location = 35 THEN COALESCE(tm.addressGodownGst_No, 'Unknown')
+                        ELSE COALESCE(gm_to.Gst_No, 'Unknown')
+                    END AS ToGst,
+                    po.OrderId AS arrivalOrderId
+                FROM
+                    tbl_Trip_Details AS td
+                LEFT JOIN tbl_Trip_Arrival as ta ON ta.Arr_Id = td.Arrival_Id
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = ta.Product_Id
+                LEFT JOIN tbl_Godown_Master AS gm_from ON gm_from.Godown_Id = ta.From_Location
+                LEFT JOIN tbl_Godown_Master AS gm_to ON gm_to.Godown_Id = ta.To_Location
+                LEFT JOIN tbl_PurchaseOrderDeliveryDetails AS po ON po.Trip_Id = td.Trip_Id AND po.Trip_Item_SNo = td.Arrival_Id
+                LEFT JOIN tbl_Pack_Master as pck ON pck.Pack_Id = pm.Pack_Id
+                LEFT JOIN (
                     SELECT 
-                        Id, OrderId, Trip_Id, Trip_Item_SNo, TransporterIndex,
-                        LocationId, Location, ArrivalDate, ItemId, ItemName,
-                        Quantity, Weight, BilledRate
-                    FROM tbl_PurchaseOrderDeliveryDetails
-                    WHERE Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
-                ), TRIP_EMPLOYEES AS (
-                    SELECT 
-                        te.*,
-                        e.Cost_Center_Name AS Emp_Name,
-                        cc.Cost_Category
-                    FROM 
-                        tbl_Trip_Employees AS te
-                    LEFT JOIN tbl_ERP_Cost_Center AS e
-                        ON e.Cost_Center_Id = te.Involved_Emp_Id
-                    LEFT JOIN tbl_ERP_Cost_Category AS cc
-                        ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
-                    WHERE 
-                        te.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
-                ), ALTERATION_HISTORY AS (
-                    SELECT ah.*, u.Name AS alterByGet 
-                    FROM tbl_Alteration_History AS ah
-                    LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
-                    WHERE 
-                        alteredTable = 'tbl_Trip_Master' 
-                        AND alteredRowId IN (SELECT Trip_Id FROM TRIP_MASTER)
-                ), CREDIT_NOTE AS (
-                    SELECT
-                        td.Id AS TD_Id,
-                        td.Trip_Id,
-                        td.Credit_Note_Id,
-                        cngi.CR_Id,
-                        cngi.CR_Inv_No,
-                        cngi.CR_Date,
-                        cngi.Voucher_Type,
-                        v.Voucher_Type AS VoucherTypeGet,
-                        cngi.Retailer_Id,
-                        rm.Retailer_Name,
-                        cngi.Total_Invoice_value
+                        tmm.Trip_Id, 
+                        gmm.Godown_Name AS addressGodown_Name,
+                        gmm.Godown_Address AS addressGodownAddress,
+                        gmm.Gst_No AS addressGodownGst_No,
+                        gmm.Phone_No AS addressGodownPhone_No
+                    FROM tbl_Trip_Master AS tmm
+                    LEFT JOIN tbl_Godown_Master AS gmm ON gmm.Godown_Id = tmm.addressGodown
+                    WHERE tmm.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip)
+                ) AS tm ON tm.Trip_Id = td.Trip_Id
+                WHERE td.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip);
+                -- 2. MAPED_ARRIVALS
+                SELECT 
+                    Id, OrderId, Trip_Id, Trip_Item_SNo, TransporterIndex,
+                    LocationId, Location, ArrivalDate, ItemId, ItemName,
+                    Quantity, Weight, BilledRate
+                FROM tbl_PurchaseOrderDeliveryDetails
+                WHERE Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip);
+                -- 3. TRIP_EMPLOYEES
+                SELECT 
+                    te.*,
+                    e.Cost_Center_Name AS Emp_Name,
+                    cc.Cost_Category
+                FROM 
+                    tbl_Trip_Employees AS te
+                LEFT JOIN tbl_ERP_Cost_Center AS e
+                    ON e.Cost_Center_Id = te.Involved_Emp_Id
+                LEFT JOIN tbl_ERP_Cost_Category AS cc
+                    ON cc.Cost_Category_Id = te.Cost_Center_Type_Id
+                WHERE 
+                    te.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip);
+                -- 4. ALTERATION_HISTORY
+                SELECT ah.*, u.Name AS alterByGet 
+                FROM tbl_Alteration_History AS ah
+                LEFT JOIN tbl_Users AS u ON u.UserId = ah.alterBy
+                WHERE 
+                    alteredTable = 'tbl_Trip_Master' 
+                    AND alteredRowId IN (SELECT Trip_Id FROM @FilteredTrip);
+                -- 5. CREDIT_NOTE
+                SELECT
+                    td.Id AS TD_Id,
+                    td.Trip_Id,
+                    td.Credit_Note_Id,
+                    cngi.CR_Id,
+                    cngi.CR_Inv_No,
+                    cngi.CR_Date,
+                    cngi.Voucher_Type,
+                    v.Voucher_Type AS VoucherTypeGet,
+                    cngi.Retailer_Id,
+                    rm.Retailer_Name,
+                    cngi.Total_Invoice_value
+                FROM tbl_Trip_Details AS td
+                LEFT JOIN tbl_Credit_Note_Gen_Info AS cngi ON cngi.CR_Id = td.Credit_Note_Id 
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = cngi.Retailer_Id
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = cngi.Voucher_Type
+                WHERE td.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip)
+                  AND td.Credit_Note_Id IS NOT NULL;
+                -- 6. CREDIT_NOTE_PRODUCTS
+                SELECT
+                    si.CR_Id,
+                    si.S_No,
+                    si.Item_Id,
+                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+                    si.HSN_Code,
+                    si.Bill_Qty AS QTY,
+                    si.Item_Rate,
+                    si.Taxable_Amount,
+                    si.Tax_Rate AS Gst_Rate,
+                    si.Cgst AS Cgst_P,
+                    si.Sgst AS Sgst_P,
+                    si.Igst AS Igst_P,
+                    si.Cgst_Amo,
+                    si.Sgst_Amo,
+                    si.Igst_Amo,
+                    si.Final_Amo AS Total_Value
+                FROM tbl_Credit_Note_Stock_Info AS si
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                WHERE si.CR_Id IN (
+                    SELECT td.Credit_Note_Id
                     FROM tbl_Trip_Details AS td
-                    LEFT JOIN tbl_Credit_Note_Gen_Info AS cngi ON cngi.CR_Id = td.Credit_Note_Id 
-                    LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = cngi.Retailer_Id
-                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = cngi.Voucher_Type
-                    WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+                    WHERE td.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip)
                       AND td.Credit_Note_Id IS NOT NULL
-                ), DEBIT_NOTE AS (
-                    SELECT
-                        td.Id AS TD_Id,
-                        td.Trip_Id,
-                        td.Debit_Note_Id,
-                        dngi.DB_Id,
-                        dngi.DB_Inv_No,
-                        dngi.DB_Date,
-                        dngi.Voucher_Type,
-                        v.Voucher_Type AS VoucherTypeGet,
-                        dngi.Retailer_Id,
-                        rm.Retailer_Name,
-                        dngi.Total_Invoice_value
+                )
+                ORDER BY si.S_No;
+                -- 7. DEBIT_NOTE
+                SELECT
+                    td.Id AS TD_Id,
+                    td.Trip_Id,
+                    td.Debit_Note_Id,
+                    dngi.DB_Id,
+                    dngi.DB_Inv_No,
+                    dngi.DB_Date,
+                    dngi.Voucher_Type,
+                    v.Voucher_Type AS VoucherTypeGet,
+                    dngi.Retailer_Id,
+                    rm.Retailer_Name,
+                    dngi.Total_Invoice_value
+                FROM tbl_Trip_Details AS td
+                LEFT JOIN tbl_Debit_Note_Gen_Info AS dngi ON dngi.DB_Id = td.Debit_Note_Id 
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = dngi.Voucher_Type
+                WHERE td.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip)
+                  AND td.Debit_Note_Id IS NOT NULL;
+                -- 8. DEBIT_NOTE_PRODUCTS
+                SELECT
+                    si.DB_Id,
+                    si.S_No,
+                    si.Item_Id,
+                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
+                    si.HSN_Code,
+                    si.Bill_Qty AS QTY,
+                    si.Item_Rate,
+                    si.Taxable_Amount,
+                    si.Tax_Rate AS Gst_Rate,
+                    si.Cgst AS Cgst_P,
+                    si.Sgst AS Sgst_P,
+                    si.Igst AS Igst_P,
+                    si.Cgst_Amo,
+                    si.Sgst_Amo,
+                    si.Igst_Amo,
+                    si.Final_Amo AS Total_Value
+                FROM tbl_Debit_Note_Stock_Info AS si
+                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
+                WHERE si.DB_Id IN (
+                    SELECT td.Debit_Note_Id
                     FROM tbl_Trip_Details AS td
-                    LEFT JOIN tbl_Debit_Note_Gen_Info AS dngi ON dngi.DB_Id = td.Debit_Note_Id 
-                    LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
-                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = dngi.Voucher_Type
-                    WHERE td.Trip_Id IN (SELECT Trip_Id FROM TRIP_MASTER)
+                    WHERE td.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip)
                       AND td.Debit_Note_Id IS NOT NULL
                 )
-                SELECT 
-                    tm.*,
-                    COALESCE((
-                        SELECT td.* 
-                        FROM TRIP_DETAILS AS td
-                        WHERE td.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS Products_List,
-                    COALESCE((
-                        SELECT te.* 
-                        FROM TRIP_EMPLOYEES AS te
-                        WHERE te.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS Employees_Involved,
-                    COALESCE((
-                        SELECT ma.* 
-                        FROM MAPED_ARRIVALS AS ma
-                        WHERE ma.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS ConvertedPurchaseOrders,
-                    COALESCE((
-                        SELECT ah.* 
-                        FROM ALTERATION_HISTORY AS ah
-                        WHERE ah.alteredRowId = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS Alteration_History,
-                    COALESCE((
-                        SELECT
-                            cn.TD_Id,
-                            cn.Trip_Id,
-                            cn.Credit_Note_Id,
-                            cn.CR_Id,
-                            cn.CR_Inv_No,
-                            cn.CR_Date,
-                            cn.VoucherTypeGet,
-                            cn.Retailer_Id,
-                            cn.Retailer_Name,
-                            cn.Total_Invoice_value,
-                            COALESCE((
-                                SELECT
-                                    si.S_No,
-                                    si.Item_Id,
-                                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
-                                    si.HSN_Code,
-                                    si.Bill_Qty AS QTY,
-                                    si.Item_Rate,
-                                    si.Taxable_Amount,
-                                    si.Tax_Rate AS Gst_Rate,
-                                    si.Cgst AS Cgst_P,
-                                    si.Sgst AS Sgst_P,
-                                    si.Igst AS Igst_P,
-                                    si.Cgst_Amo,
-                                    si.Sgst_Amo,
-                                    si.Igst_Amo,
-                                    si.Final_Amo AS Total_Value
-                                FROM tbl_Credit_Note_Stock_Info AS si
-                                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
-                                WHERE si.CR_Id = cn.CR_Id
-                                ORDER BY si.S_No
-                                FOR JSON PATH
-                            ), '[]') AS Products_List
-                        FROM CREDIT_NOTE AS cn
-                        WHERE cn.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS Credit_Note_List,
-                    COALESCE((
-                        SELECT
-                            dn.TD_Id,
-                            dn.Trip_Id,
-                            dn.Debit_Note_Id,
-                            dn.DB_Id,
-                            dn.DB_Inv_No,
-                            dn.DB_Date,
-                            dn.VoucherTypeGet,
-                            dn.Retailer_Id,
-                            dn.Retailer_Name,
-                            dn.Total_Invoice_value,
-                            COALESCE((
-                                SELECT
-                                    si.S_No,
-                                    si.Item_Id,
-                                    COALESCE(pm.Product_Name, 'unknown') AS Product_Name,
-                                    si.HSN_Code,
-                                    si.Bill_Qty AS QTY,
-                                    si.Item_Rate,
-                                    si.Taxable_Amount,
-                                    si.Tax_Rate AS Gst_Rate,
-                                    si.Cgst AS Cgst_P,
-                                    si.Sgst AS Sgst_P,
-                                    si.Igst AS Igst_P,
-                                    si.Cgst_Amo,
-                                    si.Sgst_Amo,
-                                    si.Igst_Amo,
-                                    si.Final_Amo AS Total_Value
-                                FROM tbl_Debit_Note_Stock_Info AS si
-                                LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
-                                WHERE si.DB_Id = dn.DB_Id
-                                ORDER BY si.S_No
-                                FOR JSON PATH
-                            ), '[]') AS Products_List
-                        FROM DEBIT_NOTE AS dn
-                        WHERE dn.Trip_Id = tm.Trip_Id
-                        FOR JSON PATH
-                    ), '[]') AS Debit_Note_List
-                FROM 
-                    TRIP_MASTER AS tm`
+                ORDER BY si.S_No;`
             );
 
-            if (result.recordset.length > 0) {
+            const Trip_Master = toArray(result.recordsets[0]);
+            const Trip_Details = toArray(result.recordsets[1]);
+            const Maped_Arrivals = toArray(result.recordsets[2]);
+            const Trip_Employees = toArray(result.recordsets[3]);
+            const Alteration_History = toArray(result.recordsets[4]);
+            const Credit_Note = toArray(result.recordsets[5]);
+            const Credit_Note_Products = toArray(result.recordsets[6]);
+            const Debit_Note = toArray(result.recordsets[7]);
+            const Debit_Note_Products = toArray(result.recordsets[8]);
 
-                const parsed = result.recordset.map(o => {
-                    const creditNoteList = JSON.parse(o?.Credit_Note_List || '[]').map(cn => ({
-                        ...cn,
-                        Products_List: typeof cn.Products_List === 'string'
-                            ? JSON.parse(cn.Products_List)
-                            : (Array.isArray(cn.Products_List) ? cn.Products_List : [])
-                    }));
-                    const debitNoteList = JSON.parse(o?.Debit_Note_List || '[]').map(dn => ({
-                        ...dn,
-                        Products_List: typeof dn.Products_List === 'string'
-                            ? JSON.parse(dn.Products_List)
-                            : (Array.isArray(dn.Products_List) ? dn.Products_List : [])
-                    }));
+            if (Trip_Master.length > 0) {
+
+                const parsed = Trip_Master.map(o => {
+                    const creditNoteList = Credit_Note
+                        .filter(cn => isEqualNumber(cn.Trip_Id, o.Trip_Id))
+                        .map(cn => ({
+                            ...cn,
+                            Products_List: Credit_Note_Products.filter(cnp => isEqualNumber(cnp.CR_Id, cn.CR_Id))
+                        }));
+
+                    const debitNoteList = Debit_Note
+                        .filter(dn => isEqualNumber(dn.Trip_Id, o.Trip_Id))
+                        .map(dn => ({
+                            ...dn,
+                            Products_List: Debit_Note_Products.filter(dnp => isEqualNumber(dnp.DB_Id, dn.DB_Id))
+                        }));
+
                     return {
                         ...o,
-                        Products_List: JSON.parse(o?.Products_List || '[]'),
-                        Employees_Involved: JSON.parse(o?.Employees_Involved || '[]'),
-                        ConvertedPurchaseOrders: JSON.parse(o?.ConvertedPurchaseOrders || '[]'),
-                        Alteration_History: JSON.parse(o?.Alteration_History || '[]'),
+                        Products_List: Trip_Details.filter(td => isEqualNumber(td.Trip_Id, o.Trip_Id)),
+                        Employees_Involved: Trip_Employees.filter(te => isEqualNumber(te.Trip_Id, o.Trip_Id)),
+                        ConvertedPurchaseOrders: Maped_Arrivals.filter(ma => isEqualNumber(ma.Trip_Id, o.Trip_Id)),
+                        Alteration_History: Alteration_History.filter(ah => isEqualNumber(ah.alteredRowId, o.Trip_Id)),
                         Credit_Note_List: creditNoteList,
                         Debit_Note_List: debitNoteList,
                     };
@@ -348,7 +323,7 @@ const tripActivities = () => {
             const StartTime = req.body?.StartTime ? new Date(req.body.StartTime) : new Date();
             const EndTime = req.body?.EndTime ? new Date(req.body.EndTime) : new Date();
 
-            if (!checkIsNumber(Branch_Id) || !BillType || !checkIsNumber(VoucherType)) {
+            if (!isValidNumber(Branch_Id) || !BillType || !isValidNumber(VoucherType)) {
                 return invalidInput(res, 'Select Branch, BillType, VoucherType is required');
             }
 

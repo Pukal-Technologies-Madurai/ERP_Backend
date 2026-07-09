@@ -3499,10 +3499,7 @@ const DeliveryOrder = () => {
     LEFT JOIN tbl_UOM AS u ON u.Unit_Id = oi.Unit_Id
     LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
     LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = oi.Godown_Id
-    WHERE
-        CONVERT(DATE, oi.Do_Date) >= CONVERT(DATE, @from)
-        AND
-        CONVERT(DATE, oi.Do_Date) <= CONVERT(DATE, @to)
+    WHERE oi.Do_Date BETWEEN @from AND @to
 ),
 DELIVERY_STAFF AS (
     SELECT
@@ -3515,6 +3512,8 @@ DELIVERY_STAFF AS (
     FROM tbl_Sales_Delivery_Staff_Info dsi
     LEFT JOIN tbl_Erp_Cost_Category ecc ON ecc.Cost_Category_Id = dsi.Emp_Type_Id
     LEFT JOIN tbl_ERP_Cost_Center e ON e.Cost_Center_Id = dsi.Emp_Id
+    JOIN tbl_Sales_Delivery_Gen_Info AS sdgi ON sdgi.Do_Id = dsi.Do_Id
+    WHERE sdgi.Do_Date BETWEEN @from AND @to
 ),
 DELIVERY_ALL_STAFF AS (
     SELECT
@@ -3617,10 +3616,8 @@ LEFT JOIN tbl_Route_Master AS rmt ON rmt.Route_Id = rm.Route_Id
 LEFT JOIN tbl_Area_Master AS am ON am.Area_Id = rm.Area_Id
 LEFT JOIN TRANSPORTER_INFO ti ON ti.Do_Id = sdgi.Do_Id
 WHERE 
-    CONVERT(DATE, sdgi.Do_Date) >= CONVERT(DATE, @from)
-    AND
-    CONVERT(DATE, sdgi.Do_Date) <= CONVERT(DATE, @to)
-     AND sdgi.Delivery_Status IN (1, 2, 4, 5,6) 
+    sdgi.Do_Date BETWEEN @from AND @to
+     AND sdgi.Delivery_Status IN (0, 1, 2, 4, 5, 6) 
    -- AND NOT EXISTS (
    --     SELECT 1 FROM tbl_Trip_Details td WHERE td.Delivery_Id = sdgi.Do_Id
   --  )

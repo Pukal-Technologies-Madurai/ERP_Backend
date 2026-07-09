@@ -22,6 +22,7 @@ import ContraRouter from './contra.mjs'
 import PosRouter from './pos.mjs';
 import CreditNoteRouter from './creditNote.mjs';
 import DebitNoteRouter from './debitNote.mjs';
+import MobileAPIRouter from './mobileApi.mjs';
 
 const indexRouter = express.Router();
 
@@ -46,5 +47,6 @@ indexRouter.use('/contra', ContraRouter);
 indexRouter.use('/pos', PosRouter);
 indexRouter.use('/creditNote', CreditNoteRouter);
 indexRouter.use('/debitNote', DebitNoteRouter);
+indexRouter.use('/mobileApi', MobileAPIRouter)
 
 export default indexRouter;
