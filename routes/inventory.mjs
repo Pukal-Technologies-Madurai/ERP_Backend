@@ -9,6 +9,7 @@ import batchProcess from '../controller/Inventory/batchProcess.mjs';
 import inventoryReport from '../controller/Inventory/reports.mjs';
 import { alterHistory } from '../middleware/alterHistory.mjs';
 import rateValues from '../controller/Inventory/rateValues.mjs';
+import * as processingLRReport from '../controller/Inventory/processingLRReport.mjs';
 
 const inventoryRouter = express.Router();
 
@@ -72,6 +73,11 @@ inventoryRouter.put(
     stockProcessing.updateStockProcessing
 );
 inventoryRouter.delete('/stockProcessing', stockProcessing.deleteStockProcessing);
+
+inventoryRouter.get('/processingLRReport', processingLRReport.getProcessingForAssignCostCenter);
+inventoryRouter.post('/processingLRReport', processingLRReport.postAssignCostCenterToProcessing);
+inventoryRouter.post('/processingLRReport/multiple', processingLRReport.multipleProcessingStaffUpdate);
+inventoryRouter.post('/processingLRReport/multipleDelete', processingLRReport.multipleProcessingStaffDelete);
 
 inventoryRouter.get('/batchMaster/materialInward', batchProcess.getUnAssignedBatchFromMaterialInward);
 inventoryRouter.post('/batchMaster/materialInward', batchProcess.postBatchInMaterialInward);

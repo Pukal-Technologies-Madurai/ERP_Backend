@@ -39,23 +39,30 @@ export const getModuleRulesWithAccess = async (req, res) => {
 
 export const postModuleRules = async (req, res) => {
     try {
-        const { moduleName, ruleName, discription, ruleValue, createdBy } = req.body;
-        if (!moduleName || !ruleName || !ruleValue || !createdBy) {
-            return invalidInput(res, 'moduleName, ruleName, ruleValue, createdBy is required')
+        if (!userPortal) {
+            return failed(res, 'User Portal DB not configured')
+        }
+
+        const { moduleCode, moduleName, ruleName, discription, createdBy } = req.body;
+        if (!moduleCode || !moduleName || !ruleName) {
+            return invalidInput(res, 'moduleCode, moduleName, ruleName, createdBy is required')
         }
         
         const request = new sql.Request();
         const result = await request
+            .input('moduleCode', sql.VarChar(10), moduleCode)
             .input('moduleName', sql.NVarChar(50), moduleName)
             .input('ruleName', sql.NVarChar(150), ruleName)
             .input('discription', sql.NVarChar(250), discription)
-            .input('ruleValue', sql.NVarChar(250), ruleValue)
-            .input('createdBy', sql.Int, createdBy)
             .query(`
-                INSERT INTO tbl_Module_Rules (
-                    moduleName, ruleName, discription, ruleValue, createdBy
+                DECLARE @newRuleNumber INT;
+                SELECT @newRuleNumber = ISNULL(MAX(ruleNumber), 0) + 1 FROM [${userPortal}].[dbo].[tbl_Module_Rules] WHERE moduleCode = @moduleCode;
+                DECLARE @newRuleCode VARCHAR(50);
+                SET @newRuleCode = @moduleCode + '_' + CAST(@newRuleNumber AS VARCHAR(10));
+                INSERT INTO [${userPortal}].[dbo].[tbl_Module_Rules] (
+                    moduleCode, moduleName, ruleNumber, ruleCode, ruleName, discription, createdOn
                 ) VALUES (
-                    @moduleName, @ruleName, @discription, @ruleValue, @createdBy
+                    @moduleCode, @moduleName, @newRuleNumber, @newRuleCode, @ruleName, @discription, GETDATE()
                 );`
             );
 
@@ -67,24 +74,32 @@ export const postModuleRules = async (req, res) => {
 
 export const putModuleRules = async (req, res) => {
     try {
-        const { id, moduleName, ruleName, discription, ruleValue } = req.body;
-        if (!id || !moduleName || !ruleName || !ruleValue) {
-            return invalidInput(res, 'id, moduleName, ruleName, ruleValue is required')
+        if (!userPortal) {
+            return failed(res, 'User Portal DB not configured')
+        }
+
+        const { id, moduleCode, moduleName, ruleNumber, ruleCode, ruleName, discription } = req.body;
+        if (!id || !moduleCode || !moduleName || !ruleNumber || !ruleCode || !ruleName) {
+            return invalidInput(res, 'id, moduleCode, moduleName, ruleNumber, ruleCode, ruleName is required')
         }
         
         const request = new sql.Request();
         const result = await request
             .input('id', sql.UniqueIdentifier, id)
+            .input('moduleCode', sql.VarChar(10), moduleCode)
             .input('moduleName', sql.NVarChar(50), moduleName)
+            .input('ruleNumber', sql.Int, ruleNumber)
+            .input('ruleCode', sql.VarChar(50), ruleCode)
             .input('ruleName', sql.NVarChar(150), ruleName)
             .input('discription', sql.NVarChar(250), discription)
-            .input('ruleValue', sql.NVarChar(250), ruleValue)
             .query(`
-                UPDATE tbl_Module_Rules
-                SET moduleName = @moduleName,
+                UPDATE [${userPortal}].[dbo].[tbl_Module_Rules]
+                SET moduleCode = @moduleCode,
+                    moduleName = @moduleName,
+                    ruleNumber = @ruleNumber,
+                    ruleCode = @ruleCode,
                     ruleName = @ruleName,
-                    discription = @discription,
-                    ruleValue = @ruleValue
+                    discription = @discription
                 WHERE id = @id`
             );
 

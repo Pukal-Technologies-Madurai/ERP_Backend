@@ -2794,3 +2794,30 @@ export const salesTallySync = async (req, res) => {
         servError(e, res);
     }
 }
+
+export const updateProductDeliveryStatus = async (req, res) => {
+    try {
+        const { itemId, statusValue = 1 } = req.body;
+        const reqDate = req.body?.reqDate ? ISOString(req.body.reqDate) : ISOString();
+
+        const request = new sql.Request()
+            .input('itemId', sql.Int, itemId)
+            .input('statusValue', sql.Int, statusValue)
+            .input('reqDate', sql.Date, reqDate)
+            .query(`
+                UPDATE tbl_Sales_Delivery_Stock_Info AS sdsi
+                SET sdsi.itemReadyForDelivery = @statusValue
+                FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                JOIN tbl_Sales_Delivery_Stock_Info AS sdsi ON sdsi.Do_Id = sdgi.Do_Id
+                WHERE 
+                    sdsi.Item_Id = @itemId AND 
+                    CONVERT(DATE, sdgi.Do_Date) = @reqDate;`
+            );
+
+        await request;
+
+        success(res);
+    } catch (e) {
+        servError(e, res);
+    }
+}

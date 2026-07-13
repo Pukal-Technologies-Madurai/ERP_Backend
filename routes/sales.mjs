@@ -5,7 +5,8 @@ import dbconnect from '../middleware/otherDB.mjs';
 import {
     getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation,
     getSalesInvoiceById, getLastSalesInvoiceByRetailerId, getAdjacentSalesInvoice,
-    bulkCreateSalesInvoice, getSalesInvoiceByDoIds
+    bulkCreateSalesInvoice, getSalesInvoiceByDoIds,
+    updateProductDeliveryStatus
 } from '../controller/Sales/salesInvoice/salesInvoceCrud.mjs';
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount,
@@ -70,6 +71,7 @@ SalesRouter.get('/salesInvoice/lastInvoice', getLastSalesInvoiceByRetailerId);
 SalesRouter.get('/salesInvoice/adjacentInvoice', getAdjacentSalesInvoice);
 SalesRouter.get('/salesInvoice/bulkByIds', getSalesInvoiceByDoIds);
 SalesRouter.get('/salesInvoice/godownStockDetails', getGodownStockDetails);
+SalesRouter.put('/salesInvoice/stockReadyForDelivery', updateProductDeliveryStatus);
 
 SalesRouter.get('/getInvoiceDetails',salesInvoice.getInvoiceDetails)
 
