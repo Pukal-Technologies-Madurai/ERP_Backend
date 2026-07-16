@@ -1282,11 +1282,116 @@ ORDER BY Do_Id;
     }
 }
 
+// export const lrReportUploadMobile = async (req, res) => {
+//     const transaction = new sql.Transaction();
+//     let transactionBegun = false;
+
+//     try {
+//         await uploadFile(req, res, 6, 'LRReport');
+
+//         const fileName = req?.file?.filename;
+//         const filePath = req?.file?.path;
+//         const { Do_Id, Do_Inv_No, involvedStaffs, Uploaded_By } = req.body;
+
+//         if (!Do_Id) {
+//             return invalidInput(res, 'Do_Id is required');
+//         }
+
+//         await transaction.begin();
+//         transactionBegun = true;
+
+
+//         if (involvedStaffs) {
+//             let staffArray = [];
+//             try {
+//                 staffArray = JSON.parse(involvedStaffs);
+//             } catch (e) {
+//                 console.error('Error parsing involvedStaffs:', e);
+//             }
+
+//             if (staffArray.length > 0) {
+//                 const staffRequest = new sql.Request(transaction);
+
+//                 // Delete existing
+//                 await staffRequest
+//                     .input('Do_Id', sql.BigInt, Do_Id)
+//                     .query(`DELETE FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = @Do_Id`);
+
+//                 // Build bulk insert query
+//                 let valuesClause = '';
+//                 const parameters = {};
+
+//                 staffArray.forEach((staff, index) => {
+//                     valuesClause += valuesClause ? ',' : '';
+//                     valuesClause += `(@Do_Id, @Emp_Type_Id_${index}, @Emp_Id_${index})`;
+//                     parameters[`Emp_Type_Id_${index}`] = staff.Emp_Type_Id;
+//                     parameters[`Emp_Id_${index}`] = staff.Emp_Id;
+//                 });
+
+//                 const bulkRequest = new sql.Request(transaction);
+//                 bulkRequest.input('Do_Id', sql.BigInt, Do_Id);
+
+//                 Object.keys(parameters).forEach(key => {
+//                     bulkRequest.input(key, sql.BigInt, parameters[key]);
+//                 });
+
+//                 await bulkRequest.query(`
+//                     INSERT INTO tbl_Sales_Delivery_Staff_Info (Do_Id, Emp_Type_Id, Emp_Id)
+//                     VALUES ${valuesClause}
+//                 `);
+//             }
+//         }
+
+//         // Handle file upload - Best practice with IDENTITY
+//         if (fileName) {
+//             const imageRequest = new sql.Request(transaction);
+//             let soId = null;
+
+//             const So_Id_Get = await getNextId({ table: 'tbl_LrReport', column: 'Id' });
+//             if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get Id');
+//             soId = So_Id_Get.MaxId;
+
+
+//             const result = await imageRequest
+//                 .input('Id', sql.BigInt, soId)
+//                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
+//                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+//                 .input('ImageUrl', sql.NVarChar, filePath)
+//                 .input('Image_Name', sql.NVarChar, fileName)
+//                 .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+//                 .query(`
+//                     INSERT INTO tbl_LrReport (Id,Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
+//                     VALUES (@Id,@Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By);
+//                 `);
+
+//         }
+
+//         await transaction.commit();
+//         success(res, 'Changes saved successfully');
+
+//     } catch (e) {
+//         console.error('Error:', e);
+//         if (transactionBegun) {
+//             try {
+//                 await transaction.rollback();
+//             } catch (_) {
+//                 // Ignore rollback error
+//             }
+//         }
+//         servError(e, res);
+//     }
+
+
+
+// };
+
+
 export const lrReportUploadMobile = async (req, res) => {
-    const transaction = new sql.Transaction();
+    let transaction;
     let transactionBegun = false;
 
     try {
+        
         await uploadFile(req, res, 6, 'LRReport');
 
         const fileName = req?.file?.filename;
@@ -1297,9 +1402,28 @@ export const lrReportUploadMobile = async (req, res) => {
             return invalidInput(res, 'Do_Id is required');
         }
 
-        await transaction.begin();
-        transactionBegun = true;
+       
+        if (!sql.connected) {
+            await sql.connect(); // uses the config already passed to sql.connect() at app startup
+        }
 
+        transaction = new sql.Transaction();
+
+        try {
+            await transaction.begin();
+        } catch (beginErr) {
+            // One-shot retry: pool object existed but underlying connection was stale/dead
+            if (beginErr.code === 'ENOTOPEN' || beginErr.code === 'ECONNCLOSED') {
+                console.warn('Pool connection stale, reconnecting and retrying transaction...');
+                await sql.close().catch(() => {}); // clear the dead pool
+                await sql.connect();
+                transaction = new sql.Transaction();
+                await transaction.begin();
+            } else {
+                throw beginErr;
+            }
+        }
+        transactionBegun = true;
 
         if (involvedStaffs) {
             let staffArray = [];
@@ -1312,12 +1436,10 @@ export const lrReportUploadMobile = async (req, res) => {
             if (staffArray.length > 0) {
                 const staffRequest = new sql.Request(transaction);
 
-                // Delete existing
                 await staffRequest
                     .input('Do_Id', sql.BigInt, Do_Id)
                     .query(`DELETE FROM tbl_Sales_Delivery_Staff_Info WHERE Do_Id = @Do_Id`);
 
-                // Build bulk insert query
                 let valuesClause = '';
                 const parameters = {};
 
@@ -1342,17 +1464,14 @@ export const lrReportUploadMobile = async (req, res) => {
             }
         }
 
-        // Handle file upload - Best practice with IDENTITY
         if (fileName) {
             const imageRequest = new sql.Request(transaction);
-            let soId = null;
 
             const So_Id_Get = await getNextId({ table: 'tbl_LrReport', column: 'Id' });
             if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get Id');
-            soId = So_Id_Get.MaxId;
+            const soId = So_Id_Get.MaxId;
 
-
-            const result = await imageRequest
+            await imageRequest
                 .input('Id', sql.BigInt, soId)
                 .input('Do_Id', sql.NVarChar, Do_Id.toString())
                 .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
@@ -1363,7 +1482,6 @@ export const lrReportUploadMobile = async (req, res) => {
                     INSERT INTO tbl_LrReport (Id,Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
                     VALUES (@Id,@Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By);
                 `);
-
         }
 
         await transaction.commit();
@@ -1380,16 +1498,15 @@ export const lrReportUploadMobile = async (req, res) => {
         }
         servError(e, res);
     }
-
-
-
 };
 
+
 export const lrReportUpdateMobile = async (req, res) => {
-    const transaction = new sql.Transaction();
+    let transaction;
     let transactionBegun = false;
 
     try {
+        // Do the slow part (multer/disk write) BEFORE opening any DB transaction
         await uploadFile(req, res, 6, 'LRReport');
 
         const fileName = req?.file?.filename;
@@ -1405,9 +1522,27 @@ export const lrReportUpdateMobile = async (req, res) => {
             return invalidInput(res, 'Id is required to update');
         }
 
-        await transaction.begin();
-        transactionBegun = true;
+        // Make sure the global pool is actually connected before starting a transaction
+        if (!sql.connected) {
+            await sql.connect();
+        }
 
+        transaction = new sql.Transaction();
+
+        try {
+            await transaction.begin();
+        } catch (beginErr) {
+            if (beginErr.code === 'ENOTOPEN' || beginErr.code === 'ECONNCLOSED') {
+                console.warn('Pool connection stale, reconnecting and retrying transaction...');
+                await sql.close().catch(() => {});
+                await sql.connect();
+                transaction = new sql.Transaction();
+                await transaction.begin();
+            } else {
+                throw beginErr;
+            }
+        }
+        transactionBegun = true;
 
         const getOldImageRequest = new sql.Request(transaction);
         const oldImageResult = await getOldImageRequest
@@ -1420,25 +1555,13 @@ export const lrReportUpdateMobile = async (req, res) => {
             return failed(res, 'LR Report record not found');
         }
 
-        // Delete old image file
         const oldImagePath = oldImageResult.recordset[0].ImageUrl;
-        if (oldImagePath) {
-            try {
-                const fs = await import('fs');
-                if (fs.existsSync(oldImagePath)) {
-                    fs.unlinkSync(oldImagePath);
-                }
-            } catch (fileErr) {
-                console.error('Failed to delete old image file:', fileErr.message);
-            }
-        }
 
         // Delete the old record
         const deleteRequest = new sql.Request(transaction);
         await deleteRequest
             .input('Id', sql.BigInt, Id)
             .query(`DELETE FROM tbl_LrReport WHERE Id = @Id`);
-
 
         const insertRequest = new sql.Request(transaction);
         await insertRequest
@@ -1454,15 +1577,110 @@ export const lrReportUpdateMobile = async (req, res) => {
             `);
 
         await transaction.commit();
+
+        // Delete the OLD image file only after the transaction has successfully committed.
+        // (Moved out of the transaction block — see note below.)
+        if (oldImagePath) {
+            try {
+                const fs = await import('fs');
+                if (fs.existsSync(oldImagePath)) {
+                    fs.unlinkSync(oldImagePath);
+                }
+            } catch (fileErr) {
+                console.error('Failed to delete old image file:', fileErr.message);
+            }
+        }
+
         success(res, 'LR Report image updated successfully');
 
     } catch (e) {
+        console.error('Error:', e);
         if (transactionBegun) {
             try { await transaction.rollback(); } catch (_) { }
         }
         servError(e, res);
     }
 };
+
+
+// export const lrReportUpdateMobile = async (req, res) => {
+//     const transaction = new sql.Transaction();
+//     let transactionBegun = false;
+
+//     try {
+//         await uploadFile(req, res, 6, 'LRReport');
+
+//         const fileName = req?.file?.filename;
+//         const filePath = req?.file?.path;
+
+//         if (!fileName) {
+//             return invalidInput(res, 'New image is required');
+//         }
+
+//         const { Id, Do_Id, Do_Inv_No, Uploaded_By } = req.body;
+
+//         if (!Id) {
+//             return invalidInput(res, 'Id is required to update');
+//         }
+
+//         await transaction.begin();
+//         transactionBegun = true;
+
+
+//         const getOldImageRequest = new sql.Request(transaction);
+//         const oldImageResult = await getOldImageRequest
+//             .input('Id', sql.BigInt, Id)
+//             .query(`SELECT ImageUrl FROM tbl_LrReport WHERE Id = @Id`);
+
+//         if (oldImageResult.recordset.length === 0) {
+//             await transaction.rollback();
+//             transactionBegun = false;
+//             return failed(res, 'LR Report record not found');
+//         }
+
+//         // Delete old image file
+//         const oldImagePath = oldImageResult.recordset[0].ImageUrl;
+//         if (oldImagePath) {
+//             try {
+//                 const fs = await import('fs');
+//                 if (fs.existsSync(oldImagePath)) {
+//                     fs.unlinkSync(oldImagePath);
+//                 }
+//             } catch (fileErr) {
+//                 console.error('Failed to delete old image file:', fileErr.message);
+//             }
+//         }
+
+//         // Delete the old record
+//         const deleteRequest = new sql.Request(transaction);
+//         await deleteRequest
+//             .input('Id', sql.BigInt, Id)
+//             .query(`DELETE FROM tbl_LrReport WHERE Id = @Id`);
+
+
+//         const insertRequest = new sql.Request(transaction);
+//         await insertRequest
+//             .input('Id', sql.BigInt, Id)
+//             .input('Do_Id', sql.NVarChar, Do_Id?.toString() || '')
+//             .input('Do_Inv_No', sql.NVarChar, Do_Inv_No || '')
+//             .input('ImageUrl', sql.NVarChar, filePath)
+//             .input('Image_Name', sql.NVarChar, fileName)
+//             .input('Uploaded_By', sql.BigInt, Uploaded_By || null)
+//             .query(`
+//                 INSERT INTO tbl_LrReport (Id, Do_Id, Do_Inv_No, ImageUrl, Image_Name, Uploaded_By)
+//                 VALUES (@Id, @Do_Id, @Do_Inv_No, @ImageUrl, @Image_Name, @Uploaded_By)
+//             `);
+
+//         await transaction.commit();
+//         success(res, 'LR Report image updated successfully');
+
+//     } catch (e) {
+//         if (transactionBegun) {
+//             try { await transaction.rollback(); } catch (_) { }
+//         }
+//         servError(e, res);
+//     }
+// };
 
 export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
     try {
