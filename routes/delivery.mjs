@@ -27,4 +27,7 @@ DeliveryRouter.get('/deliveryOrderListData',deliverOrder.getDeliveryorderList)
 DeliveryRouter.get('/deliveryOrderListDataMobile',deliverOrder.getDeliveryorderListMobile)
 // DeliveryRouter.get('/deliveryOrder', deliverOrder.getSaleOrder);
 
+
+DeliveryRouter.put('/tripRoute',deliveryOrder.tripRoutes)
+
 export default DeliveryRouter;
