@@ -2481,6 +2481,8 @@ const DeliveryOrder = () => {
                    sdsi.S_No,
                    sogi.So_Date,
                    TRY_CAST(sdsi.Item_Id AS INT) AS Item_Id,
+                   pm.Pos_Brand_Id,
+                   pob.POS_Brand_Name,
                    CAST(COALESCE(TRY_CAST(sdsi.Bill_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Bill_Qty,
                    CAST(COALESCE(TRY_CAST(sdsi.Act_Qty AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Act_Qty,
                    CAST(COALESCE(TRY_CAST(sdsi.Taxable_Rate AS DECIMAL(18,2)), 0) AS DECIMAL(18,2)) as Taxable_Rate,
@@ -2539,6 +2541,7 @@ const DeliveryOrder = () => {
                LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = TRY_CAST(sgi.Retailer_Id AS INT)
                LEFT JOIN tbl_Sales_Order_Gen_Info sogi ON sogi.So_Id=TRY_CAST(sgi.So_No AS INT)
                LEFT JOIN tbl_Sales_Delivery_Address sda ON sda.id = TRY_CAST(sgi.shipingAddressId AS INT)
+               LEFT JOIN tbl_POS_Brand pob ON pob.POS_Brand_Id = TRY_CAST(pm.Pos_Brand_Id AS INT)
                WHERE TRY_CAST(sdsi.Delivery_Order_Id AS INT) IN (${deliveryIds.map((_, i) => `@DeliveryId${i}`).join(',')})
                ORDER BY TRY_CAST(sdsi.Delivery_Order_Id AS INT), sdsi.S_No
                `;
