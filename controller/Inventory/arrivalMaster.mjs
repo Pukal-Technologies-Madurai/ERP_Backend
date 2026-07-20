@@ -246,14 +246,17 @@ const ArrivalMaster = () => {
     }
 
     const addBulkArrivalEntry = async (req, res) => {
+        const transaction = new sql.Transaction();
+
         try {
+            await transaction.begin();
             const body = req.body;
 
             if (!Array.isArray(body) || body.length === 0) {
                 return invalidInput(res, 'Invalid Payload');
             }
 
-            const request = new sql.Request()
+            const request = new sql.Request(transaction)
                 .input('json', sql.NVarChar(sql.MAX), JSON.stringify(body))
                 .query(`
                     INSERT INTO tbl_Trip_Arrival (
@@ -297,12 +300,17 @@ const ArrivalMaster = () => {
 
             const result = await request;
 
+            await transaction.commit();
+
             if (result.rowsAffected[0] > 0) {
                 success(res, 'Arrival Saved');
             } else {
                 failed(res, 'Failed to save')
             }
         } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
             servError(e, res);
         }
     }

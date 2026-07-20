@@ -1508,7 +1508,7 @@ const batchTransaction = async (req, res) => {
                 	AND bt.reference_id = sdgi.Do_Id
                 	AND bt.batch = sdsi.Batch_Name
                 	AND (bt.type = 'SALES' OR bt.type = 'SALES_REVERSAL')
-                WHERE sdgi.Cancel_status <> 0
+                WHERE sdgi.Cancel_status <> 0 AND bt.batch_id = @batch_id
                 GROUP BY bt.batch_id, sdgi.Do_Id, sdgi.Do_Date, sdgi.Do_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
                 -- ********************************* purchase - IN ********************************* 
                 SELECT 
@@ -1533,7 +1533,7 @@ const batchTransaction = async (req, res) => {
                 	bt.batch_id = bm.id 
                 	AND bt.type = 'PURCHASE_REVERSAL'
                 	AND bt.reference_id = sdgi.PIN_Id
-                WHERE sdgi.Cancel_status = 0
+                WHERE sdgi.Cancel_status = 0 AND bm.id = @batch_id
                 GROUP BY bm.id, sdgi.PIN_Id, sdgi.Po_Entry_Date, sdgi.Po_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
                 -- ********************************* CONSUMPTION - OUT ********************************* 
                 SELECT 
@@ -1554,7 +1554,7 @@ const batchTransaction = async (req, res) => {
                 	AND bt.reference_id = sdgi.PR_Id
                 	AND bt.batch = sdsi.Sour_Batch_Lot_No
                 	AND (bt.type = 'CONSUMPTION' OR bt.type = 'CONSUMPTION_REVERSAL')
-                WHERE sdgi.PR_Status <> 'Canceled'
+                WHERE sdgi.PR_Status <> 'Canceled' AND bt.batch_id = @batch_id
                 GROUP BY bt.batch_id, sdgi.PR_Id, sdgi.Process_date, sdgi.PR_Inv_Id, bt.type, sdgi.Created_At;
                 -- ********************************* PRODUCTION - IN ********************************* 
                 SELECT 
@@ -1578,7 +1578,7 @@ const batchTransaction = async (req, res) => {
                 	bt.batch_id = bm.id 
                 	AND bt.type = 'PRODUCTION_REVERSAL'
                 	AND bt.reference_id = sdgi.PR_Id
-                WHERE sdgi.PR_Status <> 'Canceled'
+                WHERE sdgi.PR_Status <> 'Canceled' AND bm.id = @batch_id
                 GROUP BY bm.id, sdgi.PR_Id, sdgi.Process_date, sdgi.Process_no, bt.type, sdgi.Created_At;
                 -- ********************************* debit_note - OUT ********************************* 
                 SELECT 
@@ -1600,7 +1600,7 @@ const batchTransaction = async (req, res) => {
                 	AND bt.reference_id = sdgi.DB_Id
                 	AND bt.batch = sdsi.Batch_Name
                 	AND (bt.type = 'DEBIT_NOTE' OR bt.type = 'DEBIT_NOTE_REVERSAL')
-                WHERE sdgi.Cancel_status <> 0
+                WHERE sdgi.Cancel_status <> 0 AND bt.batch_id = @batch_id
                 GROUP BY bt.batch_id, sdgi.DB_Id, sdgi.DB_Date, sdgi.DB_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
                 -- ********************************* credit_note - IN ********************************* 
                 SELECT 
@@ -1625,7 +1625,7 @@ const batchTransaction = async (req, res) => {
                 	bt.batch_id = bm.id 
                 	AND bt.type = 'CREDIT_NOTE_REVERSAL'
                 	AND bt.reference_id = sdgi.CR_Id
-                WHERE sdgi.Cancel_status = 0
+                WHERE sdgi.Cancel_status = 0 AND bm.id = @batch_id
                 GROUP BY bm.id, sdgi.CR_Id, sdgi.CR_Date, sdgi.CR_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
                 -- ********************************* godown_transfer - OUT ********************************* 
                 SELECT 
@@ -1647,7 +1647,7 @@ const batchTransaction = async (req, res) => {
                 	AND bt.reference_id = sdsi.Arr_Id
                 	AND bt.batch = sdsi.Batch_No
                 	AND (bt.type = 'OTHER_GODOWN' OR bt.type = 'OTHER_GODOWN_REVERSAL')
-                WHERE sdgi.TripStatus <> 'Canceled'
+                WHERE sdgi.TripStatus <> 'Canceled' AND bt.batch_id = @batch_id
                 GROUP BY bt.batch_id, sdsi.Arr_Id, sdgi.Trip_Date, sdgi.TR_INV_ID, bt.type, sdgi.Created_At;
                 -- ********************************* material_inward - IN ********************************* 
                 SELECT 
@@ -1673,7 +1673,7 @@ const batchTransaction = async (req, res) => {
                 	bt.batch_id = bm.id 
                 	AND bt.type = 'MATERIAL_INWARD_REVERSAL'
                 	AND bt.reference_id = sdsi.Arr_Id
-                WHERE sdgi.TripStatus <> 'Canceled'
+                WHERE sdgi.TripStatus <> 'Canceled' AND bm.id = @batch_id
                 GROUP BY bm.id, sdgi.Trip_Id, sdgi.Trip_Date, sdgi.TR_INV_ID, rm.Retailer_Name, bt.type, sdgi.Created_At;
             `);
 
