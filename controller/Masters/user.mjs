@@ -794,9 +794,9 @@ const user = () => {
         } = req.body;
         const currentCompanyId = checkIsNumber(Company_id) ? Number(Company_id) : COM_ID;
 
-        if (!UserId || !Name || !UserName || !checkIsNumber(UserTypeId) || !Password || !checkIsNumber(BranchId)) {
-            return invalidInput(res, 'UserId, Name, UserName, UserTypeId, Password and BranchId are required and must be valid.', {
-                UserId, Name, UserName, UserTypeId, Password, BranchId
+        if (!UserId || !Name || !UserName || !checkIsNumber(UserTypeId)  || !checkIsNumber(BranchId)) {
+            return invalidInput(res, 'UserId, Name, UserName, UserTypeId and BranchId are required and must be valid.', {
+                UserId, Name, UserName, UserTypeId, BranchId
             });
         }
 
@@ -824,14 +824,14 @@ const user = () => {
                 .input('Name', Name)
                 .input('UserName', UserName)
                 .input('UserTypeId', UserTypeId)
-                .input('Password', decryptPasswordFun(Password))
+                // .input('Password', decryptPasswordFun(Password))
                 .input('Company_id', currentCompanyId)
                 .query(`
                     UPDATE [${userPortalDB}].[dbo].[tbl_Users]
                     SET Name = @Name,
                         UserName = @UserName,
-                        UserTypeId = @UserTypeId,
-                        Password = @Password
+                        UserTypeId = @UserTypeId
+                       -- Password = @Password
                     WHERE Local_User_ID = @UserId
                     AND Company_Id = @Company_id;
                 `);
@@ -846,7 +846,7 @@ const user = () => {
                 .input('Name', Name)
                 .input('UserName', UserName)
                 .input('UserTypeId', UserTypeId)
-                .input('Password', decryptPasswordFun(Password))
+                // .input('Password', decryptPasswordFun(Password))
                 .input('BranchId', BranchId)
                 .input('Company_id', currentCompanyId)
                 .query(`
@@ -854,7 +854,7 @@ const user = () => {
                     SET Name = @Name,
                         UserName = @UserName,
                         UserTypeId = @UserTypeId,
-                        Password = @Password,
+                        
                         BranchId = @BranchId
                     WHERE UserId = @UserId
                     AND Company_id = @Company_id;
