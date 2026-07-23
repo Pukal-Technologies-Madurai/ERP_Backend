@@ -1096,8 +1096,14 @@ const CostCenter = () => {
     const getCostCenterCategory = async (req, res) => {
         try {
             const result = await sql.query(`
-                SELECT *
+                SELECT 
+                    Cost_Category_Id,
+                    Cost_Category,
+                    COALESCE(Alias_Name, Cost_Category) AS Alias_Name,
+                    COALESCE(Order_By, 0) AS Order_By,
+                    COALESCE(IS_Active, 0) AS IS_Active
                 FROM tbl_ERP_Cost_Category
+                ORDER BY Order_By;
             `);
 
             sentData(res, result.recordset)
@@ -1107,7 +1113,7 @@ const CostCenter = () => {
     }
 
     const createCostCategory = async (req, res) => {
-        const { Cost_Category } = req.body;
+        const { Cost_Category, Alias_Name, Order_By, IS_Active } = req.body;
 
         if (!Cost_Category) {
             return invalidInput(res, 'Cost_Category are required');
@@ -1125,11 +1131,14 @@ const CostCenter = () => {
             const request = new sql.Request()
                 .input('Cost_Category_Id', newCostCenterId)
                 .input('Cost_Category', Cost_Category)
+                .input('Alias_Name', Alias_Name || null)
+                .input('Order_By', Order_By || null)
+                .input('IS_Active', IS_Active ?? 1)
                 .query(`
                     INSERT INTO tbl_ERP_Cost_Category (
-                        Cost_Category_Id, Cost_Category
+                        Cost_Category_Id, Cost_Category, Alias_Name, Order_By, IS_Active
                     ) VALUES (
-                        @Cost_Category_Id, @Cost_Category
+                        @Cost_Category_Id, @Cost_Category, @Alias_Name, @Order_By, @IS_Active
                     );
                 `);
 
@@ -1172,7 +1181,7 @@ const CostCenter = () => {
     };
 
     const updateCostCategory = async (req, res) => {
-        const { Cost_Category_Id, Cost_Category } = req.body;
+        const { Cost_Category_Id, Cost_Category, Alias_Name, Order_By, IS_Active } = req.body;
 
         if (!checkIsNumber(Cost_Category_Id)) {
             return invalidInput(res, 'Cost_Category_Id required');
@@ -1182,10 +1191,16 @@ const CostCenter = () => {
             const request = new sql.Request()
                 .input('Cost_Category_Id', Cost_Category_Id)
                 .input('Cost_Category', Cost_Category)
+                .input('Alias_Name', Alias_Name || null)
+                .input('Order_By', Order_By || null)
+                .input('IS_Active', IS_Active ?? 1)
                 .query(`
                 UPDATE tbl_ERP_Cost_Category
                 SET
-                    Cost_Category = @Cost_Category
+                    Cost_Category = @Cost_Category,
+                    Alias_Name = @Alias_Name,
+                    Order_By = @Order_By,
+                    IS_Active = @IS_Active
                 WHERE
                     Cost_Category_Id = @Cost_Category_Id;
                 `);
@@ -1205,7 +1220,12 @@ const CostCenter = () => {
     const costCategoryDropDown = async (req, res) => {
         try {
             const result = await sql.query(`
-             SELECT Cost_Category_Id as value, Cost_Category as label FROM tbl_ERP_Cost_Category
+                SELECT 
+                    Cost_Category_Id as value, 
+                    Cost_Category as label 
+                FROM tbl_ERP_Cost_Category
+                WHERE IS_Active = 1
+                ORDER BY Order_By;
             `);
 
             if (result.recordset.length > 0) {
