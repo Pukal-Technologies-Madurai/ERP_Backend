@@ -865,7 +865,7 @@ const tripActivities = () => {
                         stf.Trip_Id AS PR_Id,
                         stf.Cost_Center_Type_Id AS Emp_Type_Id,
                         stf.Involved_Emp_Id AS Emp_Id,
-                        e.Cost_Center_Name AS Emp_Name,
+                        ISNULL(e.Cost_Center_Name, 'Unknown') AS Emp_Name,
                         cc.Cost_Category AS Involved_Emp_Type
                     FROM tbl_Trip_Employees AS stf
                     LEFT JOIN tbl_ERP_Cost_Center AS e
@@ -881,9 +881,9 @@ const tripActivities = () => {
                     WHERE Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip);
 
                 -- Cost Types
-                    SELECT Cost_Category_Id, Cost_Category
+                    SELECT Cost_Category_Id, Cost_Category, COALESCE(Order_By, 999) AS Order_By
                     FROM tbl_ERP_Cost_Category
-                    ORDER BY Cost_Category;
+                    ORDER BY Order_By;
                 `
                 );
 
@@ -899,11 +899,17 @@ const tripActivities = () => {
             const tripWithStaffs = tripList.map(trip => {
                 const involvedStaffs = staffs.filter(stf =>
                     isEqualNumber(stf.PR_Id, trip.Trip_Id)
-                );
+                ).map(stf => ({
+                    ...stf,
+                    PR_Id: toNumber(stf.PR_Id),
+                    Emp_Type_Id: toNumber(stf.Emp_Type_Id),
+                    Emp_Id: toNumber(stf.Emp_Id)
+                }));
 
                 return {
                     ...trip,
-                    PR_Id: trip.Trip_Id,
+                    Trip_Id: toNumber(trip.Trip_Id),
+                    PR_Id: toNumber(trip.Trip_Id),
                     involvedStaffs,
                 };
             });
@@ -913,7 +919,7 @@ const tripActivities = () => {
                 data: tripWithStaffs,
                 others: {
                     costTypes: toArray(costTypes),
-                    uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
+                    uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => toNumber(i.Emp_Type_Id))
                 }
             });
 
@@ -945,7 +951,7 @@ const tripActivities = () => {
             const request = new sql.Request(transaction);
             await request
                 .input('Trip_Id', sql.BigInt, Trip_Id)
-                .input('involvedStaffs', sql.NVarChar, JSON.stringify(involvedStaffs))
+                .input('involvedStaffs', sql.NVarChar(sql.MAX), JSON.stringify(involvedStaffs))
                 .query(`
                     -- Delete old staff entries
                     DELETE FROM tbl_Trip_Employees

@@ -68,9 +68,9 @@ export const getProcessingForAssignCostCenter = async (req, res) => {
                 WHERE PR_Id IN (SELECT PR_Id FROM @FilteredProcessing);
 
             -- Cost Types
-                SELECT Cost_Category_Id, Cost_Category
+                SELECT Cost_Category_Id, Cost_Category, COALESCE(Order_By, 999) AS Order_By
                 FROM tbl_ERP_Cost_Category
-                ORDER BY Cost_Category;
+                ORDER BY Order_By;
 
             -- Source details
                 SELECT 

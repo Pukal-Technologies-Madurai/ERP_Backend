@@ -75,9 +75,9 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                 FROM tbl_Sales_Delivery_Staff_Info
                 WHERE Do_Id IN (SELECT Do_Id FROM @FilteredInvoice);
             -- Cost Types
-                SELECT Cost_Category_Id, Cost_Category
+                SELECT Cost_Category_Id, Cost_Category, COALESCE(Order_By, 999) AS Order_By
                 FROM tbl_ERP_Cost_Category
-                ORDER BY Cost_Category;
+                ORDER BY Order_By;
             -- Stock Details
                 SELECT 
                     sdsi.Do_Date,
