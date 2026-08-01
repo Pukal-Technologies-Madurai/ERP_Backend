@@ -66,6 +66,18 @@ FROM tbl_Sales_Order_Staff_Info AS sosi
 LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
 LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
 JOIN (SELECT DISTINCT orderId FROM @Filtered) AS fltr ON fltr.orderId = sosi.So_Id
+-- ******************** 4: Sales Order Expence Info ********************
+SELECT 
+    soei.So_Id,
+    soei.Sno,
+    soei.Expense_Id,
+    soei.Expence_Value_DR,
+    soei.Expence_Value_CR,
+    COALESCE(acc.Account_Name, 'unknown') AS Expence_Name,
+    acc.percentageValue
+FROM tbl_Sales_Order_Expence_Info AS soei
+JOIN (SELECT DISTINCT orderId FROM @Filtered) AS fltr ON fltr.orderId = soei.So_Id
+LEFT JOIN tbl_Account_Master AS acc ON acc.Acc_Id = soei.Expense_Id
 -- OTHER MODULES
 -- ******************** 4: Sales General Info ********************
 SELECT 
@@ -162,7 +174,7 @@ const SaleOrder = () => {
         const {
             Retailer_Id, Sales_Person_Id, Branch_Id,
             Narration = null, Created_by, Product_Array = [], GST_Inclusive = 1, IS_IGST = 0, VoucherType = '',
-            Staff_Involved_List = [], invoiceCopyCount = 1
+            Staff_Involved_List = [], invoiceCopyCount = 1, Expence_Array = []
         } = req.body;
 
         const So_Date = ISOString(req?.body?.So_Date);
@@ -248,7 +260,11 @@ const SaleOrder = () => {
 
             // tax calculation
 
-            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
+            const TotalExpences = toNumber(RoundNumber(
+                toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+            ));
+
+            const Total_Invoice_value = RoundNumber(Addition(TotalExpences, Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
                 const billQty = RoundNumber(item?.Bill_Qty);
                 const Amount = Multiplication(billQty, itemRate);
@@ -263,32 +279,68 @@ const SaleOrder = () => {
                 } else {
                     return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
                 }
-            }, 0))
+            }, 0)))
 
-            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+            const totalValueBeforeTaxValues = () => {
+                const productTax = Product_Array.reduce((acc, item) => {
+                    const itemRate = RoundNumber(item?.Item_Rate);
+                    const billQty = RoundNumber(item?.Bill_Qty);
+                    const Amount = Multiplication(billQty, itemRate);
 
-                if (isNotTaxableBill) return {
-                    TotalValue: Addition(acc.TotalValue, Amount),
+                    if (isNotTaxableBill) return {
+                        TotalValue: Addition(acc.TotalValue, Amount),
+                        TotalTax: 0
+                    }
+
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                    const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                    const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                    const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+                    return {
+                        TotalValue, TotalTax
+                    };
+                }, {
+                    TotalValue: 0,
                     TotalTax: 0
-                }
+                });
 
-                const product = findProductDetails(productsData, item.Item_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+                const invoiceExpencesTaxTotal = toArray(Expence_Array).reduce((acc, exp) => Addition(
+                    acc,
+                    isIGST ? exp?.Igst_Amo : Addition(exp?.Cgst_Amo, exp?.Sgst_Amo)
+                ), 0);
 
-                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
-                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+                const TotalValue = productTax.TotalValue;
+                const TotalTax = Addition(productTax.TotalTax, invoiceExpencesTaxTotal);
+
+                const Cgst = isIGST ? 0 : RoundNumber(TotalTax / 2);
+                const Sgst = isIGST ? 0 : RoundNumber(TotalTax / 2);
+                const Igst = isIGST ? RoundNumber(TotalTax) : 0;
+                
+                const sumComponents = Addition(
+                    TotalValue, 
+                    Addition(Addition(Cgst, Sgst), Igst)
+                );
+                const TotalExpences = toNumber(RoundNumber(
+                    toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+                ));
+                const total = Addition(sumComponents, TotalExpences);
+                const roundedTotal = Math.round(Total_Invoice_value);
+                const roundOff = RoundNumber(roundedTotal - total);
 
                 return {
-                    TotalValue, TotalTax
-                };
-            }, {
-                TotalValue: 0,
-                TotalTax: 0
-            });
+                    TotalValue,
+                    TotalTax,
+                    Cgst,
+                    Sgst,
+                    Igst,
+                    roundOff
+                }
+            };
+
+            const totalValueBeforeTax = totalValueBeforeTaxValues();
 
             await transaction.begin();
 
@@ -303,11 +355,11 @@ const SaleOrder = () => {
                 .input('Branch_Id', Branch_Id)
                 .input('VoucherType', VoucherType)
                 .input('GST_Inclusive', GST_Inclusive)
-                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('IGST_Total', isIGST ? totalValueBeforeTax.TotalTax : 0)
+                .input('CSGT_Total', totalValueBeforeTax.Cgst)
+                .input('SGST_Total', totalValueBeforeTax.Sgst)
+                .input('IGST_Total', totalValueBeforeTax.Igst)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('Round_off', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
+                .input('Round_off', totalValueBeforeTax.roundOff)
                 .input('Total_Invoice_value', Math.round(Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
@@ -420,6 +472,94 @@ const SaleOrder = () => {
                     );
             }
 
+            if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
+                for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
+                    const exp = Expence_Array[expInd];
+                    const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                    const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? Math.abs(toNumber(exp?.Expence_Value)) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('So_Id', So_Id)
+                        .input('Sno', expInd + 1)
+                        .input('Expense_Id', toNumber(exp?.Expense_Id))
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Sales_Order_Expence_Info (
+                                So_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            ) VALUES (
+                                @So_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Expence row in sales order creation');
+                    }
+                }
+            }
+
+            const taxTypes = [
+                { expName: 'CGST', Value: totalValueBeforeTax.Cgst },
+                { expName: 'SGST', Value: totalValueBeforeTax.Sgst },
+                { expName: 'IGST', Value: totalValueBeforeTax.Igst },
+                { expName: 'ROUNDOFF', Value: totalValueBeforeTax.roundOff }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            let snoOffset = Array.isArray(Expence_Array) ? Expence_Array.length : 0;
+
+            if (taxTypes.length > 0) {
+                const getExpName = new sql.Request(transaction);
+                taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+                const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
+
+                const getCurrespondingAccount = getExpName.query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE AC_Reason IN (${inClause}) 
+                    AND Acc_Id IS NOT NULL;`
+                );
+
+                const expData = (await getCurrespondingAccount).recordset;
+
+                const missing = taxTypes.filter(exp =>
+                    !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+                );
+
+                if (missing.length > 0) {
+                    throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+                }
+
+                for (let i = 0; i < taxTypes.length; i++) {
+                    const { expName, Value } = taxTypes[i];
+                    const numValue = Number(Value);
+                    const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('So_Id', So_Id)
+                        .input('Sno', snoOffset + i + 1)
+                        .input('Expense_Id', Expense_Id)
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Sales_Order_Expence_Info (
+                                So_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            ) VALUES (
+                                @So_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            )`
+                        );
+
+                    const result = await request;
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert tax expense row in sales order creation');
+                    }
+                }
+            }
+
             await transaction.commit();
 
             const getCreatedSaleOrder = new sql.Request()
@@ -463,7 +603,19 @@ const SaleOrder = () => {
                     FROM tbl_Sales_Order_Staff_Info AS sosi
                     LEFT JOIN tbl_ERP_Cost_Center AS c ON c.Cost_Center_Id = sosi.Involved_Emp_Id
                     LEFT JOIN tbl_ERP_Cost_Category cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
-                    WHERE sosi.So_Id = @So_Id;`
+                    WHERE sosi.So_Id = @So_Id;
+                    -- Expenses
+                    SELECT 
+                        soei.So_Id,
+                        soei.Sno,
+                        soei.Expense_Id,
+                        soei.Expence_Value_DR,
+                        soei.Expence_Value_CR,
+                        COALESCE(acc.Account_Name, 'unknown') AS Expence_Name,
+                        acc.percentageValue
+                    FROM tbl_Sales_Order_Expence_Info AS soei
+                    LEFT JOIN tbl_Account_Master AS acc ON acc.Acc_Id = soei.Expense_Id
+                    WHERE soei.So_Id = @So_Id;`
                 );
 
             const createdSaleOrder = await getCreatedSaleOrder;
@@ -473,6 +625,12 @@ const SaleOrder = () => {
                     generalInfo: isValidObject(createdSaleOrder.recordsets[0][0]) ? createdSaleOrder.recordsets[0][0] : {},
                     productDetails: toArray(createdSaleOrder.recordsets[1]),
                     staffInvolved: toArray(createdSaleOrder.recordsets[2]),
+                    Expence_Array: toArray(createdSaleOrder.recordsets[3]).map(exp => ({
+                        Expense_Id: exp.Expense_Id,
+                        Expence_Value: exp.Expence_Value_DR || exp.Expence_Value_CR || 0,
+                        Expence_Name: exp.Expence_Name,
+                        percentageValue: exp.percentageValue
+                    })),
                 },
             })
 
@@ -493,7 +651,7 @@ const SaleOrder = () => {
             const {
                 So_Id, Retailer_Id, Sales_Person_Id, Branch_Id, Cancel_status,
                 Narration = null, Created_by, Product_Array, GST_Inclusive = 1, IS_IGST = 0,
-                Staff_Involved_List = [], invoiceCopyCount = 1
+                Staff_Involved_List = [], invoiceCopyCount = 1, Expence_Array = []
             } = req.body;
 
             const So_Date = ISOString(req?.body?.So_Date);
@@ -515,7 +673,11 @@ const SaleOrder = () => {
 
             const productsData = (await getProducts()).dataArray;
 
-            const Total_Invoice_value = RoundNumber(Product_Array.reduce((acc, item) => {
+            const TotalExpences = toNumber(RoundNumber(
+                toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+            ));
+
+            const Total_Invoice_value = RoundNumber(Addition(TotalExpences, Product_Array.reduce((acc, item) => {
                 const itemRate = RoundNumber(item?.Item_Rate);
                 const billQty = RoundNumber(item?.Bill_Qty);
                 const Amount = Multiplication(billQty, itemRate);
@@ -530,32 +692,68 @@ const SaleOrder = () => {
                 } else {
                     return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
                 }
-            }, 0))
+            }, 0)))
 
-            const totalValueBeforeTax = Product_Array.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate);
-                const billQty = RoundNumber(item?.Bill_Qty);
-                const Amount = Multiplication(billQty, itemRate);
+            const totalValueBeforeTaxValues = () => {
+                const productTax = Product_Array.reduce((acc, item) => {
+                    const itemRate = RoundNumber(item?.Item_Rate);
+                    const billQty = RoundNumber(item?.Bill_Qty);
+                    const Amount = Multiplication(billQty, itemRate);
 
-                if (isNotTaxableBill) return {
-                    TotalValue: Addition(acc.TotalValue, Amount),
+                    if (isNotTaxableBill) return {
+                        TotalValue: Addition(acc.TotalValue, Amount),
+                        TotalTax: 0
+                    }
+
+                    const product = findProductDetails(productsData, item.Item_Id);
+                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+                    const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+                    const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+                    const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+                    return {
+                        TotalValue, TotalTax
+                    };
+                }, {
+                    TotalValue: 0,
                     TotalTax: 0
-                }
+                });
 
-                const product = findProductDetails(productsData, item.Item_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+                const invoiceExpencesTaxTotal = toArray(Expence_Array).reduce((acc, exp) => Addition(
+                    acc,
+                    isIGST ? exp?.Igst_Amo : Addition(exp?.Cgst_Amo, exp?.Sgst_Amo)
+                ), 0);
 
-                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
-                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+                const TotalValue = productTax.TotalValue;
+                const TotalTax = Addition(productTax.TotalTax, invoiceExpencesTaxTotal);
+
+                const Cgst = isIGST ? 0 : RoundNumber(TotalTax / 2);
+                const Sgst = isIGST ? 0 : RoundNumber(TotalTax / 2);
+                const Igst = isIGST ? RoundNumber(TotalTax) : 0;
+                
+                const sumComponents = Addition(
+                    TotalValue, 
+                    Addition(Addition(Cgst, Sgst), Igst)
+                );
+                const TotalExpences = toNumber(RoundNumber(
+                    toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+                ));
+                const total = Addition(sumComponents, TotalExpences);
+                const roundedTotal = Math.round(Total_Invoice_value);
+                const roundOff = RoundNumber(roundedTotal - total);
 
                 return {
-                    TotalValue, TotalTax
-                };
-            }, {
-                TotalValue: 0,
-                TotalTax: 0
-            });
+                    TotalValue,
+                    TotalTax,
+                    Cgst,
+                    Sgst,
+                    Igst,
+                    roundOff
+                }
+            };
+
+            const totalValueBeforeTax = totalValueBeforeTaxValues();
 
             const request = new sql.Request(transaction)
                 .input('soid', So_Id)
@@ -565,11 +763,11 @@ const SaleOrder = () => {
                 .input('branch', Branch_Id)
                 .input('Cancel_status', Cancel_status)
                 .input('GST_Inclusive', GST_Inclusive)
-                .input('CSGT_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('SGST_Total', isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('IGST_Total', isIGST ? totalValueBeforeTax.TotalTax : 0)
+                .input('CSGT_Total', totalValueBeforeTax.Cgst)
+                .input('SGST_Total', totalValueBeforeTax.Sgst)
+                .input('IGST_Total', totalValueBeforeTax.Igst)
                 .input('IS_IGST', isIGST ? 1 : 0)
-                .input('roundoff', RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value))
+                .input('roundoff', totalValueBeforeTax.roundOff)
                 .input('totalinvoice', Math.round(Total_Invoice_value))
                 .input('Total_Before_Tax', totalValueBeforeTax.TotalValue)
                 .input('Total_Tax', totalValueBeforeTax.TotalTax)
@@ -618,7 +816,8 @@ const SaleOrder = () => {
                 .input('soid', So_Id)
                 .query(`
                     DELETE FROM tbl_Sales_Order_Stock_Info WHERE Sales_Order_Id = @soid;
-                    DELETE FROM tbl_Sales_Order_Staff_Info WHERE So_Id = @soid;`
+                    DELETE FROM tbl_Sales_Order_Staff_Info WHERE So_Id = @soid;
+                    DELETE FROM tbl_Sales_Order_Expence_Info WHERE So_Id = @soid;`
                 );
 
             for (let i = 0; i < Product_Array.length; i++) {
@@ -699,6 +898,94 @@ const SaleOrder = () => {
                     );
             }
 
+            if (Array.isArray(Expence_Array) && Expence_Array.length > 0) {
+                for (let expInd = 0; expInd < Expence_Array.length; expInd++) {
+                    const exp = Expence_Array[expInd];
+                    const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
+                    const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? Math.abs(toNumber(exp?.Expence_Value)) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('So_Id', So_Id)
+                        .input('Sno', expInd + 1)
+                        .input('Expense_Id', toNumber(exp?.Expense_Id))
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Sales_Order_Expence_Info (
+                                So_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            ) VALUES (
+                                @So_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            )`
+                        );
+
+                    const result = await request;
+
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert Expence row in sales order edit');
+                    }
+                }
+            }
+
+            const taxTypes = [
+                { expName: 'CGST', Value: totalValueBeforeTax.Cgst },
+                { expName: 'SGST', Value: totalValueBeforeTax.Sgst },
+                { expName: 'IGST', Value: totalValueBeforeTax.Igst },
+                { expName: 'ROUNDOFF', Value: totalValueBeforeTax.roundOff }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            let snoOffset = Array.isArray(Expence_Array) ? Expence_Array.length : 0;
+
+            if (taxTypes.length > 0) {
+                const getExpName = new sql.Request(transaction);
+                taxTypes.forEach((t, i) => getExpName.input(`exp${i}`, t.expName));
+                const inClause = taxTypes.map((_, i) => `@exp${i}`).join(', ');
+
+                const getCurrespondingAccount = getExpName.query(`
+                    SELECT Acc_Id, AC_Reason 
+                    FROM tbl_Default_AC_Master 
+                    WHERE AC_Reason IN (${inClause}) 
+                    AND Acc_Id IS NOT NULL;`
+                );
+
+                const expData = (await getCurrespondingAccount).recordset;
+
+                const missing = taxTypes.filter(exp =>
+                    !expData.some(row => stringCompare(row.AC_Reason, exp.expName))
+                );
+
+                if (missing.length > 0) {
+                    throw new Error(`Expense id not mapped: ${missing.map(m => m.expName).join(', ')}`);
+                }
+
+                for (let i = 0; i < taxTypes.length; i++) {
+                    const { expName, Value } = taxTypes[i];
+                    const numValue = Number(Value);
+                    const Expense_Id = expData.find(exp => stringCompare(exp.AC_Reason, expName)).Acc_Id;
+
+                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+
+                    const request = new sql.Request(transaction)
+                        .input('So_Id', So_Id)
+                        .input('Sno', snoOffset + i + 1)
+                        .input('Expense_Id', Expense_Id)
+                        .input('Expence_Value_DR', Expence_Value_DR)
+                        .input('Expence_Value_CR', Expence_Value_CR)
+                        .query(`
+                            INSERT INTO tbl_Sales_Order_Expence_Info (
+                                So_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            ) VALUES (
+                                @So_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            )`
+                        );
+
+                    const result = await request;
+                    if (result.rowsAffected[0] === 0) {
+                        throw new Error('Failed to insert tax expense row in sales order edit');
+                    }
+                }
+            }
+
             await transaction.commit();
             success(res, 'Changes Saved!')
 
@@ -731,6 +1018,7 @@ const SaleOrder = () => {
                 saleOrderGeneralResult,
                 saleOrderStockResult,
                 saleOrderStaffResult,
+                saleOrderExpenceResult,
                 salesInvoiceGeneralResult,
                 salesInvoiceStockResult,
                 salesInvoiceStaffResult,
@@ -744,6 +1032,7 @@ const SaleOrder = () => {
                 // order
                 const stockItems = saleOrderStockResult.filter(item => isEqualNumber(item.Sales_Order_Id, row.So_Id));
                 const staffInvolved = saleOrderStaffResult.filter(staff => isEqualNumber(staff.So_Id, row.So_Id));
+                const expences = saleOrderExpenceResult.filter(exp => isEqualNumber(exp.So_Id, row.So_Id));
                 // invoice
                 const invoiceInfo = salesInvoiceGeneralResult.filter(inv => isEqualNumber(inv.saleOrderId, row.So_Id));
 
@@ -790,6 +1079,12 @@ const SaleOrder = () => {
                     ...row,
                     Products_List: stockWithInvoiceDetails,
                     Staff_Involved_List: staffInvolved,
+                    Expence_Array: expences.map(exp => ({
+                        Expense_Id: exp.Expense_Id,
+                        Expence_Value: exp.Expence_Value_DR || exp.Expence_Value_CR || 0,
+                        Expence_Name: exp.Expence_Name,
+                        percentageValue: exp.percentageValue
+                    })),
                     ConvertedInvoice: invoiceWithOtherDetails
                 };
             });
@@ -2001,42 +2296,42 @@ const SaleOrder = () => {
     };
 
 
-const getSaleOrderList = async (req, res) => {
-    try {
-        const {
-            Retailer_Id,
-            Cancel_status,
-            Created_by,
-            Sales_Person_Id,
-            VoucherType,
-            OrderStatus,
-            Branch_Id,
-            FromDate,
-            ToDate,
-            Mobile_No
-        } = req.query;
+    const getSaleOrderList = async (req, res) => {
+        try {
+            const {
+                Retailer_Id,
+                Cancel_status,
+                Created_by,
+                Sales_Person_Id,
+                VoucherType,
+                OrderStatus,
+                Branch_Id,
+                FromDate,
+                ToDate,
+                Mobile_No
+            } = req.query;
 
-        // Convert empty string to null for proper handling
-        const createdByValue = (Created_by !== undefined && Created_by !== null && Created_by !== '') 
-            ? parseInt(Created_by) 
-            : null;
-        
-        const mobileNoValue = (Mobile_No !== undefined && Mobile_No !== null && Mobile_No !== '') 
-            ? Mobile_No 
-            : null;
+            // Convert empty string to null for proper handling
+            const createdByValue = (Created_by !== undefined && Created_by !== null && Created_by !== '')
+                ? parseInt(Created_by)
+                : null;
 
-        const request = new sql.Request()
-            .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
-            .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
-            .input('creater', createdByValue !== null ? createdByValue : null)
-            .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
-            .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
-            .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
-            .input('FromDate', FromDate || null)
-            .input('ToDate', ToDate || null)
-            .input('Mobile_No', mobileNoValue);
+            const mobileNoValue = (Mobile_No !== undefined && Mobile_No !== null && Mobile_No !== '')
+                ? Mobile_No
+                : null;
 
-        const result = await request.query(`
+            const request = new sql.Request()
+                .input('retailer', checkIsNumber(Retailer_Id) ? Retailer_Id : null)
+                .input('cancel', checkIsNumber(Cancel_status) ? Cancel_status : null)
+                .input('creater', createdByValue !== null ? createdByValue : null)
+                .input('salesPerson', checkIsNumber(Sales_Person_Id) ? Sales_Person_Id : null)
+                .input('VoucherType', checkIsNumber(VoucherType) ? VoucherType : null)
+                .input('Branch_Id', checkIsNumber(Branch_Id) ? Branch_Id : null)
+                .input('FromDate', FromDate || null)
+                .input('ToDate', ToDate || null)
+                .input('Mobile_No', mobileNoValue);
+
+            const result = await request.query(`
             /* ================================
                STEP 0 : DETERMINE FILTERING LOGIC
             ================================= */
@@ -2209,94 +2504,114 @@ const getSaleOrderList = async (req, res) => {
             WHERE 
                 alteredTable = 'tbl_Sales_Order_Gen_Info' 
                 AND alteredRowId IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
+
+            /* ================================ 
+               STEP 7 : EXPENCES
+            ================================= */
+            SELECT 
+                soei.Id,
+                soei.So_Id,
+                soei.Sno,
+                soei.Expense_Id,
+                soei.Expence_Value_DR,
+                soei.Expence_Value_CR,
+                COALESCE(acc.Account_Name, 'unknown') AS Expence_Name,
+                acc.percentageValue
+            FROM tbl_Sales_Order_Expence_Info AS soei
+            LEFT JOIN tbl_Account_Master AS acc ON acc.Acc_Id = soei.Expense_Id
+            WHERE soei.So_Id IN (SELECT DISTINCT So_Id FROM @FilteredOrders);
         `);
 
-        const [
-            OrderData,
-            ProductDetails,
-            StaffInvolved,
-            DeliveryData,
-            DeliveryItems,
-            AlterHistory
-        ] = result.recordsets;
+            const [
+                OrderData,
+                ProductDetails,
+                StaffInvolved,
+                DeliveryData,
+                DeliveryItems,
+                AlterHistory,
+                ExpenceData
+            ] = result.recordsets;
 
-        if (!OrderData || OrderData.length === 0) {
+            if (!OrderData || OrderData.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    message: "No data found",
+                    data: []
+                });
+            }
+
+            const resData = OrderData.map(order => {
+                const orderProducts = ProductDetails.filter(p =>
+                    Number(p.Sales_Order_Id) === Number(order.So_Id)
+                );
+
+                const deliveryList = DeliveryData.filter(d =>
+                    Number(d.So_No) === Number(order.So_Id)
+                );
+
+                const totalOrderedQty = orderProducts.reduce(
+                    (s, p) => s + (Number(p.Bill_Qty) || 0), 0
+                );
+
+                const totalDeliveredQty = deliveryList.reduce((sum, d) => {
+                    const items = DeliveryItems.filter(i =>
+                        Number(i.Delivery_Order_Id) === Number(d.Do_Id)
+                    );
+                    return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
+                }, 0);
+
+                const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
+
+                const alterHistory = AlterHistory.filter(ah =>
+                    Number(ah.alteredRowId) === Number(order.So_Id)
+                );
+
+                return {
+                    ...order,
+                    OrderStatus: status,
+                    Products_List: orderProducts.map(p => ({
+                        ...p,
+                        ProductImageUrl: getImage("products", p.Product_Image_Name)
+                    })),
+                    Staff_Involved_List: StaffInvolved.filter(s =>
+                        Number(s.So_Id) === Number(order.So_Id)
+                    ),
+                    Expence_Array: ExpenceData.filter(e =>
+                        Number(e.So_Id) === Number(order.So_Id)
+                    ),
+                    ConvertedInvoice: deliveryList.map(d => ({
+                        ...d,
+                        InvoicedProducts: DeliveryItems
+                            .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
+                            .map(p => ({
+                                ...p,
+                                ProductImageUrl: getImage("products", p.Product_Image_Name)
+                            }))
+                    })),
+                    alterHistoryDetails: alterHistory
+                };
+            });
+
+            const finalData = OrderStatus
+                ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
+                : resData;
+
             return res.status(200).json({
                 success: true,
-                message: "No data found",
-                data: []
+                message: "Data retrieved successfully",
+                data: finalData,
+                total: finalData.length
+            });
+
+        } catch (err) {
+            console.error('Error in getSaleOrderList:', err);
+            return res.status(500).json({
+                success: false,
+                message: "Internal server error",
+                error: err.message
             });
         }
-
-        const resData = OrderData.map(order => {
-            const orderProducts = ProductDetails.filter(p =>
-                Number(p.Sales_Order_Id) === Number(order.So_Id)
-            );
-
-            const deliveryList = DeliveryData.filter(d =>
-                Number(d.So_No) === Number(order.So_Id)
-            );
-
-            const totalOrderedQty = orderProducts.reduce(
-                (s, p) => s + (Number(p.Bill_Qty) || 0), 0
-            );
-
-            const totalDeliveredQty = deliveryList.reduce((sum, d) => {
-                const items = DeliveryItems.filter(i =>
-                    Number(i.Delivery_Order_Id) === Number(d.Do_Id)
-                );
-                return sum + items.reduce((s, i) => s + (Number(i.Bill_Qty) || 0), 0);
-            }, 0);
-
-            const status = totalDeliveredQty >= totalOrderedQty && totalOrderedQty > 0 ? "completed" : "pending";
-
-            const alterHistory = AlterHistory.filter(ah =>
-                Number(ah.alteredRowId) === Number(order.So_Id)
-            );
-
-            return {
-                ...order,
-                OrderStatus: status,
-                Products_List: orderProducts.map(p => ({
-                    ...p,
-                    ProductImageUrl: getImage("products", p.Product_Image_Name)
-                })),
-                Staff_Involved_List: StaffInvolved.filter(s =>
-                    Number(s.So_Id) === Number(order.So_Id)
-                ),
-                ConvertedInvoice: deliveryList.map(d => ({
-                    ...d,
-                    InvoicedProducts: DeliveryItems
-                        .filter(i => Number(i.Delivery_Order_Id) === Number(d.Do_Id))
-                        .map(p => ({
-                            ...p,
-                            ProductImageUrl: getImage("products", p.Product_Image_Name)
-                        }))
-                })),
-                alterHistoryDetails: alterHistory
-            };
-        });
-
-        const finalData = OrderStatus
-            ? resData.filter(o => o.OrderStatus === OrderStatus.toLowerCase())
-            : resData;
-
-        return res.status(200).json({
-            success: true,
-            message: "Data retrieved successfully",
-            data: finalData,
-            total: finalData.length
-        });
-
-    } catch (err) {
-        console.error('Error in getSaleOrderList:', err);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: err.message
-        });
-    }
-};
+    };
 
     // const getSaleOrderList = async (req, res) => {
     //     try {

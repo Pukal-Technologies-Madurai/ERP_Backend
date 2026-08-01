@@ -46,6 +46,11 @@ inventoryRouter.get('/tripSheet/arrivalEntry', arrivalMaster.getArrivalEntry);
 inventoryRouter.get('/tripSheet/arrivalEntry/filters', arrivalMaster.getArrivalFilters);
 inventoryRouter.post('/tripSheet/arrivalEntry/bulk', arrivalMaster.addBulkArrivalEntry);
 inventoryRouter.post('/tripSheet/arrivalEntry', arrivalMaster.addArrivalEntry);
+
+inventoryRouter.get('/tripSheet/lrReport', tripmaster.getTripForAssignCostCenter);
+inventoryRouter.post('/tripSheet/lrReport', tripmaster.postAssignCostCenterToTrip);
+inventoryRouter.post('/tripSheet/lrReport/multiple', tripmaster.multipleTripStaffUpdate);
+inventoryRouter.post('/tripSheet/lrReport/multipleDelete', tripmaster.multipleTripStaffDelete);
 inventoryRouter.put(
     '/tripSheet/arrivalEntry', 
     alterHistory({

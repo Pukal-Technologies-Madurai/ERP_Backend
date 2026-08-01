@@ -815,10 +815,273 @@ const tripActivities = () => {
         }
     };
 
+    const getTripForAssignCostCenter = async (req, res) => {
+        try {
+            const reqDate = req.query.reqDate ? ISOString(req.query.reqDate) : ISOString();
+            const status = req.query.staffStatus;
+
+            const getTripQuery = new sql.Request()
+                .input('reqDate', sql.Date, reqDate)
+                .input('status', sql.Int, toNumber(status))
+                .query(`
+                -- filtered trip ids temp table
+                    DECLARE @FilteredTrip TABLE (Trip_Id BIGINT);
+                -- inserting data to temp table
+                    INSERT INTO @FilteredTrip (Trip_Id)
+                    SELECT Trip_Id
+                    FROM tbl_Trip_Master
+                    WHERE 
+                        CONVERT(DATE, Trip_Date) = @reqDate
+                        ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
+
+                -- general info
+                    SELECT 
+                        tm.Trip_Id,
+                        tm.TR_INV_ID AS PR_Inv_Id,
+                        tm.VoucherType,
+                        vt.Voucher_Type AS voucherTypeGet,
+                        tm.Trip_Date AS Process_date,
+                        tm.Godownlocation,
+                        g.Godown_Name AS godownNameGet,
+                        tm.Branch_Id,
+                        b.BranchName AS branchNameGet,
+                        tm.TripStatus AS PR_Status, 
+                        tm.Narration,
+                        tm.Created_By,
+                        tm.Created_At,
+                        ISNULL(tm.staffInvolvedStatus, 0) staffInvolvedStatus,
+                        CONVERT(DATETIME, tm.Created_At) AS createdOn,
+                        COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+                    FROM tbl_Trip_Master AS tm
+                    LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = tm.VoucherType
+                    LEFT JOIN tbl_Godown_Master AS g ON g.Godown_Id = tm.Godownlocation
+                    LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = tm.Branch_Id
+                    LEFT JOIN tbl_Users AS cb ON cb.UserId = tm.Created_By
+                    WHERE tm.Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip)
+                    ORDER BY tm.Trip_Id DESC;
+
+                -- involved staffs
+                    SELECT 
+                        stf.Trip_Id AS PR_Id,
+                        stf.Cost_Center_Type_Id AS Emp_Type_Id,
+                        stf.Involved_Emp_Id AS Emp_Id,
+                        e.Cost_Center_Name AS Emp_Name,
+                        cc.Cost_Category AS Involved_Emp_Type
+                    FROM tbl_Trip_Employees AS stf
+                    LEFT JOIN tbl_ERP_Cost_Center AS e
+                        ON e.Cost_Center_Id = stf.Involved_Emp_Id
+                    LEFT JOIN tbl_ERP_Cost_Category AS cc
+                        ON cc.Cost_Category_Id = stf.Cost_Center_Type_Id
+                    WHERE stf.Trip_Id IN (SELECT DISTINCT Trip_Id FROM @FilteredTrip)
+                    ORDER BY stf.Trip_Id;
+
+                -- Unique Cost Category IDs
+                    SELECT DISTINCT Cost_Center_Type_Id AS Emp_Type_Id
+                    FROM tbl_Trip_Employees
+                    WHERE Trip_Id IN (SELECT Trip_Id FROM @FilteredTrip);
+
+                -- Cost Types
+                    SELECT Cost_Category_Id, Cost_Category
+                    FROM tbl_ERP_Cost_Category
+                    ORDER BY Cost_Category;
+                `
+                );
+
+            const result = await getTripQuery;
+
+            const [
+                tripList = [], 
+                staffs = [], 
+                uniqeInvolvedStaffs = [], 
+                costTypes = []
+            ] = result.recordsets;
+
+            const tripWithStaffs = tripList.map(trip => {
+                const involvedStaffs = staffs.filter(stf =>
+                    isEqualNumber(stf.PR_Id, trip.Trip_Id)
+                );
+
+                return {
+                    ...trip,
+                    PR_Id: trip.Trip_Id,
+                    involvedStaffs,
+                };
+            });
+
+            res.status(200).json({
+                success: true,
+                data: tripWithStaffs,
+                others: {
+                    costTypes: toArray(costTypes),
+                    uniqeInvolvedStaffs: toArray(uniqeInvolvedStaffs).map(i => i.Emp_Type_Id)
+                }
+            });
+
+        } catch (e) {
+            servError(e, res);
+        }
+    };
+
+    const postAssignCostCenterToTrip = async (req, res) => {
+        const transaction = new sql.Transaction();
+
+        try {
+            const { PR_Id, involvedStaffs, staffInvolvedStatus } = req.body;
+            const Trip_Id = PR_Id;
+
+            await transaction.begin();
+
+            const updateStatusRequest = new sql.Request(transaction);
+            await updateStatusRequest
+                .input('Trip_Id', sql.BigInt, Trip_Id)
+                .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
+                .query(`
+                    UPDATE tbl_Trip_Master
+                    SET staffInvolvedStatus = @staffInvolvedStatus
+                    WHERE Trip_Id = @Trip_Id;`
+                );
+
+            // Update involved staffs
+            const request = new sql.Request(transaction);
+            await request
+                .input('Trip_Id', sql.BigInt, Trip_Id)
+                .input('involvedStaffs', sql.NVarChar, JSON.stringify(involvedStaffs))
+                .query(`
+                    -- Delete old staff entries
+                    DELETE FROM tbl_Trip_Employees
+                    WHERE Trip_Id = @Trip_Id;
+                    
+                    -- Insert new staff entries
+                    INSERT INTO tbl_Trip_Employees (Trip_Id, Cost_Center_Type_Id, Involved_Emp_Id)
+                    SELECT 
+                        @Trip_Id,
+                        JSON_VALUE(value, '$.Emp_Type_Id') AS Cost_Center_Type_Id,
+                        JSON_VALUE(value, '$.Emp_Id') AS Involved_Emp_Id
+                    FROM OPENJSON(@involvedStaffs);`
+                );
+
+            await transaction.commit();
+
+            success(res, 'Changes saved');
+        } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
+            servError(e, res);
+        }
+    };
+
+    const multipleTripStaffUpdate = async (req, res) => {
+        const transaction = new sql.Transaction();
+        try {
+            const { CostCategory, PR_Id, involvedStaffs, staffInvolvedStatus, deliveryStatus = 'New' } = req.body;
+            const tripIdsStr = PR_Id.join(',');
+
+            await transaction.begin();
+
+            await new sql.Request(transaction)
+                .input('tripIds', sql.NVarChar(sql.MAX), tripIdsStr)
+                .input('staffInvolvedStatus', sql.Int, staffInvolvedStatus)
+                .input('TripStatus', sql.VarChar, deliveryStatus)
+                .query(`
+                    UPDATE tbl_Trip_Master
+                    SET 
+                        staffInvolvedStatus = @staffInvolvedStatus,
+                        TripStatus = @TripStatus
+                    WHERE Trip_Id IN (
+                        SELECT CAST(value AS INT)
+                        FROM STRING_SPLIT(@tripIds, ',')
+                    );`
+                );
+
+            if (PR_Id.length > 0 && CostCategory) {
+                await new sql.Request(transaction)
+                    .input('tripIds', sql.NVarChar(sql.MAX), tripIdsStr)
+                    .input('Cost_Center_Type_Id', sql.Int, CostCategory)
+                    .query(`
+                        DELETE FROM tbl_Trip_Employees
+                        WHERE 
+                            Trip_Id IN (
+                                SELECT CAST(value AS INT)
+                                FROM STRING_SPLIT(@tripIds, ',')
+                            )
+                            AND Cost_Center_Type_Id = @Cost_Center_Type_Id;`
+                    );
+            }
+
+            if (involvedStaffs.length > 0) {
+                const values = [];
+                PR_Id.forEach(tripId => {
+                    involvedStaffs.forEach(staffId => {
+                        values.push(`(${tripId}, ${CostCategory}, ${staffId})`);
+                    });
+                });
+
+                if (values.length > 0) {
+                    const query = `
+                        INSERT INTO tbl_Trip_Employees (Trip_Id, Cost_Center_Type_Id, Involved_Emp_Id)
+                        VALUES ${values.join(',')};`;
+                    const request = new sql.Request(transaction);
+                    await request.query(query);
+                }
+            }
+
+            await transaction.commit();
+            success(res, 'Trip Staff Updated!');
+        } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
+            servError(e, res);
+        }
+    }
+
+    const multipleTripStaffDelete = async (req, res) => {
+        const transaction = new sql.Transaction();
+        try {
+            if (!req.body.CostCategory || !req.body.PR_Id || !Array.isArray(req.body.PR_Id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'CostCategory and PR_Id (array) are required'
+                });
+            }
+
+            const { CostCategory, PR_Id } = req.body;
+            const tripIdsStr = PR_Id.join(',');
+
+            await transaction.begin();
+
+            await new sql.Request(transaction)
+                .input('tripIds', sql.NVarChar(sql.MAX), tripIdsStr)
+                .input('Cost_Center_Type_Id', sql.Int, CostCategory)
+                .query(`
+                    DELETE FROM tbl_Trip_Employees
+                    WHERE 
+                        Trip_Id IN (
+                            SELECT CAST(value AS INT)
+                            FROM STRING_SPLIT(@tripIds, ',')
+                        )
+                        AND Cost_Center_Type_Id = @Cost_Center_Type_Id;`
+                );
+
+            await transaction.commit();
+            success(res, `Staff with CostCategory ${CostCategory} removed from ${PR_Id.length} records!`);
+        } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
+            servError(e, res);
+        }
+    }
+
     return {
         getTripDetails,
         createTripDetails,
         updateTripDetails,
+        getTripForAssignCostCenter,
+        postAssignCostCenterToTrip,
+        multipleTripStaffUpdate,
+        multipleTripStaffDelete
     }
 }
 
