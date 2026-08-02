@@ -45,6 +45,9 @@ import accountUserMapping from "../controller/Masters/accountUserMapping.mjs";
 import abstractgroupType from '../controller/Masters/abstractgroupType.mjs';
 
 import whatsapp from '../controller/Masters/whatsapp.mjs';
+import unitCategory from '../controller/Masters/unitMasterCategory.mjs';
+import unitMeasurement from '../controller/Masters/unitMasterMeasurement.mjs';
+import productUnitConversion from '../controller/Masters/productUnitConversion.mjs';
 
 const MastersRouter = express.Router();
 
@@ -412,5 +415,22 @@ MastersRouter.get('/whatsapp/incoming', whatsapp.getIncomingMessages);
 MastersRouter.post('/whatsapp/logSend',whatsapp.logWhatsappSend)
 MastersRouter.get('/whatsapp/getWhatsappCounts',whatsapp.getWhatsappCounts)
 
+
+MastersRouter.get('/unitCategory', unitCategory.getCategories);
+MastersRouter.get('/unitCategory/active', unitCategory.getActiveCategories);
+MastersRouter.post('/unitCategory', unitCategory.postCategory);
+MastersRouter.put('/unitCategory', unitCategory.putCategory);
+MastersRouter.delete('/unitCategory', unitCategory.deleteCategory);
+
+MastersRouter.get('/unitMeasurement', unitMeasurement.getMeasurements);
+MastersRouter.get('/unitMeasurement/active', unitMeasurement.getActiveMeasurements);
+MastersRouter.post('/unitMeasurement', unitMeasurement.postMeasurement);
+MastersRouter.put('/unitMeasurement', unitMeasurement.putMeasurement);
+MastersRouter.delete('/unitMeasurement', unitMeasurement.deleteMeasurement);
+
+MastersRouter.get('/productUnitConversion', productUnitConversion.getConversions);
+MastersRouter.post('/productUnitConversion', productUnitConversion.postConversion);
+MastersRouter.put('/productUnitConversion', productUnitConversion.putConversion);
+MastersRouter.delete('/productUnitConversion', productUnitConversion.deleteConversion);
 
 export default MastersRouter;
