@@ -832,8 +832,12 @@ const tripActivities = () => {
                     FROM tbl_Trip_Master
                     WHERE 
                         CONVERT(DATE, Trip_Date) = @reqDate
+                        AND BillType IN (
+                            'MATERIAL INWARD', 'OTHER GODOWN',
+                            'CREDIT_NOTE', 'DEBIT_NOTE'
+                        )
+                        AND TripStatus <> 'Cancelled'
                         ${isEqualNumber(status, 0) ? ' AND ISNULL(staffInvolvedStatus, 0) = 0 ' : ''}
-
                 -- general info
                     SELECT 
                         tm.Trip_Id,
