@@ -590,7 +590,7 @@ const PaymentMaster = () => {
 
             const { payment_id, payment_no, payment_date, bill_type, DR_CR_Acc_Id, BillsDetails, CostingDetails } = req.body;
 
-            if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
+            // if (!isArray(BillsDetails) || BillsDetails.length === 0) return invalidInput(res, 'BillsDetails is required');
 
             const isPurchasePayment = isEqualNumber(bill_type, 1);
 
@@ -640,7 +640,7 @@ const PaymentMaster = () => {
                 if (result.rowsAffected[0] === 0) throw new Error('Failed to Insert Payment Bill Details');
             }
 
-            if (isArray(CostingDetails) && CostingDetails.length > 0) {
+            if (isArray(CostingDetails) && CostingDetails.length > 0 && isArray(BillsDetails) && BillsDetails.length > 0) {
                 for (let i = 0; i < CostingDetails.length; i++) {
                     const itemDetails = CostingDetails[i];
 

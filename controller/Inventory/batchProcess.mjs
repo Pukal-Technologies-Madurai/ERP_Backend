@@ -1387,7 +1387,7 @@ const previousAndNextStages = async (req, res) => {
             .input('batchName', sql.NVarChar, batch_name)
             .input('godown_id', sql.Int, godown_id)
             .query(`
-                -DECLARE @reqItem INT = 340, @batchName NVARCHAR(50) = 'GULABI PRODUCTION';
+                --DECLARE @reqItem INT = 340, @batchName NVARCHAR(50) = 'GULABI PRODUCTION';
                 -- ****************************** batch details ******************************
                 SELECT
                     bm.id,
@@ -1516,7 +1516,6 @@ const batchTransaction = async (req, res) => {
             // .input('batch_name', sql.NVarChar, batch_name)
             // .input('item_id', sql.Int, item_id)
             .query(`
-                DECLARE @target_batch_id UNIQUEIDENTIFIER = @batch_id;
                 -- ********************************* batch master *********************************
                 SELECT
                     bm.id,
