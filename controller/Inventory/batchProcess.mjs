@@ -1613,7 +1613,7 @@ const batchTransaction = async (req, res) => {
                     bm.id AS batchId,
                     sdgi.PR_Id AS voucherId,
                     sdgi.Process_date AS voucherDate,
-                    sdgi.Process_no AS voucherNumber,
+                    sdgi.PR_Inv_Id AS voucherNumber,
                     'Not applicable' partyName,
                     SUM(sdsi.Dest_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
                     SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
@@ -1631,7 +1631,7 @@ const batchTransaction = async (req, res) => {
                 	AND bt.type = 'PRODUCTION_REVERSAL'
                 	AND bt.reference_id = sdgi.PR_Id
                 WHERE sdgi.PR_Status <> 'Canceled' AND bm.id = @batch_id
-                GROUP BY bm.id, sdgi.PR_Id, sdgi.Process_date, sdgi.Process_no, bt.type, sdgi.Created_At;
+                GROUP BY bm.id, sdgi.PR_Id, sdgi.Process_date, sdgi.PR_Inv_Id, bt.type, sdgi.Created_At;
                 -- ********************************* debit_note - OUT *********************************
                 SELECT
                     bt.batch_id AS batchId,
