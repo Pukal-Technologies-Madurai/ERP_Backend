@@ -3618,31 +3618,30 @@ ORDER BY llos.Pro_Id;
 
 
 
-    const salesInvoiceWhatsapp = async (req, res) => {
-        const { generalInfo, stockInfo } = req.body;
-        let transaction;
-    
+ const salesInvoiceWhatsapp = async (req, res) => {
+    const { generalInfo, stockInfo } = req.body;
+    let transaction;
 
-        try {
-            transaction = new sql.Transaction();
-            await transaction.begin();
+    try {
+        transaction = new sql.Transaction();
+        await transaction.begin();
 
 
-            const maxPreIdRequest = new sql.Request(transaction);
-            const maxPreIdResult = await maxPreIdRequest.query(`
+        const maxPreIdRequest = new sql.Request(transaction);
+        const maxPreIdResult = await maxPreIdRequest.query(`
       SELECT ISNULL(MAX(Pre_Ord_Id), 0) + 1 AS NextId 
       FROM [dbo].[tbl_Sales_Whats_up_Order_Gen_Info]
     `);
-            const preOrderId = maxPreIdResult.recordset[0].NextId;
+        const preOrderId = maxPreIdResult.recordset[0].NextId;
 
-            const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
-            if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
-            const So_Id = So_Id_Get.MaxId;
+        const So_Id_Get = await getNextId({ table: 'tbl_Sales_Order_Gen_Info', column: 'So_Id' });
+        if (!So_Id_Get.status || !checkIsNumber(So_Id_Get.MaxId)) throw new Error('Failed to get So_Id_Get');
+        const So_Id = So_Id_Get.MaxId;
 
-            const So_Date = generalInfo.So_Date;
-            const So_Year_Master = await new sql.Request(transaction)
-                .input('So_Date', So_Date)
-                .query(`
+        const So_Date = generalInfo.So_Date;
+        const So_Year_Master = await new sql.Request(transaction)
+            .input('So_Date', So_Date)
+            .query(`
         SELECT Id AS Year_Id, Year_Desc
         FROM tbl_Year_Master
         WHERE 
@@ -3650,24 +3649,24 @@ ORDER BY llos.Pro_Id;
           AND Fin_End_Date >= @So_Date
       `);
 
-            if (So_Year_Master.recordset.length === 0) throw new Error('Year_Id not found');
-            const { Year_Id, Year_Desc } = So_Year_Master.recordset[0];
+        if (So_Year_Master.recordset.length === 0) throw new Error('Year_Id not found');
+        const { Year_Id, Year_Desc } = So_Year_Master.recordset[0];
 
-            const voucherData = await new sql.Request(transaction)
-                .input('Voucher_Type', 200)
-                .query(`
+        const voucherData = await new sql.Request(transaction)
+            .input('Voucher_Type', 200)
+            .query(`
         SELECT Voucher_Code 
         FROM tbl_Voucher_Type 
         WHERE Vocher_Type_Id = @Voucher_Type
       `);
 
-            const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
-            if (!VoucherCode) throw new Error('Failed to fetch Voucher Code for Voucher_Type_Id = 0');
+        const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
+        if (!VoucherCode) throw new Error('Failed to fetch Voucher Code for Voucher_Type_Id = 0');
 
-            const So_Branch_Inv_Id_Result = await new sql.Request(transaction)
-                .input('So_Year', Year_Id)
-                .input('Voucher_Type', 200)
-                .query(`
+        const So_Branch_Inv_Id_Result = await new sql.Request(transaction)
+            .input('So_Year', Year_Id)
+            .input('Voucher_Type', 200)
+            .query(`
         SELECT COALESCE(MAX(So_Branch_Inv_Id), 0) AS So_Branch_Inv_Id
         FROM tbl_Sales_Order_Gen_Info
         WHERE 
@@ -3675,94 +3674,94 @@ ORDER BY llos.Pro_Id;
           AND VoucherType = @Voucher_Type
       `);
 
-            const So_Branch_Inv_Id = Number(So_Branch_Inv_Id_Result.recordset[0]?.So_Branch_Inv_Id || 0) + 1;
-            if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
+        const So_Branch_Inv_Id = Number(So_Branch_Inv_Id_Result.recordset[0]?.So_Branch_Inv_Id || 0) + 1;
+        if (!checkIsNumber(So_Branch_Inv_Id)) throw new Error('Failed to get Order Id');
 
 
-            const createPadString = (num, length) => {
-                return num.toString().padStart(length, '0');
+        const createPadString = (num, length) => {
+            return num.toString().padStart(length, '0');
+        };
+
+        const So_Inv_No = `${VoucherCode}/${createPadString(So_Branch_Inv_Id, 6)}/${Year_Desc}`;
+
+
+        const productsData = (await getProducts()).dataArray;
+
+
+        const GST_Inclusive = generalInfo.GST_Inclusive || 1;
+        const IS_IGST = generalInfo.IS_IGST || 0;
+
+        const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
+        const isInclusive = isEqualNumber(GST_Inclusive, 1);
+        const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
+        const isIGST = isEqualNumber(IS_IGST, 1);
+        const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
+
+
+        const Total_Invoice_value = RoundNumber(stockInfo.reduce((acc, item) => {
+            const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
+            const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
+            const Amount = Multiplication(billQty, itemRate);
+
+            if (isNotTaxableBill) return Addition(acc, Amount);
+
+            const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
+            const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+            if (isInclusive) {
+                return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
+            } else {
+                return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
+            }
+        }, 0));
+
+
+        const totalValueBeforeTax = stockInfo.reduce((acc, item) => {
+            const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
+            const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
+            const Amount = Multiplication(billQty, itemRate);
+
+            if (isNotTaxableBill) return {
+                TotalValue: Addition(acc.TotalValue, Amount),
+                TotalTax: 0
             };
 
-            const So_Inv_No = `${VoucherCode}/${createPadString(So_Branch_Inv_Id, 6)}/${Year_Desc}`;
+            const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
+            const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
+
+            const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
+            const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
+            const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
+
+            return {
+                TotalValue, TotalTax
+            };
+        }, {
+            TotalValue: 0,
+            TotalTax: 0
+        });
+
+        const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
+        const Final_Total_Invoice_value = Math.round(Total_Invoice_value);
 
 
-            const productsData = (await getProducts()).dataArray;
+        const whatsappGenRequest = new sql.Request(transaction)
+            .input('Pre_Ord_Id', sql.Int, preOrderId)
+            .input('Ord_Date', sql.DateTime, generalInfo.So_Date)
+            .input('Customer_Name', sql.NVarChar, generalInfo.Customer_Name)
+            .input('Custome_Id', sql.Int, generalInfo.Retailer_Id)
+            .input('Broker_Name', sql.NVarChar, generalInfo.Broker_Name || '')
+            .input('Broker_Id', sql.Int, generalInfo.Broker_Id)
+            .input('Transporter_Name', sql.NVarChar, generalInfo.Transporter_Name || '')
+            .input('Transporter_Id', sql.Int, generalInfo.Transporter_Id)
+            .input('Ord_Mobile_No', sql.NVarChar, generalInfo.Ord_Mobile_No)
+            .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
+            .input('Shipp_Address', sql.NVarChar, generalInfo.Shipp_Address || '')
+            .input('Deliv_Address', sql.NVarChar, generalInfo.Deliv_Address || '')
+            .input('Rematks', sql.NVarChar, generalInfo.Narration || '')
+            .input('Created_on', sql.DateTime, generalInfo.Created_on);
 
-
-            const GST_Inclusive = generalInfo.GST_Inclusive || 1;
-            const IS_IGST = generalInfo.IS_IGST || 0;
-
-            const isExclusiveBill = isEqualNumber(GST_Inclusive, 0);
-            const isInclusive = isEqualNumber(GST_Inclusive, 1);
-            const isNotTaxableBill = isEqualNumber(GST_Inclusive, 2);
-            const isIGST = isEqualNumber(IS_IGST, 1);
-            const taxType = isNotTaxableBill ? 'zerotax' : isInclusive ? 'remove' : 'add';
-
-
-            const Total_Invoice_value = RoundNumber(stockInfo.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
-                const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
-                const Amount = Multiplication(billQty, itemRate);
-
-                if (isNotTaxableBill) return Addition(acc, Amount);
-
-                const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-
-                if (isInclusive) {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-                } else {
-                    return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-                }
-            }, 0));
-
-
-            const totalValueBeforeTax = stockInfo.reduce((acc, item) => {
-                const itemRate = RoundNumber(item?.Item_Rate || item?.Price || 0);
-                const billQty = RoundNumber(item?.Bill_Qty || item?.Quantity || 0);
-                const Amount = Multiplication(billQty, itemRate);
-
-                if (isNotTaxableBill) return {
-                    TotalValue: Addition(acc.TotalValue, Amount),
-                    TotalTax: 0
-                };
-
-                const product = findProductDetails(productsData, item.Item_Id || item.Product_Id);
-                const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-
-                const taxInfo = calculateGSTDetails(Amount, gstPercentage, isInclusive ? 'remove' : 'add');
-                const TotalValue = Addition(acc.TotalValue, taxInfo.without_tax);
-                const TotalTax = Addition(acc.TotalTax, taxInfo.tax_amount);
-
-                return {
-                    TotalValue, TotalTax
-                };
-            }, {
-                TotalValue: 0,
-                TotalTax: 0
-            });
-
-            const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
-            const Final_Total_Invoice_value = Math.round(Total_Invoice_value);
-
-
-            const whatsappGenRequest = new sql.Request(transaction)
-                .input('Pre_Ord_Id', sql.Int, preOrderId)
-                .input('Ord_Date', sql.DateTime, generalInfo.So_Date)
-                .input('Customer_Name', sql.NVarChar, generalInfo.Customer_Name)
-                .input('Custome_Id', sql.Int, generalInfo.Retailer_Id)
-                .input('Broker_Name', sql.NVarChar, generalInfo.Broker_Name || '')
-                .input('Broker_Id', sql.Int, generalInfo.Broker_Id)
-                .input('Transporter_Name', sql.NVarChar, generalInfo.Transporter_Name || '')
-                .input('Transporter_Id', sql.Int, generalInfo.Transporter_Id)
-                .input('Ord_Mobile_No', sql.NVarChar, generalInfo.Ord_Mobile_No)
-                .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
-                .input('Shipp_Address', sql.NVarChar, generalInfo.Shipp_Address || '')
-                .input('Deliv_Address', sql.NVarChar, generalInfo.Deliv_Address || '')
-                .input('Rematks', sql.NVarChar, generalInfo.Narration || '')
-                .input('Created_on', sql.DateTime, generalInfo.Created_on);
-
-            await whatsappGenRequest.query(`
+        await whatsappGenRequest.query(`
       INSERT INTO [dbo].[tbl_Sales_Whats_up_Order_Gen_Info] 
       (Pre_Ord_Id, Ord_Date, Customer_Name, Custome_Id, Broker_Name, Broker_Id, 
        Transporter_Name, Transporter_Id, Ord_Mobile_No, Total_Invoice_value, 
@@ -3774,48 +3773,48 @@ ORDER BY llos.Pro_Id;
       );
     `);
 
-            const mainGenRequest = new sql.Request(transaction)
+        const mainGenRequest = new sql.Request(transaction)
 
-                .input('So_Id', sql.Int, So_Id)
-                .input('So_Inv_No', sql.NVarChar, So_Inv_No)
-                .input('So_Year', sql.Int, Year_Id)
-                .input('Pre_Id', sql.Int, preOrderId)
-                .input('So_Branch_Inv_Id', sql.Int, So_Branch_Inv_Id)
-                .input('So_Date', sql.Date, So_Date)
-
-
-                .input('Retailer_Id', sql.Int, generalInfo.Retailer_Id)
-                .input('Sales_Person_Id', sql.Int, generalInfo.Sales_Person_Id || 0)
-                .input('Branch_Id', sql.Int, generalInfo.Branch_Id || 1)
+            .input('So_Id', sql.Int, So_Id)
+            .input('So_Inv_No', sql.NVarChar, So_Inv_No)
+            .input('So_Year', sql.Int, Year_Id)
+            .input('Pre_Id', sql.Int, preOrderId)
+            .input('So_Branch_Inv_Id', sql.Int, So_Branch_Inv_Id)
+            .input('So_Date', sql.Date, So_Date)
 
 
-                .input('VoucherType', sql.Int, 200)
-                .input('GST_Inclusive', sql.Int, GST_Inclusive)
-                .input('IS_IGST', sql.Int, isIGST ? 1 : 0)
-                .input('CSGT_Total', sql.Decimal(18, 2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('SGST_Total', sql.Decimal(18, 2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
-                .input('IGST_Total', sql.Decimal(18, 2), isIGST ? totalValueBeforeTax.TotalTax : 0)
-                .input('Round_off', sql.Decimal(18, 2), Round_off)
-                .input('Total_Before_Tax', sql.Decimal(18, 2), totalValueBeforeTax.TotalValue)
-                .input('Total_Tax', sql.Decimal(18, 2), totalValueBeforeTax.TotalTax)
-                .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
+            .input('Retailer_Id', sql.Int, generalInfo.Retailer_Id)
+            .input('Sales_Person_Id', sql.Int, generalInfo.Sales_Person_Id || 0)
+            .input('Branch_Id', sql.Int, generalInfo.Branch_Id || 1)
 
 
-                .input('Narration', sql.NVarChar, generalInfo.Narration || '')
-                .input('isConverted', sql.Int, 0)
-                .input('Cancel_status', sql.Int, 1)
+            .input('VoucherType', sql.Int, 200)
+            .input('GST_Inclusive', sql.Int, GST_Inclusive)
+            .input('IS_IGST', sql.Int, isIGST ? 1 : 0)
+            .input('CSGT_Total', sql.Decimal(18, 2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
+            .input('SGST_Total', sql.Decimal(18, 2), isIGST ? 0 : totalValueBeforeTax.TotalTax / 2)
+            .input('IGST_Total', sql.Decimal(18, 2), isIGST ? totalValueBeforeTax.TotalTax : 0)
+            .input('Round_off', sql.Decimal(18, 2), Round_off)
+            .input('Total_Before_Tax', sql.Decimal(18, 2), totalValueBeforeTax.TotalValue)
+            .input('Total_Tax', sql.Decimal(18, 2), totalValueBeforeTax.TotalTax)
+            .input('Total_Invoice_value', sql.Decimal(18, 2), Final_Total_Invoice_value)
 
 
-                .input('Created_by', sql.Int, generalInfo.Created_by || 0)
-                .input('Altered_by', sql.Int, '')
-                .input('Created_on', sql.DateTime, generalInfo.Created_on)
-                .input('Alterd_on', sql.DateTime, generalInfo.Created_on)
-                .input('Trans_Type', sql.NVarChar, 'INSERT')
-                .input('Alter_Id', sql.Int, Math.floor(Math.random() * 999999))
-                .input('Approved_By', sql.Int, null)
-                .input('Approve_Status', sql.Int, 0);
+            .input('Narration', sql.NVarChar, generalInfo.Narration || '')
+            .input('isConverted', sql.Int, 0)
+            .input('Cancel_status', sql.Int, 1)
 
-            await mainGenRequest.query(`
+
+            .input('Created_by', sql.Int, generalInfo.Created_by || 0)
+            .input('Altered_by', sql.Int, '')
+            .input('Created_on', sql.DateTime, generalInfo.Created_on)
+            .input('Alterd_on', sql.DateTime, generalInfo.Created_on)
+            .input('Trans_Type', sql.NVarChar, 'INSERT')
+            .input('Alter_Id', sql.Int, Math.floor(Math.random() * 999999))
+            .input('Approved_By', sql.Int, null)
+            .input('Approve_Status', sql.Int, 0);
+
+        await mainGenRequest.query(`
       INSERT INTO [dbo].[tbl_Sales_Order_Gen_Info] 
       (So_Id, So_Inv_No, So_Year, Pre_Id, So_Branch_Inv_Id, So_Date,
        Retailer_Id, Sales_Person_Id, Branch_Id, VoucherType, GST_Inclusive, IS_IGST,
@@ -3833,38 +3832,38 @@ ORDER BY llos.Pro_Id;
       );
     `);
 
-            if (stockInfo && stockInfo.length > 0) {
-                for (let i = 0; i < stockInfo.length; i++) {
-                    const item = stockInfo[i];
+        if (stockInfo && stockInfo.length > 0) {
+            for (let i = 0; i < stockInfo.length; i++) {
+                const item = stockInfo[i];
 
-                    const productDetails = findProductDetails(productsData, item.Item_Id || item.Product_Id);
-                    const gstPercentage = isIGST ? productDetails.Igst_P : productDetails.Gst_P;
+                const productDetails = findProductDetails(productsData, item.Item_Id || item.Product_Id);
+                const gstPercentage = isIGST ? productDetails.Igst_P : productDetails.Gst_P;
 
-                    const Bill_Qty = Number(item.Bill_Qty || item.Quantity || 0);
-                    const Item_Rate = RoundNumber(item.Item_Rate || item.Price || 0);
-                    const Amount = Multiplication(Bill_Qty, Item_Rate);
+                const Bill_Qty = Number(item.Bill_Qty || item.Quantity || 0);
+                const Item_Rate = RoundNumber(item.Item_Rate || item.Price || 0);
+                const Amount = Multiplication(Bill_Qty, Item_Rate);
 
-                    const Taxble = gstPercentage > 0 ? 1 : 0;
+                const Taxble = gstPercentage > 0 ? 1 : 0;
 
-                    const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
-                    const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
+                const itemRateGst = calculateGSTDetails(Item_Rate, gstPercentage, taxType);
+                const gstInfo = calculateGSTDetails(Amount, gstPercentage, taxType);
 
-                    const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
-                    const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
-                    const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
-                    const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
-                    const Sgst_Amo = Cgst_Amo;
+                const cgstPer = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_per : 0;
+                const igstPer = (!isNotTaxableBill && isIGST) ? gstInfo.igst_per : 0;
+                const Cgst_Amo = (!isNotTaxableBill && !isIGST) ? gstInfo.cgst_amount : 0;
+                const Igst_Amo = (!isNotTaxableBill && isIGST) ? gstInfo.igst_amount : 0;
+                const Sgst_Amo = Cgst_Amo;
 
-                    const whatsappStockRequest = new sql.Request(transaction)
-                        .input('Pre_Ord_Id', sql.Int, preOrderId)
-                        .input('S_No', sql.Int, i + 1)
-                        .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
-                        .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
-                        .input('Bill_Qty', sql.Decimal(18, 2), Bill_Qty)
-                        .input('Rate', sql.Decimal(18, 2), Item_Rate)
-                        .input('Amount', sql.Decimal(18, 2), Amount);
+                const whatsappStockRequest = new sql.Request(transaction)
+                    .input('Pre_Ord_Id', sql.Int, preOrderId)
+                    .input('S_No', sql.Int, i + 1)
+                    .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
+                    .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
+                    .input('Bill_Qty', sql.Decimal(18, 2), Bill_Qty)
+                    .input('Rate', sql.Decimal(18, 2), Item_Rate)
+                    .input('Amount', sql.Decimal(18, 2), Amount);
 
-                    await whatsappStockRequest.query(`
+                await whatsappStockRequest.query(`
           INSERT INTO [dbo].[tbl_Sales_Whats_up_Order_Stock_Info]
           (Pre_Ord_Id, S_No, Item_Id, Unit_Id, Bill_Qty, Rate, Amount)
           VALUES (
@@ -3872,35 +3871,35 @@ ORDER BY llos.Pro_Id;
           );
         `);
 
-                    const mainStockRequest = new sql.Request(transaction)
-                        .input('So_Date', sql.Date, So_Date)
-                        .input('Sales_Order_Id', sql.Int, So_Id)
-                        .input('S_No', sql.Int, i + 1)
-                        .input('Pre_Id', sql.Int, preOrderId)
-                        .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
-                        .input('Bill_Qty', sql.Decimal(18, 2), Bill_Qty)
-                        .input('Taxable_Rate', sql.Decimal(18, 2), itemRateGst.base_amount)
-                        .input('Item_Rate', sql.Decimal(18, 2), Item_Rate)
-                        .input('Amount', sql.Decimal(18, 2), Amount)
-                        .input('Free_Qty', sql.Decimal(18, 2), 0)
-                        .input('Total_Qty', sql.Decimal(18, 2), Bill_Qty)
-                        .input('Taxble', sql.Decimal(18, 2), Taxble)
-                        .input('HSN_Code', sql.NVarChar, productDetails.HSN_Code || '210690')
-                        .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
-                        .input('Unit_Name', sql.NVarChar, item.Unit_Name || 'QTY')
-                        .input('Taxable_Amount', sql.Decimal(18, 2), gstInfo.base_amount)
-                        .input('Tax_Rate', sql.Decimal(18, 2), gstPercentage)
-                        .input('Cgst', sql.Decimal(18, 2), cgstPer)
-                        .input('Cgst_Amo', sql.Decimal(18, 2), Cgst_Amo)
-                        .input('Sgst', sql.Decimal(18, 2), cgstPer)
-                        .input('Sgst_Amo', sql.Decimal(18, 2), Sgst_Amo)
-                        .input('Igst', sql.Decimal(18, 2), igstPer)
-                        .input('Igst_Amo', sql.Decimal(18, 2), Igst_Amo)
-                        .input('Final_Amo', sql.Decimal(18, 2), gstInfo.with_tax)
-                        .input('Created_on', sql.DateTime, generalInfo.Created_on)
-                        .input('GoDown_Id', sql.Int, item.GoDown_Id || null);
+                const mainStockRequest = new sql.Request(transaction)
+                    .input('So_Date', sql.Date, So_Date)
+                    .input('Sales_Order_Id', sql.Int, So_Id)
+                    .input('S_No', sql.Int, i + 1)
+                    .input('Pre_Id', sql.Int, preOrderId)
+                    .input('Item_Id', sql.Int, item.Item_Id || item.Product_Id || 0)
+                    .input('Bill_Qty', sql.Decimal(18, 2), Bill_Qty)
+                    .input('Taxable_Rate', sql.Decimal(18, 2), itemRateGst.base_amount)
+                    .input('Item_Rate', sql.Decimal(18, 2), Item_Rate)
+                    .input('Amount', sql.Decimal(18, 2), Amount)
+                    .input('Free_Qty', sql.Decimal(18, 2), 0)
+                    .input('Total_Qty', sql.Decimal(18, 2), Bill_Qty)
+                    .input('Taxble', sql.Decimal(18, 2), Taxble)
+                    .input('HSN_Code', sql.NVarChar, productDetails.HSN_Code || '210690')
+                    .input('Unit_Id', sql.Int, item.Unit_Id || item.unitId || 7)
+                    .input('Unit_Name', sql.NVarChar, item.Unit_Name || 'QTY')
+                    .input('Taxable_Amount', sql.Decimal(18, 2), gstInfo.base_amount)
+                    .input('Tax_Rate', sql.Decimal(18, 2), gstPercentage)
+                    .input('Cgst', sql.Decimal(18, 2), cgstPer)
+                    .input('Cgst_Amo', sql.Decimal(18, 2), Cgst_Amo)
+                    .input('Sgst', sql.Decimal(18, 2), cgstPer)
+                    .input('Sgst_Amo', sql.Decimal(18, 2), Sgst_Amo)
+                    .input('Igst', sql.Decimal(18, 2), igstPer)
+                    .input('Igst_Amo', sql.Decimal(18, 2), Igst_Amo)
+                    .input('Final_Amo', sql.Decimal(18, 2), gstInfo.with_tax)
+                    .input('Created_on', sql.DateTime, generalInfo.Created_on)
+                    .input('GoDown_Id', sql.Int, item.GoDown_Id || null);
 
-                    await mainStockRequest.query(`
+                await mainStockRequest.query(`
           INSERT INTO [dbo].[tbl_Sales_Order_Stock_Info]
           (So_Date, Sales_Order_Id, S_No, Pre_Id, Item_Id, Bill_Qty, Taxable_Rate,
            Item_Rate, Amount, Free_Qty, Total_Qty, Taxble, HSN_Code, Unit_Id,
@@ -3913,31 +3912,76 @@ ORDER BY llos.Pro_Id;
             @Igst, @Igst_Amo, @Final_Amo, @Created_on, @GoDown_Id
           );
         `);
-                }
             }
+        }
 
-            if (generalInfo.Staff_Involved_List && generalInfo.Staff_Involved_List.length > 0) {
-                for (const staff of generalInfo.Staff_Involved_List) {
-                    await new sql.Request(transaction)
-                        .input('So_Id', sql.Int, So_Id)
-                        .input('Involved_Emp_Id', sql.Int, staff?.Involved_Emp_Id)
-                        .input('Cost_Center_Type_Id', sql.Int, staff?.Cost_Center_Type_Id)
-                        .query(`
+        if (generalInfo.Staff_Involved_List && generalInfo.Staff_Involved_List.length > 0) {
+            for (const staff of generalInfo.Staff_Involved_List) {
+                await new sql.Request(transaction)
+                    .input('So_Id', sql.Int, So_Id)
+                    .input('Involved_Emp_Id', sql.Int, staff?.Involved_Emp_Id)
+                    .input('Cost_Center_Type_Id', sql.Int, staff?.Cost_Center_Type_Id)
+                    .query(`
             INSERT INTO tbl_Sales_Order_Staff_Info (
               So_Id, Involved_Emp_Id, Cost_Center_Type_Id
             ) VALUES (
               @So_Id, @Involved_Emp_Id, @Cost_Center_Type_Id
             );
           `);
-                }
             }
+        }
 
-            await transaction.commit();
+        // ── Insert expenses into both the WhatsApp staging table and the main order table ──
+        const Expence_Array = Array.isArray(generalInfo.Expence_Array) ? generalInfo.Expence_Array : [];
 
-            const whatsappFetchRequest = new sql.Request()
-                .input('Pre_Ord_Id', sql.Int, preOrderId);
+        if (Expence_Array.length > 0) {
+            for (let i = 0; i < Expence_Array.length; i++) {
+                const exp = Expence_Array[i];
+                const Expense_Id = exp?.Expense_Id || exp?.Acc_Id || null;
+                const rawValue = RoundNumber(exp?.Expence_Value || 0);
 
-            const whatsappResult = await whatsappFetchRequest.query(`
+                // Convention: non-negative value → Debit column, negative value → Credit column (magnitude)
+                const Expence_Value_DR = rawValue >= 0 ? Math.abs(rawValue) : 0;
+                const Expence_Value_CR = rawValue < 0 ? Math.abs(rawValue) : 0;
+
+                const Sno = i + 1;
+
+                await new sql.Request(transaction)
+                    .input('Pre_Ord_Id', sql.Int, preOrderId)
+                    .input('Sno', sql.Int, Sno)
+                    .input('Expense_Id', sql.Int, Expense_Id)
+                    .input('Expence_Value_DR', sql.Decimal(18, 2), Expence_Value_DR)
+                    .input('Expence_Value_CR', sql.Decimal(18, 2), Expence_Value_CR)
+                    .query(`
+            INSERT INTO [dbo].[tbl_Sales_Whats_up_Expence_Info]
+            (Pre_Ord_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR)
+            VALUES (
+              @Pre_Ord_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+            );
+          `);
+
+                await new sql.Request(transaction)
+                    .input('So_Id', sql.Int, So_Id)
+                    .input('Sno', sql.Int, Sno)
+                    .input('Expense_Id', sql.Int, Expense_Id)
+                    .input('Expence_Value_DR', sql.Decimal(18, 2), Expence_Value_DR)
+                    .input('Expence_Value_CR', sql.Decimal(18, 2), Expence_Value_CR)
+                    .query(`
+            INSERT INTO [dbo].[tbl_Sales_Order_Expence_Info]
+            (So_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR)
+            VALUES (
+              @So_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+            );
+          `);
+            }
+        }
+
+        await transaction.commit();
+
+        const whatsappFetchRequest = new sql.Request()
+            .input('Pre_Ord_Id', sql.Int, preOrderId);
+
+        const whatsappResult = await whatsappFetchRequest.query(`
       SELECT 
         g.*,
         s.S_No,
@@ -3952,9 +3996,9 @@ ORDER BY llos.Pro_Id;
       ORDER BY s.S_No;
     `);
 
-            const getCreatedSaleOrder = new sql.Request()
-                .input('So_Id', So_Id)
-                .query(`
+        const getCreatedSaleOrder = new sql.Request()
+            .input('So_Id', So_Id)
+            .query(`
         -- general info
         SELECT 
             so.*, 
@@ -3998,71 +4042,72 @@ ORDER BY llos.Pro_Id;
         WHERE sosi.So_Id = @So_Id;
       `);
 
-            const createdSaleOrder = await getCreatedSaleOrder;
+        const createdSaleOrder = await getCreatedSaleOrder;
 
 
-            const processedData = {
-                success: true,
-                message: "Order created successfully in all tables",
-                data: {
+        const processedData = {
+            success: true,
+            message: "Order created successfully in all tables",
+            data: {
 
-                    whatsapp: {
-                        Pre_Ord_Id: preOrderId,
-                        generalInfo: generalInfo,
-                        stockInfo: stockInfo,
-                        insertedData: whatsappResult.recordset
-                    },
+                whatsapp: {
+                    Pre_Ord_Id: preOrderId,
+                    generalInfo: generalInfo,
+                    stockInfo: stockInfo,
+                    insertedData: whatsappResult.recordset
+                },
 
-                    mainOrder: {
-                        So_Id: So_Id,
-                        So_Inv_No: So_Inv_No,
-                        So_Year: Year_Id,
-                        So_Branch_Inv_Id: So_Branch_Inv_Id,
-                        VoucherType: 0,
-                        VoucherCode: VoucherCode,
-                        generalInfo: (createdSaleOrder.recordsets[0]) ? createdSaleOrder.recordsets[0] : {},
-                        productDetails: toArray(createdSaleOrder.recordsets[1]),
-                        staffInvolved: toArray(createdSaleOrder.recordsets[2])
-                    },
-                    totalAmount: Final_Total_Invoice_value,
-                    totalItems: stockInfo.length,
-                    taxSummary: {
-                        totalBeforeTax: totalValueBeforeTax.TotalValue,
-                        totalTax: totalValueBeforeTax.TotalTax,
-                        cgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
-                        sgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
-                        igst: isIGST ? totalValueBeforeTax.TotalTax : 0,
-                        roundOff: Round_off
-                    }
-                }
-            };
-
-            return res.status(200).json(processedData);
-
-        } catch (error) {
-            console.error('Error in salesInvoiceWhatsapp:', error);
-
-
-            if (transaction && transaction._aborted === false) {
-                try {
-                    await transaction.rollback();
-                } catch (rollbackError) {
-                    console.error('Error rolling back transaction:', rollbackError);
+                mainOrder: {
+                    So_Id: So_Id,
+                    So_Inv_No: So_Inv_No,
+                    So_Year: Year_Id,
+                    So_Branch_Inv_Id: So_Branch_Inv_Id,
+                    VoucherType: 0,
+                    VoucherCode: VoucherCode,
+                    generalInfo: (createdSaleOrder.recordsets[0]) ? createdSaleOrder.recordsets[0] : {},
+                    productDetails: toArray(createdSaleOrder.recordsets[1]),
+                    staffInvolved: toArray(createdSaleOrder.recordsets[2])
+                },
+                totalAmount: Final_Total_Invoice_value,
+                totalItems: stockInfo.length,
+                taxSummary: {
+                    totalBeforeTax: totalValueBeforeTax.TotalValue,
+                    totalTax: totalValueBeforeTax.TotalTax,
+                    cgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
+                    sgst: isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
+                    igst: isIGST ? totalValueBeforeTax.TotalTax : 0,
+                    roundOff: Round_off
                 }
             }
+        };
 
-            return res.status(500).json({
-                success: false,
-                message: error.message || "Failed to create order",
-                error: error.toString()
-            });
+        return res.status(200).json(processedData);
+
+    } catch (error) {
+        console.error('Error in salesInvoiceWhatsapp:', error);
+
+
+        if (transaction && transaction._aborted === false) {
+            try {
+                await transaction.rollback();
+            } catch (rollbackError) {
+                console.error('Error rolling back transaction:', rollbackError);
+            }
         }
-    };
 
-const salesInvoiceWhatsappupdate = async (req, res) => {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to create order",
+            error: error.toString()
+        });
+    }
+};
+
+
+
+    const salesInvoiceWhatsappupdate = async (req, res) => {
     const { generalInfo, stockInfo } = req.body;
     let transaction;
-
 
     try {
         transaction = new sql.Transaction();
@@ -4194,9 +4239,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
                 WHERE Pre_Ord_Id = @Pre_Ord_Id
             `);
 
-        // ────────────────────────────────────────────────────────────────
-        // ✅ UPDATE Main Sales Order General Info (instead of DELETE + INSERT)
-        // ────────────────────────────────────────────────────────────────
+       
         await new sql.Request(transaction)
             .input('So_Id',               sql.Int,           So_Id)
             .input('So_Date',             sql.Date,          So_Date)
@@ -4240,7 +4283,7 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             `);
 
         // ────────────────────────────────────────────────────────────────
-        // ✅ DELETE existing Stock Info and Staff Info (for clean update)
+        // ✅ DELETE existing Stock Info, Staff Info AND Expense Info (for clean update)
         // ────────────────────────────────────────────────────────────────
         await new sql.Request(transaction)
             .input('So_Id', sql.Int, So_Id)
@@ -4261,6 +4304,21 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             .query(`
                 DELETE FROM [dbo].[tbl_Sales_Order_Staff_Info]
                 WHERE So_Id = @So_Id    
+            `);
+
+        // ✅ NEW — clear old expenses before re-inserting the current set
+        await new sql.Request(transaction)
+            .input('So_Id', sql.Int, So_Id)
+            .query(`
+                DELETE FROM [dbo].[tbl_Sales_Order_Expence_Info]
+                WHERE So_Id = @So_Id
+            `);
+
+        await new sql.Request(transaction)
+            .input('Pre_Ord_Id', sql.Int, preOrderId)
+            .query(`
+                DELETE FROM [dbo].[tbl_Sales_Whats_up_Expence_Info]
+                WHERE Pre_Ord_Id = @Pre_Ord_Id
             `);
 
         // ────────────────────────────────────────────────────────────────
@@ -4348,7 +4406,6 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             }
         }
 
-      
         if (generalInfo.Staff_Involved_List && generalInfo.Staff_Involved_List.length > 0) {
             for (const staff of generalInfo.Staff_Involved_List) {
                 await new sql.Request(transaction)
@@ -4365,82 +4422,56 @@ const salesInvoiceWhatsappupdate = async (req, res) => {
             }
         }
 
+    
+        const Expence_Array = Array.isArray(generalInfo.Expence_Array) ? generalInfo.Expence_Array : [];
+
+        if (Expence_Array.length > 0) {
+            for (let i = 0; i < Expence_Array.length; i++) {
+                const exp = Expence_Array[i];
+                const Expense_Id = exp?.Expense_Id || exp?.Acc_Id || null;
+                const rawValue = RoundNumber(exp?.Expence_Value || 0);
+
+                const Expence_Value_DR = rawValue >= 0 ? Math.abs(rawValue) : 0;
+                const Expence_Value_CR = rawValue < 0 ? Math.abs(rawValue) : 0;
+
+                const Sno = i + 1;
+
+                await new sql.Request(transaction)
+                    .input('Pre_Ord_Id', sql.Int, preOrderId)
+                    .input('Sno', sql.Int, Sno)
+                    .input('Expense_Id', sql.Int, Expense_Id)
+                    .input('Expence_Value_DR', sql.Decimal(18, 2), Expence_Value_DR)
+                    .input('Expence_Value_CR', sql.Decimal(18, 2), Expence_Value_CR)
+                    .query(`
+                        INSERT INTO [dbo].[tbl_Sales_Whats_up_Expence_Info]
+                        (Pre_Ord_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR)
+                        VALUES (
+                            @Pre_Ord_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                        );
+                    `);
+
+                await new sql.Request(transaction)
+                    .input('So_Id', sql.Int, So_Id)
+                    .input('Sno', sql.Int, Sno)
+                    .input('Expense_Id', sql.Int, Expense_Id)
+                    .input('Expence_Value_DR', sql.Decimal(18, 2), Expence_Value_DR)
+                    .input('Expence_Value_CR', sql.Decimal(18, 2), Expence_Value_CR)
+                    .query(`
+                        INSERT INTO [dbo].[tbl_Sales_Order_Expence_Info]
+                        (So_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR)
+                        VALUES (
+                            @So_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                        );
+                    `);
+            }
+        }
+
         // Commit Transaction
         await transaction.commit();
 
-        // Fetch updated order for response
-        const createdSaleOrder = await new sql.Request()
-            .input('So_Id', So_Id)
-            .query(`
-                -- General Info
-                SELECT 
-                    so.*, 
-                    COALESCE(rm.Retailer_Name, 'unknown')  AS Retailer_Name,
-                    COALESCE(sp.Name, 'unknown')            AS Sales_Person_Name,
-                    COALESCE(bm.BranchName, 'unknown')      AS Branch_Name,
-                    COALESCE(cb.Name, 'unknown')            AS Created_BY_Name,
-                    COALESCE(v.Voucher_Type, 'unknown')     AS VoucherTypeGet
-                FROM tbl_Sales_Order_Gen_Info AS so
-                LEFT JOIN tbl_Retailers_Master  AS rm ON rm.Retailer_Id = so.Retailer_Id
-                LEFT JOIN tbl_Users             AS sp ON sp.UserId = so.Sales_Person_Id
-                LEFT JOIN tbl_Branch_Master        bm ON bm.BranchId = so.Branch_Id
-                LEFT JOIN tbl_Users             AS cb ON cb.UserId = so.Created_by
-                LEFT JOIN tbl_Voucher_Type      AS v  ON v.Vocher_Type_Id = so.VoucherType
-                WHERE so.So_Id = @So_Id;
-
-                -- Product Details
-                SELECT 
-                    si.*,
-                    COALESCE(pm.Product_Name,       'not available') AS Product_Name,
-                    COALESCE(pm.Short_Name,         'not available') AS Product_Short_Name,
-                    COALESCE(pm.Product_Image_Name, 'not available') AS Product_Image_Name,
-                    COALESCE(u.Units,               'not available') AS UOM,
-                    COALESCE(b.Brand_Name,          'not available') AS BrandGet
-                FROM tbl_Sales_Order_Stock_Info AS si
-                LEFT JOIN tbl_Product_Master    AS pm ON pm.Product_Id = si.Item_Id
-                LEFT JOIN tbl_UOM               AS u  ON u.Unit_Id = si.Unit_Id
-                LEFT JOIN tbl_Brand_Master      AS b  ON b.Brand_Id = pm.Brand
-                WHERE si.Sales_Order_Id = @So_Id;
-
-                -- Staff Involved
-                SELECT 
-                    sosi.So_Id, 
-                    sosi.Involved_Emp_Id,
-                    sosi.Cost_Center_Type_Id,
-                    c.Cost_Center_Name  AS EmpName,
-                    cc.Cost_Category    AS EmpType
-                FROM tbl_Sales_Order_Staff_Info   AS sosi
-                LEFT JOIN tbl_ERP_Cost_Center     AS c  ON c.Cost_Center_Id = sosi.Involved_Emp_Id
-                LEFT JOIN tbl_ERP_Cost_Category      cc ON cc.Cost_Category_Id = sosi.Cost_Center_Type_Id
-                WHERE sosi.So_Id = @So_Id;
-            `);
-
-        // Build Response
         const processedData = {
             success: true,
-            message: "Order updated successfully",
-            data: {
-                mainOrder: {
-                    So_Id,
-                    So_Inv_No,
-                    So_Year:          Year_Id,
-                    So_Branch_Inv_Id,
-                    VoucherType:      200,
-                    generalInfo:      createdSaleOrder.recordsets[0] || {},
-                    productDetails:   toArray(createdSaleOrder.recordsets[1]),
-                    staffInvolved:    toArray(createdSaleOrder.recordsets[2])
-                },
-                totalAmount: Final_Total_Invoice_value,
-                totalItems:  stockInfo.length,
-                taxSummary: {
-                    totalBeforeTax: totalValueBeforeTax.TotalValue,
-                    totalTax:       totalValueBeforeTax.TotalTax,
-                    cgst:           isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
-                    sgst:           isIGST ? 0 : totalValueBeforeTax.TotalTax / 2,
-                    igst:           isIGST ? totalValueBeforeTax.TotalTax : 0,
-                    roundOff:       Round_off
-                }
-            }
+            message: "Order updated successfully"
         };
 
         return res.status(200).json(processedData);
