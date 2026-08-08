@@ -5,7 +5,7 @@ import { insertMultipleBatch, insertMultipleBatchUsageDetails } from '../../midd
 
 // material inward
 
-const assignBatchNames = async (outstanding, modulePrefix, Fromdate, Todate) => {
+const assignBatchNames = async (outstanding) => {
     const outstandingData = toArray(outstanding);
     if (!outstandingData.length) return outstandingData;
 
@@ -13,46 +13,31 @@ const assignBatchNames = async (outstanding, modulePrefix, Fromdate, Todate) => 
     if (productIds.length === 0) return outstandingData;
 
     const countReq = new sql.Request();
-    countReq.input('Fromdate', sql.Date, Fromdate);
-    countReq.input('Todate', sql.Date, Todate);
-
     const countQuery = `
-        SELECT item_id, CONVERT(DATE, trans_date) as t_date, COUNT(1) as batchCount
+        SELECT item_id, COUNT(1) as totalBatches
         FROM tbl_Batch_Master
         WHERE item_id IN (${productIds.join(',')})
-          AND CONVERT(DATE, trans_date) BETWEEN @Fromdate AND @Todate
-        GROUP BY item_id, CONVERT(DATE, trans_date)
+        GROUP BY item_id
     `;
     const countRes = await countReq.query(countQuery);
 
     const countMap = {};
     countRes.recordset.forEach(row => {
-        const d = new Date(row.t_date);
-        const dateKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-        countMap[`${row.item_id}_${dateKey}`] = row.batchCount;
+        countMap[row.item_id] = row.totalBatches;
     });
 
-    const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
     const counters = {};
 
     return outstandingData.map(row => {
-        const evDate = new Date(row.eventDate);
-        const dateKey = `${evDate.getUTCFullYear()}-${String(evDate.getUTCMonth() + 1).padStart(2, '0')}-${String(evDate.getUTCDate()).padStart(2, '0')}`;
+        const pId = row.productId;
 
-        const yearStr = String(evDate.getUTCFullYear()).slice(-2);
-        const monthStr = monthNames[evDate.getUTCMonth()];
-        const dayStr = String(evDate.getUTCDate()).padStart(2, '0');
-
-        const baseKey = `${modulePrefix}_${row.productId}_${yearStr}_${monthStr}_${dayStr}`;
-        const dbCountKey = `${row.productId}_${dateKey}`;
-
-        if (counters[baseKey] === undefined) {
-            counters[baseKey] = (countMap[dbCountKey] || 0) + 1;
+        if (counters[pId] === undefined) {
+            counters[pId] = (countMap[pId] || 0) + 1;
         } else {
-            counters[baseKey]++;
+            counters[pId]++;
         }
 
-        row.suggestBatchName = `${baseKey}_${counters[baseKey]}`;
+        row.suggestBatchName = `${pId}_${counters[pId]}`;
         return row;
     });
 };
@@ -126,7 +111,7 @@ const getUnAssignedBatchFromMaterialInward = async (req, res) => {
 
         const [outstanding, fromGodowns, toGodowns, items] = result.recordsets;
 
-        const outstandingData = await assignBatchNames(outstanding, 'MI', Fromdate, Todate);
+        const outstandingData = await assignBatchNames(outstanding);
 
         sentData(res, outstandingData, {
             fromGodowns: toArray(fromGodowns),
@@ -190,6 +175,7 @@ const postBatchInMaterialInward = async (req, res) => {
             transaction,
             itemBatch.map(item => ({
                 batch: item.batch,
+                batch_alias: item.batch_alias,
                 trans_date: new Date(trans_date),
                 item_id: toNumber(item.productId),
                 godown_id: toNumber(item.godownId),
@@ -417,7 +403,7 @@ const getUnAssignedBatchProcessing = async (req, res) => {
 
         const [outstanding, toGodowns, items] = result.recordsets;
 
-        const outstandingData = await assignBatchNames(outstanding, 'PRO', Fromdate, Todate);
+        const outstandingData = await assignBatchNames(outstanding);
 
         sentData(res, outstandingData, {
             fromGodowns: [],
@@ -453,9 +439,10 @@ const postBatchInProcessing = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             created_by NVARCHAR(100),
-            uniquId BIGINT
+            uniquId BIGINT,
+            batch_alias NVARCHAR(50)
         );
-                INSERT INTO #Parsed(batch, item_id, godown_id, quantity, rate, created_by, uniquId)
+                INSERT INTO #Parsed(batch, item_id, godown_id, quantity, rate, created_by, uniquId, batch_alias)
         SELECT * FROM OPENJSON(@jsonData)
         WITH(
             batch NVARCHAR(50),
@@ -464,7 +451,8 @@ const postBatchInProcessing = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             created_by NVARCHAR(100),
-            uniquId BIGINT
+            uniquId BIGINT,
+            batch_alias NVARCHAR(50)
         );
                 IF EXISTS(SELECT 1 FROM #Parsed WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
                 THROW 50000, 'Invalid or missing fields in JSON input.', 1;
@@ -479,6 +467,7 @@ const postBatchInProcessing = async (req, res) => {
             transaction,
             itemBatch.map(item => ({
                 batch: item.batch,
+                batch_alias: item.batch_alias,
                 trans_date: new Date(trans_date),
                 item_id: toNumber(item.productId),
                 godown_id: toNumber(item.godownId),
@@ -534,7 +523,8 @@ const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
                     COALESCE(ar.Total_Value, 0) AS amount,
                     COALESCE(cb.Name, 'Not found') AS createdByGet,
                     ar.CreatedAt AS createdAt,
-                    'OTHER_GODOWN' AS moduleName
+                    'OTHER_GODOWN' AS moduleName,
+                    bm.batch_alias
                 FROM tbl_Trip_Arrival AS ar
                 LEFT JOIN tbl_Product_Master AS p ON ar.Product_Id = p.Product_Id
                 LEFT JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ar.From_Location
@@ -542,6 +532,7 @@ const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = ar.Created_By
                 JOIN tbl_Trip_Details AS td ON td.Arrival_Id = ar.Arr_Id
                 JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = td.Trip_Id
+                LEFT JOIN tbl_Batch_Master AS bm ON bm.batch = ar.Batch_No AND bm.item_id = ar.Product_Id
                 WHERE 
                     TRIM(COALESCE(ar.Batch_No, '')) = ''
                     AND CONVERT(DATE, tm.Trip_Date) BETWEEN @Fromdate AND @Todate
@@ -610,9 +601,10 @@ const postOtherGodownTransfer = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             uniquId BIGINT,
-            moduleId BIGINT
+            moduleId BIGINT,
+            batch_alias NVARCHAR(50)
         );
-                INSERT INTO #Parsed(batch_id, batch, item_id, from_godown, to_godown, quantity, rate, uniquId, moduleId)
+                INSERT INTO #Parsed(batch_id, batch, item_id, from_godown, to_godown, quantity, rate, uniquId, moduleId, batch_alias)
         SELECT * FROM OPENJSON(@jsonData)
         WITH(
             id NVARCHAR(150),
@@ -623,7 +615,8 @@ const postOtherGodownTransfer = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             uniquId BIGINT,
-            moduleId BIGINT
+            moduleId BIGINT,
+            batch_alias NVARCHAR(50)
         );
                 UPDATE t
                 SET t.Batch_No = p.batch
@@ -636,6 +629,7 @@ const postOtherGodownTransfer = async (req, res) => {
             transaction,
             itemBatch.map(item => ({
                 batch: item.batch,
+                batch_alias: item.batch_alias,
                 trans_date: new Date(trans_date),
                 item_id: toNumber(item.productId),
                 godown_id: toNumber(item.fromGodownId),
@@ -652,6 +646,7 @@ const postOtherGodownTransfer = async (req, res) => {
             transaction,
             itemBatch.map(item => ({
                 batch: item.batch,
+                batch_alias: item.batch_alias,
                 trans_date: new Date(trans_date),
                 item_id: toNumber(item.productId),
                 godown_id: toNumber(item.godownId),
@@ -706,13 +701,15 @@ const getUnAssignedBatchSales = async (req, res) => {
                     COALESCE(sdi.Final_Amo, 0) AS amount,
                     COALESCE(cb.Name, 'Not found') AS createdByGet,
                     sd.Created_on AS createdAt,
-                    'SALES' AS moduleName
+                    'SALES' AS moduleName,
+                    bm.batch_alias
                 FROM tbl_Sales_Delivery_Stock_Info AS sdi
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = sdi.Item_Id
                 --LEFT JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = prd.From_Location
                 LEFT JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = sdi.GoDown_Id
                 JOIN tbl_Sales_Delivery_Gen_Info AS sd ON sd.Do_Id = sdi.Delivery_Order_Id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = sd.Created_By
+                LEFT JOIN tbl_Batch_Master AS bm ON bm.batch = sdi.Batch_Name AND bm.item_id = sdi.Item_Id
                 WHERE
                     TRIM(COALESCE(sdi.Batch_Name, '')) = ''
                 	AND sd.Do_Date BETWEEN @Fromdate AND @Todate
@@ -775,9 +772,10 @@ const postSalesUsage = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             uniquId BIGINT,
-            moduleId BIGINT
+            moduleId BIGINT,
+            batch_alias NVARCHAR(50)
         );
-                INSERT INTO #Parsed(batch_id, batch, item_id, from_godown, to_godown, quantity, rate, uniquId, moduleId)
+                INSERT INTO #Parsed(batch_id, batch, item_id, from_godown, to_godown, quantity, rate, uniquId, moduleId, batch_alias)
         SELECT * FROM OPENJSON(@jsonData)
         WITH(
             id NVARCHAR(150),
@@ -788,7 +786,8 @@ const postSalesUsage = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             uniquId BIGINT,
-            moduleId BIGINT
+            moduleId BIGINT,
+            batch_alias NVARCHAR(50)
         );
                 UPDATE s
                 SET s.Batch_Name = p.batch
@@ -801,6 +800,7 @@ const postSalesUsage = async (req, res) => {
             transaction,
             itemBatch.map(item => ({
                 batch: item.batch,
+                batch_alias: item.batch_alias,
                 trans_date: new Date(trans_date),
                 item_id: toNumber(item.productId),
                 godown_id: toNumber(item.godownId),
@@ -854,12 +854,14 @@ const getUnAssignedBatchPurchase = async (req, res) => {
                     COALESCE(psi.Final_Amo, 0) AS amount,
                     COALESCE(cb.Name, 'Not found') AS createdByGet,
                     pui.Created_on AS createdAt,
-                    'PURCHASE' AS moduleName
+                    'PURCHASE' AS moduleName,
+                    bm.batch_alias
                 FROM tbl_Purchase_Order_Inv_Stock_Info AS psi
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = psi.Item_Id
                 LEFT JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = psi.Location_Id
                 JOIN tbl_Purchase_Order_Inv_Gen_Info AS pui ON pui.PIN_Id = psi.PIN_Id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = pui.Created_by
+                LEFT JOIN tbl_Batch_Master AS bm ON bm.batch = psi.Batch_No AND bm.item_id = psi.Item_Id
                 WHERE
                 TRIM(COALESCE(psi.Batch_No, '')) = ''
                 	AND pui.Po_Entry_Date BETWEEN @Fromdate AND @Todate
@@ -884,7 +886,7 @@ const getUnAssignedBatchPurchase = async (req, res) => {
 
         const [outstanding, toGodowns, items] = result.recordsets;
 
-        const outstandingData = await assignBatchNames(outstanding, 'PI', Fromdate, Todate);
+        const outstandingData = await assignBatchNames(outstanding);
 
         sentData(res, outstandingData, {
             fromGodown: [],
@@ -922,9 +924,10 @@ const postPurchaseBatch = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             created_by NVARCHAR(100),
-            uniquId BIGINT
+            uniquId BIGINT,
+            batch_alias NVARCHAR(50)
         );
-                INSERT INTO #Parsed(batch, item_id, godown_id, quantity, rate, created_by, uniquId)
+                INSERT INTO #Parsed(batch, item_id, godown_id, quantity, rate, created_by, uniquId, batch_alias)
         SELECT * FROM OPENJSON(@jsonData)
         WITH(
             batch NVARCHAR(50),
@@ -933,7 +936,8 @@ const postPurchaseBatch = async (req, res) => {
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             created_by NVARCHAR(100),
-            uniquId BIGINT
+            uniquId BIGINT,
+            batch_alias NVARCHAR(50)
         );
                 IF EXISTS(SELECT 1 FROM #Parsed WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
                 THROW 50000, 'Invalid or missing fields in JSON input.', 1;
@@ -948,6 +952,7 @@ const postPurchaseBatch = async (req, res) => {
             transaction,
             itemBatch.map(item => ({
                 batch: item.batch,
+                batch_alias: item.batch_alias,
                 trans_date: new Date(trans_date),
                 item_id: toNumber(item.productId),
                 godown_id: toNumber(item.godownId),
@@ -1000,12 +1005,14 @@ const getUnAssignedBatchCreditNote = async (req, res) => {
                     COALESCE(csi.Final_Amo, 0) AS amount,
                     COALESCE(cb.Name, 'Not found') AS createdByGet,
                     cr.Created_on AS createdAt,
-                    'CREDIT_NOTE' AS moduleName
+                    'CREDIT_NOTE' AS moduleName,
+                    bm.batch_alias
                 FROM tbl_Credit_Note_Stock_Info AS csi
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = csi.Item_Id
                 LEFT JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = csi.GoDown_Id
                 JOIN tbl_Credit_Note_Gen_Info AS cr ON cr.CR_Id = csi.CR_Id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = cr.Created_by
+                LEFT JOIN tbl_Batch_Master AS bm ON bm.batch = csi.Batch_Name AND bm.item_id = csi.Item_Id
                 WHERE
                 TRIM(COALESCE(csi.Batch_Name, '')) = ''
                 	AND cr.CR_Date BETWEEN @Fromdate AND @Todate
@@ -1030,7 +1037,7 @@ const getUnAssignedBatchCreditNote = async (req, res) => {
 
         const [outstanding, toGodowns, items] = result.recordsets;
 
-        const outstandingData = await assignBatchNames(outstanding, 'CN', Fromdate, Todate);
+        const outstandingData = await assignBatchNames(outstanding);
 
         sentData(res, outstandingData, {
             fromGodown: [],
@@ -1299,6 +1306,7 @@ const getBatchStockBalance = async (req, res) => {
                 SELECT
                     bm.id,
                     bm.batch,
+                    COALESCE(bm.batch_alias, bm.batch) AS batch_alias,
                     bm.trans_date,
                     bm.godown_id,
                     sg.Godown_Name AS godownName,
@@ -1360,6 +1368,7 @@ const batchDropDown = async (req, res) => {
             .query(`
                 SELECT
                     bm.batch,
+                    bm.batch_alias,
                     bm.item_id,
                     pm.Product_Name AS item_name,
                     bm.godown_id,
@@ -1394,6 +1403,7 @@ const previousAndNextStages = async (req, res) => {
                     bm.item_id,
                     pm.Product_Name item_Name,
                     bm.batch,
+                    bm.batch_alias,
                     bm.godown_id,
                     gm.Godown_Name godown_name,
                     bm.quantity,
@@ -1520,6 +1530,7 @@ const batchTransaction = async (req, res) => {
                 SELECT
                     bm.id,
                     bm.batch,
+                    bm.batch_alias,
                     bm.trans_date,
                     bm.item_id,
                     COALESCE(pm.Product_Name, 'Not found') AS item_get,

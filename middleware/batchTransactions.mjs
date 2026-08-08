@@ -4,6 +4,7 @@ import { isEqualNumber, isValidNumber, stringCompare } from '../helper_functions
 export const insertSingleBatch = async (
     transaction,
     batch,
+    batch_alias,
     trans_date = new Date(),
     item_id,
     godown_id,
@@ -27,8 +28,13 @@ export const insertSingleBatch = async (
             return true;
         }
 
+        if (stringCompare(batch_alias, '') || batch_alias === undefined) {
+            batch_alias = batch;
+        }
+
         const request = new sql.Request(transaction)
             .input('batch', sql.NVarChar(255), batch)
+            .input('batch_alias', sql.NVarChar(50), batch_alias)
             .input('trans_date', sql.Date, trans_date)
             .input('item_id', sql.Int, item_id)
             .input('godown_id', sql.Int, godown_id)
@@ -51,10 +57,10 @@ export const insertSingleBatch = async (
                 IF @batch_id IS NULL 
                 BEGIN
                     INSERT INTO tbl_Batch_Master (
-                        batch, trans_date, item_id, godown_id, quantity, 
+                        batch, batch_alias, trans_date, item_id, godown_id, quantity, 
                         rate, created_at, created_by, ob_id
                     ) VALUES (
-                        @batch, @trans_date, @item_id, @godown_id, @quantity, 
+                        @batch, @batch_alias, @trans_date, @item_id, @godown_id, @quantity, 
                         @rate, GETDATE(), @created_by, @maxObId
                     )
                 END
@@ -93,6 +99,7 @@ export const insertMultipleBatch = async (
             const result = await insertSingleBatch(
                 transaction,
                 batch.batch,
+                batch.batch_alias,
                 batch.trans_date,
                 batch.item_id,
                 batch.godown_id,
