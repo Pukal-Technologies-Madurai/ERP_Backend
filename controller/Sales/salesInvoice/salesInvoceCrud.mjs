@@ -1484,6 +1484,15 @@ export const bulkCreateSalesInvoice = async (req, res) => {
         const VoucherCode = voucherData.recordset[0]?.Voucher_Code;
         if (!VoucherCode) throw new Error('Failed to fetch Voucher Code');
 
+        // GETTING DEFAULT ACCOUNTS FOR TAXES
+        const defaultAcRequest = await new sql.Request().query(`
+            SELECT Acc_Id, AC_Reason 
+            FROM tbl_Default_AC_Master 
+            WHERE AC_Reason IN ('CGST', 'SGST', 'IGST', 'ROUNDOFF') 
+            AND Acc_Id IS NOT NULL;
+        `);
+        const defaultAccounts = defaultAcRequest.recordset || [];
+
         // Fetch starting Do_No
         const currentDoNoReq = await new sql.Request()
             .input('Do_Year', Year_Id)
@@ -1504,6 +1513,7 @@ export const bulkCreateSalesInvoice = async (req, res) => {
         const genInfoRows = [];
         let allStockRows = [];
         const allStaffRows = [];
+        const allExpenseRows = [];
 
         // Build Rows iteratively
         for (const order of SaleOrders) {
@@ -1523,8 +1533,12 @@ export const bulkCreateSalesInvoice = async (req, res) => {
             const Do_No = nextDoNo++;
             const Do_Inv_No = `${VoucherCode}/${createPadString(Do_No, 6)}/${Year_Desc}`;
 
+            const actualExpenceArray = toArray(Expence_Array).filter(
+                exp => !['CGST', 'SGST', 'IGST', 'ROUND OFF'].some(tax => stringCompare(tax, exp?.Expence_Name))
+            );
+
             const TotalExpences = toNumber(RoundNumber(
-                toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
+                toArray(actualExpenceArray).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
             ));
 
             const Total_Invoice_value = RoundNumber(
@@ -1570,10 +1584,10 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                     return { TotalValue, TotalTax };
                 }, { TotalValue: 0, TotalTax: 0 });
 
-                const invoiceExpencesTaxTotal = toArray(Expence_Array).reduce((acc, exp) => {
-                    if (isNotTaxableBill) return 0;
-                    return Addition(acc, calculateGSTDetails(exp?.Expence_Value, exp?.percentageValue, 'remove').tax_amount)
-                }, 0);
+                const invoiceExpencesTaxTotal = toArray(actualExpenceArray).reduce((acc, exp) => Addition(
+                    acc,
+                    IS_IGST ? exp?.Igst_Amo : Addition(exp?.Cgst_Amo, exp?.Sgst_Amo)
+                ), 0);
 
                 return {
                     TotalValue: productTax.TotalValue,
@@ -1622,6 +1636,46 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                 Payment_Status: Payment_Status,
                 shipingAddressId: null
             });
+
+            // Extract & Map Expense Rows for tbl_Sales_Delivery_Expence_Info
+            let expSno = 1;
+            for (const exp of actualExpenceArray) {
+                const expVal = toNumber(exp?.Expence_Value);
+                const Expence_Value_DR = expVal >= 0 ? expVal : 0;
+                const Expence_Value_CR = expVal < 0 ? Math.abs(expVal) : 0;
+                if (checkIsNumber(exp?.Expense_Id)) {
+                    allExpenseRows.push({
+                        Do_Id,
+                        Sno: expSno++,
+                        Expense_Id: toNumber(exp?.Expense_Id),
+                        Expence_Value_DR,
+                        Expence_Value_CR
+                    });
+                }
+            }
+
+            const taxTypes = [
+                { expName: 'CGST', Value: CGST },
+                { expName: 'SGST', Value: SGST },
+                { expName: 'IGST', Value: IGST },
+                { expName: 'ROUNDOFF', Value: Round_off }
+            ].filter(fil => toNumber(fil.Value) !== 0);
+
+            for (const tax of taxTypes) {
+                const accRow = defaultAccounts.find(r => stringCompare(r.AC_Reason, tax.expName));
+                if (accRow) {
+                    const numValue = Number(tax.Value);
+                    const Expence_Value_DR = numValue >= 0 ? numValue : 0;
+                    const Expence_Value_CR = numValue < 0 ? Math.abs(numValue) : 0;
+                    allExpenseRows.push({
+                        Do_Id,
+                        Sno: expSno++,
+                        Expense_Id: accRow.Acc_Id,
+                        Expence_Value_DR,
+                        Expence_Value_CR
+                    });
+                }
+            }
 
             const processedProducts = Products_List.map(p => ({
                 ...p,
@@ -1746,6 +1800,28 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                 ) AS p;
             `);
         await stockInsertRequest;
+
+        // INSERT EXPENCE DETAILS
+        if (allExpenseRows.length > 0) {
+            const expInsertRequest = new sql.Request(transaction)
+                .input('ExpJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: allExpenseRows }))
+                .query(`
+                    INSERT INTO tbl_Sales_Delivery_Expence_Info (
+                        Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                    )
+                    SELECT
+                        p.Do_Id, p.Sno, p.Expense_Id, p.Expence_Value_DR, p.Expence_Value_CR
+                    FROM OPENJSON(@ExpJson, '$.rows')
+                    WITH (
+                        Do_Id BIGINT '$.Do_Id',
+                        Sno INT '$.Sno',
+                        Expense_Id BIGINT '$.Expense_Id',
+                        Expence_Value_DR DECIMAL(18,2) '$.Expence_Value_DR',
+                        Expence_Value_CR DECIMAL(18,2) '$.Expence_Value_CR'
+                    ) AS p;
+                `);
+            await expInsertRequest;
+        }
 
         // INSERT STAFF INVOLVED DETAILS
         if (allStaffRows.length > 0) {
