@@ -2,6 +2,7 @@ import sql from 'mssql';
 import { servError, dataFound, noData, success, invalidInput, sentData } from '../../res.mjs';
 import { checkIsNumber, createPadString, filterableText, isEqualNumber, ISOString, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
 import { insertMultipleBatch, insertMultipleBatchUsageDetails, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
+import batchProcess from './batchProcess.mjs';
 
 const StockManagement = () => {
 
@@ -187,6 +188,20 @@ const StockManagement = () => {
                 Dest_Rate: toNumber(item?.Dest_Rate),
                 Dest_Amt: toNumber(item?.Dest_Amt)
             }));
+
+            const newBatches = Destination.filter(d => filterableText(d.Dest_Batch_Lot_No) && d.Dest_Batch_Lot_No.startsWith('PRD_'));
+            if (newBatches.length > 0) {
+                const batchInput = newBatches.map(b => ({ ...b, productId: b.Dest_Item_Id }));
+                const assignedBatches = await batchProcess.assignBatchNames(batchInput);
+                Destination.forEach(d => {
+                    if (filterableText(d.Dest_Batch_Lot_No) && d.Dest_Batch_Lot_No.startsWith('PRD_')) {
+                        const assigned = assignedBatches.find(ab => isEqualNumber(ab.Dest_Item_Id, d.Dest_Item_Id) && ab.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No);
+                        if (assigned) {
+                            d.Dest_Batch_Lot_No = assigned.suggestBatchName;
+                        }
+                    }
+                });
+            }
 
             const StaffInvolve = toArray(req.body.StaffInvolve).map(item => ({
                 ...item,
@@ -445,6 +460,7 @@ const StockManagement = () => {
                     transaction,
                     batchDest.map(d => ({
                         batch: d.Dest_Batch_Lot_No,
+                        batch_alias: Destination.find(ds => ds.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No)?.Dest_Batch_Alias,
                         trans_date: new Date(Process_date),
                         item_id: toNumber(d.Dest_Item_Id),
                         godown_id: toNumber(d.Dest_Goodown_Id),
@@ -524,6 +540,20 @@ const StockManagement = () => {
                 Dest_Rate: toNumber(item?.Dest_Rate),
                 Dest_Amt: toNumber(item?.Dest_Amt)
             }));
+
+            const newBatches = Destination.filter(d => filterableText(d.Dest_Batch_Lot_No) && d.Dest_Batch_Lot_No.startsWith('PRD_'));
+            if (newBatches.length > 0) {
+                const batchInput = newBatches.map(b => ({ ...b, productId: b.Dest_Item_Id }));
+                const assignedBatches = await batchProcess.assignBatchNames(batchInput);
+                Destination.forEach(d => {
+                    if (filterableText(d.Dest_Batch_Lot_No) && d.Dest_Batch_Lot_No.startsWith('PRD_')) {
+                        const assigned = assignedBatches.find(ab => isEqualNumber(ab.Dest_Item_Id, d.Dest_Item_Id) && ab.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No);
+                        if (assigned) {
+                            d.Dest_Batch_Lot_No = assigned.suggestBatchName;
+                        }
+                    }
+                });
+            }
 
             const StaffInvolve = toArray(req.body.StaffInvolve).map(item => ({
                 ...item,
@@ -766,6 +796,7 @@ const StockManagement = () => {
                     transaction,
                     batchDest.map(d => ({
                         batch: d.Dest_Batch_Lot_No,
+                        batch_alias: Destination.find(ds => ds.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No)?.Dest_Batch_Alias,
                         trans_date: new Date(Process_date),
                         item_id: toNumber(d.Dest_Item_Id),
                         godown_id: toNumber(d.Dest_Goodown_Id),

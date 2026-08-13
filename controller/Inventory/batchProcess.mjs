@@ -1806,6 +1806,7 @@ const batchTransaction = async (req, res) => {
 }
 
 export default {
+    assignBatchNames,
     getUnAssignedBatchFromMaterialInward,
     postBatchInMaterialInward,
     getUnAssignedBatchProcessingSource,
