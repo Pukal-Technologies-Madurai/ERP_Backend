@@ -1,6 +1,6 @@
 import sql from 'mssql'
-import { servError, success, invalidInput, sentData, noData } from '../../res.mjs';
-import { Addition, checkIsNumber, getDaysBetween, isEqualNumber, ISOString, stringCompare, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
+import { servError, success, invalidInput, sentData, noData, dataFound } from '../../res.mjs';
+import { Addition, checkIsNumber, filterableText, getDaysBetween, isEqualNumber, ISOString, stringCompare, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
 import { insertMultipleBatch, insertMultipleBatchUsageDetails } from '../../middleware/batchTransactions.mjs';
 
 // material inward
@@ -196,6 +196,230 @@ const postBatchInMaterialInward = async (req, res) => {
         servError(err, res);
     }
 };
+
+// Combined processing stock-journal
+
+const getUnAssignedProcessingCombined = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .query(`                
+                -- other final filters
+                DECLARE @processingFilters TABLE (PR_Id INT);
+                -- inserting final filter data
+                INSERT INTO @processingFilters (PR_Id)
+                SELECT DISTINCT pgi.PR_Id
+                FROM tbl_Processing_Gen_Info AS pgi
+                LEFT JOIN tbl_Processing_Source_Details AS s
+                ON s.PR_Id = pgi.PR_Id
+                LEFT JOIN tbl_Processing_Destin_Details AS d
+                ON d.PR_Id = pgi.PR_Id
+                WHERE 
+                    pgi.Process_date BETWEEN @Fromdate AND @Todate
+                    AND pgi.PR_Status <> 'Canceled'
+                    AND (
+                        EXISTS (SELECT 1 FROM tbl_Processing_Source_Details s2 WHERE s2.PR_Id = pgi.PR_Id AND TRIM(COALESCE(s2.Sour_Batch_Lot_No, '')) = '')
+                        OR
+                        EXISTS (SELECT 1 FROM tbl_Processing_Destin_Details d2 WHERE d2.PR_Id = pgi.PR_Id AND TRIM(COALESCE(d2.Dest_Batch_Lot_No, '')) = '')
+                    );
+                    
+                -- processing general info
+                SELECT 
+                    pgi.*,
+                    br.BranchName,
+                    v.Voucher_Type AS VoucherTypeGet,
+                    g.Godown_Name AS GodownNameGet,
+                    cb.Name AS createdByGet
+                FROM tbl_Processing_Gen_Info AS pgi
+                LEFT JOIN tbl_Branch_Master AS br ON br.BranchId = pgi.Branch_Id
+                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pgi.VoucherType
+                LEFT JOIN tbl_Godown_Master AS g ON g.Godown_Id = pgi.Godownlocation
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = pgi.Created_By
+                WHERE pgi.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters)
+                ORDER BY pgi.Process_date DESC;
+                -- source details
+                SELECT s.*,
+                    p.Product_Name,
+                    g.Godown_Name
+                FROM tbl_Processing_Source_Details AS s
+                LEFT JOIN tbl_Product_Master AS p
+                    ON s.Sour_Item_Id = p.Product_Id
+                LEFT JOIN tbl_Godown_Master AS g
+                    ON s.Sour_Goodown_Id = g.Godown_Id
+                WHERE s.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+                -- destination details
+                SELECT d.*,
+                    p.Product_Name,
+                    g.Godown_Name
+                FROM tbl_Processing_Destin_Details AS d
+                LEFT JOIN tbl_Product_Master AS p
+                    ON d.Dest_Item_Id = p.Product_Id
+                LEFT JOIN tbl_Godown_Master AS g
+                    ON d.Dest_Goodown_Id = g.Godown_Id
+                WHERE d.PR_Id IN (SELECT DISTINCT PR_Id FROM @processingFilters);
+            `);
+
+        const result = await request;
+
+        const generalInfo = toArray(result.recordsets[0]);
+        const sourceInfo = toArray(result.recordsets[1]);
+        const destinationInfo = toArray(result.recordsets[2]);
+
+        const destWithProductId = destinationInfo.map(d => ({ ...d, productId: d.Dest_Item_Id }));
+        const destinationInfoWithBatches = await assignBatchNames(destWithProductId);
+
+        if (result.recordsets[0].length > 0) {
+            const extractedData = generalInfo.map(o => ({
+                ...o,
+                SourceDetails: sourceInfo.filter(
+                    fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                ),
+                DestinationDetails: destinationInfoWithBatches.filter(
+                    fil => isEqualNumber(fil.PR_Id, o.PR_Id)
+                )
+            }));
+            dataFound(res, extractedData);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
+const postBatchInProcessingCombined = async (req, res) => {
+    const transaction = new sql.Transaction();
+    try {
+        const { sourceBatches = [], destBatches = [], createdBy = '' } = req.body;
+        const trans_date = req.body.trans_date ? ISOString(req.body.trans_date) : ISOString();
+
+        if ((!sourceBatches.length && !destBatches.length) || !checkIsNumber(createdBy)) {
+            return invalidInput(res);
+        }
+
+        await transaction.begin();
+
+        // 1. Source Batches (Consumption)
+        if (sourceBatches.length > 0) {
+            const sourceJson = JSON.stringify(sourceBatches);
+            await new sql.Request(transaction)
+                .input('jsonData', sql.NVarChar(sql.MAX), sourceJson)
+                .query(`
+                    CREATE TABLE #ParsedSource(
+                        batch NVARCHAR(50),
+                        uniquId BIGINT
+                    );
+                    INSERT INTO #ParsedSource(batch, uniquId)
+                    SELECT * FROM OPENJSON(@jsonData)
+                    WITH(
+                        batch NVARCHAR(50),
+                        uniquId BIGINT
+                    );
+                    UPDATE pr
+                    SET pr.Sour_Batch_Lot_No = p.batch
+                    FROM tbl_Processing_Source_Details pr
+                    JOIN #ParsedSource p ON pr.PRS_Id = p.uniquId;
+                    DROP TABLE #ParsedSource; 
+                `);
+
+            const batchUsageResult = await insertMultipleBatchUsageDetails(
+                transaction,
+                sourceBatches.map(b => ({
+                    batch: b.batch,
+                    trans_date: new Date(trans_date),
+                    item_id: toNumber(b.productId),
+                    godown_id: toNumber(b.godownId || b.fromGodownId),
+                    quantity: toNumber(b.quantity),
+                    type: 'CONSUMPTION',
+                    reference_id: toNumber(b.moduleId),
+                    created_by: toNumber(createdBy)
+                }))
+            );
+            if (!batchUsageResult) throw new Error('Batch consumption failed');
+        }
+
+        if (destBatches.length > 0) {
+            // Auto batch generation for temporary names if any
+            const newBatches = destBatches.filter(d => filterableText(d.batch));
+            if (newBatches.length > 0) {
+                const assignedBatches = await assignBatchNames(newBatches);
+                destBatches.forEach(d => {
+                    if (filterableText(d.batch)) {
+                        const assigned = assignedBatches.find(ab => isEqualNumber(ab.productId, d.productId) && ab.batch === d.batch);
+                        if (assigned) {
+                            d.batch = assigned.suggestBatchName;
+                        }
+                    }
+                });
+            }
+
+            const destJson = JSON.stringify(destBatches);
+            await new sql.Request(transaction)
+                .input('jsonData', sql.NVarChar(sql.MAX), destJson)
+                .query(`
+                    CREATE TABLE #ParsedDest(
+                        batch NVARCHAR(50),
+                        item_id BIGINT,
+                        godown_id BIGINT,
+                        quantity DECIMAL(18, 2),
+                        rate DECIMAL(18, 2),
+                        created_by NVARCHAR(100),
+                        uniquId BIGINT,
+                        batch_alias NVARCHAR(50)
+                    );
+                    INSERT INTO #ParsedDest(batch, item_id, godown_id, quantity, rate, created_by, uniquId, batch_alias)
+                    SELECT * FROM OPENJSON(@jsonData)
+                    WITH(
+                        batch NVARCHAR(50),
+                        productId BIGINT,
+                        godownId BIGINT,
+                        quantity DECIMAL(18, 2),
+                        rate DECIMAL(18, 2),
+                        created_by NVARCHAR(100),
+                        uniquId BIGINT,
+                        batch_alias NVARCHAR(50)
+                    );
+                    IF EXISTS(SELECT 1 FROM #ParsedDest WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
+                    THROW 50000, 'Invalid or missing fields in JSON input.', 1;
+                    UPDATE pr
+                    SET pr.Dest_Batch_Lot_No = p.batch
+                    FROM tbl_Processing_Destin_Details pr
+                    JOIN #ParsedDest p ON pr.PRD_Id = p.uniquId;
+                    DROP TABLE #ParsedDest; 
+                `);
+
+            const batchResult = await insertMultipleBatch(
+                transaction,
+                destBatches.map(d => ({
+                    batch: d.batch,
+                    batch_alias: d.batch_alias || d.batch,
+                    trans_date: new Date(trans_date),
+                    item_id: toNumber(d.productId),
+                    godown_id: toNumber(d.godownId),
+                    quantity: toNumber(d.quantity),
+                    rate: toNumber(d.rate),
+                    type: 'PRODUCTION',
+                    reference_id: toNumber(d.moduleId),
+                    created_by: toNumber(createdBy)
+                }))
+            );
+            if (!batchResult) throw new Error('Batch creation failed');
+        }
+
+        await transaction.commit();
+        success(res, 'Batch and Processing updated successfully');
+
+    } catch (err) {
+        if (transaction._aborted !== true && transaction._isActive) {
+            await transaction.rollback();
+        }
+        servError(err, res);
+    }
+}
 
 // consumption stock-journal
 
@@ -1809,6 +2033,8 @@ export default {
     assignBatchNames,
     getUnAssignedBatchFromMaterialInward,
     postBatchInMaterialInward,
+    getUnAssignedProcessingCombined,
+    postBatchInProcessingCombined,
     getUnAssignedBatchProcessingSource,
     postBatchInProcessingSource,
     getUnAssignedBatchProcessing,
