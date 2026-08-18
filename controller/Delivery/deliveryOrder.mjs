@@ -2639,18 +2639,18 @@ const DeliveryOrder = () => {
     WHERE Trip_Id IN (${tripIds.map((_, i) => `@RouteTripId${i}`).join(',')})
 `;
 
-const routeRequest = new sql.Request();
-tripIds.forEach((id, i) => {
-    routeRequest.input(`RouteTripId${i}`, sql.Int, id);
-});
+                const routeRequest = new sql.Request();
+                tripIds.forEach((id, i) => {
+                    routeRequest.input(`RouteTripId${i}`, sql.Int, id);
+                });
 
-const routeResult = await routeRequest.query(routeQuery);
+                const routeResult = await routeRequest.query(routeQuery);
 
-const routeMap = {};
-routeResult.recordset.forEach(r => {
-    const key = `${r.Trip_Id}_${r.Retailer_Id}`;
-    routeMap[key] = r.Route;
-});
+                const routeMap = {};
+                routeResult.recordset.forEach(r => {
+                    const key = `${r.Trip_Id}_${r.Retailer_Id}`;
+                    routeMap[key] = r.Route;
+                });
 
 
                 const finalData = tripMasterResult.recordset.map(trip => {
@@ -2665,7 +2665,7 @@ routeResult.recordset.forEach(r => {
                             So_No: detail.So_No,
                             So_Date: details.So_Date,
                             Ledger_Name: detail.Ledger_Name,
-                            Retailer_Id: detail.Retailer_Id, 
+                            Retailer_Id: detail.Retailer_Id,
                             Total_Before_Tax: detail.Total_Before_Tax,
                             Total_Invoice_Value: detail.Total_Invoice_Value,
                             SGST_Total: detail.SGST_Total,
@@ -2721,7 +2721,7 @@ routeResult.recordset.forEach(r => {
                             };
                         });
 
-                         const routeKey = `${tripId}_${detail.Retailer_Id}`;
+                        const routeKey = `${tripId}_${detail.Retailer_Id}`;
 
                         return {
                             Do_Id: detail.Do_Id,
@@ -2730,7 +2730,7 @@ routeResult.recordset.forEach(r => {
                             Retailer_Name: detail.Cost_Center_Name || 'N/A',
                             Product_Do_Date: detail.Delivery_Do_Date,
                             So_Date: detail.So_Date,
-                            Route: routeMap[routeKey] || '', 
+                            Route: routeMap[routeKey] || '',
                             Products_List: formattedProducts
                         };
                     });
@@ -4264,69 +4264,69 @@ WHERE
 
 
 
-const tripRoutes = async (req, res) => {
-    try {
-        const { routes } = req.body;
+    const tripRoutes = async (req, res) => {
+        try {
+            const { routes } = req.body;
 
-        if (!Array.isArray(routes) || routes.length === 0) {
-            return invalidInput(res, 'routes array is required');
-        }
-
-        for (const item of routes) {
-            if (
-                !checkIsNumber(item.Trip_Id) ||
-                !checkIsNumber(item.Retailer_Id) ||
-                item.Route === undefined ||
-                item.Route === null ||
-                item.Route === ''
-            ) {
-                return invalidInput(
-                    res,
-                    'Trip_Id, Retailer_Id and Route are required for every row'
-                );
+            if (!Array.isArray(routes) || routes.length === 0) {
+                return invalidInput(res, 'routes array is required');
             }
-        }
 
-        for (let i = 0; i < routes.length; i++) {
-            const { Trip_Id, Retailer_Id, Route } = routes[i];
+            for (const item of routes) {
+                if (
+                    !checkIsNumber(item.Trip_Id) ||
+                    !checkIsNumber(item.Retailer_Id) ||
+                    item.Route === undefined ||
+                    item.Route === null ||
+                    item.Route === ''
+                ) {
+                    return invalidInput(
+                        res,
+                        'Trip_Id, Retailer_Id and Route are required for every row'
+                    );
+                }
+            }
 
-            // Remove existing route entry for this Trip_Id + Retailer_Id, if any
-            await new sql.Request()
-                .input('Trip_Id', sql.Int, parseInt(Trip_Id, 10))
-                .input('Retailer_Id', sql.Int, parseInt(Retailer_Id, 10))
-                .query(`
+            for (let i = 0; i < routes.length; i++) {
+                const { Trip_Id, Retailer_Id, Route } = routes[i];
+
+                // Remove existing route entry for this Trip_Id + Retailer_Id, if any
+                await new sql.Request()
+                    .input('Trip_Id', sql.Int, parseInt(Trip_Id, 10))
+                    .input('Retailer_Id', sql.Int, parseInt(Retailer_Id, 10))
+                    .query(`
                     DELETE FROM tbl_Trip_Retailer_Route
                     WHERE Trip_Id = @Trip_Id AND Retailer_Id = @Retailer_Id;
                 `);
 
-            const getId = await getNextId({
-                table: "tbl_Trip_Retailer_Route",
-                column: "Id",
-            });
+                const getId = await getNextId({
+                    table: "tbl_Trip_Retailer_Route",
+                    column: "Id",
+                });
 
-            if (!getId.status || !checkIsNumber(getId.MaxId)) {
-                throw new Error("Failed to get Id");
-            }
+                if (!getId.status || !checkIsNumber(getId.MaxId)) {
+                    throw new Error("Failed to get Id");
+                }
 
-            const Id = getId.MaxId;
+                const Id = getId.MaxId;
 
-            await new sql.Request()
-                .input('Id', sql.Int, Id)
-                .input('Trip_Id', sql.Int, parseInt(Trip_Id, 10))
-                .input('Retailer_Id', sql.Int, parseInt(Retailer_Id, 10))
-                .input('Route', sql.VarChar(50), String(Route))
-                .query(`
+                await new sql.Request()
+                    .input('Id', sql.Int, Id)
+                    .input('Trip_Id', sql.Int, parseInt(Trip_Id, 10))
+                    .input('Retailer_Id', sql.Int, parseInt(Retailer_Id, 10))
+                    .input('Route', sql.VarChar(50), String(Route))
+                    .query(`
                     INSERT INTO tbl_Trip_Retailer_Route (Id, Trip_Id, Retailer_Id, Route)
                     VALUES (@Id, @Trip_Id, @Retailer_Id, @Route);
                 `);
+            }
+
+            success(res, 'Route saved successfully');
+
+        } catch (e) {
+            servError(e, res);
         }
-
-        success(res, 'Route saved successfully');
-
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    };
 
     return {
         salesDeliveryCreation,

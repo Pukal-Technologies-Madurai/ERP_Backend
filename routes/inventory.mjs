@@ -4,6 +4,7 @@ import stockJournals from '../controller/Inventory/stockJournals.mjs';
 import stockProcessing from '../controller/Inventory/stockProcessing.mjs';
 import dbconnect from '../middleware/otherDB.mjs';
 import tripmaster from '../controller/Inventory/tripmaster.mjs';
+import tripGroup from '../controller/Inventory/tripGroup.mjs';
 import arrivalMaster from '../controller/Inventory/arrivalMaster.mjs';
 import batchProcess from '../controller/Inventory/batchProcess.mjs';
 import inventoryReport from '../controller/Inventory/reports.mjs';
@@ -63,6 +64,12 @@ inventoryRouter.put(
 );
 // inventoryRouter.put('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
 // inventoryRouter.delete('/tripSheet/arrivalList', tripmaster.addArrivalDetails);
+
+inventoryRouter.get('/tripGroup', tripGroup.getTripGroups);
+inventoryRouter.get('/tripGroup/notGrouped', tripGroup.getNotGroupedTrips);
+inventoryRouter.post('/tripGroup', tripGroup.createTripGroup);
+inventoryRouter.put('/tripGroup', tripGroup.updateTripGroup);
+inventoryRouter.delete('/tripGroup', tripGroup.deleteTripGroup);
 
 inventoryRouter.post('/stockProcessing/getWithFilters', stockProcessing.getProcessingDetails);
 inventoryRouter.get('/stockProcessing/itemsUsed', stockProcessing.getItemsUsedInProcessing);
