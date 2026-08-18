@@ -93,6 +93,9 @@ inventoryRouter.post('/batchMaster/consumption', batchProcess.postBatchInProcess
 inventoryRouter.get('/batchMaster/production', batchProcess.getUnAssignedBatchProcessing);
 inventoryRouter.post('/batchMaster/production', batchProcess.postBatchInProcessing);
 
+inventoryRouter.get('/batchMaster/processingCombined', batchProcess.getUnAssignedProcessingCombined);
+inventoryRouter.post('/batchMaster/processingCombined', batchProcess.postBatchInProcessingCombined);
+
 inventoryRouter.get('/batchMaster/godownTransfer', batchProcess.getUnAssignedBatchFromGodownTransfer);
 inventoryRouter.post('/batchMaster/godownTransfer', batchProcess.postOtherGodownTransfer);
 
