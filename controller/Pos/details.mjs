@@ -571,72 +571,126 @@ const getPosGroupDetails=async(req,res)=>{
 }
 
 
-    const getAllProductsPos = async (req, res) => {
-        try {
-            const request = new sql.Request()
-                .query(`
-                  			DECLARE @LatestRateDate DATE = (
-    SELECT TOP 1 Rate_Date 
-    FROM tbl_Pos_Rate_Master 
-    ORDER BY Rate_Date DESC
-);
+//     const getAllProductsPos = async (req, res) => {
+//         try {
+//             const request = new sql.Request()
+//                 .query(`
+//                   			DECLARE @LatestRateDate DATE = (
+//     SELECT TOP 1 Rate_Date 
+//     FROM tbl_Pos_Rate_Master 
+//     ORDER BY Rate_Date DESC
+// );
 
-SELECT 
-    p.*,
-    stl.Stock_Tally_Id,
-    stl.Alter_Tally_Id,
-    stl.Stock_Item,
-    stl.Group_ST,
-    stl.Bag,
-    stl.Stock_Group,
-    stl.S_Sub_Group_1,
-    stl.Grade_Item_Group,
-    stl.Item_Name_Modified,
-    stl.POS_Group,
-    stl.POS_Item_Name,
+// SELECT 
+//     p.*,
+//     stl.Stock_Tally_Id,
+//     stl.Alter_Tally_Id,
+//     stl.Stock_Item,
+//     stl.Group_ST,
+//     stl.Bag,
+//     stl.Stock_Group,
+//     stl.S_Sub_Group_1,
+//     stl.Grade_Item_Group,
+//     stl.Item_Name_Modified,
+//     stl.POS_Group,
+//     stl.POS_Item_Name,
     
-    COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
-   COALESCE(stl.Pos_Group, 'NOT FOUND') AS Pro_Group,
-    COALESCE(u.Units, 'NOT FOUND') AS Units,
-    COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
-    COALESCE(p.Product_Rate, 0) AS Item_Rate,
+//     COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
+//    COALESCE(stl.Pos_Group, 'NOT FOUND') AS Pro_Group,
+//     COALESCE(u.Units, 'NOT FOUND') AS Units,
+//     COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
+//     COALESCE(p.Product_Rate, 0) AS Item_Rate,
 
-    COALESCE(pr.Rate, 0)               AS POS_Rate,
-    COALESCE(pr.Min_Rate, 0)           AS POS_Min_Rate,
-    COALESCE(pr.Max_Rate, 0)           AS POS_Max_Rate,
-    COALESCE(pr.Is_Active_Decative, 0) AS POS_Is_Active,
-    pr.Rate_Date                       AS POS_Rate_Date,
-    pr.Is_Active_Decative              AS Active_Deactive
+//     COALESCE(pr.Rate, 0)               AS POS_Rate,
+//     COALESCE(pr.Min_Rate, 0)           AS POS_Min_Rate,
+//     COALESCE(pr.Max_Rate, 0)           AS POS_Max_Rate,
+//     COALESCE(pr.Is_Active_Decative, 0) AS POS_Is_Active,
+//     pr.Rate_Date                       AS POS_Rate_Date,
+//     pr.Is_Active_Decative              AS Active_Deactive
 
-FROM 
-    tbl_Product_Master AS p
-    LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
+// FROM 
+//     tbl_Product_Master AS p
+//     LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
 
-    LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = p.Product_Id
-    LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
-    LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
-    LEFT JOIN tbl_Stock_LOS AS stl ON stl.Pro_Id = p.Product_Id
+//     LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = p.Product_Id
+//     LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
+//     LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+//     LEFT JOIN tbl_Stock_LOS AS stl ON stl.Pro_Id = p.Product_Id
 
-    INNER JOIN tbl_Pos_Rate_Master AS pr   
-        ON pr.Item_Id = p.Product_Id
-        AND CAST(pr.Rate_Date AS DATE) = @LatestRateDate
+//     INNER JOIN tbl_Pos_Rate_Master AS pr   
+//         ON pr.Item_Id = p.Product_Id
+//         AND CAST(pr.Rate_Date AS DATE) = @LatestRateDate
 
-ORDER BY p.Product_Id DESC`
-                );
+// ORDER BY p.Product_Id DESC`
+//                 );
 
-            const productResult = (await request).recordset;
+//             const productResult = (await request).recordset;
 
-            const withImage = productResult.map(product => ({
-                ...product,
-                productImageUrl: getImage('products', product?.Product_Image_Name),
-            }));
+//             const withImage = productResult.map(product => ({
+//                 ...product,
+//                 productImageUrl: getImage('products', product?.Product_Image_Name),
+//             }));
 
-            sentData(res, withImage);
+//             sentData(res, withImage);
 
-        } catch (e) {
-            servError(e, res);
-        }
-    };
+//         } catch (e) {
+//             servError(e, res);
+//         }
+//     };
+
+
+const getAllProductsPos = async (req, res) => {
+    try {
+        const request = new sql.Request()
+            .query(`
+                SELECT 
+                    p.*,
+                    stl.Stock_Tally_Id,
+                    stl.Alter_Tally_Id,
+                    stl.Stock_Item,
+                    stl.Group_ST,
+                    stl.Bag,
+                    stl.Stock_Group,
+                    stl.S_Sub_Group_1,
+                    stl.Grade_Item_Group,
+                    stl.Item_Name_Modified,
+                    stl.POS_Group,
+                    stl.POS_Item_Name,
+
+                    COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
+                    COALESCE(stl.Pos_Group, 'NOT FOUND') AS Pro_Group,
+                    COALESCE(u.Units, 'NOT FOUND') AS Units,
+                    COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
+                    COALESCE(p.Product_Rate, 0) AS Item_Rate
+
+                FROM 
+                    tbl_Product_Master AS p
+                    LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
+                    LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = p.Product_Id
+                    LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
+                    LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+                    LEFT JOIN tbl_Stock_LOS AS stl ON stl.Pro_Id = p.Product_Id
+
+                WHERE 
+                    p.IsActive = 1
+
+                ORDER BY p.Product_Id DESC
+            `);
+
+        const productResult = (await request).recordset;
+
+        const withImage = productResult.map(product => ({
+            ...product,
+            productImageUrl: getImage('products', product?.Product_Image_Name),
+        }));
+
+        sentData(res, withImage);
+
+    } catch (e) {
+        servError(e, res);
+    }
+};
+
 
 const getProductsWithStock = async (req, res) => {
     try {

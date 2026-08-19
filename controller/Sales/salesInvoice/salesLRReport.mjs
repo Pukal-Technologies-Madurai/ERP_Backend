@@ -1737,6 +1737,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = sog.Branch_Id
                 LEFT JOIN tbl_Ledger_LOL AS ll ON ll.Ret_Id = sog.Retailer_Id
                 WHERE sog.So_Id IN (SELECT So_Id FROM @FilteredSalesOrder)
+                 AND sog.Cancel_status <> 0
                 ORDER BY sog.So_Date, sog.So_Id;
             
             -- Sales Order Staff Info
@@ -1813,7 +1814,10 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
 
         const result = await getSalesOrder;
 
-        const orders = result.recordsets[0] || [];
+        // const orders = result.recordsets[0] || [];
+        // const result = await getSalesOrder;
+
+const orders = (result.recordsets[0] || []).filter(o => o.Cancel_status !== 0);
         const staffs = result.recordsets[1] || [];
         const uniqueInvolvedStaffs = result.recordsets[2] || [];
         const costTypes = result.recordsets[3] || [];
@@ -1843,20 +1847,19 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
             Subtotal: (Number(stock.Item_Rate) || 0) * (Number(stock.Bill_Qty) || 0)
         }));
 
-        // Group staff and stock details by order
-        // ALL LOL columns are already in the order object from ll.*
+     
         const ordersWithDetails = orders.map(order => {
-            // Filter staffs using So_Id
+          
             const involvedStaffs = staffs.filter(stf =>
                 isEqualNumber(stf.So_Id, order.So_Id) && stf.Document_Type === order.Document_Type
             );
 
-            // Filter stock details using So_Id
+          
             const orderStockDetails = calculatedStockDetails.filter(stk =>
                 isEqualNumber(stk.So_Id, order.So_Id) && stk.Document_Type === order.Document_Type
             );
 
-            // Get delivery details for this order if converted
+          
             const deliveryInfo = deliveryDetails.find(del =>
                 isEqualNumber(del.Sales_Order_Id, order.So_Id)
             );
@@ -1865,7 +1868,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                 ...order,
                 involvedStaffs,
                 stockDetails: orderStockDetails,
-                // Add delivery information if converted
+              
                 ...(deliveryInfo && {
                     Delivery_Info: {
                         Delivery_Id: deliveryInfo.Do_Id,
@@ -1876,7 +1879,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
                         Delivery_Total_Value: deliveryInfo.Delivery_Total_Value
                     }
                 }),
-                // Calculate summary statistics
+                
                 Order_Summary: {
                     Total_Items: orderStockDetails.length,
                     Total_Quantity: orderStockDetails.reduce((sum, item) => sum + (Number(item.Bill_Qty) || 0), 0),
@@ -1887,7 +1890,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
             };
         });
 
-        // Prepare response
+       
         sentData(res, ordersWithDetails, {
             costTypes: toArray(costTypes),
             uniqueInvolvedStaffs: toArray(uniqueInvolvedStaffs).map(i => i.Emp_Type_Id).filter(Boolean),
