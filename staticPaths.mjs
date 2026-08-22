@@ -6,7 +6,6 @@ export const staticPaths = [
     { route: '/imageURL/attendance', folder: 'uploads/attendance' },
     { route: '/imageURL/visitLogs', folder: 'uploads/visitLogs' },
      { route: '/imageURL/LRReport', folder: 'uploads/LRReport' },
-     { route: '/imageURL/pendingbills', folder: 'uploads/pendingbills' },
     { route: '/imageURL/imageNotFound', folder: 'uploads/imageNotFound.jpg' }
 
 ];

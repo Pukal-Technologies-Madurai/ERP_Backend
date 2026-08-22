@@ -433,8 +433,4 @@ MastersRouter.post('/productUnitConversion', productUnitConversion.postConversio
 MastersRouter.put('/productUnitConversion', productUnitConversion.putConversion);
 MastersRouter.delete('/productUnitConversion', productUnitConversion.deleteConversion);
 
-
-
-MastersRouter.post('/whatsapp/uploadPendingBillsPdf', whatsapp.postPendingBillsPdf);
-MastersRouter.delete('/whatsapp/cleanupPdf', whatsapp.whatsappDelete);
 export default MastersRouter;

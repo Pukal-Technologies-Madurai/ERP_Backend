@@ -1,7 +1,6 @@
 import sql from 'mssql';
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs'
 import { checkIsNumber, filterableText, isEqualNumber, randomNumber } from '../../helper_functions.mjs';
-import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 const whatsapp = () => {
 
@@ -671,48 +670,42 @@ const getWhatsappCounts = async (req, res) => {
         res.json({ success: true, data: [] });
     }
 };
+// const getWhatsappCounts = async (req, res) => {
+//     try {
+//         const { documentType, referenceIds } = req.query;
+//         if (!documentType || !referenceIds) {
+//             return res.json({ success: true, data: [] });
+//         }
+//         const ids = String(referenceIds).split(',').map(s => s.trim()).filter(Boolean);
+//         if (ids.length === 0) return res.json({ success: true, data: [] });
 
+       
+//         const placeholders = ids.map((_, i) => `@id${i}`).join(',');
+//         const request = new sql.Request();
+        
+        
+//         ids.forEach((id, i) => {
+//             request.input(`id${i}`, sql.VarChar(100), id);
+//         });
+//         request.input('documentType', sql.VarChar(50), documentType);
 
-const postPendingBillsPdf = async (req, res) => {
-    try {
-        await uploadFile(req, res, 7, 'pdfFile');
+//         const result = await request.query(`
+//             SELECT Reference_Id, COUNT(*) AS Sent_Count
+//             FROM tbl_Whatsapp_Details
+//             WHERE Document_Type = @documentType
+//               AND Reference_Id IN (${placeholders})
+//             GROUP BY Reference_Id
+//         `);
 
-        const fileName = req?.file?.filename;
-
-        if (!fileName) {
-            return invalidInput(res, 'PDF file is required');
-        }
-
-   
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const publicUrl = `${baseUrl}/imageURL/pendingbills/${fileName}`;
-
-        success(res, 'Pending bills PDF uploaded', { url: publicUrl, fileName });
-
-    } catch (error) {
-        servError(error, res);
-    }
-};
-
-
-const whatsappDelete=async(req,res)=>{
-     try {
-        // const { fileName } = req.body;
-          const fileName =  req.body;
-
-         await uploadFile(req, res, 7, 'pdfFile');
-
-      
-        const filePath = `./uploads/pendingbills/${fileName}`;
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
-        success(res, 'File cleaned up');
-    } catch (error) {
-        servError(error, res);
-    }
-
-}
+//         res.json({ 
+//             success: true, 
+//             data: result.recordset || [] 
+//         });
+//     } catch (e) {
+//         console.error('Error in getWhatsappCounts:', e);
+//         res.json({ success: true, data: [] });
+//     }
+// };
 
     return {
                 verifyWebhook,
@@ -729,9 +722,8 @@ const whatsappDelete=async(req,res)=>{
         FilterWhatsappSettingColumn,
         saveWhatsappColumnSettings,
         logWhatsappSend,
-        getWhatsappCounts,
-        postPendingBillsPdf,
-        whatsappDelete
+        getWhatsappCounts
+        
 
     }
 }
