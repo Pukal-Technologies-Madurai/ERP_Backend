@@ -91,7 +91,8 @@ function buildBulkPurchaseRows(Product_Array, productsData, { isInclusive, isNot
                 item_id: toNumber(product?.Item_Id),
                 godown_id: toNumber(product?.Location_Id) || 0,
                 quantity: Bill_Qty,
-                rate: Item_Rate
+                rate: Item_Rate,
+                batch_id: product?.Batch_Id || ''
             });
         }
     });
@@ -370,7 +371,8 @@ const PurchaseInvoice = () => {
                     rate: b.rate,
                     type: 'PURCHASE',
                     reference_id: PIN_Id,
-                    created_by: Created_by
+                    created_by: Created_by,
+                    batch_id: b.batch_id
                 }))
             );
             if (!batchInsertResult) throw new Error('Batch creation failed');
@@ -879,7 +881,8 @@ const PurchaseInvoice = () => {
                     rate: b.rate,
                     type: 'PURCHASE',
                     reference_id: PIN_Id,
-                    created_by: Created_by
+                    created_by: Created_by,
+                    batch_id: b.batch_id
                 }))
             );
             if (!batchInsertResultEdit) throw new Error('Batch creation failed');

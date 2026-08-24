@@ -1309,7 +1309,8 @@ export const createSalesInvoice = async (req, res) => {
                     quantity: b.Bill_Qty,
                     type: 'SALES',
                     reference_id: Do_Id,
-                    created_by: Created_by
+                    created_by: Created_by,
+                    batch_id: Products.find(p => p.Batch_Name === b.Batch_Name && p.Item_Id === b.Item_Id)?.Batch_Id || ''
                 }))
             );
             if (!batchInsertResult) throw new Error('Batch usage details creation failed');
@@ -2193,7 +2194,8 @@ export const updateSalesInvoice = async (req, res) => {
                     quantity: b.Bill_Qty,
                     type: 'SALES',
                     reference_id: Do_Id,
-                    created_by: Altered_by
+                    created_by: Altered_by,
+                    batch_id: Products.find(p => p.Batch_Name === b.Batch_Name && p.Item_Id === b.Item_Id)?.Batch_Id || ''
                 }))
             );
             if (!batchInsertResult) throw new Error('Batch usage details creation failed');

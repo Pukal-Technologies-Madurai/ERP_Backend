@@ -14,16 +14,23 @@ const assignBatchNames = async (outstanding) => {
 
     const countReq = new sql.Request();
     const countQuery = `
-        SELECT item_id, COUNT(1) as totalBatches
-        FROM tbl_Batch_Master
-        WHERE item_id IN (${productIds.join(',')})
+        WITH ParsedBatches AS (
+            SELECT 
+                item_id,
+                TRY_CAST(SUBSTRING(batch_alias, LEN(CAST(item_id AS VARCHAR)) + 2, LEN(batch_alias)) AS INT) as suffix
+            FROM tbl_Batch_Master
+            WHERE item_id IN (${productIds.join(',')})
+              AND batch_alias LIKE CAST(item_id AS VARCHAR) + '\\_%' ESCAPE '\\'
+        )
+        SELECT item_id, COALESCE(MAX(suffix), 0) as max_suffix
+        FROM ParsedBatches
         GROUP BY item_id
     `;
     const countRes = await countReq.query(countQuery);
 
     const countMap = {};
     countRes.recordset.forEach(row => {
-        countMap[row.item_id] = row.totalBatches;
+        countMap[row.item_id] = row.max_suffix;
     });
 
     const counters = {};
@@ -187,7 +194,8 @@ const postBatchInMaterialInward = async (req, res) => {
                 quantity: toNumber(item.quantity),
                 type: 'MATERIAL_INWARD',
                 reference_id: toNumber(item.uniquId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!usageResult) throw new Error('Batch consumption failed');
@@ -205,7 +213,8 @@ const postBatchInMaterialInward = async (req, res) => {
                 rate: toNumber(item.rate),
                 type: 'MATERIAL_INWARD',
                 reference_id: toNumber(item.uniquId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!batchResult) throw new Error('Batch creation failed');
@@ -215,6 +224,187 @@ const postBatchInMaterialInward = async (req, res) => {
 
     } catch (err) {
         if (transaction._aborted !== true) await transaction.rollback();
+        servError(err, res);
+    }
+};
+
+// godown transfer
+
+const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
+    try {
+        const
+            Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
+            Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
+
+        const { fromGodown = null, toGodown = null, item = null } = req.query;
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .input('fromGodown', sql.Int, fromGodown)
+            .input('toGodown', sql.Int, toGodown)
+            .input('item', sql.Int, item)
+            .query(`
+                SELECT 
+                    --TOP (200)
+                    ar.Arr_Id AS uniquId,
+                    tm.Trip_Id AS moduleId,
+                    tm.Trip_Date AS eventDate,
+                    tm.TR_INV_ID AS voucherNumber,
+                    ar.Product_Id AS productId,
+                    p.Product_Name AS productNameGet,
+                    fg.Godown_Id AS fromGodownId, 
+                    tg.Godown_Id AS godownId, 
+                    fg.Godown_Name AS fromGodownGet,
+                    tg.Godown_Name AS toGodownGet,
+                    COALESCE(ar.QTY, 0) AS quantity,
+                    COALESCE(ar.Gst_Rate, 0) AS rate,
+                    COALESCE(ar.Total_Value, 0) AS amount,
+                    COALESCE(cb.Name, 'Not found') AS createdByGet,
+                    ar.CreatedAt AS createdAt,
+                    'OTHER_GODOWN' AS moduleName,
+                    bm.batch_alias
+                FROM tbl_Trip_Arrival AS ar
+                LEFT JOIN tbl_Product_Master AS p ON ar.Product_Id = p.Product_Id
+                LEFT JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ar.From_Location
+                LEFT JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ar.To_Location
+                LEFT JOIN tbl_Users AS cb ON cb.UserId = ar.Created_By
+                JOIN tbl_Trip_Details AS td ON td.Arrival_Id = ar.Arr_Id
+                JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = td.Trip_Id
+                LEFT JOIN tbl_Batch_Master AS bm ON bm.batch = ar.Batch_No AND bm.item_id = ar.Product_Id
+                WHERE 
+                    TRIM(COALESCE(ar.Batch_No, '')) = ''
+                    AND CONVERT(DATE, tm.Trip_Date) BETWEEN @Fromdate AND @Todate
+                    AND tm.billType = 'OTHER GODOWN'
+                    ${checkIsNumber(fromGodown) ? ` AND ar.From_Location = @fromGodown ` : ''}
+                    ${checkIsNumber(toGodown) ? ` AND ar.To_Location = @toGodown ` : ''}
+                    ${checkIsNumber(item) ? ` AND ar.Product_Id = @item ` : ''}
+                ORDER BY tm.Trip_Date ASC;
+                -- filter values
+                -- From godowns
+                SELECT DISTINCT ta.From_Location AS value, fg.Godown_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ta.From_Location
+                ORDER BY fg.Godown_Name;
+                -- To godowns
+                SELECT DISTINCT ta.To_Location AS value, tg.Godown_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.To_Location
+                ORDER BY tg.Godown_Name;
+                -- items 
+                SELECT DISTINCT ta.Product_Id AS value, p.Product_Name AS label
+                FROM tbl_Trip_Arrival AS ta
+                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Product_Id
+                ORDER BY p.Product_Name;`
+            );
+
+        const result = await request;
+
+        const [outstanding, fromGodowns, toGodowns, items] = result.recordsets;
+
+        sentData(res, toArray(outstanding), {
+            fromGodowns: toArray(fromGodowns),
+            toGodowns: toArray(toGodowns),
+            items: toArray(items)
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+const postOtherGodownTransfer = async (req, res) => {
+    const transaction = new sql.Transaction();
+
+    try {
+        const { itemBatch = [], createdBy = '' } = req.body;
+
+        const trans_date = req.body.trans_date ? ISOString(req.body.trans_date) : ISOString();
+
+        if (!itemBatch.length || !checkIsNumber(createdBy))
+            return invalidInput(res);
+
+        const jsonData = JSON.stringify(itemBatch);
+        await transaction.begin();
+
+        // Update Trip Arrival batch numbers
+        await new sql.Request(transaction)
+            .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
+            .query(`
+                CREATE TABLE #Parsed(
+                    batch_id NVARCHAR(150),
+                    batch NVARCHAR(50),
+                    item_id BIGINT,
+                    from_godown BIGINT,
+                    to_godown BIGINT,
+                    quantity DECIMAL(18, 2),
+                    rate DECIMAL(18, 2),
+                    uniquId BIGINT,
+                    moduleId BIGINT,
+                    batch_alias NVARCHAR(50)
+                );
+                INSERT INTO #Parsed(batch_id, batch, item_id, from_godown, to_godown, quantity, rate, uniquId, moduleId, batch_alias)
+                SELECT * FROM OPENJSON(@jsonData)
+                WITH(
+                    id NVARCHAR(150),
+                    batch NVARCHAR(50),
+                    productId BIGINT,
+                    fromGodownId BIGINT,
+                    godownId BIGINT,
+                    quantity DECIMAL(18, 2),
+                    rate DECIMAL(18, 2),
+                    uniquId BIGINT,
+                    moduleId BIGINT,
+                    batch_alias NVARCHAR(50)
+                );
+                UPDATE t
+                SET t.Batch_No = p.batch
+                FROM tbl_Trip_Arrival t
+                JOIN #Parsed p ON t.Arr_Id = p.uniquId;
+                DROP TABLE #Parsed; `);
+
+        // Transfer out: batch consumption from source godown
+        const usageResult = await insertMultipleBatchUsageDetails(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                batch_alias: item.batch_alias,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.fromGodownId),
+                quantity: toNumber(item.quantity),
+                type: 'OTHER_GODOWN',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
+            }))
+        );
+        if (!usageResult) throw new Error('Batch consumption failed');
+
+        // Transfer in: batch master upsert in destination godown
+        const batchResult = await insertMultipleBatch(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                batch_alias: item.batch_alias,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.godownId),
+                quantity: toNumber(item.quantity),
+                rate: toNumber(item.rate),
+                type: 'OTHER_GODOWN',
+                reference_id: toNumber(item.moduleId),
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
+            }))
+        );
+        if (!batchResult) throw new Error('Batch creation in destination failed');
+
+        await transaction.commit();
+        success(res, 'Godown transfer completed successfully');
+
+    } catch (err) {
+        if (!transaction._aborted) await transaction.rollback();
         servError(err, res);
     }
 };
@@ -358,7 +548,8 @@ const postBatchInProcessingCombined = async (req, res) => {
                     quantity: toNumber(b.quantity),
                     type: 'CONSUMPTION',
                     reference_id: toNumber(b.moduleId),
-                    created_by: toNumber(createdBy)
+                    created_by: toNumber(createdBy),
+                    batch_id: b.batch_id || ''
                 }))
             );
             if (!batchUsageResult) throw new Error('Batch consumption failed');
@@ -426,7 +617,8 @@ const postBatchInProcessingCombined = async (req, res) => {
                     rate: toNumber(d.rate),
                     type: 'PRODUCTION',
                     reference_id: toNumber(d.moduleId),
-                    created_by: toNumber(createdBy)
+                    created_by: toNumber(createdBy),
+                    batch_id: d.batch_id || ''
                 }))
             );
             if (!batchResult) throw new Error('Batch creation failed');
@@ -572,7 +764,8 @@ const postBatchInProcessingSource = async (req, res) => {
                 quantity: toNumber(item.quantity),
                 type: 'CONSUMPTION',
                 reference_id: toNumber(item.moduleId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!batchResult) throw new Error('Batch consumption failed');
@@ -721,7 +914,8 @@ const postBatchInProcessing = async (req, res) => {
                 rate: toNumber(item.rate),
                 type: 'PRODUCTION',
                 reference_id: toNumber(item.moduleId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!batchResult) throw new Error('Batch creation failed');
@@ -734,185 +928,6 @@ const postBatchInProcessing = async (req, res) => {
         servError(err, res);
     }
 }
-
-// godown transfer
-
-const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
-    try {
-        const
-            Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
-            Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
-
-        const { fromGodown = null, toGodown = null, item = null } = req.query;
-
-        const request = new sql.Request()
-            .input('Fromdate', sql.Date, Fromdate)
-            .input('Todate', sql.Date, Todate)
-            .input('fromGodown', sql.Int, fromGodown)
-            .input('toGodown', sql.Int, toGodown)
-            .input('item', sql.Int, item)
-            .query(`
-                SELECT 
-                    --TOP (200)
-                    ar.Arr_Id AS uniquId,
-                    tm.Trip_Id AS moduleId,
-                    tm.Trip_Date AS eventDate,
-                    tm.TR_INV_ID AS voucherNumber,
-                    ar.Product_Id AS productId,
-                    p.Product_Name AS productNameGet,
-                    fg.Godown_Id AS fromGodownId, 
-                    tg.Godown_Id AS godownId, 
-                    fg.Godown_Name AS fromGodownGet,
-                    tg.Godown_Name AS toGodownGet,
-                    COALESCE(ar.QTY, 0) AS quantity,
-                    COALESCE(ar.Gst_Rate, 0) AS rate,
-                    COALESCE(ar.Total_Value, 0) AS amount,
-                    COALESCE(cb.Name, 'Not found') AS createdByGet,
-                    ar.CreatedAt AS createdAt,
-                    'OTHER_GODOWN' AS moduleName,
-                    bm.batch_alias
-                FROM tbl_Trip_Arrival AS ar
-                LEFT JOIN tbl_Product_Master AS p ON ar.Product_Id = p.Product_Id
-                LEFT JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ar.From_Location
-                LEFT JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ar.To_Location
-                LEFT JOIN tbl_Users AS cb ON cb.UserId = ar.Created_By
-                JOIN tbl_Trip_Details AS td ON td.Arrival_Id = ar.Arr_Id
-                JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = td.Trip_Id
-                LEFT JOIN tbl_Batch_Master AS bm ON bm.batch = ar.Batch_No AND bm.item_id = ar.Product_Id
-                WHERE 
-                    TRIM(COALESCE(ar.Batch_No, '')) = ''
-                    AND CONVERT(DATE, tm.Trip_Date) BETWEEN @Fromdate AND @Todate
-                    AND tm.billType = 'OTHER GODOWN'
-                    ${checkIsNumber(fromGodown) ? ` AND ar.From_Location = @fromGodown ` : ''}
-                    ${checkIsNumber(toGodown) ? ` AND ar.To_Location = @toGodown ` : ''}
-                    ${checkIsNumber(item) ? ` AND ar.Product_Id = @item ` : ''}
-                ORDER BY tm.Trip_Date ASC;
-                -- filter values
-                -- From godowns
-                SELECT DISTINCT ta.From_Location AS value, fg.Godown_Name AS label
-                FROM tbl_Trip_Arrival AS ta
-                JOIN tbl_Godown_Master AS fg ON fg.Godown_Id = ta.From_Location
-                ORDER BY fg.Godown_Name;
-                -- To godowns
-                SELECT DISTINCT ta.To_Location AS value, tg.Godown_Name AS label
-                FROM tbl_Trip_Arrival AS ta
-                JOIN tbl_Godown_Master AS tg ON tg.Godown_Id = ta.To_Location
-                ORDER BY tg.Godown_Name;
-                -- items 
-                SELECT DISTINCT ta.Product_Id AS value, p.Product_Name AS label
-                FROM tbl_Trip_Arrival AS ta
-                JOIN tbl_Product_Master AS p ON p.Product_Id = ta.Product_Id
-                ORDER BY p.Product_Name;`
-            );
-
-        const result = await request;
-
-        const [outstanding, fromGodowns, toGodowns, items] = result.recordsets;
-
-        sentData(res, toArray(outstanding), {
-            fromGodowns: toArray(fromGodowns),
-            toGodowns: toArray(toGodowns),
-            items: toArray(items)
-        });
-
-    } catch (e) {
-        servError(e, res);
-    }
-}
-
-const postOtherGodownTransfer = async (req, res) => {
-    const transaction = new sql.Transaction();
-
-    try {
-        const { itemBatch = [], createdBy = '' } = req.body;
-
-        const trans_date = req.body.trans_date ? ISOString(req.body.trans_date) : ISOString();
-
-        if (!itemBatch.length || !checkIsNumber(createdBy))
-            return invalidInput(res);
-
-        const jsonData = JSON.stringify(itemBatch);
-        await transaction.begin();
-
-        // Update Trip Arrival batch numbers
-        await new sql.Request(transaction)
-            .input('jsonData', sql.NVarChar(sql.MAX), jsonData)
-            .query(`
-                CREATE TABLE #Parsed(
-            batch_id NVARCHAR(150),
-            batch NVARCHAR(50),
-            item_id BIGINT,
-            from_godown BIGINT,
-            to_godown BIGINT,
-            quantity DECIMAL(18, 2),
-            rate DECIMAL(18, 2),
-            uniquId BIGINT,
-            moduleId BIGINT,
-            batch_alias NVARCHAR(50)
-        );
-                INSERT INTO #Parsed(batch_id, batch, item_id, from_godown, to_godown, quantity, rate, uniquId, moduleId, batch_alias)
-        SELECT * FROM OPENJSON(@jsonData)
-        WITH(
-            id NVARCHAR(150),
-            batch NVARCHAR(50),
-            productId BIGINT,
-            fromGodownId BIGINT,
-            godownId BIGINT,
-            quantity DECIMAL(18, 2),
-            rate DECIMAL(18, 2),
-            uniquId BIGINT,
-            moduleId BIGINT,
-            batch_alias NVARCHAR(50)
-        );
-                UPDATE t
-                SET t.Batch_No = p.batch
-                FROM tbl_Trip_Arrival t
-                JOIN #Parsed p ON t.Arr_Id = p.uniquId;
-                DROP TABLE #Parsed; `);
-
-        // Transfer out: batch consumption from source godown
-        const usageResult = await insertMultipleBatchUsageDetails(
-            transaction,
-            itemBatch.map(item => ({
-                batch: item.batch,
-                batch_alias: item.batch_alias,
-                trans_date: new Date(trans_date),
-                item_id: toNumber(item.productId),
-                godown_id: toNumber(item.fromGodownId),
-                quantity: toNumber(item.quantity),
-                type: 'OTHER_GODOWN',
-                reference_id: toNumber(item.moduleId),
-                created_by: toNumber(createdBy)
-            }))
-        );
-        if (!usageResult) throw new Error('Batch consumption failed');
-
-        // Transfer in: batch master upsert in destination godown
-        const batchResult = await insertMultipleBatch(
-            transaction,
-            itemBatch.map(item => ({
-                batch: item.batch,
-                batch_alias: item.batch_alias,
-                trans_date: new Date(trans_date),
-                item_id: toNumber(item.productId),
-                godown_id: toNumber(item.godownId),
-                quantity: toNumber(item.quantity),
-                rate: toNumber(item.rate),
-                type: 'OTHER_GODOWN',
-                reference_id: toNumber(item.moduleId),
-                created_by: toNumber(createdBy)
-            }))
-        );
-        if (!batchResult) throw new Error('Batch creation in destination failed');
-
-        await transaction.commit();
-        success(res, 'Godown transfer completed successfully');
-
-    } catch (err) {
-        if (!transaction._aborted) await transaction.rollback();
-        servError(err, res);
-    }
-};
 
 // sales invoice
 
@@ -1053,7 +1068,8 @@ const postSalesUsage = async (req, res) => {
                 quantity: toNumber(item.quantity),
                 type: 'SALES',
                 reference_id: toNumber(item.moduleId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!batchResult) throw new Error('Sales batch usage failed');
@@ -1206,7 +1222,8 @@ const postPurchaseBatch = async (req, res) => {
                 rate: toNumber(item.rate),
                 type: 'PURCHASE',
                 reference_id: toNumber(item.uniquId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!batchResult) throw new Error('Batch creation failed');
@@ -1354,7 +1371,8 @@ const postCreditNoteBatch = async (req, res) => {
                 rate: toNumber(item.rate),
                 type: 'CREDIT_NOTE',
                 reference_id: toNumber(item.moduleId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!batchResult) throw new Error('Batch creation failed');
@@ -1499,7 +1517,8 @@ const postDebitNoteUsage = async (req, res) => {
                 quantity: toNumber(item.quantity),
                 type: 'DEBIT_NOTE',
                 reference_id: toNumber(item.moduleId),
-                created_by: toNumber(createdBy)
+                created_by: toNumber(createdBy),
+                batch_id: item.batch_id || ''
             }))
         );
         if (!batchResult) throw new Error('Debit note batch usage failed');
@@ -2089,7 +2108,7 @@ export const getBatchWithDetails = async (req, res) => {
         }
 
         const request = new sql.Request();
-        
+
         if (Fromdate && Todate) {
             request.input('Fromdate', sql.Date, ISOString(Fromdate));
             request.input('Todate', sql.Date, ISOString(Todate));

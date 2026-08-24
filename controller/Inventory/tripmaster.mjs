@@ -511,7 +511,8 @@ const tripActivities = () => {
                         quantity: toNumber(p.QTY),
                         type: 'MATERIAL_INWARD',
                         reference_id: toNumber(p.Arrival_Id),
-                        created_by: toNumber(Created_By)
+                        created_by: toNumber(Created_By),
+                        batch_id: p.Batch_Id || ''
                     }))
                 );
                 if (!consumeResult) throw new Error('Batch usage creation failed');
@@ -528,7 +529,8 @@ const tripActivities = () => {
                         rate: toNumber(p.Gst_Rate),
                         type: 'MATERIAL_INWARD',
                         reference_id: toNumber(p.Arrival_Id),
-                        created_by: toNumber(Created_By)
+                        created_by: toNumber(Created_By),
+                        batch_id: p.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Batch creation failed');
@@ -546,7 +548,8 @@ const tripActivities = () => {
                         quantity: toNumber(p.QTY),
                         type: 'OTHER_GODOWN',
                         reference_id: toNumber(p.Arrival_Id),
-                        created_by: toNumber(Created_By)
+                        created_by: toNumber(Created_By),
+                        batch_id: p.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Batch usage details creation failed');
@@ -785,7 +788,8 @@ const tripActivities = () => {
                         quantity: toNumber(p.QTY),
                         type: 'MATERIAL_INWARD',
                         reference_id: toNumber(p.Arrival_Id),
-                        created_by: toNumber(Updated_By)
+                        created_by: toNumber(Updated_By),
+                        batch_id: p.Batch_Id || ''
                     }))
                 );
                 if (!consumeResult) throw new Error('Batch usage creation failed');
@@ -802,7 +806,8 @@ const tripActivities = () => {
                         rate: toNumber(p.Gst_Rate),
                         type: 'MATERIAL_INWARD',
                         reference_id: toNumber(p.Arrival_Id),
-                        created_by: toNumber(Updated_By)
+                        created_by: toNumber(Updated_By),
+                        batch_id: p.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Batch creation failed');
@@ -820,7 +825,8 @@ const tripActivities = () => {
                         quantity: toNumber(p.QTY),
                         type: 'OTHER_GODOWN',
                         reference_id: toNumber(p.Arrival_Id),
-                        created_by: toNumber(Updated_By)
+                        created_by: toNumber(Updated_By),
+                        batch_id: p.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Batch usage details creation failed');

@@ -560,7 +560,8 @@ export const createCreditNote = async (req, res) => {
                 rate: b.Item_Rate,
                 type: 'CREDIT_NOTE',
                 reference_id: CR_Id,
-                created_by: Created_by
+                created_by: Created_by,
+                batch_id: b.Batch_Id || ''
             }))
         );
         if (!batchInsertResultEdit) throw new Error('Batch creation failed');
@@ -962,7 +963,8 @@ export const updateCreditNote = async (req, res) => {
                 rate: b.Item_Rate,
                 type: 'CREDIT_NOTE',
                 reference_id: CR_Id,
-                created_by: Altered_by
+                created_by: Altered_by,
+                batch_id: b.Batch_Id || ''
             }))
         );
         if (!batchInsertResultEdit) throw new Error('Batch creation failed');

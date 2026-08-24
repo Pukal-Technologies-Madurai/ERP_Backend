@@ -559,7 +559,8 @@ export const createDebitNote = async (req, res) => {
                     quantity: b.Bill_Qty,
                     type: 'DEBIT_NOTE',
                     reference_id: DB_Id,
-                    created_by: Created_by
+                    created_by: Created_by,
+                    batch_id: b.Batch_Id || ''
                 }))
             );
             if (!batchInsertResult) throw new Error('Batch usage details creation failed');
@@ -962,7 +963,8 @@ export const updateDebitNote = async (req, res) => {
                     quantity: b.Bill_Qty,
                     type: 'DEBIT_NOTE',
                     reference_id: DB_Id,
-                    created_by: Altered_by
+                    created_by: Altered_by,
+                    batch_id: b.Batch_Id || ''
                 }))
             );
             if (!batchInsertResult) throw new Error('Batch usage details creation failed');

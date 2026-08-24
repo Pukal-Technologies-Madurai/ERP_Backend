@@ -435,7 +435,8 @@ const StockManagement = () => {
                         quantity: toNumber(s.Quantity),
                         type: 'CONSUMPTION',
                         reference_id: toNumber(PR_Id),
-                        created_by: toNumber(Created_By)
+                        created_by: toNumber(Created_By),
+                        batch_id: Source.find(src => src.Sour_Batch_Lot_No === s.Sour_Batch_Lot_No)?.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Source batch consumption failed');
@@ -456,7 +457,8 @@ const StockManagement = () => {
                         rate: toNumber(d.Rate),
                         type: 'PRODUCTION',
                         reference_id: toNumber(PR_Id),
-                        created_by: toNumber(Created_By)
+                        created_by: toNumber(Created_By),
+                        batch_id: Destination.find(ds => ds.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No)?.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Destination batch creation failed');
@@ -772,7 +774,8 @@ const StockManagement = () => {
                         quantity: toNumber(s.Quantity),
                         type: 'CONSUMPTION',
                         reference_id: toNumber(PR_Id),
-                        created_by: toNumber(Updated_By)
+                        created_by: toNumber(Updated_By),
+                        batch_id: Source.find(ss => ss.Sour_Batch_Lot_No === s.Sour_Batch_Lot_No)?.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Source batch consumption failed');
@@ -793,7 +796,8 @@ const StockManagement = () => {
                         rate: toNumber(d.Rate),
                         type: 'PRODUCTION',
                         reference_id: toNumber(PR_Id),
-                        created_by: toNumber(Updated_By)
+                        created_by: toNumber(Updated_By),
+                        batch_id: Destination.find(ds => ds.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No)?.Batch_Id || ''
                     }))
                 );
                 if (!batchResult) throw new Error('Destination batch creation failed');

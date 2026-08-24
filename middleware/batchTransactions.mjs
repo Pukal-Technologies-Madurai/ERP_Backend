@@ -12,7 +12,8 @@ export const insertSingleBatch = async (
     rate = 0,
     type,
     reference_id,
-    created_by
+    created_by,
+    batch_master_id
 ) => {
     try {
         if (!transaction) {
@@ -28,8 +29,8 @@ export const insertSingleBatch = async (
             return true;
         }
 
-        if (stringCompare(batch_alias, '') || batch_alias === undefined) {
-            batch_alias = batch;
+        if (batch_alias === undefined) {
+            batch_alias = '';
         }
 
         const request = new sql.Request(transaction)
@@ -43,26 +44,60 @@ export const insertSingleBatch = async (
             .input('type', sql.NVarChar(30), type)
             .input('reference_id', sql.Int, reference_id)
             .input('created_by', sql.Int, created_by)
+            .input('batch_master_id', sql.UniqueIdentifier, batch_master_id)
             .query(`
                 DECLARE @maxObId INT = (SELECT TOP (1) OB_Id FROM tbl_OB_ST_Date ORDER BY OB_Date DESC);
-                DECLARE @batch_id NVARCHAR(100) = (
-                    SELECT TOP (1) id 
+                DECLARE @batch_id UNIQUEIDENTIFIER = NULL;
+                
+                IF @batch_master_id IS NOT NULL AND CAST(@batch_master_id AS VARCHAR(36)) <> ''
+                BEGIN
+                    SELECT TOP (1) @batch_id = id 
+                    FROM tbl_Batch_Master
+                    WHERE id = @batch_master_id AND godown_id = @godown_id AND ob_id = @maxObId
+                END
+
+                IF @batch_id IS NULL
+                BEGIN
+                    SELECT TOP (1) @batch_id = id 
                     FROM tbl_Batch_Master
                     WHERE 
                         batch = @batch
                         AND item_id = @item_id
                         AND godown_id = @godown_id
                         AND ob_id = @maxObId
-                )
+                END;
+                
                 IF @batch_id IS NULL 
                 BEGIN
+                    DECLARE @existing_alias NVARCHAR(50) = (
+                        SELECT TOP (1) batch_alias 
+                        FROM tbl_Batch_Master 
+                        WHERE batch = @batch AND item_id = @item_id
+                    );
+                    IF @existing_alias IS NOT NULL
+                    BEGIN
+                        SET @batch_alias = @existing_alias;
+                    END
+                    ELSE
+                    BEGIN
+                        DECLARE @item_str VARCHAR(50) = CAST(@item_id AS VARCHAR) + '_';
+                        DECLARE @len INT = LEN(@item_str);
+                        DECLARE @max_suffix INT = (
+                            SELECT COALESCE(MAX(
+                                TRY_CAST(SUBSTRING(batch_alias, @len + 1, LEN(batch_alias)) AS INT)
+                            ), 0)
+                            FROM tbl_Batch_Master
+                            WHERE item_id = @item_id AND batch_alias LIKE @item_str + '%'
+                        );
+                        SET @batch_alias = @item_str + CAST((@max_suffix + 1) AS VARCHAR);
+                    END
                     INSERT INTO tbl_Batch_Master (
                         batch, batch_alias, trans_date, item_id, godown_id, quantity, 
                         rate, created_at, created_by, ob_id
                     ) VALUES (
                         @batch, @batch_alias, @trans_date, @item_id, @godown_id, @quantity, 
                         @rate, GETDATE(), @created_by, @maxObId
-                    )
+                    );
                 END
                 ELSE
                 BEGIN
@@ -107,7 +142,8 @@ export const insertMultipleBatch = async (
                 batch.rate,
                 batch.type,
                 batch.reference_id,
-                batch.created_by
+                batch.created_by,
+                batch.batch_id
             );
             if (!result) return false;
         }
@@ -237,7 +273,8 @@ export const insertBatchUsageDetails = async (
     quantity = 0,
     type,
     reference_id,
-    created_by
+    created_by,
+    batch_master_id
 ) => {
     try {
 
@@ -254,8 +291,8 @@ export const insertBatchUsageDetails = async (
             return true;
         }
 
-        if (stringCompare(batch_alias, '') || batch_alias === undefined) {
-            batch_alias = batch;
+        if (batch_alias === undefined) {
+            batch_alias = '';
         }
 
         const request = new sql.Request(transaction)
@@ -268,21 +305,57 @@ export const insertBatchUsageDetails = async (
             .input('type', sql.NVarChar(30), type)
             .input('reference_id', sql.Int, reference_id)
             .input('created_by', sql.Int, created_by)
+            .input('batch_master_id', sql.UniqueIdentifier, batch_master_id)
             .query(`
                 DECLARE @maxObId INT = (SELECT TOP (1) OB_Id FROM tbl_OB_ST_Date ORDER BY OB_Date DESC);
-                DECLARE @ob_id INT = (
-                    SELECT TOP (1) ob_id 
+                DECLARE @batch_id UNIQUEIDENTIFIER = NULL;
+                
+                IF @batch_master_id IS NOT NULL AND CAST(@batch_master_id AS VARCHAR(36)) <> ''
+                BEGIN
+                    SELECT TOP (1) @batch_id = id 
+                    FROM tbl_Batch_Master
+                    WHERE id = @batch_master_id AND godown_id = @godown_id
+                END
+
+                IF @batch_id IS NULL
+                BEGIN
+                    SELECT TOP (1) @batch_id = id 
                     FROM tbl_Batch_Master
                     WHERE 
                         batch = @batch
                         AND item_id = @item_id
                         AND godown_id = @godown_id
                     ORDER BY ob_id DESC
-                );
-                
+                END
+
+                DECLARE @ob_id INT = (SELECT TOP(1) ob_id FROM tbl_Batch_Master WHERE id = @batch_id);
+
                 IF @ob_id IS NULL
                 BEGIN
                     SET @ob_id = @maxObId;
+                    DECLARE @existing_alias NVARCHAR(50) = (
+                        SELECT TOP (1) batch_alias 
+                        FROM tbl_Batch_Master 
+                        WHERE batch = @batch AND item_id = @item_id
+                    );
+                    IF @existing_alias IS NOT NULL
+                    BEGIN
+                        SET @batch_alias = @existing_alias;
+                    END
+                    ELSE
+                    BEGIN
+                        DECLARE @item_str VARCHAR(50) = CAST(@item_id AS VARCHAR) + '_';
+                        DECLARE @len INT = LEN(@item_str);
+                        DECLARE @max_suffix INT = (
+                            SELECT COALESCE(MAX(
+                                TRY_CAST(SUBSTRING(batch_alias, @len + 1, LEN(batch_alias)) AS INT)
+                            ), 0)
+                            FROM tbl_Batch_Master
+                            WHERE item_id = @item_id AND batch_alias LIKE @item_str + '%'
+                        );
+                        SET @batch_alias = @item_str + CAST((@max_suffix + 1) AS VARCHAR);
+                    END
+
                     INSERT INTO tbl_Batch_Master (
                         batch, batch_alias, trans_date, item_id, godown_id, quantity, 
                         rate, created_at, created_by, ob_id
@@ -290,18 +363,18 @@ export const insertBatchUsageDetails = async (
                         @batch, @batch_alias, @trans_date, @item_id, @godown_id, 0, 
                         0, GETDATE(), @created_by, @maxObId
                     )
-                END
-
-                DECLARE @batch_id NVARCHAR(100) = (
-                    SELECT TOP (1) id 
+                    
+                    SELECT TOP (1) @batch_id = id 
                     FROM tbl_Batch_Master
                     WHERE 
                         batch = @batch
                         AND item_id = @item_id
                         AND godown_id = @godown_id
-                        AND ob_id = @ob_id
+                        AND ob_id = @maxObId
                     ORDER BY ob_id DESC
-                );
+
+                    SET @ob_id = @maxObId;
+                END
 
                 IF @batch_id IS NOT NULL
                 BEGIN
@@ -349,7 +422,8 @@ export const insertMultipleBatchUsageDetails = async (
                 batch.quantity,
                 batch.type,
                 batch.reference_id,
-                batch.created_by
+                batch.created_by,
+                batch.batch_id
             );
             if (!result) return false;
         }
