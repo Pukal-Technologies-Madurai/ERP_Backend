@@ -189,20 +189,7 @@ const StockManagement = () => {
                 Dest_Amt: toNumber(item?.Dest_Amt)
             }));
 
-            const newBatches = Destination.filter(d => filterableText(d.Dest_Batch_Lot_No) && d.Dest_Batch_Lot_No.startsWith('PRD_'));
-            if (newBatches.length > 0) {
-                const batchInput = newBatches.map(b => ({ ...b, productId: b.Dest_Item_Id }));
-                const assignedBatches = await batchProcess.assignBatchNames(batchInput);
-                Destination.forEach(d => {
-                    if (filterableText(d.Dest_Batch_Lot_No) && d.Dest_Batch_Lot_No.startsWith('PRD_')) {
-                        const assigned = assignedBatches.find(ab => isEqualNumber(ab.Dest_Item_Id, d.Dest_Item_Id) && ab.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No);
-                        if (assigned) {
-                            d.Dest_Batch_Lot_No = assigned.suggestBatchName;
-                        }
-                    }
-                });
-            }
-
+            // Batch assignment logic removed since middleware handles missing batches dynamically
             const StaffInvolve = toArray(req.body.StaffInvolve).map(item => ({
                 ...item,
                 Staff_Type_Id: toNumber(item?.Staff_Type_Id),
@@ -441,6 +428,7 @@ const StockManagement = () => {
                     transaction,
                     batchSource.map(s => ({
                         batch: s.Sour_Batch_Lot_No,
+                        batch_alias: Source.find(src => src.Sour_Batch_Lot_No === s.Sour_Batch_Lot_No)?.Sour_Batch_Alias || s.Sour_Batch_Lot_No,
                         trans_date: new Date(Process_date),
                         item_id: toNumber(s.Sour_Item_Id),
                         godown_id: toNumber(s.Sour_Goodown_Id),
@@ -460,7 +448,7 @@ const StockManagement = () => {
                     transaction,
                     batchDest.map(d => ({
                         batch: d.Dest_Batch_Lot_No,
-                        batch_alias: Destination.find(ds => ds.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No)?.Dest_Batch_Alias,
+                        batch_alias: Destination.find(ds => ds.Dest_Batch_Lot_No === d.Dest_Batch_Lot_No)?.Dest_Batch_Alias || d.Dest_Batch_Lot_No,
                         trans_date: new Date(Process_date),
                         item_id: toNumber(d.Dest_Item_Id),
                         godown_id: toNumber(d.Dest_Goodown_Id),
@@ -777,6 +765,7 @@ const StockManagement = () => {
                     transaction,
                     batchSource.map(s => ({
                         batch: s.Sour_Batch_Lot_No,
+                        batch_alias: Source.find(ss => ss.Sour_Batch_Lot_No === s.Sour_Batch_Lot_No)?.Sour_Batch_Alias || s.Sour_Batch_Lot_No,
                         trans_date: new Date(Process_date),
                         item_id: toNumber(s.Sour_Item_Id),
                         godown_id: toNumber(s.Sour_Goodown_Id),

@@ -500,10 +500,27 @@ const tripActivities = () => {
             const batchProducts = Product_Array.filter(p => filterableText(p?.Batch_No));
 
             if (BillType === 'MATERIAL INWARD' && batchProducts.length > 0) {
+                const consumeResult = await insertMultipleBatchUsageDetails(
+                    transaction,
+                    batchProducts.map(p => ({
+                        batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.From_Location),
+                        quantity: toNumber(p.QTY),
+                        type: 'MATERIAL_INWARD',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Created_By)
+                    }))
+                );
+                if (!consumeResult) throw new Error('Batch usage creation failed');
+
                 const batchResult = await insertMultipleBatch(
                     transaction,
                     batchProducts.map(p => ({
                         batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
                         trans_date: new Date(Trip_Date),
                         item_id: toNumber(p.Product_Id),
                         godown_id: toNumber(p.To_Location),
@@ -522,6 +539,7 @@ const tripActivities = () => {
                     transaction,
                     batchProducts.map(p => ({
                         batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
                         trans_date: new Date(Trip_Date),
                         item_id: toNumber(p.Product_Id),
                         godown_id: toNumber(p.From_Location),
@@ -756,10 +774,27 @@ const tripActivities = () => {
             const batchProductsEdit = Product_Array.filter(p => filterableText(p?.Batch_No));
 
             if (BillType === 'MATERIAL INWARD' && batchProductsEdit.length > 0) {
+                const consumeResult = await insertMultipleBatchUsageDetails(
+                    transaction,
+                    batchProductsEdit.map(p => ({
+                        batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.From_Location),
+                        quantity: toNumber(p.QTY),
+                        type: 'MATERIAL_INWARD',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Updated_By)
+                    }))
+                );
+                if (!consumeResult) throw new Error('Batch usage creation failed');
+
                 const batchResult = await insertMultipleBatch(
                     transaction,
                     batchProductsEdit.map(p => ({
                         batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
                         trans_date: new Date(Trip_Date),
                         item_id: toNumber(p.Product_Id),
                         godown_id: toNumber(p.To_Location),
@@ -778,6 +813,7 @@ const tripActivities = () => {
                     transaction,
                     batchProductsEdit.map(p => ({
                         batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
                         trans_date: new Date(Trip_Date),
                         item_id: toNumber(p.Product_Id),
                         godown_id: toNumber(p.From_Location),

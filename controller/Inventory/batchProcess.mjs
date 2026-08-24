@@ -65,6 +65,7 @@ const getUnAssignedBatchFromMaterialInward = async (req, res) => {
                     tm.TR_INV_ID AS voucherNumber,
                     ar.Product_Id AS productId,
                     p.Product_Name AS productNameGet,
+                    fg.Godown_Id AS fromGodownId,
                     tg.Godown_Id AS godownId, 
                     fg.Godown_Name AS fromGodownGet,
                     tg.Godown_Name AS toGodownGet,
@@ -145,22 +146,26 @@ const postBatchInMaterialInward = async (req, res) => {
                 CREATE TABLE #Parsed(
             batch NVARCHAR(50),
             item_id BIGINT,
+            from_godown BIGINT,
             godown_id BIGINT,
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             created_by NVARCHAR(100),
-            uniquId BIGINT
+            uniquId BIGINT,
+            batch_alias NVARCHAR(50)
         );
-                INSERT INTO #Parsed(batch, item_id, godown_id, quantity, rate, created_by, uniquId)
+                INSERT INTO #Parsed(batch, item_id, from_godown, godown_id, quantity, rate, created_by, uniquId, batch_alias)
         SELECT * FROM OPENJSON(@jsonData)
         WITH(
             batch NVARCHAR(50),
             productId BIGINT,
+            fromGodownId BIGINT,
             godownId BIGINT,
             quantity DECIMAL(18, 2),
             rate DECIMAL(18, 2),
             created_by NVARCHAR(100),
-            uniquId BIGINT
+            uniquId BIGINT,
+            batch_alias NVARCHAR(50)
         );
                 IF EXISTS(SELECT 1 FROM #Parsed WHERE batch IS NULL OR item_id IS NULL OR godown_id IS NULL)
                 THROW 50000, 'Invalid or missing fields in JSON input.', 1;
@@ -169,6 +174,23 @@ const postBatchInMaterialInward = async (req, res) => {
                 FROM tbl_Trip_Arrival t
                 JOIN #Parsed p ON t.Arr_Id = p.uniquId;
                 DROP TABLE #Parsed; `);
+
+        // Transfer out: batch consumption from source godown
+        const usageResult = await insertMultipleBatchUsageDetails(
+            transaction,
+            itemBatch.map(item => ({
+                batch: item.batch,
+                batch_alias: item.batch_alias,
+                trans_date: new Date(trans_date),
+                item_id: toNumber(item.productId),
+                godown_id: toNumber(item.fromGodownId),
+                quantity: toNumber(item.quantity),
+                type: 'MATERIAL_INWARD',
+                reference_id: toNumber(item.uniquId),
+                created_by: toNumber(createdBy)
+            }))
+        );
+        if (!usageResult) throw new Error('Batch consumption failed');
 
         // Batch master upsert via centralized function
         const batchResult = await insertMultipleBatch(
@@ -1600,7 +1622,7 @@ const batchDropDown = async (req, res) => {
                 FROM tbl_Batch_Master AS bm
                 JOIN tbl_Product_Master AS pm ON pm.Product_Id = bm.item_id
                 JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = bm.godown_id
-                GROUP BY bm.batch, bm.item_id, pm.Product_Name, bm.godown_id, gm.Godown_Name; `
+                GROUP BY bm.batch, bm.batch_alias, bm.item_id, pm.Product_Name, bm.godown_id, gm.Godown_Name; `
             );
 
         const result = await request;
@@ -1936,6 +1958,32 @@ const batchTransaction = async (req, res) => {
                 AND(bt.type = 'OTHER_GODOWN' OR bt.type = 'OTHER_GODOWN_REVERSAL')
                 WHERE sdgi.TripStatus <> 'Canceled' AND bt.batch_id = @batch_id
                 GROUP BY bt.batch_id, sdsi.Arr_Id, sdgi.Trip_Date, sdgi.TR_INV_ID, bt.type, sdgi.Created_At;
+            -- ********************************* material_inward - OUT *********************************
+                SELECT
+                    bt.batch_id AS batchId,
+                    sdsi.Arr_Id AS voucherId,
+                    sdgi.Trip_Date AS voucherDate,
+                    sdgi.TR_INV_ID AS voucherNumber,
+                    COALESCE(rm.Retailer_Name, 'Not found') partyName,
+                    SUM(sdsi.QTY) - COALESCE(SUM(cbt.quantity), 0) AS voucherQuantity,
+                    SUM(bt.quantity) - COALESCE(SUM(cbt.quantity), 0)  AS batchQuantity,
+                    'MATERIAL_INWARD' AS transType,
+                    sdgi.Created_At AS createdAt
+                FROM tbl_Batch_Transaction AS bt
+                JOIN tbl_Trip_Arrival AS sdsi ON sdsi.Arr_Id = bt.reference_id
+                JOIN tbl_Trip_Details AS tripDetails ON tripDetails.Arrival_Id = sdsi.Arr_Id
+                JOIN tbl_Trip_Master AS sdgi ON sdgi.Trip_Id = tripDetails.Trip_Id
+                LEFT JOIN tbl_Batch_Transaction AS cbt ON
+                    cbt.batch_id = bt.batch_id 
+                	AND cbt.type = 'MATERIAL_INWARD_REVERSAL'
+                	AND cbt.reference_id = sdsi.Arr_Id
+                LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.concern
+                WHERE 
+                    sdgi.TripStatus <> 'Canceled' 
+                    AND bt.batch_id = @batch_id
+                    AND (bt.type = 'MATERIAL_INWARD')
+                GROUP BY bt.batch_id, sdsi.Arr_Id, sdgi.Trip_Date, sdgi.TR_INV_ID, rm.Retailer_Name, bt.type, sdgi.Created_At;
+
             -- ********************************* material_inward - IN *********************************
                 SELECT
                     bm.id AS batchId,
@@ -1976,7 +2024,8 @@ const batchTransaction = async (req, res) => {
             debit_note,
             credit_note,
             godown_transfer,
-            material_inward
+            material_inward_out,
+            material_inward_in
         ] = result.recordsets;
 
         if (!batch[0]) return noData(res);
@@ -1989,7 +2038,8 @@ const batchTransaction = async (req, res) => {
             ...(debit_note || []),
             ...(credit_note || []),
             ...(godown_transfer || []),
-            ...(material_inward || [])
+            ...(material_inward_out || []),
+            ...(material_inward_in || [])
         ];
 
         const groupedVouchers = rawVouchers.reduce((acc, item) => {
@@ -2029,6 +2079,81 @@ const batchTransaction = async (req, res) => {
     }
 }
 
+export const getBatchWithDetails = async (req, res) => {
+    try {
+        const { Fromdate, Todate, stockStatus } = req.query;
+
+        let dateCondition = '';
+        if (Fromdate && Todate) {
+            dateCondition = ` AND CONVERT(DATE, bm.trans_date) BETWEEN @Fromdate AND @Todate `;
+        }
+
+        const request = new sql.Request();
+        
+        if (Fromdate && Todate) {
+            request.input('Fromdate', sql.Date, ISOString(Fromdate));
+            request.input('Todate', sql.Date, ISOString(Todate));
+        }
+
+        const result = await request.query(`
+            SELECT
+                bm.id AS batchId,
+                bm.batch AS batchNo,
+                bm.batch_alias AS batchAlias,
+                bm.trans_date AS transDate,
+                p.Product_Name AS productName,
+                g.Godown_Name AS godownName,
+                bm.quantity AS inwardQty,
+                COALESCE(SUM(bt.quantity), 0) AS consumedQty,
+                (bm.quantity - COALESCE(SUM(bt.quantity), 0)) AS availableQty
+            FROM tbl_Batch_Master bm
+            LEFT JOIN tbl_Product_Master p ON p.Product_Id = bm.item_id
+            LEFT JOIN tbl_Godown_Master g ON g.Godown_Id = bm.godown_id
+            LEFT JOIN tbl_Batch_Transaction bt ON bt.batch_id = bm.id
+            WHERE 1=1 ${dateCondition}
+            GROUP BY 
+                bm.id, bm.batch, bm.batch_alias, bm.trans_date, p.Product_Name, g.Godown_Name, bm.quantity
+        `);
+
+        let filteredData = result.recordset || (result._recordset) || [];
+        if (!Array.isArray(filteredData) && result.recordsets) {
+            filteredData = result.recordsets[0] || [];
+        }
+
+        if (stockStatus) {
+            if (stockStatus === 'available') {
+                filteredData = filteredData.filter(b => Number(b.availableQty) > 0);
+            } else if (stockStatus === 'negative') {
+                filteredData = filteredData.filter(b => Number(b.availableQty) < 0);
+            } else if (stockStatus === 'zero') {
+                filteredData = filteredData.filter(b => Number(b.availableQty) === 0);
+            }
+        }
+
+        filteredData.sort((a, b) => {
+            const dateA = new Date(a.transDate).getTime();
+            const dateB = new Date(b.transDate).getTime();
+
+            if (dateB !== dateA) {
+                return dateB - dateA; // Descending by date
+            }
+
+            const getStockPriority = (qty) => {
+                if (qty > 0) return 1;
+                if (qty < 0) return 2;
+                return 3;
+            };
+
+            return getStockPriority(Number(a.availableQty)) - getStockPriority(Number(b.availableQty));
+        });
+
+        sentData(res, filteredData);
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 export default {
     assignBatchNames,
     getUnAssignedBatchFromMaterialInward,
@@ -2054,5 +2179,6 @@ export default {
     previousAndNextStages,
     previousBatchDetails,
     nextBatchDetails,
-    batchTransaction
+    batchTransaction,
+    getBatchWithDetails
 }

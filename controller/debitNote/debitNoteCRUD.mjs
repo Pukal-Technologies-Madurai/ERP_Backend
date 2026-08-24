@@ -58,7 +58,8 @@ function buildBulkDebitNoteRows(Product_Array, productsData, flags = {}) {
             Igst: RoundNumber(igstPer),
             Igst_Amo: RoundNumber(Igst_Amo),
             Final_Amo: RoundNumber(gstInfo.with_tax),
-            Batch_Name: product?.Batch_Name || ''
+            Batch_Name: product?.Batch_Name || '',
+            Batch_Alias: product?.Batch_Alias || product?.Batch_Name || ''
         });
     });
 
@@ -549,8 +550,9 @@ export const createDebitNote = async (req, res) => {
         if (stockRows.length > 0) {
             const batchInsertResult = await insertMultipleBatchUsageDetails(
                 transaction,
-                stockRows.map(b => ({
+                stockRows.filter(b => b.Batch_Name).map(b => ({
                     batch: b.Batch_Name,
+                    batch_alias: b.Batch_Alias,
                     trans_date: new Date(DB_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,
@@ -951,8 +953,9 @@ export const updateDebitNote = async (req, res) => {
         if (stockRows.length > 0) {
             const batchInsertResult = await insertMultipleBatchUsageDetails(
                 transaction,
-                stockRows.map(b => ({
+                stockRows.filter(b => b.Batch_Name).map(b => ({
                     batch: b.Batch_Name,
+                    batch_alias: b.Batch_Alias,
                     trans_date: new Date(DB_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,

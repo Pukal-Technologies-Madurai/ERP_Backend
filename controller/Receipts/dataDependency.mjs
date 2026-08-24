@@ -439,6 +439,7 @@ const ReceiptDataDependency = () => {
             const request = new sql.Request()
                 .input('receipt_id', receipt_id)
                 .query(`
+					DECLARE @OB_Id INT = (SELECT MAX(Id) FROM tbl_OB_Date);
                     WITH RECEIPT_BILL_INFO AS (
                         SELECT 
                             pbi.*
@@ -466,7 +467,7 @@ const ReceiptDataDependency = () => {
                             SELECT DISTINCT bill_name 
                             FROM RECEIPT_BILL_INFO 
                             WHERE receipt_bill_type = 1 AND JournalBillType = 'SALES RECEIPT'
-                        )
+                        ) AND OB_Id = @OB_Id
                     ), 
                     -- CTE for Purchase Invoice
                     SALES_INVOICE_DATE AS (

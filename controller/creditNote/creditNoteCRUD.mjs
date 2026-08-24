@@ -58,7 +58,8 @@ function buildBulkCreditNoteRows(Product_Array, productsData, flags = {}) {
             Igst: RoundNumber(igstPer),
             Igst_Amo: RoundNumber(Igst_Amo),
             Final_Amo: RoundNumber(gstInfo.with_tax),
-            Batch_Name: product?.Batch_Name || ''
+            Batch_Name: product?.Batch_Name || '',
+            Batch_Alias: product?.Batch_Alias || product?.Batch_Name || ''
         });
     });
 
@@ -549,8 +550,9 @@ export const createCreditNote = async (req, res) => {
 
         const batchInsertResultEdit = await insertMultipleBatch(
             transaction,
-            stockRows.map(b => ({
+            stockRows.filter(b => b.Batch_Name).map(b => ({
                 batch: b.Batch_Name,
+                batch_alias: b.Batch_Alias,
                 trans_date: new Date(CR_Date),
                 item_id: b.Item_Id,
                 godown_id: b.GoDown_Id,
@@ -950,8 +952,9 @@ export const updateCreditNote = async (req, res) => {
 
         const batchInsertResultEdit = await insertMultipleBatch(
             transaction,
-            stockRows.map(b => ({
+            stockRows.filter(b => b.Batch_Name).map(b => ({
                 batch: b.Batch_Name,
+                batch_alias: b.Batch_Alias,
                 trans_date: new Date(CR_Date),
                 item_id: b.Item_Id,
                 godown_id: b.GoDown_Id,

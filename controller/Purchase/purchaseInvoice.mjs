@@ -87,6 +87,7 @@ function buildBulkPurchaseRows(Product_Array, productsData, { isInclusive, isNot
         if (product?.Batch_No) {
             batchRows.push({
                 batch: product?.Batch_No,
+                batch_alias: product?.Batch_Alias || product?.Batch_No,
                 item_id: toNumber(product?.Item_Id),
                 godown_id: toNumber(product?.Location_Id) || 0,
                 quantity: Bill_Qty,
@@ -361,6 +362,7 @@ const PurchaseInvoice = () => {
                 transaction,
                 batchRows.map(b => ({
                     batch: b.batch,
+                    batch_alias: b.batch_alias,
                     trans_date: new Date(Po_Inv_Date),
                     item_id: b.item_id,
                     godown_id: b.godown_id,
@@ -869,6 +871,7 @@ const PurchaseInvoice = () => {
                 transaction,
                 batchRows.map(b => ({
                     batch: b.batch,
+                    batch_alias: b.batch_alias,
                     trans_date: new Date(Po_Inv_Date),
                     item_id: b.item_id,
                     godown_id: b.godown_id,

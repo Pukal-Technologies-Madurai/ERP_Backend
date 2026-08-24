@@ -72,6 +72,7 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}, packData = 
         if (product?.Batch_Name) {
             batchRows.push({
                 batch: product?.Batch_Name,
+                batch_alias: product?.Batch_Alias || product?.Batch_Name,
                 item_id: toNumber(product?.Item_Id),
                 godown_id: toNumber(product?.Location_Id) || 0,
                 quantity: Bill_Qty,
@@ -1210,7 +1211,7 @@ export const createSalesInvoice = async (req, res) => {
 
         const isSO = checkIsNumber(So_No);
 
-        const { stockRows } = buildBulkSalesRows(toArray(Product_Array), productsData, {
+        const { stockRows, batchRows } = buildBulkSalesRows(toArray(Product_Array), productsData, {
             isInclusive,
             isNotTaxableBill,
             isIGST,
@@ -1301,6 +1302,7 @@ export const createSalesInvoice = async (req, res) => {
                 transaction,
                 batchCreationDetails.map(b => ({
                     batch: b.Batch_Name,
+                    batch_alias: batchRows.find(br => br.batch === b.Batch_Name)?.batch_alias || b.Batch_Name,
                     trans_date: new Date(Do_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,
@@ -2093,7 +2095,7 @@ export const updateSalesInvoice = async (req, res) => {
 
         const isSO = checkIsNumber(So_No)
 
-        const { stockRows } = buildBulkSalesRows(toArray(Product_Array), productsData, {
+        const { stockRows, batchRows } = buildBulkSalesRows(toArray(Product_Array), productsData, {
             isInclusive,
             isNotTaxableBill,
             isIGST,
@@ -2184,6 +2186,7 @@ export const updateSalesInvoice = async (req, res) => {
                 transaction,
                 batchCreationDetails.map(b => ({
                     batch: b.Batch_Name,
+                    batch_alias: batchRows.find(br => br.batch === b.Batch_Name)?.batch_alias || b.Batch_Name,
                     trans_date: new Date(Do_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,

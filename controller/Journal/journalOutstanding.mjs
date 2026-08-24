@@ -112,7 +112,7 @@ SELECT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
 FROM tbl_Journal_Entries_Info AS jei
 JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
 WHERE 
-	jgi.JournalDate >= @OB_Date --'OJS/000358/25-26'
+	jgi.JournalDate >= @OB_Date
     AND jei.Acc_Id = @Acc_Id
     AND jgi.JournalStatus <> 0;
 `;

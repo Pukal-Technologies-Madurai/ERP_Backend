@@ -230,6 +230,7 @@ export const reverseMultipleBatch = async (transaction, batchArray) => {
 export const insertBatchUsageDetails = async (
     transaction,
     batch,
+    batch_alias,
     trans_date = new Date(),
     item_id,
     godown_id,
@@ -253,8 +254,13 @@ export const insertBatchUsageDetails = async (
             return true;
         }
 
+        if (stringCompare(batch_alias, '') || batch_alias === undefined) {
+            batch_alias = batch;
+        }
+
         const request = new sql.Request(transaction)
             .input('batch', sql.NVarChar(255), batch)
+            .input('batch_alias', sql.NVarChar(50), batch_alias)
             .input('trans_date', sql.Date, trans_date)
             .input('item_id', sql.Int, item_id)
             .input('godown_id', sql.Int, godown_id)
@@ -263,6 +269,7 @@ export const insertBatchUsageDetails = async (
             .input('reference_id', sql.Int, reference_id)
             .input('created_by', sql.Int, created_by)
             .query(`
+                DECLARE @maxObId INT = (SELECT TOP (1) OB_Id FROM tbl_OB_ST_Date ORDER BY OB_Date DESC);
                 DECLARE @ob_id INT = (
                     SELECT TOP (1) ob_id 
                     FROM tbl_Batch_Master
@@ -272,6 +279,19 @@ export const insertBatchUsageDetails = async (
                         AND godown_id = @godown_id
                     ORDER BY ob_id DESC
                 );
+                
+                IF @ob_id IS NULL
+                BEGIN
+                    SET @ob_id = @maxObId;
+                    INSERT INTO tbl_Batch_Master (
+                        batch, batch_alias, trans_date, item_id, godown_id, quantity, 
+                        rate, created_at, created_by, ob_id
+                    ) VALUES (
+                        @batch, @batch_alias, @trans_date, @item_id, @godown_id, 0, 
+                        0, GETDATE(), @created_by, @maxObId
+                    )
+                END
+
                 DECLARE @batch_id NVARCHAR(100) = (
                     SELECT TOP (1) id 
                     FROM tbl_Batch_Master
@@ -282,6 +302,7 @@ export const insertBatchUsageDetails = async (
                         AND ob_id = @ob_id
                     ORDER BY ob_id DESC
                 );
+
                 IF @batch_id IS NOT NULL
                 BEGIN
                     INSERT INTO tbl_Batch_Transaction (
@@ -321,6 +342,7 @@ export const insertMultipleBatchUsageDetails = async (
             const result = await insertBatchUsageDetails(
                 transaction,
                 batch.batch,
+                batch.batch_alias,
                 batch.trans_date,
                 batch.item_id,
                 batch.godown_id,

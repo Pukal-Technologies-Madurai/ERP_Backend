@@ -124,6 +124,7 @@ inventoryRouter.get('/batchMaster/previousAndNextStages', batchProcess.previousA
 inventoryRouter.get('/batchMaster/batchPreviousStage', batchProcess.previousBatchDetails);
 inventoryRouter.get('/batchMaster/batchNextStage', batchProcess.nextBatchDetails);
 inventoryRouter.get('/batchMaster/batchTransactions', batchProcess.batchTransaction);
+inventoryRouter.get('/batchProcess/getBatchWithDetails', batchProcess.getBatchWithDetails);
 
 inventoryRouter.get('/trunoverRatio', inventoryReport.getInventoryReport);
 

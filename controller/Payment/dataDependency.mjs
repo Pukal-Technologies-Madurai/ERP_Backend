@@ -186,6 +186,7 @@ const PaymentDataDependency = () => {
             const request = new sql.Request()
                 .input('payment_id', payment_id)
                 .query(`
+					DECLARE @OB_Id INT = (SELECT MAX(Id) FROM tbl_OB_Date);
                     WITH PAYMENT_BILL_INFO AS (
                     	SELECT 
                     		pbi.*
@@ -213,7 +214,7 @@ const PaymentDataDependency = () => {
                             SELECT DISTINCT bill_name 
                             FROM PAYMENT_BILL_INFO 
                             WHERE bill_type = 1 AND JournalBillType = 'PURCHASE INVOICE'
-                        )
+                        ) AND OB_Id = @OB_Id
                     ),  
                     -- CTE for Purchase Invoice
                     PURCHASE_INVOICE_DATE AS (
@@ -885,7 +886,7 @@ LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = psi.Emp_Type_Id
 WHERE pgi.payment_date BETWEEN @Fromdate AND @Todate AND pgi.status <> 0
 --  *************************** quantity and price of costing (Trip Sheet) ***************************
 SELECT 
-	td.Trip_Id AS pay_bill_id,
+	td.Trip_Id AS pay_bill_id,6+
 	ta.Product_Id AS item_id,
 	COALESCE(ta.QTY, 0) AS itemQuantity,
 	tm.BillType AS JournalBillType, -- MATERIAL INWARD OR OTHER GODOWN
