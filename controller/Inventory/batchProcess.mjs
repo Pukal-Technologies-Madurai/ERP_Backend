@@ -1566,7 +1566,7 @@ const getBatchStockBalance = async (req, res) => {
                 ${stringCompare(dateBased, 'yes') ? ` AND CONVERT(DATE, bm.trans_date) BETWEEN @Fromdate AND @Todate ` : ''}
                 ${checkIsNumber(Product_Id) ? ` AND bm.item_id = @Product_Id ` : ''}
                 GROUP BY bm.id, bm.quantity
-                ${stringCompare(dateBased, 'no') ? ` HAVING COALESCE(SUM(bt.quantity), 0) < bm.quantity ` : ''};
+                ${stringCompare(dateBased, 'no') ? ` HAVING (bm.quantity - COALESCE(SUM(bt.quantity), 0)) <> 0 ` : ''};
                 --batch master
                 SELECT
                     bm.id,

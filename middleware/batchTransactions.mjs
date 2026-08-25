@@ -44,7 +44,7 @@ export const insertSingleBatch = async (
             .input('type', sql.NVarChar(30), type)
             .input('reference_id', sql.Int, reference_id)
             .input('created_by', sql.Int, created_by)
-            .input('batch_master_id', sql.UniqueIdentifier, batch_master_id)
+            .input('batch_master_id', sql.UniqueIdentifier, batch_master_id === '' ? null : batch_master_id)
             .query(`
                 DECLARE @maxObId INT = (SELECT TOP (1) OB_Id FROM tbl_OB_ST_Date ORDER BY OB_Date DESC);
                 DECLARE @batch_id UNIQUEIDENTIFIER = NULL;
@@ -305,7 +305,7 @@ export const insertBatchUsageDetails = async (
             .input('type', sql.NVarChar(30), type)
             .input('reference_id', sql.Int, reference_id)
             .input('created_by', sql.Int, created_by)
-            .input('batch_master_id', sql.UniqueIdentifier, batch_master_id)
+            .input('batch_master_id', sql.UniqueIdentifier, batch_master_id === '' ? null : batch_master_id)
             .query(`
                 DECLARE @maxObId INT = (SELECT TOP (1) OB_Id FROM tbl_OB_ST_Date ORDER BY OB_Date DESC);
                 DECLARE @batch_id UNIQUEIDENTIFIER = NULL;

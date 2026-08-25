@@ -553,6 +553,24 @@ const tripActivities = () => {
                     }))
                 );
                 if (!batchResult) throw new Error('Batch usage details creation failed');
+
+                const batchInwardResult = await insertMultipleBatch(
+                    transaction,
+                    batchProducts.map(p => ({
+                        batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.To_Location),
+                        quantity: toNumber(p.QTY),
+                        rate: toNumber(p.Gst_Rate),
+                        type: 'OTHER_GODOWN',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Created_By),
+                        batch_id: p.Batch_Id || ''
+                    }))
+                );
+                if (!batchInwardResult) throw new Error('Batch creation in destination failed');
             }
 
             for (let i = 0; i < EmployeesInvolved.length; i++) {
@@ -830,6 +848,24 @@ const tripActivities = () => {
                     }))
                 );
                 if (!batchResult) throw new Error('Batch usage details creation failed');
+
+                const batchInwardResult = await insertMultipleBatch(
+                    transaction,
+                    batchProductsEdit.map(p => ({
+                        batch: p.Batch_No,
+                        batch_alias: p.Batch_Alias || p.Batch_No,
+                        trans_date: new Date(Trip_Date),
+                        item_id: toNumber(p.Product_Id),
+                        godown_id: toNumber(p.To_Location),
+                        quantity: toNumber(p.QTY),
+                        rate: toNumber(p.Gst_Rate),
+                        type: 'OTHER_GODOWN',
+                        reference_id: toNumber(p.Arrival_Id),
+                        created_by: toNumber(Updated_By),
+                        batch_id: p.Batch_Id || ''
+                    }))
+                );
+                if (!batchInwardResult) throw new Error('Batch creation in destination failed');
             }
 
             for (let i = 0; i < EmployeesInvolved.length; i++) {
