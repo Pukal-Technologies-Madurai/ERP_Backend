@@ -75,7 +75,7 @@ function buildBulkSalesRows(Product_Array, productsData, flags = {}, packData = 
                 batch_alias: product?.Batch_Alias || product?.Batch_Name,
                 item_id: toNumber(product?.Item_Id),
                 godown_id: toNumber(product?.Location_Id) || 0,
-                quantity: Bill_Qty,
+                quantity: Act_Qty,
                 rate: Item_Rate
             });
         }
@@ -1246,7 +1246,7 @@ export const createSalesInvoice = async (req, res) => {
                     inserted.Bill_Qty,
                     inserted.GoDown_Id,
                     inserted.Batch_Name
-                INTO @batchDetails (DO_St_Id, Item_Id, Bill_Qty, GoDown_Id, Batch_Name)
+                INTO @batchDetails (DO_St_Id, Item_Id, Act_Qty, GoDown_Id, Batch_Name)
                 SELECT
                     @Do_Date, @Do_Id, ISNULL(p.S_No, ROW_NUMBER() OVER (ORDER BY (SELECT 1))), p.Item_Id,
                     p.Bill_Qty, p.Alt_Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
@@ -1306,7 +1306,7 @@ export const createSalesInvoice = async (req, res) => {
                     trans_date: new Date(Do_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,
-                    quantity: b.Bill_Qty,
+                    quantity: b.Act_Qty,
                     type: 'SALES',
                     reference_id: Do_Id,
                     created_by: Created_by,
@@ -2062,7 +2062,7 @@ export const updateSalesInvoice = async (req, res) => {
         const existingBatchRows = (await new sql.Request(transaction)
             .input('Do_Id', Do_Id)
             .query(`
-                SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Bill_Qty
+                SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Act_Qty
                 FROM tbl_Sales_Delivery_Stock_Info
                 WHERE Delivery_Order_Id = @Do_Id
                     AND Batch_Name IS NOT NULL
@@ -2076,7 +2076,7 @@ export const updateSalesInvoice = async (req, res) => {
                     pre_batch: row.Batch_Name,
                     pre_item_id: row.Item_Id,
                     pre_godown_id: row.GoDown_Id,
-                    pre_quantity: row.Bill_Qty,
+                    pre_quantity: row.Act_Qty,
                     pre_type: 'SALES',
                     pre_reference_id: Do_Id,
                     created_by: Altered_by
@@ -2131,7 +2131,7 @@ export const updateSalesInvoice = async (req, res) => {
                     inserted.Bill_Qty,
                     inserted.GoDown_Id,
                     inserted.Batch_Name
-                INTO @batchDetails (DO_St_Id, Item_Id, Bill_Qty, GoDown_Id, Batch_Name)
+                INTO @batchDetails (DO_St_Id, Item_Id, Act_Qty, GoDown_Id, Batch_Name)
                 SELECT
                     @Do_Date, @Do_Id, ISNULL(p.S_No, ROW_NUMBER() OVER (ORDER BY (SELECT 1))), p.Item_Id,
                     p.Bill_Qty, p.Alt_Bill_Qty, p.Act_Qty, p.Alt_Act_Qty,
@@ -2191,7 +2191,7 @@ export const updateSalesInvoice = async (req, res) => {
                     trans_date: new Date(Do_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,
-                    quantity: b.Bill_Qty,
+                    quantity: b.Act_Qty,
                     type: 'SALES',
                     reference_id: Do_Id,
                     created_by: Altered_by,

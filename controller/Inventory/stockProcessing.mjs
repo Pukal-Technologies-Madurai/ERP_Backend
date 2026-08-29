@@ -468,9 +468,7 @@ const StockManagement = () => {
 
             return success(res, 'Stock Processing created successfully');
         } catch (e) {
-            if (transaction._aborted === false) {
-                await transaction.rollback();
-            }
+            try { await transaction.rollback(); } catch(e) {}
             servError(e, res);
         }
     }
@@ -806,20 +804,68 @@ const StockManagement = () => {
             await transaction.commit();
             return success(res, 'Journal Updated Successfully');
         } catch (e) {
-            if (transaction._aborted === false) {
-                await transaction.rollback();
-            }
+            try { await transaction.rollback(); } catch(e) {}
             servError(e, res);
         }
     };
 
     const deleteStockProcessing = async (req, res) => {
+        const transaction = new sql.Transaction();
         try {
 
-            const { PR_Id } = req.body;
+            const { PR_Id, Created_By } = req.body;
             if (!checkIsNumber(PR_Id)) return invalidInput(res, 'PR_Id is required');
 
-            const request = new sql.Request()
+            await transaction.begin();
+
+            const oldRecordsQuery = await new sql.Request(transaction)
+                .input('PR_Id', PR_Id)
+                .query(`
+                    SELECT s.PRS_Id, s.Sour_Item_Id, s.Sour_Goodown_Id, s.Sour_Batch_Lot_No, s.Sour_Qty
+                    FROM tbl_Processing_Source_Details s
+                    WHERE s.PR_Id = @PR_Id AND s.Sour_Batch_Lot_No IS NOT NULL AND s.Sour_Batch_Lot_No <> '';
+
+                    SELECT d.PRD_Id, d.Dest_Item_Id, d.Dest_Goodown_Id, d.Dest_Batch_Lot_No, d.Dest_Qty, d.Dest_Rate
+                    FROM tbl_Processing_Destin_Details d
+                    WHERE d.PR_Id = @PR_Id AND d.Dest_Batch_Lot_No IS NOT NULL AND d.Dest_Batch_Lot_No <> '';
+                `);
+            
+            const oldSource = toArray(oldRecordsQuery.recordsets[0]);
+            const oldDest = toArray(oldRecordsQuery.recordsets[1]);
+
+            if (oldSource.length > 0) {
+                const reverseSource = await reverseMultipleBatch(
+                    transaction,
+                    oldSource.map(s => ({
+                        pre_batch: s.Sour_Batch_Lot_No,
+                        pre_item_id: toNumber(s.Sour_Item_Id),
+                        pre_godown_id: toNumber(s.Sour_Goodown_Id),
+                        pre_quantity: toNumber(s.Sour_Qty),
+                        pre_type: 'CONSUMPTION',
+                        pre_reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Created_By || 0)
+                    }))
+                );
+                if (!reverseSource) throw new Error('Source reversal failed');
+            }
+
+            if (oldDest.length > 0) {
+                const reverseDest = await reverseMultipleBatch(
+                    transaction,
+                    oldDest.map(d => ({
+                        pre_batch: d.Dest_Batch_Lot_No,
+                        pre_item_id: toNumber(d.Dest_Item_Id),
+                        pre_godown_id: toNumber(d.Dest_Goodown_Id),
+                        pre_quantity: toNumber(d.Dest_Qty),
+                        pre_type: 'PRODUCTION',
+                        pre_reference_id: toNumber(PR_Id),
+                        created_by: toNumber(Created_By || 0)
+                    }))
+                );
+                if (!reverseDest) throw new Error('Destination reversal failed');
+            }
+
+            const request = new sql.Request(transaction)
                 .input('PR_Id', PR_Id)
                 .query(`
                     DELETE FROM tbl_Processing_Gen_Info WHERE PR_Id = @PR_Id;
@@ -832,9 +878,12 @@ const StockManagement = () => {
 
             if (result.rowsAffected[0] === 0) throw new Error('Failed to delete');
 
+            await transaction.commit();
+
             return success(res, 'Processing Deleted!')
 
         } catch (e) {
+            try { await transaction.rollback(); } catch(err) {}
             servError(e, res);
         }
     }

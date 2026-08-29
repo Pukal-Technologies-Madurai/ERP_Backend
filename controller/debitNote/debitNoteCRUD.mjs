@@ -556,7 +556,7 @@ export const createDebitNote = async (req, res) => {
                     trans_date: new Date(DB_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,
-                    quantity: b.Bill_Qty,
+                    quantity: b.Act_Qty,
                     type: 'DEBIT_NOTE',
                     reference_id: DB_Id,
                     created_by: Created_by,
@@ -853,7 +853,7 @@ export const updateDebitNote = async (req, res) => {
         const existingBatchRows = (await new sql.Request(transaction)
             .input('DB_Id', DB_Id)
             .query(`
-                SELECT Batch_Name, Item_Id, GoDown_Id, Bill_Qty
+                SELECT Batch_Name, Item_Id, GoDown_Id, Act_Qty
                 FROM tbl_Debit_Note_Stock_Info
                 WHERE DB_Id = @DB_Id
                     AND Batch_Name IS NOT NULL
@@ -867,7 +867,7 @@ export const updateDebitNote = async (req, res) => {
                     pre_batch: row.Batch_Name,
                     pre_item_id: row.Item_Id,
                     pre_godown_id: row.GoDown_Id,
-                    pre_quantity: row.Bill_Qty,
+                    pre_quantity: row.Act_Qty,
                     pre_type: 'DEBIT_NOTE',
                     pre_reference_id: DB_Id,
                     created_by: Altered_by
@@ -960,7 +960,7 @@ export const updateDebitNote = async (req, res) => {
                     trans_date: new Date(DB_Date),
                     item_id: b.Item_Id,
                     godown_id: b.GoDown_Id,
-                    quantity: b.Bill_Qty,
+                    quantity: b.Act_Qty,
                     type: 'DEBIT_NOTE',
                     reference_id: DB_Id,
                     created_by: Altered_by,

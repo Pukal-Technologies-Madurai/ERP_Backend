@@ -90,7 +90,7 @@ function buildBulkPurchaseRows(Product_Array, productsData, { isInclusive, isNot
                 batch_alias: product?.Batch_Alias || product?.Batch_No,
                 item_id: toNumber(product?.Item_Id),
                 godown_id: toNumber(product?.Location_Id) || 0,
-                quantity: Bill_Qty,
+                quantity: Act_Qty,
                 rate: Item_Rate,
                 batch_id: product?.Batch_Id || ''
             });
@@ -683,7 +683,7 @@ const PurchaseInvoice = () => {
             const existingBatchRows = (await new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
                 .query(`
-                    SELECT POI_St_Id, Batch_No, Item_Id, Location_Id, Bill_Qty
+                    SELECT POI_St_Id, Batch_No, Item_Id, Location_Id, Act_Qty
                     FROM tbl_Purchase_Order_Inv_Stock_Info
                     WHERE PIN_Id = @PIN_Id
                         AND Batch_No IS NOT NULL
@@ -697,7 +697,7 @@ const PurchaseInvoice = () => {
                         pre_batch: row.Batch_No,
                         pre_item_id: row.Item_Id,
                         pre_godown_id: row.Location_Id,
-                        pre_quantity: row.Bill_Qty,
+                        pre_quantity: row.Act_Qty,
                         pre_type: 'PURCHASE',
                         pre_reference_id: PIN_Id,
                         created_by: Created_by

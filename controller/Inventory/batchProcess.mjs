@@ -5,14 +5,14 @@ import { insertMultipleBatch, insertMultipleBatchUsageDetails } from '../../midd
 
 // material inward
 
-const assignBatchNames = async (outstanding) => {
+const assignBatchNames = async (outstanding, transaction = null) => {
     const outstandingData = toArray(outstanding);
     if (!outstandingData.length) return outstandingData;
 
     const productIds = [...new Set(outstandingData.map(r => r.productId))];
     if (productIds.length === 0) return outstandingData;
 
-    const countReq = new sql.Request();
+    const countReq = transaction ? new sql.Request(transaction) : new sql.Request();
     const countQuery = `
         WITH ParsedBatches AS (
             SELECT 
@@ -557,11 +557,11 @@ const postBatchInProcessingCombined = async (req, res) => {
 
         if (destBatches.length > 0) {
             // Auto batch generation for temporary names if any
-            const newBatches = destBatches.filter(d => filterableText(d.batch));
+            const newBatches = destBatches.filter(d => filterableText(d.batch) && !filterableText(d.batch_alias));
             if (newBatches.length > 0) {
-                const assignedBatches = await assignBatchNames(newBatches);
+                const assignedBatches = await assignBatchNames(newBatches, transaction);
                 destBatches.forEach(d => {
-                    if (filterableText(d.batch)) {
+                    if (filterableText(d.batch) && !filterableText(d.batch_alias)) {
                         const assigned = assignedBatches.find(ab => isEqualNumber(ab.productId, d.productId) && ab.batch === d.batch);
                         if (assigned) {
                             d.batch = assigned.suggestBatchName;
@@ -1577,12 +1577,14 @@ const getBatchStockBalance = async (req, res) => {
                     sg.Godown_Name AS godownName,
                     bm.item_id,
                     p.Product_Name AS productNameGet,
+                    ISNULL(TRY_CAST(pck.Pack AS DECIMAL(18, 2)), 0) AS packValue,
                     COALESCE(bm.quantity, 0) AS totalQuantity,
                     bm.created_at,
                     COALESCE(cb.Name, 'Not found') AS createdByGet
                 FROM tbl_Batch_Master AS bm 
                 LEFT JOIN tbl_Godown_Master AS sg ON sg.Godown_Id = bm.godown_id
                 LEFT JOIN tbl_Product_Master AS p ON p.Product_Id = bm.item_id
+                LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = bm.created_by
                 WHERE bm.id IN(SELECT id FROM @batchDetails);
                 --batch transaction
@@ -1823,7 +1825,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.Do_Date AS voucherDate,
                     sdgi.Do_Inv_No AS voucherNumber,
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
-                    SUM(sdsi.Bill_Qty) AS voucherQuantity,
+                    SUM(sdsi.Act_Qty) AS voucherQuantity,
                     SUM(bt.quantity) AS batchQuantity,
                     bt.type AS transType,
                     sdgi.Created_on AS createdAt
@@ -1845,7 +1847,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.Po_Entry_Date AS voucherDate,
                     sdgi.Po_Inv_No AS voucherNumber,
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
-                    SUM(sdsi.Bill_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
+                    SUM(sdsi.Act_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
                     SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
                     'PURCHASE' AS transType,
                     sdgi.Created_on AS createdAt
@@ -1915,7 +1917,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.DB_Date AS voucherDate,
                     sdgi.DB_Inv_No AS voucherNumber,
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
-                    SUM(sdsi.Bill_Qty) AS voucherQuantity,
+                    SUM(sdsi.Act_Qty) AS voucherQuantity,
                     SUM(bt.quantity) AS batchQuantity,
                     bt.type AS transType,
                     sdgi.Created_on AS createdAt
@@ -1937,7 +1939,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.CR_Date AS voucherDate,
                     sdgi.CR_Inv_No AS voucherNumber,
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
-                    SUM(sdsi.Bill_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
+                    SUM(sdsi.Act_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
                     SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
                     'CREDIT_NOTE' AS transType,
                     sdgi.Created_on AS createdAt

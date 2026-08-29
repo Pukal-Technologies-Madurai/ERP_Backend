@@ -556,7 +556,7 @@ export const createCreditNote = async (req, res) => {
                 trans_date: new Date(CR_Date),
                 item_id: b.Item_Id,
                 godown_id: b.GoDown_Id,
-                quantity: b.Bill_Qty,
+                quantity: b.Act_Qty,
                 rate: b.Item_Rate,
                 type: 'CREDIT_NOTE',
                 reference_id: CR_Id,
@@ -852,7 +852,7 @@ export const updateCreditNote = async (req, res) => {
         const existingBatchRows = (await new sql.Request(transaction)
             .input('CR_Id', CR_Id)
             .query(`
-                SELECT Batch_Name, Item_Id, GoDown_Id, Bill_Qty
+                SELECT Batch_Name, Item_Id, GoDown_Id, Act_Qty
                 FROM tbl_Credit_Note_Stock_Info
                 WHERE CR_Id = @CR_Id
                     AND Batch_Name IS NOT NULL
@@ -867,7 +867,7 @@ export const updateCreditNote = async (req, res) => {
                     pre_batch: row.Batch_Name,
                     pre_item_id: row.Item_Id,
                     pre_godown_id: row.GoDown_Id,
-                    pre_quantity: row.Bill_Qty,
+                    pre_quantity: row.Act_Qty,
                     pre_type: 'CREDIT_NOTE',
                     pre_reference_id: CR_Id,
                     created_by: Altered_by
@@ -959,7 +959,7 @@ export const updateCreditNote = async (req, res) => {
                 trans_date: new Date(CR_Date),
                 item_id: b.Item_Id,
                 godown_id: b.GoDown_Id,
-                quantity: b.Bill_Qty,
+                quantity: b.Act_Qty,
                 rate: b.Item_Rate,
                 type: 'CREDIT_NOTE',
                 reference_id: CR_Id,

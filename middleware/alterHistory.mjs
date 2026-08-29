@@ -40,12 +40,18 @@ export const alterHistory = ({
             req.alterId = alterId;
             req.alterHistoryId = insertedId;
 
+            res.on('finish', async () => {
+                try {
+                    await transaction.rollback();
+                } catch (e) {
+                    // Ignore error if transaction is already committed/rolled back
+                }
+            });
+
             next();
 
         } catch (err) {
-            if (transaction._aborted !== true) {
-                await transaction.rollback();
-            }
+            try { await transaction.rollback(); } catch(e) {}
             next(err);
         }
     };
