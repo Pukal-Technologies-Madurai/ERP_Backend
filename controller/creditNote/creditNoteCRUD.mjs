@@ -871,7 +871,8 @@ export const updateCreditNote = async (req, res) => {
                     pre_type: 'CREDIT_NOTE',
                     pre_reference_id: CR_Id,
                     created_by: Altered_by
-                }))
+                })),
+                true
             );
             if (!batchReversalResult) throw new Error('Batch reversal failed');
         }

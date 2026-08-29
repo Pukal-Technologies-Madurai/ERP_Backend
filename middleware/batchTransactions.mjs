@@ -164,6 +164,7 @@ export const reverseBatch = async (
     pre_type = '',
     pre_reference_id,
     created_by,
+    isInwardReversal = false
 ) => {
 
     if (!transaction) {
@@ -189,6 +190,7 @@ export const reverseBatch = async (
             .input('pre_type', sql.NVarChar(30), pre_type)
             .input('pre_reference_id', sql.Int, pre_reference_id)
             .input('created_by', sql.Int, created_by)
+            .input('isInwardReversal', sql.Bit, isInwardReversal ? 1 : 0)
             .query(`
                 DECLARE @pre_ob_id INT = (
                     SELECT TOP (1) ob_id 
@@ -215,7 +217,8 @@ export const reverseBatch = async (
                         batch_id, batch, trans_date, item_id, godown_id, quantity, 
                         type, reference_id, created_at, created_by, ob_id
                     ) VALUES (
-                        @pre_batch_id, @pre_batch, @trans_date, @pre_item_id, @pre_godown_id, -@pre_quantity, 
+                        @pre_batch_id, @pre_batch, @trans_date, @pre_item_id, @pre_godown_id, 
+                        CASE WHEN @isInwardReversal = 1 THEN @pre_quantity ELSE -@pre_quantity END, 
                         @pre_type + '_REVERSAL', @pre_reference_id, GETDATE(), @created_by, @pre_ob_id
                     )
                 END
@@ -235,7 +238,7 @@ export const reverseBatch = async (
     }
 }
 
-export const reverseMultipleBatch = async (transaction, batchArray) => {
+export const reverseMultipleBatch = async (transaction, batchArray, isInwardReversal = false) => {
     try {
 
         if (batchArray.length === 0) {
@@ -251,7 +254,8 @@ export const reverseMultipleBatch = async (transaction, batchArray) => {
                 batch.pre_quantity,
                 batch.pre_type,
                 batch.pre_reference_id,
-                batch.created_by
+                batch.created_by,
+                isInwardReversal
             );
             if (!result) return false;
         }

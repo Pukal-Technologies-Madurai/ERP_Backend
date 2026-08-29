@@ -618,7 +618,8 @@ const StockManagement = () => {
                         pre_type: 'CONSUMPTION',
                         pre_reference_id: toNumber(PR_Id),
                         created_by: toNumber(Updated_By)
-                    }))
+                    })),
+                    false
                 );
                 if (!reverseSource) throw new Error('Source reversal failed');
             }
@@ -634,7 +635,8 @@ const StockManagement = () => {
                         pre_type: 'PRODUCTION',
                         pre_reference_id: toNumber(PR_Id),
                         created_by: toNumber(Updated_By)
-                    }))
+                    })),
+                    true
                 );
                 if (!reverseDest) throw new Error('Destination reversal failed');
             }
@@ -844,7 +846,8 @@ const StockManagement = () => {
                         pre_type: 'CONSUMPTION',
                         pre_reference_id: toNumber(PR_Id),
                         created_by: toNumber(Created_By || 0)
-                    }))
+                    })),
+                    false
                 );
                 if (!reverseSource) throw new Error('Source reversal failed');
             }
@@ -860,7 +863,8 @@ const StockManagement = () => {
                         pre_type: 'PRODUCTION',
                         pre_reference_id: toNumber(PR_Id),
                         created_by: toNumber(Created_By || 0)
-                    }))
+                    })),
+                    true
                 );
                 if (!reverseDest) throw new Error('Destination reversal failed');
             }

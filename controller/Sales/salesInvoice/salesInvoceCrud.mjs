@@ -2080,7 +2080,8 @@ export const updateSalesInvoice = async (req, res) => {
                     pre_type: 'SALES',
                     pre_reference_id: Do_Id,
                     created_by: Altered_by
-                }))
+                })),
+                false
             );
             if (!batchReversalResult) throw new Error('Batch reversal failed');
         }

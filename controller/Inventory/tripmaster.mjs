@@ -708,7 +708,7 @@ const tripActivities = () => {
             const existingBatchRows = (await new sql.Request(transaction)
                 .input('Trip_Id', Trip_Id)
                 .query(`
-                    SELECT ta.Batch_No, ta.Product_Id, ta.To_Location, ta.QTY
+                    SELECT ta.Batch_No, ta.Product_Id, ta.To_Location, ta.From_Location, ta.QTY
                     FROM tbl_Trip_Details AS td
                     LEFT JOIN tbl_Trip_Arrival AS ta ON ta.Arr_Id = td.Arrival_Id
                     WHERE 
@@ -718,6 +718,7 @@ const tripActivities = () => {
                 `)).recordset;
 
             if (existingBatchRows.length > 0) {
+                // Reverse inward batch at destination
                 const batchReversalResult = await reverseMultipleBatch(
                     transaction,
                     existingBatchRows.map(row => ({
@@ -728,9 +729,28 @@ const tripActivities = () => {
                         pre_type: BillType === 'MATERIAL INWARD' ? 'MATERIAL_INWARD' : 'OTHER_GODOWN',
                         pre_reference_id: Trip_Id,
                         created_by: Updated_By
-                    }))
+                    })),
+                    true
                 );
                 if (!batchReversalResult) throw new Error('Batch reversal failed');
+
+                // Reverse outward batch at source if OTHER GODOWN or MATERIAL INWARD
+                if (BillType === 'OTHER GODOWN' || BillType === 'MATERIAL INWARD') {
+                    const sourceReversalResult = await reverseMultipleBatch(
+                        transaction,
+                        existingBatchRows.map(row => ({
+                            pre_batch: row.Batch_No,
+                            pre_item_id: row.Product_Id,
+                            pre_godown_id: row.From_Location,
+                            pre_quantity: row.QTY,
+                            pre_type: BillType === 'MATERIAL INWARD' ? 'MATERIAL_INWARD' : 'OTHER_GODOWN',
+                            pre_reference_id: Trip_Id,
+                            created_by: Updated_By
+                        })),
+                        false
+                    );
+                    if (!sourceReversalResult) throw new Error('Source batch reversal failed');
+                }
             }
 
             // Clean up old records

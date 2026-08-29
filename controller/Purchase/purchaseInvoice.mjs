@@ -701,7 +701,8 @@ const PurchaseInvoice = () => {
                         pre_type: 'PURCHASE',
                         pre_reference_id: PIN_Id,
                         created_by: Created_by
-                    }))
+                    })),
+                    true
                 );
                 if (!batchReversalResult) throw new Error('Batch reversal failed');
             }

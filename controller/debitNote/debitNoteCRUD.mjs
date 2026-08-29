@@ -871,7 +871,8 @@ export const updateDebitNote = async (req, res) => {
                     pre_type: 'DEBIT_NOTE',
                     pre_reference_id: DB_Id,
                     created_by: Altered_by
-                }))
+                })),
+                false
             );
             if (!batchReversalResult) throw new Error('Batch reversal failed');
         }

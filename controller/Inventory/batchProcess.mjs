@@ -1609,9 +1609,23 @@ const getBatchStockBalance = async (req, res) => {
 
             const stockDays = toNumber(masterRow?.trans_date ? getDaysBetween(trans_date, ISOString()) : '');
 
-            const consumedQuantity = transactionRows.reduce((acc, curr) => acc + toNumber(curr.quantity), 0)
+            const inwardReversals = transactionRows.reduce((acc, curr) => {
+                if (curr.type.endsWith('_REVERSAL') && Number(curr.quantity) > 0) {
+                    return acc + Number(curr.quantity);
+                }
+                return acc;
+            }, 0);
 
-            const pendingQuantity = toNumber(masterRow?.totalQuantity) - consumedQuantity;
+            const consumedQuantity = transactionRows.reduce((acc, curr) => {
+                if (curr.type.endsWith('_REVERSAL') && Number(curr.quantity) < 0) {
+                    return acc + Number(curr.quantity);
+                } else if (!curr.type.endsWith('_REVERSAL')) {
+                    return acc + Number(curr.quantity);
+                }
+                return acc;
+            }, 0);
+
+            const pendingQuantity = (toNumber(masterRow?.totalQuantity) - inwardReversals) - consumedQuantity;
 
             return {
                 ...masterRow,
@@ -2124,8 +2138,8 @@ export const getBatchWithDetails = async (req, res) => {
                 bm.trans_date AS transDate,
                 p.Product_Name AS productName,
                 g.Godown_Name AS godownName,
-                bm.quantity AS inwardQty,
-                COALESCE(SUM(bt.quantity), 0) AS consumedQty,
+                (bm.quantity - COALESCE(SUM(CASE WHEN bt.type LIKE '%_REVERSAL' AND bt.quantity > 0 THEN bt.quantity ELSE 0 END), 0)) AS inwardQty,
+                (COALESCE(SUM(CASE WHEN bt.type NOT LIKE '%_REVERSAL' THEN bt.quantity ELSE 0 END), 0) + COALESCE(SUM(CASE WHEN bt.type LIKE '%_REVERSAL' AND bt.quantity < 0 THEN bt.quantity ELSE 0 END), 0)) AS consumedQty,
                 (bm.quantity - COALESCE(SUM(bt.quantity), 0)) AS availableQty
             FROM tbl_Batch_Master bm
             LEFT JOIN tbl_Product_Master p ON p.Product_Id = bm.item_id
