@@ -619,7 +619,7 @@ const tripActivities = () => {
                 BillType = 0,
                 Narration = '',
                 Updated_By = '',
-                TripStatus = 'New',
+                TripStatus,
                 Product_Array = [],
                 EmployeesInvolved = [],
                 concern = null
@@ -662,7 +662,7 @@ const tripActivities = () => {
                 .input('UnloadingEmpty', toNumber(UnloadingEmpty || 0))
                 .input('BillType', BillType)
                 .input('Narration', Narration)
-                .input('TripStatus', TripStatus)
+                .input('TripStatus', TripStatus || 'NOT ISSUED')
                 .input('StartTime', StartTime)
                 .input('EndTime', EndTime)
                 .input('Trip_ST_KM', toNumber(Trip_ST_KM))
@@ -1094,8 +1094,8 @@ const tripActivities = () => {
                 .query(`
                     UPDATE tbl_Trip_Master
                     SET 
-                        staffInvolvedStatus = @staffInvolvedStatus,
-                        TripStatus = @TripStatus
+                        staffInvolvedStatus = @staffInvolvedStatus
+                        -- TripStatus = @TripStatus
                     WHERE Trip_Id IN (
                         SELECT CAST(value AS INT)
                         FROM STRING_SPLIT(@tripIds, ',')
