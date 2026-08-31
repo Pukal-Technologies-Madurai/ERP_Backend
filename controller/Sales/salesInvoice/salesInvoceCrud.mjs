@@ -1226,7 +1226,7 @@ export const createSalesInvoice = async (req, res) => {
                 DECLARE @batchDetails TABLE (
                     DO_St_Id INT,
                     Item_Id BIGINT,
-                    Bill_Qty DECIMAL(18,2),
+                    Act_Qty DECIMAL(18,2),
                     GoDown_Id BIGINT,
                     Batch_Name NVARCHAR(200)
                 );
@@ -1243,7 +1243,7 @@ export const createSalesInvoice = async (req, res) => {
                 OUTPUT
                     inserted.DO_St_Id,
                     inserted.Item_Id,
-                    inserted.Bill_Qty,
+                    inserted.Act_Qty,
                     inserted.GoDown_Id,
                     inserted.Batch_Name
                 INTO @batchDetails (DO_St_Id, Item_Id, Act_Qty, GoDown_Id, Batch_Name)
@@ -2112,7 +2112,7 @@ export const updateSalesInvoice = async (req, res) => {
                 DECLARE @batchDetails TABLE (
                     DO_St_Id INT,
                     Item_Id BIGINT,
-                    Bill_Qty DECIMAL(18,2),
+                    Act_Qty DECIMAL(18,2),
                     GoDown_Id BIGINT,
                     Batch_Name NVARCHAR(200)
                 );
@@ -2129,7 +2129,7 @@ export const updateSalesInvoice = async (req, res) => {
                 OUTPUT
                     inserted.DO_St_Id,
                     inserted.Item_Id,
-                    inserted.Bill_Qty,
+                    inserted.Act_Qty,
                     inserted.GoDown_Id,
                     inserted.Batch_Name
                 INTO @batchDetails (DO_St_Id, Item_Id, Act_Qty, GoDown_Id, Batch_Name)

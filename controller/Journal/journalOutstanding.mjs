@@ -182,7 +182,7 @@ export const getSalesInvOutstanding = (JournalAutoId) => `
                 SUM(Total_Invoice_value) AS creditNoteAdjustment
             FROM tbl_Credit_Note_Gen_Info
             JOIN @filteredSalesInv AS fil ON fil.voucherNumber = TRIM(Ref_Inv_Number)
-            WHERE Cancel_status <> 0
+            WHERE Cancel_status <> 0 AND CR_Date >= @OB_Date
             GROUP BY Ref_Inv_Number
         ) cn ON cn.Ref_Inv_Number = pig.Do_Inv_No
         LEFT JOIN (
@@ -240,7 +240,7 @@ export const getSalesObOutstanding = (JournalAutoId) => `
                 SUM(Total_Invoice_value) AS creditNoteAdjustment
             FROM tbl_Credit_Note_Gen_Info
             JOIN @filteredSalesOb AS fil ON fil.voucherNumber = TRIM(Ref_Inv_Number)
-            WHERE Cancel_status <> 0
+            WHERE Cancel_status <> 0 AND CR_Date >= @OB_Date
             GROUP BY Ref_Inv_Number
         ) cn ON cn.Ref_Inv_Number = cb.bill_no
         LEFT JOIN (
@@ -358,7 +358,7 @@ export const getPurchaseInvOutstanding = (JournalAutoId) => `
                 SUM(Total_Invoice_value) AS debitNoteAdjustment
             FROM tbl_Debit_Note_Gen_Info
             JOIN @filteredPurchaseInv AS fil ON fil.voucherNumber = TRIM(Ref_Inv_Number)
-            WHERE Cancel_status <> 0
+            WHERE Cancel_status <> 0 AND DB_Date >= @OB_Date
             GROUP BY Ref_Inv_Number
         ) dn ON dn.Ref_Inv_Number = pig.Po_Inv_No
         LEFT JOIN (
@@ -416,7 +416,7 @@ export const getPurchaseObOutstanding = (JournalAutoId) => `
                 SUM(Total_Invoice_value) AS debitNoteAdjustment
             FROM tbl_Debit_Note_Gen_Info
             JOIN @filteredPurchaseOb AS fil ON fil.voucherNumber = TRIM(Ref_Inv_Number)
-            WHERE Cancel_status <> 0
+            WHERE Cancel_status <> 0 AND DB_Date >= @OB_Date
             GROUP BY Ref_Inv_Number
         ) dn ON dn.Ref_Inv_Number = cb.bill_no
         LEFT JOIN (
