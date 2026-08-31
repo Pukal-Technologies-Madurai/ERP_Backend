@@ -435,6 +435,10 @@ MastersRouter.delete('/productUnitConversion', productUnitConversion.deleteConve
 
 
 MastersRouter.post('/whatsapp/uploadPendingBillsPdf', whatsapp.postPendingBillsPdf);
+MastersRouter.post('/whatsapp/saleorderpdf', whatsapp.postsalesPdf);
+MastersRouter.post('/whatsapp/salesInvoicepdf', whatsapp.postsalesInvoicePdf);
+MastersRouter.post('/whatsapp/statementpdf', whatsapp.poststatementPdf);
 MastersRouter.delete('/whatsapp/cleanupPdf', whatsapp.whatsappDelete);
+
 
 export default MastersRouter;

@@ -695,6 +695,71 @@ const postPendingBillsPdf = async (req, res) => {
     }
 };
 
+const postsalesPdf = async (req, res) => {
+    try {
+        await uploadFile(req, res, 8, 'pdfFile');
+
+        const fileName = req?.file?.filename;
+
+        if (!fileName) {
+            return invalidInput(res, 'PDF file is required');
+        }
+
+   
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        console.log("baseUrl",baseUrl)
+        const publicUrl = `${baseUrl}/imageURL/saleorder/${fileName}`;
+        console.log("publicUrl",publicUrl)
+        success(res, 'Sale Order PDF uploaded', { url: publicUrl, fileName });
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
+const postsalesInvoicePdf = async (req, res) => {
+    try {
+        await uploadFile(req, res, 9, 'pdfFile');
+
+        const fileName = req?.file?.filename;
+
+        if (!fileName) {
+            return invalidInput(res, 'PDF file is required');
+        }
+
+   
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const publicUrl = `${baseUrl}/imageURL/saleinvoice/${fileName}`;
+
+        success(res, 'Sale invoice PDF uploaded', { url: publicUrl, fileName });
+
+    } catch (error) {
+        servError(error, res);
+    }
+};
+
+const poststatementPdf=async(req,res)=>{
+     try {
+        await uploadFile(req, res, 10, 'pdfFile');
+
+        const fileName = req?.file?.filename;
+
+        if (!fileName) {
+            return invalidInput(res, 'PDF file is required');
+        }
+
+   
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const publicUrl = `${baseUrl}/imageURL/statement/${fileName}`;
+
+        success(res, 'outstanding PDF uploaded', { url: publicUrl, fileName });
+
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
+
 
 const whatsappDelete=async(req,res)=>{
      try {
@@ -732,6 +797,9 @@ const whatsappDelete=async(req,res)=>{
         logWhatsappSend,
         getWhatsappCounts,
         postPendingBillsPdf,
+        postsalesPdf,
+        postsalesInvoicePdf,
+        poststatementPdf,
         whatsappDelete
 
     }
