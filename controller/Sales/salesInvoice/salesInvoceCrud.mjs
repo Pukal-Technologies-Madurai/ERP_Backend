@@ -2877,6 +2877,63 @@ export const salesTallySync = async (req, res) => {
     }
 }
 
+export const cancelSalesInvoice = async (req, res) => {
+    const transaction = new sql.Transaction();
+    try {
+        const { Do_Id, Altered_by } = req.body;
+
+        if(!isValidNumber(Do_Id)) return invalidInput(res);
+        
+        await transaction.begin();
+
+        const existingBatchRows = (await new sql.Request(transaction)
+            .input('Do_Id', Do_Id)
+            .query(`
+                SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Act_Qty
+                FROM tbl_Sales_Delivery_Stock_Info
+                WHERE Delivery_Order_Id = @Do_Id
+                    AND Batch_Name IS NOT NULL
+                    AND LTRIM(RTRIM(Batch_Name)) <> ''
+            `)).recordset;
+
+        if (existingBatchRows.length > 0) {
+            const batchReversalResult = await reverseMultipleBatch(
+                transaction,
+                existingBatchRows.map(row => ({
+                    pre_batch: row.Batch_Name,
+                    pre_item_id: row.Item_Id,
+                    pre_godown_id: row.GoDown_Id,
+                    pre_quantity: row.Act_Qty,
+                    pre_type: 'SALES',
+                    pre_reference_id: Do_Id,
+                    created_by: Altered_by
+                })),
+                false
+            );
+            if (!batchReversalResult) throw new Error('Batch reversal failed');
+        }
+
+        const updateStatus = await new sql.Request(transaction)
+            .input('Do_Id', Do_Id)
+            .input('Cancel_status', 0)
+            .query(`
+                UPDATE tbl_Sales_Delivery_Gen_Info 
+                SET Cancel_status = @Cancel_status 
+                WHERE Do_Id = @Do_Id
+            `);
+            
+        if (updateStatus.rowsAffected[0] === 0) {
+            throw new Error('Failed to update cancel status');
+        }
+
+        await transaction.commit();
+        success(res, 'Sales Invoice Cancelled Successfully!');
+    } catch (e) {
+        if (!transaction._aborted) await transaction.rollback();
+        servError(e, res);
+    }
+}
+
 export const updateProductDeliveryStatus = async (req, res) => {
     try {
         const { itemId, statusValue = 1 } = req.body;
