@@ -780,6 +780,28 @@ const whatsappDelete=async(req,res)=>{
 
 }
 
+
+const postpricelistPdf=async(req,res)=>{
+      try {
+        await uploadFile(req, res, 11, 'pdfFile');
+
+        const fileName = req?.file?.filename;
+
+        if (!fileName) {
+            return invalidInput(res, 'PDF file is required');
+        }
+
+   
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const publicUrl = `${baseUrl}/imageURL/pricelist/${fileName}`;
+
+        success(res, 'outstanding PDF uploaded', { url: publicUrl, fileName });
+
+    } catch (error) {
+        servError(error, res);
+    }
+}
+
     return {
                 verifyWebhook,
         receiveWebhook,
@@ -800,6 +822,7 @@ const whatsappDelete=async(req,res)=>{
         postsalesPdf,
         postsalesInvoicePdf,
         poststatementPdf,
+        postpricelistPdf,
         whatsappDelete
 
     }

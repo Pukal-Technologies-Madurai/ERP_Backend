@@ -438,6 +438,7 @@ MastersRouter.post('/whatsapp/uploadPendingBillsPdf', whatsapp.postPendingBillsP
 MastersRouter.post('/whatsapp/saleorderpdf', whatsapp.postsalesPdf);
 MastersRouter.post('/whatsapp/salesInvoicepdf', whatsapp.postsalesInvoicePdf);
 MastersRouter.post('/whatsapp/statementpdf', whatsapp.poststatementPdf);
+MastersRouter.post('/whatsapp/pricelistpdf', whatsapp.postpricelistPdf);
 MastersRouter.delete('/whatsapp/cleanupPdf', whatsapp.whatsappDelete);
 
 
