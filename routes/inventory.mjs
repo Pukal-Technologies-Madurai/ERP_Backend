@@ -42,6 +42,16 @@ inventoryRouter.put(
     }),
     tripmaster.updateTripDetails
 );
+inventoryRouter.delete(
+    '/tripSheet', 
+    alterHistory({
+        alteredTable: 'tbl_Trip_Master',
+        rowIdField: 'Trip_Id',
+        userField: 'Updated_By',
+        reason: 'Alter_Reason',
+    }),
+    tripmaster.cancelTripSheet
+);
 
 inventoryRouter.get('/tripSheet/arrivalEntry', arrivalMaster.getArrivalEntry);
 inventoryRouter.get('/tripSheet/arrivalEntry/filters', arrivalMaster.getArrivalFilters);

@@ -815,7 +815,7 @@ const StockManagement = () => {
         const transaction = new sql.Transaction();
         try {
 
-            const { PR_Id, Created_By } = req.body;
+            const { PR_Id, Altered_by } = req.body;
             if (!checkIsNumber(PR_Id)) return invalidInput(res, 'PR_Id is required');
 
             await transaction.begin();
@@ -845,7 +845,7 @@ const StockManagement = () => {
                         pre_quantity: toNumber(s.Sour_Qty),
                         pre_type: 'CONSUMPTION',
                         pre_reference_id: toNumber(PR_Id),
-                        created_by: toNumber(Created_By || 0)
+                        created_by: toNumber(Altered_by || 0)
                     })),
                     false
                 );
@@ -862,7 +862,7 @@ const StockManagement = () => {
                         pre_quantity: toNumber(d.Dest_Qty),
                         pre_type: 'PRODUCTION',
                         pre_reference_id: toNumber(PR_Id),
-                        created_by: toNumber(Created_By || 0)
+                        created_by: toNumber(Altered_by || 0)
                     })),
                     true
                 );
@@ -872,10 +872,9 @@ const StockManagement = () => {
             const request = new sql.Request(transaction)
                 .input('PR_Id', PR_Id)
                 .query(`
-                    DELETE FROM tbl_Processing_Gen_Info WHERE PR_Id = @PR_Id;
-                    DELETE FROM tbl_Processing_Source_Details WHERE PR_Id = @PR_Id;
-                    DELETE FROM tbl_Processing_Destin_Details WHERE PR_Id = @PR_Id;
-                    DELETE FROM tbl_Processing_Staff_Involved WHERE PR_Id = @PR_Id;`
+                    UPDATE tbl_Processing_Gen_Info
+                    SET PR_Status = 'Canceled' 
+                    WHERE PR_Id = @PR_Id;`
                 );
 
             const result = await request;

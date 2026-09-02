@@ -245,9 +245,9 @@ export const getSalesInvoice = async (req, res) => {
                 WHERE 
                     Do_Date BETWEEN @Fromdate AND @Todate
                     ${isValidNumber(Retailer_Id) ? ' AND Retailer_Id = @retailer ' : ''}
-                    ${isValidNumber(Cancel_status) ? ' AND Cancel_status = @cancel ' : ''}
-                    ${isValidNumber(Created_by) ? ' AND Created_by = @creater ' : ''}
-                    ${isValidNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''}
+                    ${checkIsNumber(Cancel_status) ? ' AND Cancel_status = @cancel ' : ''}
+                    ${checkIsNumber(Created_by) ? ' AND Created_by = @creater ' : ''}
+                    ${checkIsNumber(VoucherType) ? ' AND Voucher_Type = @VoucherType ' : ''}
                     ${isValidNumber(Branch_Id) ? ' AND Branch_Id = @Branch_Id ' : ''}
                     ${isValidNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
                     ${!stringCompare(Do_Inv_No, '') ? ' AND Do_Inv_No = @Do_Inv_No ' : ''}

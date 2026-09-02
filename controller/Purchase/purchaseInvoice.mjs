@@ -958,17 +958,51 @@ const PurchaseInvoice = () => {
     }
 
     const cancelPurchaseInvoice = async (req, res) => {
+        const transaction = new sql.Transaction();
+
         try {
-            const { PIN_Id } = req.query;
+            const { PIN_Id, Created_by } = req.body;
 
             if (!checkIsNumber(PIN_Id)) return invalidInput(res);
 
-            const request = new sql.Request()
+            await transaction.begin();
+
+            const request = new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
                 .query(`
                     UPDATE tbl_Purchase_Order_Inv_Gen_Info
-                    SET Cancel_status = CASE WHEN Cancel_status = 1 THEN 0 ELSE 1 END
+                    SET Cancel_status = 1
                     WHERE PIN_Id = @PIN_Id`);
+
+            // Fetch existing batch rows for reversal
+            const existingBatchRows = (await new sql.Request()
+                .input('PIN_Id', PIN_Id)
+                .query(`
+                    SELECT POI_St_Id, Batch_No, Item_Id, Location_Id, Act_Qty
+                    FROM tbl_Purchase_Order_Inv_Stock_Info
+                    WHERE PIN_Id = @PIN_Id
+                        AND Batch_No IS NOT NULL
+                        AND Batch_No <> ''
+                `)).recordset;
+
+            if (existingBatchRows.length > 0) {
+                const batchReversalResult = await reverseMultipleBatch(
+                    transaction,
+                    existingBatchRows.map(row => ({
+                        pre_batch: row.Batch_No,
+                        pre_item_id: row.Item_Id,
+                        pre_godown_id: row.Location_Id,
+                        pre_quantity: row.Act_Qty,
+                        pre_type: 'PURCHASE',
+                        pre_reference_id: PIN_Id,
+                        created_by: Created_by
+                    })),
+                    true
+                );
+                if (!batchReversalResult) throw new Error('Batch reversal failed');
+            }
+
+            await transaction.commit();
 
             const result = await request;
 
@@ -977,7 +1011,11 @@ const PurchaseInvoice = () => {
             } else {
                 failed(res);
             }
+            
         } catch (e) {
+            if (transaction._aborted === false) {
+                await transaction.rollback();
+            }
             servError(e, res);
         }
     }

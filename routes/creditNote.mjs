@@ -1,5 +1,5 @@
 import express from "express";
-import { getCreditNote, getCreditNoteById, createCreditNote, updateCreditNote, deleteCreditNote, getFilterValues } from "../controller/creditNote/creditNoteCRUD.mjs";
+import { getCreditNote, getCreditNoteById, createCreditNote, updateCreditNote, getFilterValues, cancelCreditNote } from "../controller/creditNote/creditNoteCRUD.mjs";
 import { alterHistory } from "../middleware/alterHistory.mjs";
 
 const CreditNoteRouter = express.Router();
@@ -14,6 +14,11 @@ CreditNoteRouter.put('/', alterHistory({
     userField: 'Altered_by',
     reason: 'Alter_Reason',
 }), updateCreditNote);
-CreditNoteRouter.delete('/', deleteCreditNote);
+CreditNoteRouter.delete('/', alterHistory({
+    alteredTable: 'tbl_Credit_Note_Gen_Info',
+    rowIdField: 'CR_Id',
+    userField: 'Altered_by',
+    reason: 'Alter_Reason',
+}), cancelCreditNote);
 
 export default CreditNoteRouter;

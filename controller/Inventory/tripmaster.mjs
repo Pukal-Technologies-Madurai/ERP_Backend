@@ -992,9 +992,9 @@ const tripActivities = () => {
             const result = await getTripQuery;
 
             const [
-                tripList = [], 
-                staffs = [], 
-                uniqeInvolvedStaffs = [], 
+                tripList = [],
+                staffs = [],
+                uniqeInvolvedStaffs = [],
                 costTypes = []
             ] = result.recordsets;
 
@@ -1182,6 +1182,78 @@ const tripActivities = () => {
         }
     }
 
+    const cancelTripSheet = async (req, res) => {
+        const transaction = new sql.Transaction();
+        try {
+            const { Trip_Id, BillType = 'MATERIAL INWARD', Updated_By } = req.body;
+
+            if (!isValidNumber(Trip_Id)) return invalidInput(res);
+
+            await transaction.begin();
+
+            await new sql.Request(transaction)
+                .input('Trip_Id', Trip_Id)
+                .input('TripStatus', "Canceled")
+                .query(`
+                    UPDATE tbl_Trip_Master 
+                    SET TripStatus = @TripStatus 
+                    WHERE Trip_Id = @Trip_Id
+                `);
+
+            // Fetch existing batch rows for reversal
+            if (BillType === "MATERIAL INWARD" || BillType === "OTHER GODOWN") {
+                const existingBatchRows = (await new sql.Request(transaction)
+                    .input('Trip_Id', Trip_Id)
+                    .query(`
+                        SELECT ta.Batch_No, ta.Product_Id, ta.To_Location, ta.From_Location, ta.QTY
+                        FROM tbl_Trip_Details AS td
+                        LEFT JOIN tbl_Trip_Arrival AS ta ON ta.Arr_Id = td.Arrival_Id
+                        WHERE 
+                            td.Trip_Id = @Trip_Id
+                            AND ta.Batch_No IS NOT NULL
+                            AND ta.Batch_No <> ''`
+                    )
+                ).recordset;
+
+                // Reverse inward batch at destination
+                await reverseMultipleBatch(
+                    transaction,
+                    existingBatchRows.map(row => ({
+                        pre_batch: row.Batch_No,
+                        pre_item_id: row.Product_Id,
+                        pre_godown_id: row.To_Location,
+                        pre_quantity: row.QTY,
+                        pre_type: BillType === 'MATERIAL INWARD' ? 'MATERIAL_INWARD' : 'OTHER_GODOWN',
+                        pre_reference_id: Trip_Id,
+                        created_by: Updated_By
+                    })),
+                    true
+                );
+
+                // Reverse outward batch at source
+                await reverseMultipleBatch(
+                    transaction,
+                    existingBatchRows.map(row => ({
+                        pre_batch: row.Batch_No,
+                        pre_item_id: row.Product_Id,
+                        pre_godown_id: row.From_Location,
+                        pre_quantity: row.QTY,
+                        pre_type: BillType === 'MATERIAL INWARD' ? 'MATERIAL_INWARD' : 'OTHER_GODOWN',
+                        pre_reference_id: Trip_Id,
+                        created_by: Updated_By
+                    })),
+                    false
+                );
+            }
+
+            await transaction.commit();
+            success(res, 'Trip Cancelled Successfully!');
+        } catch (e) {
+            if (!transaction._aborted) await transaction.rollback();
+            servError(e, res);
+        }
+    }
+
     return {
         getTripDetails,
         createTripDetails,
@@ -1189,7 +1261,8 @@ const tripActivities = () => {
         getTripForAssignCostCenter,
         postAssignCostCenterToTrip,
         multipleTripStaffUpdate,
-        multipleTripStaffDelete
+        multipleTripStaffDelete,
+        cancelTripSheet
     }
 }
 

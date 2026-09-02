@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { Addition, checkIsNumber, createPadString, Division, isEqualNumber, ISOString, Multiplication, RoundNumber, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
-import { invalidInput, servError, dataFound, noData, success } from '../../res.mjs';
+import { invalidInput, servError, dataFound, noData, success, failed } from '../../res.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 import { insertMultipleBatch, reverseMultipleBatch } from '../../middleware/batchTransactions.mjs';
@@ -1091,26 +1091,89 @@ export const updateCreditNote = async (req, res) => {
     }
 }
 
-export const deleteCreditNote = async (req, res) => {
+// export const deleteCreditNote = async (req, res) => {
+//     try {
+//         const { CR_Id } = req.body;
+
+//         if (!checkIsNumber(CR_Id)) {
+//             return invalidInput(res, 'CR_Id is required');
+//         }
+
+//         const request = new sql.Request()
+//             .input('CR_Id', CR_Id)
+//             .query(`
+//                 DELETE FROM tbl_Credit_Note_Stock_Info WHERE CR_Id = @CR_Id;
+//                 DELETE FROM tbl_Credit_Note_Expence_Info WHERE CR_Id = @CR_Id;
+//                 DELETE FROM tbl_Credit_Note_Staff_Info WHERE CR_Id = @CR_Id;
+//                 DELETE FROM tbl_Credit_Note_Gen_Info WHERE CR_Id = @CR_Id;
+//             `);
+
+//         await request;
+//         success(res, 'Credit Note deleted successfully!');
+//     } catch (e) {
+//         servError(e, res);
+//     }
+// }
+
+export const cancelCreditNote = async (req, res) => {
+    const transaction = new sql.Transaction();
+
     try {
-        const { CR_Id } = req.body;
+        const { CR_Id, Altered_by } = req.body;
 
-        if (!checkIsNumber(CR_Id)) {
-            return invalidInput(res, 'CR_Id is required');
-        }
+        if (!checkIsNumber(CR_Id)) return invalidInput(res);
 
-        const request = new sql.Request()
+        await transaction.begin();
+
+        const request = new sql.Request(transaction)
             .input('CR_Id', CR_Id)
             .query(`
-                DELETE FROM tbl_Credit_Note_Stock_Info WHERE CR_Id = @CR_Id;
-                DELETE FROM tbl_Credit_Note_Expence_Info WHERE CR_Id = @CR_Id;
-                DELETE FROM tbl_Credit_Note_Staff_Info WHERE CR_Id = @CR_Id;
-                DELETE FROM tbl_Credit_Note_Gen_Info WHERE CR_Id = @CR_Id;
-            `);
+                    UPDATE tbl_Credit_Note_Gen_Info
+                    SET Cancel_status = 0
+                    WHERE CR_Id = @CR_Id`);
 
-        await request;
-        success(res, 'Credit Note deleted successfully!');
+        const existingBatchRows = (await new sql.Request()
+            .input('CR_Id', CR_Id)
+            .query(`
+                SELECT Batch_Name, Item_Id, GoDown_Id, Act_Qty
+                FROM tbl_Credit_Note_Stock_Info
+                WHERE CR_Id = @CR_Id
+                    AND Batch_Name IS NOT NULL
+                    AND Batch_Name <> ''`
+            )
+        ).recordset;
+
+        if (existingBatchRows.length > 0) {
+            const batchReversalResult = await reverseMultipleBatch(
+                transaction,
+                existingBatchRows.map(row => ({
+                    pre_batch: row.Batch_Name,
+                    pre_item_id: row.Item_Id,
+                    pre_godown_id: row.GoDown_Id,
+                    pre_quantity: row.Act_Qty,
+                    pre_type: 'CREDIT_NOTE',
+                    pre_reference_id: CR_Id,
+                    created_by: Altered_by
+                })),
+                true
+            );
+            if (!batchReversalResult) throw new Error('Batch reversal failed');
+        }
+
+        await transaction.commit();
+
+        const result = await request;
+
+        if (result.rowsAffected[0] > 0) {
+            return success(res, 'Purchase invoice canceled');
+        } else {
+            failed(res);
+        }
+
     } catch (e) {
+        if (transaction._aborted === false) {
+            await transaction.rollback();
+        }
         servError(e, res);
     }
 }

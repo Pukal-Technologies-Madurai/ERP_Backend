@@ -1092,26 +1092,89 @@ export const updateDebitNote = async (req, res) => {
     }
 }
 
-export const deleteDebitNote = async (req, res) => {
-    try {
-        const { DB_Id } = req.body;
+// export const deleteDebitNote = async (req, res) => {
+//     try {
+//         const { DB_Id } = req.body;
 
-        if (!checkIsNumber(DB_Id)) {
-            return invalidInput(res, 'DB_Id is required');
-        }
+//         if (!checkIsNumber(DB_Id)) {
+//             return invalidInput(res, 'DB_Id is required');
+//         }
+
+//         const request = new sql.Request()
+//             .input('DB_Id', DB_Id)
+//             .query(`
+//                 DELETE FROM tbl_Debit_Note_Stock_Info WHERE DB_Id = @DB_Id;
+//                 DELETE FROM tbl_Debit_Note_Expence_Info WHERE DB_Id = @DB_Id;
+//                 DELETE FROM tbl_Debit_Note_Staff_Info WHERE DB_Id = @DB_Id;
+//                 DELETE FROM tbl_Debit_Note_Gen_Info WHERE DB_Id = @DB_Id;
+//             `);
+
+//         await request;
+//         success(res, 'Debit Note deleted successfully!');
+//     } catch (e) {
+//         servError(e, res);
+//     }
+// }
+
+export const cancelDebitNote = async (req, res) => {
+    const transaction = new sql.Transaction();
+
+    try {
+        const { DB_Id, Altered_by } = req.body;
+
+        if (!checkIsNumber(DB_Id)) return invalidInput(res);
+
+        await transaction.begin();
 
         const request = new sql.Request()
             .input('DB_Id', DB_Id)
             .query(`
-                DELETE FROM tbl_Debit_Note_Stock_Info WHERE DB_Id = @DB_Id;
-                DELETE FROM tbl_Debit_Note_Expence_Info WHERE DB_Id = @DB_Id;
-                DELETE FROM tbl_Debit_Note_Staff_Info WHERE DB_Id = @DB_Id;
-                DELETE FROM tbl_Debit_Note_Gen_Info WHERE DB_Id = @DB_Id;
-            `);
+                    UPDATE tbl_Debit_Note_Gen_Info
+                    SET Cancel_status = 0
+                    WHERE DB_Id = @DB_Id`);
 
-        await request;
-        success(res, 'Debit Note deleted successfully!');
+        // Fetch existing batch rows for reversal
+        const existingBatchRows = (await new sql.Request()
+            .input('DB_Id', DB_Id)
+            .query(`
+                SELECT Batch_Name, Item_Id, GoDown_Id, Act_Qty
+                FROM tbl_Debit_Note_Stock_Info
+                WHERE DB_Id = @DB_Id
+                    AND Batch_Name IS NOT NULL
+                    AND Batch_Name <> ''`
+            )).recordset;
+
+        if (existingBatchRows.length > 0) {
+            const batchReversalResult = await reverseMultipleBatch(
+                transaction,
+                existingBatchRows.map(row => ({
+                    pre_batch: row.Batch_Name,
+                    pre_item_id: row.Item_Id,
+                    pre_godown_id: row.GoDown_Id,
+                    pre_quantity: row.Act_Qty,
+                    pre_type: 'DEBIT_NOTE',
+                    pre_reference_id: DB_Id,
+                    created_by: Altered_by
+                })),
+                false
+            );
+            if (!batchReversalResult) throw new Error('Batch reversal failed');
+        }
+
+        await transaction.commit();
+
+        const result = await request;
+
+        if (result.rowsAffected[0] > 0) {
+            return success(res, 'Purchase invoice canceled');
+        } else {
+            failed(res);
+        }
+
     } catch (e) {
+        if (transaction._aborted === false) {
+            await transaction.rollback();
+        }
         servError(e, res);
     }
 }

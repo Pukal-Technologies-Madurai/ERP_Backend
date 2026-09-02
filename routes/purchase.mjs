@@ -19,7 +19,15 @@ PurchaseRoute.put(
     }),
     purchaseInvoice.editPurchaseInvoice,
 );
-PurchaseRoute.delete('/purchaseOrder', purchaseInvoice.cancelPurchaseInvoice);
+PurchaseRoute.delete(
+    '/purchaseOrder',
+    alterHistory({
+        alteredTable: 'tbl_Purchase_Order_Inv_Gen_Info',
+        rowIdField: 'PIN_Id',
+        userField: 'Created_by',
+        reason: 'Alter_Reason',
+    }), 
+    purchaseInvoice.cancelPurchaseInvoice);
 
 
 PurchaseRoute.get('/purchaseOrder/involvedStaffs', purchaseInvoice.getInvolvedStaffs);
