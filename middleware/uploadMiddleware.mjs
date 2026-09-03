@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const uploadFile = (req, res, uploadLocation, key) => {
-    const folders = ['products', 'retailers', 'attendance', 'visitLogs', 'forumDocuments','whatsappMedia','LRReport','pendingbills','saleorder','saleinvoice','statement'];
+    const folders = ['products', 'retailers', 'attendance', 'visitLogs', 'forumDocuments','whatsappMedia','LRReport','pendingbills','saleorder','saleinvoice','statement','pricelist'];
     const uploadDir = path.join(__dirname, '..', 'uploads', String(folders[Number(uploadLocation)]));
 
     const ensureUploadDirExists = (dir) => {

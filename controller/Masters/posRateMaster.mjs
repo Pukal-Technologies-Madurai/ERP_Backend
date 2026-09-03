@@ -1526,7 +1526,7 @@ const getPosRateMasterForWhatsapp = async (req, res) => {
                 pb.POS_Brand_Name, 
                 pm.Product_Name, 
                 pm.Short_Name, 
-                pm.isActive AS Is_Active_Decative,
+                rm.Is_Active_Decative AS Is_Active_Decative,
                 slo.Item_Name_Modified,
                 rm.Brand_Level,
                 rm.Item_Level
@@ -1571,6 +1571,7 @@ const getPosRateMasterForWhatsapp = async (req, res) => {
             message: "Data fetched successfully",
             data: {
                 posRateMaster: posRateResult.recordset,
+                posActiveDetails:posRateResult.recordset.filter(record => record.Is_Active_Decative === 1),
                 latestRateGen: latestRateGen,
                 metadata: {
                     fromDate: latestDate,
