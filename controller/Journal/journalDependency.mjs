@@ -252,7 +252,6 @@ const getVoucherInfo = async (req, res) => {
     try {
         const VoucherNo = req.query?.VoucherNo;
         if (!VoucherNo) return invalidInput(res, 'VoucherNo is required');
-        console.log(VoucherNo)
 
         const request = new sql.Request()
             .input('rawText', sql.NVarChar(100), filterableText(VoucherNo));

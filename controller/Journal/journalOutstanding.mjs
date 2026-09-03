@@ -523,7 +523,7 @@ SELECT * FROM (
         FROM tbl_Receipt_Bill_Info rbi
         JOIN tbl_Receipt_General_Info rgi ON rgi.receipt_id = rbi.receipt_id
         JOIN @filteredJournal fil ON fil.voucherId = rbi.bill_id AND fil.voucherNumber = rbi.bill_name AND fil.DrCr = 'Dr'
-        WHERE rgi.status <> 0
+        WHERE rgi.status <> 0 AND rbi.DR_CR_Acc_Id = @Acc_Id
         GROUP BY rbi.bill_id, rbi.bill_name
     ) rp ON rp.bill_id = jgi.JournalId AND rp.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Dr'
     LEFT JOIN (
@@ -534,7 +534,7 @@ SELECT * FROM (
         FROM tbl_Payment_Bill_Info pb
         JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
         JOIN @filteredJournal fil ON fil.voucherId = pb.pay_bill_id AND fil.voucherNumber = pb.bill_name AND fil.DrCr = 'Cr'
-        WHERE pgi.status <> 0
+        WHERE pgi.status <> 0 AND pb.DR_CR_Acc_Id = @Acc_Id
         GROUP BY pb.pay_bill_id, pb.bill_name
     ) pb ON pb.pay_bill_id = jgi.JournalId AND pb.bill_name = jgi.JournalVoucherNo AND jei.DrCr = 'Cr'
     LEFT JOIN (
