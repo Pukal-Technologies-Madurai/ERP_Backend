@@ -1137,41 +1137,94 @@ const user = () => {
         }
     }
 
-    const changePassword = async (req, res) => {
-        const { oldPassword, newPassword, userId } = req.body;
 
-        if (!oldPassword || !newPassword || !checkIsNumber(userId)) {
-            return invalidInput(res, 'oldPassword, newPassword, userId are required');
-        }
-
-        try {
-            const checkPassword = `SELECT Password, UserName FROM tbl_Users WHERE UserId = @userId`;
-            const request = new sql.Request().input('userId', userId);
-            const result = await request.query(checkPassword);
-
-            if (result.recordset[0] && result.recordset[0].Password === decryptPasswordFun(oldPassword)) {
-                const UserName = result.recordset[0].UserName;
-                const changePassword = new sql.Request();
-
-                changePassword.input('Mode', 2);
-                changePassword.input('UserName', UserName)
-                changePassword.input('password', decryptPasswordFun(newPassword));
-
-                const changePasswordResult = await changePassword.execute('Change_Paswword_SP');
-
-                if (changePasswordResult.rowsAffected && changePasswordResult.rowsAffected[0] > 0) {
-                    success(res, 'Password Updated')
-                } else {
-                    failed(res, 'Failed To Change Password')
-                }
-
-            } else {
-                failed(res, 'Current password does not match');
-            }
-        } catch (e) {
-            servError(e, res);
-        }
+const changePassword = async (req, res) => {
+    const { oldPassword, newPassword, userId } = req.body;
+  
+    if (!oldPassword || !newPassword || !checkIsNumber(userId)) {
+        return invalidInput(res, 'oldPassword, newPassword, userId are required');
     }
+ 
+    if (newPassword.length < 6) {
+        return invalidInput(res, 'Password must be at least 6 characters');
+    }
+ 
+    const transaction = new sql.Transaction();
+ 
+    try {
+       
+        const checkPasswordQuery = `
+            SELECT Password, UserName 
+            FROM [${DB_Name}].[dbo].[tbl_Users] 
+            WHERE UserId = @userId
+        `;
+        
+        const checkRequest = new sql.Request();
+        checkRequest.input('userId', sql.Int, parseInt(userId));
+        
+        const result = await checkRequest.query(checkPasswordQuery);
+   
+ 
+        if (!result.recordset || result.recordset.length === 0) {
+            return failed(res, 'User not found');
+        }
+ 
+        const { Password: storedPassword, UserName } = result.recordset[0];
+ 
+        if (storedPassword !== oldPassword) {
+            return failed(res, 'Current password does not match');
+        }
+ 
+  
+        const encryptedNewPassword = encryptPasswordFun(newPassword);
+        await transaction.begin();
+    
+        const erpUpdateQuery = `
+            UPDATE [${DB_Name}].[dbo].[tbl_Users] 
+            SET Password = @Password 
+            WHERE UserId = @UserId
+        `;
+ 
+        const erpUpdateRequest = new sql.Request(transaction);
+        erpUpdateRequest.input('UserId', sql.Int, parseInt(userId));
+        erpUpdateRequest.input('Password', sql.VarChar(255), newPassword);
+ 
+        const erpUpdateResult = await erpUpdateRequest.query(erpUpdateQuery);
+     
+        if (erpUpdateResult.rowsAffected[0] === 0) {
+            throw new Error('ERP database password update failed');
+        }
+ 
+
+        const portalUpdateQuery = `
+            UPDATE [${userPortalDB}].[dbo].[tbl_Users] 
+            SET Password = @Password 
+            WHERE UserName = @UserName
+        `;
+ 
+        const portalUpdateRequest = new sql.Request(transaction);
+        portalUpdateRequest.input('UserName', sql.VarChar(50), UserName);
+        portalUpdateRequest.input('Password', sql.VarChar(255), newPassword);
+ 
+        const portalUpdateResult = await portalUpdateRequest.query(portalUpdateQuery);
+  
+ 
+        if (portalUpdateResult.rowsAffected[0] === 0) {
+            throw new Error('User portal database password update failed');
+        }
+ 
+      
+        await transaction.commit();
+    
+        return success(res, 'Password Updated Successfully in both databases');
+ 
+    } catch (e) {
+        await transaction.rollback();
+        console.error(' Transaction rolled back - Error:', e.message);
+        servError(e, res);
+    }
+};
+ 
 
     const createUserForCostcenter = async (req, res) => {
         const { UserId, Cost_Center_Id, Emp_Id } = req.body;
