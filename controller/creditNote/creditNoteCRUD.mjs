@@ -1125,12 +1125,14 @@ export const cancelCreditNote = async (req, res) => {
 
         await transaction.begin();
 
-        const request = new sql.Request(transaction)
+        const result = await new sql.Request(transaction)
             .input('CR_Id', CR_Id)
             .query(`
-                    UPDATE tbl_Credit_Note_Gen_Info
-                    SET Cancel_status = 0
-                    WHERE CR_Id = @CR_Id`);
+                UPDATE tbl_Credit_Note_Gen_Info
+                SET Cancel_status = 0
+                WHERE CR_Id = @CR_Id`);
+
+        if (result.rowsAffected[0] === 0) throw new Error('Failed to cancel credit note');
 
         const existingBatchRows = (await new sql.Request()
             .input('CR_Id', CR_Id)
@@ -1162,13 +1164,7 @@ export const cancelCreditNote = async (req, res) => {
 
         await transaction.commit();
 
-        const result = await request;
-
-        if (result.rowsAffected[0] > 0) {
-            return success(res, 'Purchase invoice canceled');
-        } else {
-            failed(res);
-        }
+        return success(res, 'Purchase invoice canceled');
 
     } catch (e) {
         if (transaction._aborted === false) {

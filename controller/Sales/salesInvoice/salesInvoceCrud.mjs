@@ -2882,11 +2882,22 @@ export const cancelSalesInvoice = async (req, res) => {
     try {
         const { Do_Id, Altered_by } = req.body;
 
-        if(!isValidNumber(Do_Id)) return invalidInput(res);
-        
+        if (!isValidNumber(Do_Id)) return invalidInput(res);
+
         await transaction.begin();
 
-        const existingBatchRows = (await new sql.Request(transaction)
+        const result = await new sql.Request(transaction)
+            .input('Do_Id', Do_Id)
+            .input('Cancel_status', 0)
+            .query(`
+                UPDATE tbl_Sales_Delivery_Gen_Info 
+                SET Cancel_status = @Cancel_status 
+                WHERE Do_Id = @Do_Id
+            `);
+
+        if (result.rowsAffected[0] === 0) throw new Error('Failed to cancel sales invoice');
+
+        const existingBatchRows = (await new sql.Request()
             .input('Do_Id', Do_Id)
             .query(`
                 SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Act_Qty
@@ -2911,19 +2922,6 @@ export const cancelSalesInvoice = async (req, res) => {
                 false
             );
             if (!batchReversalResult) throw new Error('Batch reversal failed');
-        }
-
-        const updateStatus = await new sql.Request(transaction)
-            .input('Do_Id', Do_Id)
-            .input('Cancel_status', 0)
-            .query(`
-                UPDATE tbl_Sales_Delivery_Gen_Info 
-                SET Cancel_status = @Cancel_status 
-                WHERE Do_Id = @Do_Id
-            `);
-            
-        if (updateStatus.rowsAffected[0] === 0) {
-            throw new Error('Failed to update cancel status');
         }
 
         await transaction.commit();

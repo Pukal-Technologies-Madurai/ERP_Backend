@@ -468,7 +468,7 @@ const StockManagement = () => {
 
             return success(res, 'Stock Processing created successfully');
         } catch (e) {
-            try { await transaction.rollback(); } catch(e) {}
+            try { await transaction.rollback(); } catch (e) { }
             servError(e, res);
         }
     }
@@ -603,7 +603,7 @@ const StockManagement = () => {
                     FROM tbl_Processing_Destin_Details d
                     WHERE d.PR_Id = @PR_Id AND d.Dest_Batch_Lot_No IS NOT NULL AND d.Dest_Batch_Lot_No <> '';
                 `);
-            
+
             const oldSource = toArray(oldRecordsQuery.recordsets[0]);
             const oldDest = toArray(oldRecordsQuery.recordsets[1]);
 
@@ -806,7 +806,7 @@ const StockManagement = () => {
             await transaction.commit();
             return success(res, 'Journal Updated Successfully');
         } catch (e) {
-            try { await transaction.rollback(); } catch(e) {}
+            try { await transaction.rollback(); } catch (e) { }
             servError(e, res);
         }
     };
@@ -820,7 +820,17 @@ const StockManagement = () => {
 
             await transaction.begin();
 
-            const oldRecordsQuery = await new sql.Request(transaction)
+            const result = await new sql.Request(transaction)
+                .input('PR_Id', PR_Id)
+                .query(`
+                    UPDATE tbl_Processing_Gen_Info
+                    SET PR_Status = 'Canceled' 
+                    WHERE PR_Id = @PR_Id;`
+                );
+
+            if (result.rowsAffected[0] === 0) throw new Error('Failed to cancel processing');
+
+            const oldRecordsQuery = await new sql.Request()
                 .input('PR_Id', PR_Id)
                 .query(`
                     SELECT s.PRS_Id, s.Sour_Item_Id, s.Sour_Goodown_Id, s.Sour_Batch_Lot_No, s.Sour_Qty
@@ -831,7 +841,7 @@ const StockManagement = () => {
                     FROM tbl_Processing_Destin_Details d
                     WHERE d.PR_Id = @PR_Id AND d.Dest_Batch_Lot_No IS NOT NULL AND d.Dest_Batch_Lot_No <> '';
                 `);
-            
+
             const oldSource = toArray(oldRecordsQuery.recordsets[0]);
             const oldDest = toArray(oldRecordsQuery.recordsets[1]);
 
@@ -869,24 +879,12 @@ const StockManagement = () => {
                 if (!reverseDest) throw new Error('Destination reversal failed');
             }
 
-            const request = new sql.Request(transaction)
-                .input('PR_Id', PR_Id)
-                .query(`
-                    UPDATE tbl_Processing_Gen_Info
-                    SET PR_Status = 'Canceled' 
-                    WHERE PR_Id = @PR_Id;`
-                );
-
-            const result = await request;
-
-            if (result.rowsAffected[0] === 0) throw new Error('Failed to delete');
-
             await transaction.commit();
 
             return success(res, 'Processing Deleted!')
 
         } catch (e) {
-            try { await transaction.rollback(); } catch(err) {}
+            try { await transaction.rollback(); } catch (err) { }
             servError(e, res);
         }
     }

@@ -1126,12 +1126,14 @@ export const cancelDebitNote = async (req, res) => {
 
         await transaction.begin();
 
-        const request = new sql.Request()
+        const result = await new sql.Request(transaction)
             .input('DB_Id', DB_Id)
             .query(`
                     UPDATE tbl_Debit_Note_Gen_Info
                     SET Cancel_status = 0
                     WHERE DB_Id = @DB_Id`);
+
+        if (result.rowsAffected[0] === 0) throw new Error('Failed to cancel debit note');
 
         // Fetch existing batch rows for reversal
         const existingBatchRows = (await new sql.Request()
@@ -1163,13 +1165,7 @@ export const cancelDebitNote = async (req, res) => {
 
         await transaction.commit();
 
-        const result = await request;
-
-        if (result.rowsAffected[0] > 0) {
-            return success(res, 'Purchase invoice canceled');
-        } else {
-            failed(res);
-        }
+        return success(res, 'Purchase invoice canceled');
 
     } catch (e) {
         if (transaction._aborted === false) {

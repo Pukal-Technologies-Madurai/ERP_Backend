@@ -967,12 +967,14 @@ const PurchaseInvoice = () => {
 
             await transaction.begin();
 
-            const request = new sql.Request(transaction)
+            const result = await new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
                 .query(`
                     UPDATE tbl_Purchase_Order_Inv_Gen_Info
                     SET Cancel_status = 1
                     WHERE PIN_Id = @PIN_Id`);
+
+            if (result.rowsAffected[0] === 0) throw new Error('Failed to cancel purchase invoice');
 
             // Fetch existing batch rows for reversal
             const existingBatchRows = (await new sql.Request()
@@ -1003,14 +1005,7 @@ const PurchaseInvoice = () => {
             }
 
             await transaction.commit();
-
-            const result = await request;
-
-            if (result.rowsAffected[0] > 0) {
-                return success(res, 'Purchase invoice canceled');
-            } else {
-                failed(res);
-            }
+            return success(res, 'Purchase invoice canceled');
             
         } catch (e) {
             if (transaction._aborted === false) {

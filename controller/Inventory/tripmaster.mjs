@@ -1191,7 +1191,7 @@ const tripActivities = () => {
 
             await transaction.begin();
 
-            await new sql.Request(transaction)
+            const result = await new sql.Request(transaction)
                 .input('Trip_Id', Trip_Id)
                 .input('TripStatus', "Canceled")
                 .query(`
@@ -1199,6 +1199,8 @@ const tripActivities = () => {
                     SET TripStatus = @TripStatus 
                     WHERE Trip_Id = @Trip_Id
                 `);
+
+            if (result.rowsAffected[0] === 0) throw new Error('Failed to cancel Trip');
 
             // Fetch existing batch rows for reversal
             if (BillType === "MATERIAL INWARD" || BillType === "OTHER GODOWN") {

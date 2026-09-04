@@ -1018,21 +1018,21 @@ LEFT JOIN
     
     const getLastSyncedTime = async (req, res) => {
         try {
-            const request = new sql.Request(req.db)
-                .query(`
-                    SELECT Last_Sync_Date_Time FROM tbl_Sync_Time;
-                    SELECT MAX(created_On) AS lastSalesSync 
-                    FROM sales_inv_geninfo_ob;
-                `);
+            // const request = new sql.Request(req.db)
+            //     .query(`
+            //         SELECT Last_Sync_Date_Time FROM tbl_Sync_Time;
+            //         SELECT MAX(created_On) AS lastSalesSync 
+            //         FROM sales_inv_geninfo_ob;
+            //     `);
 
-            const result = await request;
+            // const result = await request;
 
-            const timeResponse = [{
-                Last_Sync_Date_Time: result.recordsets[0][0]?.Last_Sync_Date_Time,
-                lastSalesSync: result.recordsets[1][0]?.lastSalesSync
-            }]
+            // const timeResponse = [{
+            //     Last_Sync_Date_Time: result.recordsets[0][0]?.Last_Sync_Date_Time,
+            //     lastSalesSync: result.recordsets[1][0]?.lastSalesSync
+            // }]
 
-            sentData(res, timeResponse)
+            sentData(res, [])
         } catch (e) {
             servError(e, res);
         }
