@@ -1,4 +1,6 @@
 import sql from 'mssql';
+
+import * as overall from './journalOverallOutstanding.mjs';
 import { dataFound, invalidInput, sentData, servError } from '../../res.mjs';
 import { checkIsNumber, filterableText, isEqualNumber, ISOString, toArray, toNumber } from '../../helper_functions.mjs';
 
@@ -59,6 +61,103 @@ const getFilterValues = async (req, res) => {
             credit_accounts: toArray(result.recordsets[2]),
             created_by: toArray(result.recordsets[3])
         });
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+
+const getOverallPartyOutstandings = async (req, res) => {
+    try {
+        const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+        const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+
+        const request = new sql.Request()
+            .input('Fromdate', sql.Date, Fromdate)
+            .input('Todate', sql.Date, Todate)
+            .query(`
+                DECLARE @OB_Date DATE = (SELECT MAX(OB_Date) FROM tbl_OB_Date);
+                -- invoice returns
+                ${overall.purchaseReturnQuery}
+                ${overall.salesReturnQuery}
+                -- voucher filters
+                ${overall.salesInvFilterQuery}
+                ${overall.salesObFilterQuery}
+                ${overall.receiptFilterQuery}
+                ${overall.purchaseInvFilterQuery}
+                ${overall.purchaseObFilterQuery}
+                ${overall.paymentFilterQuery}
+                ${overall.journalFilterQuery}
+                ${overall.creditNoteFilterQuery}
+                ${overall.debitNoteFilterQuery}
+                -- sales outstandings (DR)
+                ${overall.getSalesInvOutstanding()}
+                UNION ALL
+                -- opening balance (DR)
+                ${overall.getSalesObOutstanding()}
+                UNION ALL
+                -- receipt outstandings (CR)
+                ${overall.getReceiptOutstanding()}
+                UNION ALL
+                -- purchase outstandings (CR)
+                ${overall.getPurchaseInvOutstanding()}
+                UNION ALL
+                -- opening balance (CR)
+                ${overall.getPurchaseObOutstanding()}
+                UNION ALL
+                -- payment outstandings (Dr)
+                ${overall.getPaymentOutstanding()}
+                UNION ALL
+                -- journal outstandings (Dr and Cr)
+                ${overall.getJournalOutstanding()}
+                UNION ALL
+                -- credit note outstandings (Cr)
+                ${overall.getCreditNoteOutstanding()}
+                UNION ALL
+                -- debit note outstandings (Dr)
+                ${overall.getDebitNoteOutstanding()}
+            `);
+
+        const accountsRequest = await new sql.Request().query('SELECT Acc_Id, Account_name FROM tbl_Account_Master');
+        const accountMap = {};
+        accountsRequest.recordset.forEach(acc => accountMap[acc.Acc_Id] = acc.Account_name);
+
+        const result = await request;
+
+        const grouped = {};
+        for (const row of result.recordset) {
+            const accId = row.Acc_Id;
+            if (!grouped[accId]) {
+                grouped[accId] = {
+                    Acc_Id: accId,
+                    Account_name: accountMap[accId] || 'Unknown',
+                    totalDebit: 0,
+                    totalCredit: 0,
+                    overallBalance: 0,
+                    balanceSide: ''
+                };
+            }
+            const bal = Number(row.BalanceAmount) || 0;
+            if (row.accountSide === 'Dr') {
+                grouped[accId].totalDebit += bal;
+            } else {
+                grouped[accId].totalCredit += bal;
+            }
+        }
+
+        const outstandings = Object.values(grouped).map(party => {
+            const dr = party.totalDebit;
+            const cr = party.totalCredit;
+            const diff = dr - cr;
+            party.overallBalance = Math.abs(diff);
+            party.balanceSide = diff >= 0 ? 'Dr' : 'Cr';
+            return party;
+        });
+
+        const nonZero = outstandings.filter(p => p.overallBalance !== 0).sort((a, b) => a.Account_name.localeCompare(b.Account_name));
+
+        sentData(res, nonZero);
+
     } catch (e) {
         servError(e, res);
     }
@@ -535,6 +634,7 @@ const getVoucherInfo = async (req, res) => {
 }
 
 export default {
+    getOverallPartyOutstandings,
     getFilterValues,
     getAccountPendingReference,
     getJournalAccounts,

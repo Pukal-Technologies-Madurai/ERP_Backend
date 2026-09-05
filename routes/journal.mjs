@@ -25,5 +25,6 @@ JournalRouter.get('/groupOutstandings', journalDependency.groupOutstandings);
 JournalRouter.get('/partyOutstanding', journalDependency.partyOutstanding);
 JournalRouter.get('/accountTransaction', journalDependency.accountTransaction);
 JournalRouter.get('/voucherInfo', journalDependency.getVoucherInfo);
+JournalRouter.get('/overallPartyOutstandings', journalDependency.getOverallPartyOutstandings);
 
 export default JournalRouter;
