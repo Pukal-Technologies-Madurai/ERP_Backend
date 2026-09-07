@@ -6,7 +6,7 @@ import cors from 'cors';
 import indexRouter from './routes/index.mjs';
 import morgan from 'morgan';
 import fs from 'fs';
-import { connectDB } from './config/dbconfig.mjs';
+import { connectDB,connectDB2 } from './config/dbconfig.mjs';
 import dotenv from 'dotenv';
 import { listRoutes } from './middleware/apiList.mjs';
 import { failed } from './res.mjs';
@@ -50,7 +50,7 @@ const logStream = fs.createWriteStream(path.join(__dirname, 'logs', 'access.log'
 app.use(morgan('dev', { stream: logStream }));
 
 connectDB();
-
+connectDB2()
 app.use('/api', idempotencyValidator, indexRouter);
 
 app.use('/api', (req, res) => {
