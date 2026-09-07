@@ -141,7 +141,7 @@ export const debitNoteFilterQuery = `
         AND COALESCE(dngi.Ref_Inv_Number, '') = '';
 `;
 
-export const getSalesInvOutstanding = (JournalAutoId) => `
+export const getSalesInvOutstanding = `
     SELECT * FROM (
         SELECT 
             pig.Do_Id                  AS voucherId,
@@ -195,13 +195,12 @@ export const getSalesInvOutstanding = (JournalAutoId) => `
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Cr'
                 AND jr.RefType = 'SALES'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = pig.Do_Id AND jr.RefNo = pig.Do_Inv_No AND jr.Acc_Id = a.Acc_Id
     ) S WHERE S.totalValue > S.againstAmount + S.journalAdjustment
 `;
 
-export const getSalesObOutstanding = (JournalAutoId) => `
+export const getSalesObOutstanding = `
     SELECT * FROM (
         SELECT 
             cb.OB_Id		  AS voucherId, 
@@ -253,13 +252,12 @@ export const getSalesObOutstanding = (JournalAutoId) => `
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Cr'
                 AND jr.RefType = 'SALES-OB'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = cb.OB_Id AND jr.RefNo = cb.bill_no AND jr.Acc_Id = cb.Retailer_id
     ) S WHERE S.totalValue > S.againstAmount + S.journalAdjustment
 `;
 
-export const getReceiptOutstanding = (JournalAutoId) => `
+export const getReceiptOutstanding = `
     SELECT * FROM (
         SELECT 
             rgi.receipt_id            AS voucherId,
@@ -311,13 +309,12 @@ export const getReceiptOutstanding = (JournalAutoId) => `
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Dr'
                 AND jr.RefType = 'RECEIPT'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = rgi.receipt_id AND jr.RefNo = rgi.receipt_invoice_no AND jr.Acc_Id = rgi.credit_ledger
     ) R WHERE R.totalValue > R.againstAmount + R.journalAdjustment
 `;
 
-export const getPurchaseInvOutstanding = (JournalAutoId) => `
+export const getPurchaseInvOutstanding = `
     SELECT * FROM (
         SELECT 
             pig.PIN_Id               AS voucherId,
@@ -371,13 +368,12 @@ export const getPurchaseInvOutstanding = (JournalAutoId) => `
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Dr'
                 AND jr.RefType = 'PURCHASE'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = pig.PIN_Id AND jr.RefNo = pig.Po_Inv_No AND jr.Acc_Id = a.Acc_Id
     ) P WHERE P.totalValue > P.againstAmount + P.journalAdjustment
 `;
 
-export const getPurchaseObOutstanding = (JournalAutoId) => `
+export const getPurchaseObOutstanding = `
     SELECT * FROM (
         SELECT 
             cb.OB_Id		AS voucherId, 
@@ -429,13 +425,12 @@ export const getPurchaseObOutstanding = (JournalAutoId) => `
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Dr'
                 AND jr.RefType = 'PURCHASE-OB'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = cb.OB_Id AND jr.RefNo = cb.bill_no AND jr.Acc_Id = cb.Retailer_id
     ) P WHERE P.totalValue > P.againstAmount + P.journalAdjustment
 `;
 
-export const getPaymentOutstanding = (JournalAutoId) => `
+export const getPaymentOutstanding = `
     SELECT * FROM (
         SELECT 
             pgi.pay_id               AS voucherId,
@@ -486,13 +481,12 @@ export const getPaymentOutstanding = (JournalAutoId) => `
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Cr'
                 AND jr.RefType = 'PAYMENT'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = pgi.pay_id AND jr.RefNo = pgi.payment_invoice_no AND jr.Acc_Id = pgi.debit_ledger
     ) PMT WHERE PMT.totalValue > PMT.againstAmount + PMT.journalAdjustment
 `;
 
-export const getJournalOutstanding = (JournalAutoId) => `
+export const getJournalOutstanding = `
 SELECT * FROM (
     SELECT 
         jgi.JournalId			 AS voucherId,
@@ -551,7 +545,6 @@ SELECT * FROM (
             AND jr.RefType = 'JOURNAL'
             /* we must match where the offset reverses the original DrCr */
             AND fil.DrCr = CASE WHEN je.DrCr = 'Dr' THEN 'Cr' ELSE 'Dr' END
-            ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
         GROUP BY jr.RefId, jr.RefNo, je.DrCr, je.Acc_Id
     ) jr1 ON 
         jr1.RefId = jgi.JournalId AND 
@@ -566,13 +559,12 @@ SELECT * FROM (
             jbr.DrCr,
             SUM(jbr.Amount) AS Amount
         FROM dbo.tbl_Journal_Bill_Reference jbr
-        WHERE 1=1 ${JournalAutoId ? " AND jbr.JournalAutoId <> @JournalAutoId " : ""}
         GROUP BY jbr.JournalAutoId, jbr.LineId, jbr.Acc_Id, jbr.DrCr
     ) jr2 ON jr2.JournalAutoId = jei.JournalAutoId AND jr2.LineId = jei.LineId AND jr2.Acc_Id = jei.Acc_Id AND jr2.DrCr = jei.DrCr
 ) JO WHERE JO.totalValue > JO.againstAmount + JO.journalAdjustment
 `;
 
-export const getCreditNoteOutstanding = (JournalAutoId) => `
+export const getCreditNoteOutstanding = `
     SELECT * FROM (
         SELECT
             cngi.CR_Id               AS voucherId,
@@ -616,13 +608,12 @@ export const getCreditNoteOutstanding = (JournalAutoId) => `
             WHERE 
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Dr'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = cngi.CR_Id AND jr.RefNo = cngi.CR_Inv_No AND jr.Acc_Id = am.Acc_Id
     ) C WHERE C.totalValue > C.againstAmount + C.journalAdjustment
 `;
 
-export const getDebitNoteOutstanding = (JournalAutoId) => `
+export const getDebitNoteOutstanding = `
     SELECT * FROM (
         SELECT
             dngi.DB_Id               AS voucherId,
@@ -666,7 +657,6 @@ export const getDebitNoteOutstanding = (JournalAutoId) => `
             WHERE 
                 jh.JournalStatus <> 0
                 AND je.DrCr = 'Cr'
-                ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = dngi.DB_Id AND jr.RefNo = dngi.DB_Inv_No AND jr.Acc_Id = am.Acc_Id
     ) D WHERE D.totalValue > D.againstAmount + D.journalAdjustment

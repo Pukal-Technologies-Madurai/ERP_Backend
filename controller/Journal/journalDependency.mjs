@@ -27,6 +27,7 @@ import {
     getDebitNoteOutstanding
 } from './journalOutstanding.mjs';
 
+
 const getFilterValues = async (req, res) => {
     try {
         const request = new sql.Request()
@@ -66,7 +67,6 @@ const getFilterValues = async (req, res) => {
     }
 }
 
-
 const getOverallPartyOutstandings = async (req, res) => {
     try {
         const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
@@ -91,31 +91,31 @@ const getOverallPartyOutstandings = async (req, res) => {
                 ${overall.creditNoteFilterQuery}
                 ${overall.debitNoteFilterQuery}
                 -- sales outstandings (DR)
-                ${overall.getSalesInvOutstanding()}
+                ${overall.getSalesInvOutstanding}
                 UNION ALL
                 -- opening balance (DR)
-                ${overall.getSalesObOutstanding()}
+                ${overall.getSalesObOutstanding}
                 UNION ALL
                 -- receipt outstandings (CR)
-                ${overall.getReceiptOutstanding()}
+                ${overall.getReceiptOutstanding}
                 UNION ALL
                 -- purchase outstandings (CR)
-                ${overall.getPurchaseInvOutstanding()}
+                ${overall.getPurchaseInvOutstanding}
                 UNION ALL
                 -- opening balance (CR)
-                ${overall.getPurchaseObOutstanding()}
+                ${overall.getPurchaseObOutstanding}
                 UNION ALL
                 -- payment outstandings (Dr)
-                ${overall.getPaymentOutstanding()}
+                ${overall.getPaymentOutstanding}
                 UNION ALL
                 -- journal outstandings (Dr and Cr)
-                ${overall.getJournalOutstanding()}
+                ${overall.getJournalOutstanding}
                 UNION ALL
                 -- credit note outstandings (Cr)
-                ${overall.getCreditNoteOutstanding()}
+                ${overall.getCreditNoteOutstanding}
                 UNION ALL
                 -- debit note outstandings (Dr)
-                ${overall.getDebitNoteOutstanding()}
+                ${overall.getDebitNoteOutstanding}
             `);
 
         const accountsRequest = await new sql.Request().query('SELECT Acc_Id, Account_name FROM tbl_Account_Master');
