@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { isEqualNumber, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
+import { isEqualNumber, ISOString, stringCompare, toArray, toNumber, isValidNumber } from '../../helper_functions.mjs';
 import { sentData, servError } from '../../res.mjs';
 import { paymentCosingGet, paymentIndirectExpencesGet } from './dataDependency.mjs';
 
@@ -530,13 +530,131 @@ const PaymentReports = () => {
         }
     }
 
+    const getChequeTransction = async (req, res) => {
+        try {
+            const Fromdate = req.query?.Fromdate ? ISOString(req.query?.Fromdate) : ISOString();
+            const Todate = req.query?.Todate ? ISOString(req.query?.Todate) : ISOString();
+            const creditAccount = req.query?.creditAccount || null;
+
+            const request = new sql.Request()
+                .input('Fromdate', Fromdate)
+                .input('Todate', Todate)
+                .input('creditAccount', creditAccount)
+                .query(`
+                -- ********************************* account filter  *********************************
+                    DECLARE @accountFilter TABLE (accId INT);
+                    WITH GroupHierarchy AS (
+                        SELECT Group_Id, Parent_AC_id
+                        FROM tbl_Accounting_Group
+                        WHERE Group_Id = 11 OR Group_Id = 22
+                        UNION ALL
+                        SELECT g.Group_Id, g.Parent_AC_id
+                        FROM tbl_Accounting_Group g
+                        JOIN GroupHierarchy gh ON g.Parent_AC_id = gh.Group_Id
+                    )
+                    INSERT INTO @accountFilter (accId)
+                    SELECT Acc_Id
+                    FROM tbl_Account_Master
+                    WHERE 
+                        Group_Id IN (SELECT Group_Id FROM GroupHierarchy)
+                        ${isValidNumber(creditAccount) ? ` AND Acc_Id = @creditAccount ` : ''};
+                -- *********************************  PAYMENT FILTERS *********************************
+                    DECLARE @paymentFilter TABLE (payment_id BIGINT PRIMARY KEY, payment_number NVARCHAR(20));
+                    INSERT INTO @paymentFilter (payment_id, payment_number)
+                    SELECT DISTINCT pgi.pay_id, pgi.payment_invoice_no
+                    FROM tbl_Payment_General_Info AS pgi
+                    JOIN @accountFilter AS creAcc ON creAcc.accId = pgi.credit_ledger
+                    WHERE 
+                    	pgi.payment_date BETWEEN @Fromdate AND @Todate 
+                    	AND pgi.status <> 0;
+                -- ********************************* getting payments *********************************
+                    SELECT
+                    	pgi.pay_id,
+                    	pgi.payment_invoice_no,
+                    	pgi.payment_date,
+                    	pgi.payment_voucher_type_id,
+                    	pgi.debit_ledger,
+                    	pgi.credit_ledger,
+                    	pgi.check_no,
+                    	pgi.check_date,
+                    	pgi.bank_date,
+                    	pgi.debit_amount,
+                    	pgi.credit_amount,
+                    	vm.Voucher_Type AS voucherTypeGet,
+                    	debAcc.Account_name AS debitAccountGet,
+                    	creAcc.Account_name AS creditAccountGet
+                    FROM tbl_Payment_General_Info AS pgi
+                    LEFT JOIN tbl_Voucher_Type AS vm ON vm.Vocher_Type_Id = pgi.payment_voucher_type_id
+                    LEFT JOIN tbl_Account_Master AS debAcc ON debAcc.Acc_Id = pgi.debit_ledger
+                    LEFT JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = pgi.credit_ledger
+                    JOIN @paymentFilter AS pfltr ON pfltr.payment_id = pgi.pay_id
+                    ORDER BY pgi.payment_date;
+                -- ********************************* payment references *********************************
+                    SELECT 
+                    	pbi.payment_id,
+                    	COALESCE(sdgi.Po_Inv_Date, pbi.payment_date) AS billDate,
+                    	pbi.bill_name AS invoiceVoucherNumber,
+                    	COALESCE(sdgi.Total_Invoice_value, 0) AS invoiceValue,
+                    	pbi.Debit_Amo AS paidAmount
+                    FROM tbl_Payment_Bill_Info AS pbi
+                    JOIN @paymentFilter AS pfil ON pfil.payment_id = pbi.payment_id AND pfil.payment_number = pbi.payment_no
+                    LEFT JOIN tbl_Purchase_Order_Inv_Gen_Info AS sdgi ON sdgi.PIN_Id = pbi.pay_bill_id AND sdgi.Po_Inv_No = pbi.bill_name
+                -- ********************************* contra references *********************************
+                    SELECT
+                    	cgi.ContraId,
+                    	cgi.ContraVoucherNo AS contraVoucherNumber,
+                    	cgi.ContraDate AS contraDate,
+                    	cbi.bill_id AS refrenceId,
+                    	cbi.bill_no AS refrenceVoucherNumber,
+                    	cgi.Amount AS contraAmount,
+                    	cgi.CreditAccount AS creditAmount,
+                    	debtAcc.Account_name AS debitAccountGet,
+                    	creAcc.Account_name AS creditAccountGet,
+                    	cgi.Chequeno AS chequeNumber,
+                    	cgi.ChequeDate AS chequeDate,
+                    	cgi.BankDate AS bankDate,
+                    	cgi.Narration AS narration
+                    FROM tbl_Contra_Bill_Info AS cbi
+                    JOIN tbl_Contra_General_Info AS cgi ON cgi.ContraId = cbi.contra_id
+                    JOIN @paymentFilter AS pf ON pf.payment_id = cbi.bill_id AND pf.payment_number = cbi.bill_no
+                    JOIN tbl_Account_Master AS debtAcc ON debtAcc.Acc_Id = cgi.DebitAccount
+                    JOIN tbl_Account_Master AS creAcc ON creAcc.Acc_Id = cgi.CreditAccount
+                    WHERE cgi.ContraStatus <> 0;`
+                );
+
+            const result = await request;
+
+            const [payment, billInfo, contra] = result.recordsets;
+
+            const output = payment.map((row) => {
+                const billRef = billInfo.filter(bill => isEqualNumber(bill.payment_id, row.pay_id));
+                const contraRef = contra.filter(c => (
+                    isEqualNumber(c.refrenceId, row.pay_id) 
+                    && stringCompare(c.refrenceVoucherNumber, row.payment_invoice_no)
+                ));
+
+                return {
+                    ...row,
+                    billRef,
+                    contraRef
+                }
+            });
+
+            sentData(res, output);
+
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
     return {
         getPendingPaymentReference,
         getAccountsTransaction,
         itemTotalExpenceWithStockGroup,
         paymentDue,
         paymentDirectExpenses,
-        paymentIndirectExpences
+        paymentIndirectExpences,
+        getChequeTransction
     }
 }
 

@@ -41,6 +41,7 @@ PaymentRouter.get('/reports/itemExpences', paymentReport.itemTotalExpenceWithSto
 PaymentRouter.get('/reports/paymentDue', paymentReport.paymentDue);
 PaymentRouter.get('/reports/paymentDirectExpenses', paymentReport.paymentDirectExpenses);
 PaymentRouter.get('/reports/paymentIndirectExpenses', paymentReport.paymentIndirectExpences);
+PaymentRouter.get('/chequeTransaction', paymentReport.getChequeTransction);
 
 PaymentRouter.post('/debtorsCreditors', debtorsCreditors.getDebtorsCrditors)
 PaymentRouter.get('/getDebtorsCreditors', debtorsCreditors.getDebtorsCreditorsId);

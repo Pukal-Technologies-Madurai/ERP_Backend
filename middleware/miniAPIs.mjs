@@ -148,7 +148,8 @@ export const getUserTypeBasedRights = async (usertype) => {
                 FROM 
                     [${userPortalDB}].[dbo].[tbl_AppMenu] m
                 LEFT JOIN 
-                    tbl_AppMenu_UserTypeRights utr ON utr.UserTypeId = @usertype AND utr.MenuId = m.id`
+                    tbl_AppMenu_UserTypeRights utr ON utr.UserTypeId = @usertype AND utr.MenuId = m.id
+                WHERE m.is_active = 1`
             )
 
         const result = await getUserTypeRights;
@@ -179,7 +180,8 @@ export const getUserBasedRights = async (userid) => {
                 FROM 
                     [${userPortalDB}].[dbo].[tbl_AppMenu] m
                 LEFT JOIN 
-                    tbl_AppMenu_UserRights ur ON ur.UserId = @userid AND ur.MenuId = m.id`
+                    tbl_AppMenu_UserRights ur ON ur.UserId = @userid AND ur.MenuId = m.id
+                WHERE m.is_active = 1`
             )
 
         const result = await getUserRights;
