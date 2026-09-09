@@ -2880,54 +2880,117 @@ export const salesTallySync = async (req, res) => {
 }
 
 export const cancelSalesInvoice = async (req, res) => {
-    const transaction = new sql.Transaction();
+    const transaction = req.transaction;
     try {
         const { Do_Id, Altered_by } = req.body;
 
         if (!isValidNumber(Do_Id)) return invalidInput(res);
 
-        await transaction.begin();
-
         const result = await new sql.Request(transaction)
             .input('Do_Id', Do_Id)
             .input('Cancel_status', 0)
             .query(`
+                SELECT Cancel_status 
+                FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE Do_Id = @Do_Id;
+                UPDATE tbl_Sales_Delivery_Gen_Info 
+                SET Cancel_status = @Cancel_status 
+                WHERE Do_Id = @Do_Id;
+            `);
+
+        const cancel_status = toArray(result.recordset[0])[0]?.Cancel_status;
+
+        if (!isEqualNumber(cancel_status, 0)) {
+            const existingBatchRows = (await new sql.Request()
+                .input('Do_Id', Do_Id)
+                .query(`
+                    SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Act_Qty
+                    FROM tbl_Sales_Delivery_Stock_Info
+                    WHERE Delivery_Order_Id = @Do_Id
+                        AND Batch_Name IS NOT NULL
+                        AND LTRIM(RTRIM(Batch_Name)) <> ''
+            `)).recordset;
+
+            if (existingBatchRows.length > 0) {
+                const batchReversalResult = await reverseMultipleBatch(
+                    transaction,
+                    existingBatchRows.map(row => ({
+                        pre_batch: row.Batch_Name,
+                        pre_item_id: row.Item_Id,
+                        pre_godown_id: row.GoDown_Id,
+                        pre_quantity: row.Act_Qty,
+                        pre_type: 'SALES',
+                        pre_reference_id: Do_Id,
+                        created_by: Altered_by
+                    })),
+                    false
+                );
+                if (!batchReversalResult) throw new Error('Batch reversal failed');
+            }
+        };
+
+        await transaction.commit();
+        success(res, 'Sales Invoice Cancelled Successfully!');
+    } catch (e) {
+        if (!transaction._aborted) await transaction.rollback();
+        servError(e, res);
+    }
+}
+
+export const revokeSalesInvoice = async (req, res) => {
+    const transaction = req.transaction;
+    try {
+        const { Do_Id, Altered_by } = req.body;
+
+        if (!isValidNumber(Do_Id)) return invalidInput(res);
+
+        const result = await new sql.Request(transaction)
+            .input('Do_Id', Do_Id)
+            .input('Cancel_status', 1)
+            .query(`
+                SELECT Cancel_status 
+                FROM tbl_Sales_Delivery_Gen_Info 
+                WHERE Do_Id = @Do_Id;
                 UPDATE tbl_Sales_Delivery_Gen_Info 
                 SET Cancel_status = @Cancel_status 
                 WHERE Do_Id = @Do_Id
             `);
 
-        if (result.rowsAffected[0] === 0) throw new Error('Failed to cancel sales invoice');
+        const cancel_status = toArray(result.recordset[0])[0]?.Cancel_status;
 
-        const existingBatchRows = (await new sql.Request()
-            .input('Do_Id', Do_Id)
-            .query(`
-                SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Act_Qty
-                FROM tbl_Sales_Delivery_Stock_Info
-                WHERE Delivery_Order_Id = @Do_Id
-                    AND Batch_Name IS NOT NULL
-                    AND LTRIM(RTRIM(Batch_Name)) <> ''
+        if (isEqualNumber(cancel_status, 0)) {
+            const existingBatchRows = (await new sql.Request(transaction)
+                .input('Do_Id', Do_Id)
+                .query(`
+                    SELECT DO_St_Id, Batch_Name, Item_Id, GoDown_Id, Act_Qty, Do_Date
+                    FROM tbl_Sales_Delivery_Stock_Info
+                    WHERE Delivery_Order_Id = @Do_Id
+                        AND Batch_Name IS NOT NULL
+                        AND LTRIM(RTRIM(Batch_Name)) <> ''
             `)).recordset;
 
-        if (existingBatchRows.length > 0) {
-            const batchReversalResult = await reverseMultipleBatch(
-                transaction,
-                existingBatchRows.map(row => ({
-                    pre_batch: row.Batch_Name,
-                    pre_item_id: row.Item_Id,
-                    pre_godown_id: row.GoDown_Id,
-                    pre_quantity: row.Act_Qty,
-                    pre_type: 'SALES',
-                    pre_reference_id: Do_Id,
-                    created_by: Altered_by
-                })),
-                false
-            );
-            if (!batchReversalResult) throw new Error('Batch reversal failed');
+            if (existingBatchRows.length > 0) {
+                const batchInsertResult = await insertMultipleBatchUsageDetails(
+                    transaction,
+                    existingBatchRows.map(row => ({
+                        batch: row.Batch_Name,
+                        batch_alias: '',
+                        trans_date: new Date(row.Do_Date),
+                        item_id: row.Item_Id,
+                        godown_id: row.GoDown_Id,
+                        quantity: row.Act_Qty,
+                        type: 'SALES',
+                        reference_id: Do_Id,
+                        created_by: Altered_by,
+                        batch_id: ''
+                    }))
+                );
+                if (!batchInsertResult) throw new Error('Batch usage details creation failed');
+            }
         }
 
         await transaction.commit();
-        success(res, 'Sales Invoice Cancelled Successfully!');
+        success(res, 'Sales Invoice Revoked Successfully!');
     } catch (e) {
         if (!transaction._aborted) await transaction.rollback();
         servError(e, res);

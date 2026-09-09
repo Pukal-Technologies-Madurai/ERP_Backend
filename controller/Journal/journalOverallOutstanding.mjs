@@ -31,11 +31,8 @@ export const salesInvFilterQuery = `
     INSERT INTO @filteredSalesInv (voucherId, voucherNumber)
     SELECT pig.Do_Id, pig.Do_Inv_No
     FROM tbl_Sales_Delivery_Gen_Info pig
-    JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
-    JOIN tbl_Account_Master a ON a.Acc_Id = r.AC_Id
     WHERE 
         pig.Cancel_status <> 0
-        
         AND pig.Do_Date >= @OB_Date
         AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.salesInvoiceId = pig.Do_Inv_No)
         AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.salesInvoiceId = pig.Do_Inv_No);
@@ -48,7 +45,6 @@ export const salesObFilterQuery = `
     FROM tbl_Ledger_Opening_Balance cb
     WHERE 
         cb.OB_date >= @OB_Date
-        
         AND cb.cr_amount = 0
         AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.salesInvoiceId = cb.bill_no)
         AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.salesInvoiceId = cb.bill_no);
@@ -69,11 +65,8 @@ export const purchaseInvFilterQuery = `
     INSERT INTO @filteredPurchaseInv (voucherId, voucherNumber)
     SELECT pig.PIN_Id, pig.Po_Inv_No
     FROM tbl_Purchase_Order_Inv_Gen_Info pig
-    JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
-    JOIN tbl_Account_Master a ON a.Acc_Id = r.AC_Id
     WHERE 
         pig.Cancel_status = 0
-        
         AND pig.Po_Entry_Date >= @OB_Date
         AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.purchaseInvoiceId = pig.Po_Inv_No)
         AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.purchaseInvoiceId = pig.Po_Inv_No);
@@ -86,7 +79,6 @@ export const purchaseObFilterQuery = `
     FROM tbl_Ledger_Opening_Balance cb
     WHERE 
         cb.OB_date >= @OB_Date
-        
         AND cb.dr_amount = 0
         AND NOT EXISTS (SELECT 1 FROM @purchaseReturn pr WHERE pr.purchaseInvoiceId = cb.bill_no)
         AND NOT EXISTS (SELECT 1 FROM @salesReturn sr WHERE sr.purchaseInvoiceId = cb.bill_no);
@@ -104,15 +96,14 @@ export const paymentFilterQuery = `
 `;
 
 export const journalFilterQuery = `
-DECLARE @filteredJournal TABLE (voucherId INT, voucherNumber NVARCHAR(20), DrCr NVARCHAR(5));
-INSERT INTO @filteredJournal (voucherId, voucherNumber, DrCr)
-SELECT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
-FROM tbl_Journal_Entries_Info AS jei
-JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
-WHERE 
-	jgi.JournalDate >= @OB_Date
-    
-    AND jgi.JournalStatus <> 0;
+    DECLARE @filteredJournal TABLE (voucherId INT, voucherNumber NVARCHAR(20), DrCr NVARCHAR(5));
+    INSERT INTO @filteredJournal (voucherId, voucherNumber, DrCr)
+    SELECT DISTINCT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
+    FROM tbl_Journal_Entries_Info AS jei
+    JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
+    WHERE 
+    	jgi.JournalDate >= @OB_Date
+        AND jgi.JournalStatus <> 0;
 `;
 
 export const creditNoteFilterQuery = `
@@ -120,8 +111,6 @@ export const creditNoteFilterQuery = `
     INSERT INTO @filteredCreditNote (voucherId, voucherNumber)
     SELECT cngi.CR_Id, cngi.CR_Inv_No
     FROM tbl_Credit_Note_Gen_Info AS cngi
-    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = cngi.Retailer_Id
-    JOIN tbl_Account_Master AS am ON am.Acc_Id = rm.AC_Id
     WHERE 
         cngi.CR_Date >= @OB_Date
         AND cngi.Cancel_status <> 0
@@ -133,8 +122,6 @@ export const debitNoteFilterQuery = `
     INSERT INTO @filteredDebitNote (voucherId, voucherNumber)
     SELECT dngi.DB_Id, dngi.DB_Inv_No
     FROM tbl_Debit_Note_Gen_Info AS dngi
-    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
-    JOIN tbl_Account_Master AS am ON am.Acc_Id = rm.AC_Id
     WHERE 
         dngi.DB_Date >= @OB_Date
         AND dngi.Cancel_status <> 0

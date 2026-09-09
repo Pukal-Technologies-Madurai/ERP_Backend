@@ -958,14 +958,10 @@ const PurchaseInvoice = () => {
     }
 
     const cancelPurchaseInvoice = async (req, res) => {
-        const transaction = new sql.Transaction();
+        const transaction = req.transaction;
 
         try {
             const { PIN_Id, Created_by } = req.body;
-
-            if (!checkIsNumber(PIN_Id)) return invalidInput(res);
-
-            await transaction.begin();
 
             const result = await new sql.Request(transaction)
                 .input('PIN_Id', PIN_Id)
@@ -1006,7 +1002,7 @@ const PurchaseInvoice = () => {
 
             await transaction.commit();
             return success(res, 'Purchase invoice canceled');
-            
+
         } catch (e) {
             if (transaction._aborted === false) {
                 await transaction.rollback();

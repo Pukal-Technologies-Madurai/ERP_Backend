@@ -1117,14 +1117,10 @@ export const updateDebitNote = async (req, res) => {
 // }
 
 export const cancelDebitNote = async (req, res) => {
-    const transaction = new sql.Transaction();
+    const transaction = req.transaction;
 
     try {
         const { DB_Id, Altered_by } = req.body;
-
-        if (!checkIsNumber(DB_Id)) return invalidInput(res);
-
-        await transaction.begin();
 
         const result = await new sql.Request(transaction)
             .input('DB_Id', DB_Id)

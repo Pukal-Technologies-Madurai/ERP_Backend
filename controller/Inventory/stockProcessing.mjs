@@ -812,13 +812,10 @@ const StockManagement = () => {
     };
 
     const deleteStockProcessing = async (req, res) => {
-        const transaction = new sql.Transaction();
+        const transaction = req.transaction;
         try {
 
             const { PR_Id, Altered_by } = req.body;
-            if (!checkIsNumber(PR_Id)) return invalidInput(res, 'PR_Id is required');
-
-            await transaction.begin();
 
             const result = await new sql.Request(transaction)
                 .input('PR_Id', PR_Id)

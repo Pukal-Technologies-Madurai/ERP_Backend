@@ -108,7 +108,7 @@ export const paymentFilterQuery = `
 export const journalFilterQuery = `
 DECLARE @filteredJournal TABLE (voucherId INT, voucherNumber NVARCHAR(20), DrCr NVARCHAR(5));
 INSERT INTO @filteredJournal (voucherId, voucherNumber, DrCr)
-SELECT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
+SELECT DISTINCT jgi.JournalId, jgi.JournalVoucherNo, jei.DrCr
 FROM tbl_Journal_Entries_Info AS jei
 JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalAutoId = jei.JournalAutoId
 WHERE 

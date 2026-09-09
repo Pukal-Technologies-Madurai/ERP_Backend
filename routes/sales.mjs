@@ -6,7 +6,7 @@ import {
     getSalesInvoice, createSalesInvoice, updateSalesInvoice, salesTallySync, liveSalesCreation,
     getSalesInvoiceById, getLastSalesInvoiceByRetailerId, getAdjacentSalesInvoice,
     bulkCreateSalesInvoice, getSalesInvoiceByDoIds,
-    updateProductDeliveryStatus, cancelSalesInvoice
+    updateProductDeliveryStatus, cancelSalesInvoice, revokeSalesInvoice
 } from '../controller/Sales/salesInvoice/salesInvoceCrud.mjs';
 import {
     getFilterValues, getStockInHandGodownWise, getSalesExpenceAccount,
@@ -63,6 +63,16 @@ SalesRouter.delete(
         reason: 'Alter_Reason',
     }), 
     cancelSalesInvoice
+);
+SalesRouter.put(
+    '/salesInvoice/revoke',
+    alterHistory({
+        alteredTable: 'tbl_Sales_Delivery_Gen_Info',
+        rowIdField: 'Do_Id',
+        userField: 'Altered_by',
+        reason: 'Alter_Reason',
+    }), 
+    revokeSalesInvoice
 );
 SalesRouter.put(
     '/salesInvoice', 

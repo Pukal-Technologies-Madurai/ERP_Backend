@@ -124,39 +124,13 @@ const getOverallPartyOutstandings = async (req, res) => {
 
         const result = await request;
 
-        const grouped = {};
-        for (const row of result.recordset) {
-            const accId = row.Acc_Id;
-            if (!grouped[accId]) {
-                grouped[accId] = {
-                    Acc_Id: accId,
-                    Account_name: accountMap[accId] || 'Unknown',
-                    totalDebit: 0,
-                    totalCredit: 0,
-                    overallBalance: 0,
-                    balanceSide: ''
-                };
-            }
-            const bal = Number(row.BalanceAmount) || 0;
-            if (row.accountSide === 'Dr') {
-                grouped[accId].totalDebit += bal;
-            } else {
-                grouped[accId].totalCredit += bal;
-            }
-        }
+        const bills = result.recordset.map(row => {
+            row.Account_name = accountMap[row.Acc_Id] || 'Unknown';
+            return row;
+        }).filter(row => (Number(row.BalanceAmount) || 0) !== 0)
+          .sort((a, b) => a.Account_name.localeCompare(b.Account_name));
 
-        const outstandings = Object.values(grouped).map(party => {
-            const dr = party.totalDebit;
-            const cr = party.totalCredit;
-            const diff = dr - cr;
-            party.overallBalance = Math.abs(diff);
-            party.balanceSide = diff >= 0 ? 'Dr' : 'Cr';
-            return party;
-        });
-
-        const nonZero = outstandings.filter(p => p.overallBalance !== 0).sort((a, b) => a.Account_name.localeCompare(b.Account_name));
-
-        sentData(res, nonZero);
+        sentData(res, bills);
 
     } catch (e) {
         servError(e, res);

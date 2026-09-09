@@ -1116,14 +1116,10 @@ export const updateCreditNote = async (req, res) => {
 // }
 
 export const cancelCreditNote = async (req, res) => {
-    const transaction = new sql.Transaction();
+    const transaction = req.transaction;
 
     try {
         const { CR_Id, Altered_by } = req.body;
-
-        if (!checkIsNumber(CR_Id)) return invalidInput(res);
-
-        await transaction.begin();
 
         const result = await new sql.Request(transaction)
             .input('CR_Id', CR_Id)

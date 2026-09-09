@@ -1183,13 +1183,9 @@ const tripActivities = () => {
     }
 
     const cancelTripSheet = async (req, res) => {
-        const transaction = new sql.Transaction();
+    const transaction = req.transaction;
         try {
             const { Trip_Id, BillType = 'MATERIAL INWARD', Updated_By } = req.body;
-
-            if (!isValidNumber(Trip_Id)) return invalidInput(res);
-
-            await transaction.begin();
 
             const result = await new sql.Request(transaction)
                 .input('Trip_Id', Trip_Id)
