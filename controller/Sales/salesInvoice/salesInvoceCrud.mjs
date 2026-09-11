@@ -2898,9 +2898,9 @@ export const cancelSalesInvoice = async (req, res) => {
                 WHERE Do_Id = @Do_Id;
             `);
 
-        const cancel_status = toArray(result.recordset[0])[0]?.Cancel_status;
+        const cancel_status = toArray(result.recordset)[0]?.Cancel_status;
 
-        if (!isEqualNumber(cancel_status, 0)) {
+        if (Number(cancel_status) === 0) {
             const existingBatchRows = (await new sql.Request()
                 .input('Do_Id', Do_Id)
                 .query(`
@@ -2956,9 +2956,9 @@ export const revokeSalesInvoice = async (req, res) => {
                 WHERE Do_Id = @Do_Id
             `);
 
-        const cancel_status = toArray(result.recordset[0])[0]?.Cancel_status;
+        const cancel_status = toArray(result.recordset)[0]?.Cancel_status;
 
-        if (isEqualNumber(cancel_status, 0)) {
+        if (Number(cancel_status) === 0) {
             const existingBatchRows = (await new sql.Request(transaction)
                 .input('Do_Id', Do_Id)
                 .query(`

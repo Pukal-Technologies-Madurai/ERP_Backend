@@ -172,10 +172,14 @@ export const getSalesInvOutstanding = (JournalAutoId) => `
                 SUM(pb.Credit_Amo) AS againstAmount
             FROM tbl_Receipt_Bill_Info pb
             JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
-            JOIN @filteredSalesInv fil ON fil.voucherId = pb.bill_id AND fil.voucherNumber = pb.bill_name
+            JOIN @filteredSalesInv fil ON 
+                -- fil.voucherId = pb.bill_id AND 
+                fil.voucherNumber = pb.bill_name
             WHERE pgi.status <> 0
             GROUP BY pb.bill_id, pb.bill_name
-        ) rp ON rp.bill_id = pig.Do_Id AND rp.bill_name = pig.Do_Inv_No
+        ) rp ON 
+            -- rp.bill_id = pig.Do_Id AND 
+            rp.bill_name = pig.Do_Inv_No
         LEFT JOIN (
             SELECT 
                 Ref_Inv_Number,
@@ -193,7 +197,9 @@ export const getSalesInvOutstanding = (JournalAutoId) => `
             FROM dbo.tbl_Journal_Bill_Reference jr
             JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
             JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-            JOIN @filteredSalesInv fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = jr.RefNo
+            JOIN @filteredSalesInv fil ON 
+                -- fil.voucherId = jr.RefId AND 
+                fil.voucherNumber = jr.RefNo
             WHERE 
                 jh.JournalStatus <> 0
                 AND je.Acc_Id = @Acc_Id
@@ -201,7 +207,9 @@ export const getSalesInvOutstanding = (JournalAutoId) => `
                 AND jr.RefType = 'SALES'
                 ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo
-        ) jr ON jr.RefId = pig.Do_Id AND jr.RefNo = pig.Do_Inv_No
+        ) jr ON 
+            -- jr.RefId = pig.Do_Id AND 
+            jr.RefNo = pig.Do_Inv_No
     ) S WHERE S.totalValue > S.againstAmount + S.journalAdjustment
 `;
 
@@ -348,10 +356,14 @@ export const getPurchaseInvOutstanding = (JournalAutoId) => `
                 SUM(pb.Debit_Amo) AS againstAmount
             FROM tbl_Payment_Bill_Info pb
             JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
-            JOIN @filteredPurchaseInv fil ON fil.voucherId = pb.pay_bill_id AND fil.voucherNumber = pb.bill_name
+            JOIN @filteredPurchaseInv fil ON 
+                -- fil.voucherId = pb.pay_bill_id AND 
+                fil.voucherNumber = pb.bill_name
             WHERE pgi.status <> 0
             GROUP BY pb.pay_bill_id, pb.bill_name
-        ) pb ON pb.pay_bill_id = pig.PIN_Id AND pb.bill_name = pig.Po_Inv_No
+        ) pb ON 
+            -- pb.pay_bill_id = pig.PIN_Id AND 
+            pb.bill_name = pig.Po_Inv_No
         LEFT JOIN (
             SELECT 
                 Ref_Inv_Number,
@@ -369,7 +381,9 @@ export const getPurchaseInvOutstanding = (JournalAutoId) => `
             FROM dbo.tbl_Journal_Bill_Reference jr
             JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
             JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-            JOIN @filteredPurchaseInv fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = jr.RefNo
+            JOIN @filteredPurchaseInv fil ON 
+                -- fil.voucherId = jr.RefId AND 
+                fil.voucherNumber = jr.RefNo
             WHERE 
                 jh.JournalStatus <> 0
                 AND je.Acc_Id = @Acc_Id
@@ -377,7 +391,9 @@ export const getPurchaseInvOutstanding = (JournalAutoId) => `
                 AND jr.RefType = 'PURCHASE'
                 ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo
-        ) jr ON jr.RefId = pig.PIN_Id AND jr.RefNo = pig.Po_Inv_No
+        ) jr ON 
+            -- jr.RefId = pig.PIN_Id AND 
+            jr.RefNo = pig.Po_Inv_No
     ) P WHERE P.totalValue > P.againstAmount + P.journalAdjustment
 `;
 
@@ -600,10 +616,14 @@ export const getCreditNoteOutstanding = (JournalAutoId) => `
                 SUM(pb.Debit_Amo) AS againstAmount
             FROM tbl_Payment_Bill_Info pb
             JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
-            JOIN @filteredCreditNote fil ON fil.voucherId = pb.pay_bill_id AND fil.voucherNumber = pb.bill_name
+            JOIN @filteredCreditNote fil ON 
+                -- fil.voucherId = pb.pay_bill_id AND 
+                fil.voucherNumber = pb.bill_name
             WHERE pgi.status <> 0
             GROUP BY pb.pay_bill_id, pb.bill_name
-        ) pb ON pb.pay_bill_id = cngi.CR_Id AND pb.bill_name = cngi.CR_Inv_No
+        ) pb ON 
+            -- pb.pay_bill_id = cngi.CR_Id AND 
+            pb.bill_name = cngi.CR_Inv_No
         LEFT JOIN (
             SELECT 
                 jr.RefId,
@@ -619,7 +639,9 @@ export const getCreditNoteOutstanding = (JournalAutoId) => `
                 AND je.DrCr = 'Dr'
                 ${JournalAutoId ? " AND jh.JournalAutoId <> @JournalAutoId " : ""}
             GROUP BY jr.RefId, jr.RefNo
-        ) jr ON jr.RefId = cngi.CR_Id AND jr.RefNo = cngi.CR_Inv_No
+        ) jr ON 
+            -- jr.RefId = cngi.CR_Id AND 
+            jr.RefNo = cngi.CR_Inv_No
     ) C WHERE C.totalValue > C.againstAmount + C.journalAdjustment
 `;
 
@@ -650,7 +672,9 @@ export const getDebitNoteOutstanding = (JournalAutoId) => `
                 SUM(rbi.Credit_Amo) AS againstAmount
             FROM tbl_Receipt_Bill_Info rbi
             JOIN tbl_Receipt_General_Info rgi ON rgi.receipt_id = rbi.receipt_id
-            JOIN @filteredDebitNote fil ON fil.voucherId = rbi.bill_id AND fil.voucherNumber = rbi.bill_name
+            JOIN @filteredDebitNote fil ON 
+                -- fil.voucherId = rbi.bill_id AND 
+                fil.voucherNumber = rbi.bill_name
             WHERE rgi.status <> 0
             GROUP BY rbi.bill_id, rbi.bill_name
         ) rp ON rp.bill_id = dngi.DB_Id AND rp.bill_name = dngi.DB_Inv_No
@@ -662,7 +686,9 @@ export const getDebitNoteOutstanding = (JournalAutoId) => `
             FROM dbo.tbl_Journal_Bill_Reference jr
             JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
             JOIN dbo.tbl_Journal_General_Info jh ON jh.JournalAutoId = jr.JournalAutoId
-            JOIN @filteredDebitNote fil ON fil.voucherId = jr.RefId AND fil.voucherNumber = jr.RefNo
+            JOIN @filteredDebitNote fil ON 
+                -- fil.voucherId = jr.RefId AND 
+                fil.voucherNumber = jr.RefNo
             WHERE 
                 jh.JournalStatus <> 0
                 AND je.Acc_Id = @Acc_Id

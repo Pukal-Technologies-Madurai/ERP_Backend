@@ -4,7 +4,7 @@ export const purchaseReturnQuery = `
     SELECT purchase.Po_Inv_No, sales.Do_Inv_No 
     FROM tbl_Sales_Delivery_Gen_Info AS sales 
     JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Po_Inv_No) = TRIM(sales.Ref_Inv_Number)
-    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id 
+    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id AND rm.AC_Id = @Acc_Id
     WHERE 
         purchase.Po_Entry_Date >= @OB_Date AND 
         purchase.Cancel_status = 0 AND 
@@ -18,7 +18,7 @@ export const salesReturnQuery = `
     SELECT purchase.Po_Inv_No, sales.Do_Inv_No
     FROM tbl_Sales_Delivery_Gen_Info AS sales 
     JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Ref_Po_Inv_No) = TRIM(sales.Do_Inv_No) 
-    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id 
+    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id AND rm.AC_Id = @Acc_Id
     WHERE 
         sales.Do_Date >= @OB_Date AND 
         sales.Cancel_status <> 0 AND 
@@ -31,6 +31,8 @@ export const salesInvFilterQuery = `
     INSERT INTO @filteredSalesInv (voucherId, voucherNumber)
     SELECT pig.Do_Id, pig.Do_Inv_No
     FROM tbl_Sales_Delivery_Gen_Info pig
+    JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
+    JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
     WHERE 
         pig.Cancel_status <> 0
         AND pig.Do_Date >= @OB_Date
@@ -65,6 +67,8 @@ export const purchaseInvFilterQuery = `
     INSERT INTO @filteredPurchaseInv (voucherId, voucherNumber)
     SELECT pig.PIN_Id, pig.Po_Inv_No
     FROM tbl_Purchase_Order_Inv_Gen_Info pig
+    JOIN tbl_Retailers_Master r ON r.Retailer_Id = pig.Retailer_Id
+    JOIN tbl_Account_Master a ON a.ERP_Id = r.ERP_Id
     WHERE 
         pig.Cancel_status = 0
         AND pig.Po_Entry_Date >= @OB_Date
@@ -111,6 +115,8 @@ export const creditNoteFilterQuery = `
     INSERT INTO @filteredCreditNote (voucherId, voucherNumber)
     SELECT cngi.CR_Id, cngi.CR_Inv_No
     FROM tbl_Credit_Note_Gen_Info AS cngi
+    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = cngi.Retailer_Id
+    JOIN tbl_Account_Master AS am ON am.Acc_Id = rm.AC_Id
     WHERE 
         cngi.CR_Date >= @OB_Date
         AND cngi.Cancel_status <> 0
@@ -122,6 +128,8 @@ export const debitNoteFilterQuery = `
     INSERT INTO @filteredDebitNote (voucherId, voucherNumber)
     SELECT dngi.DB_Id, dngi.DB_Inv_No
     FROM tbl_Debit_Note_Gen_Info AS dngi
+    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = dngi.Retailer_Id
+    JOIN tbl_Account_Master AS am ON am.Acc_Id = rm.AC_Id
     WHERE 
         dngi.DB_Date >= @OB_Date
         AND dngi.Cancel_status <> 0
@@ -184,7 +192,7 @@ export const getSalesInvOutstanding = `
                 AND jr.RefType = 'SALES'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = pig.Do_Id AND jr.RefNo = pig.Do_Inv_No AND jr.Acc_Id = a.Acc_Id
-    ) S WHERE S.totalValue > S.againstAmount + S.journalAdjustment
+    ) S WHERE S.BalanceAmount <> 0
 `;
 
 export const getSalesObOutstanding = `
@@ -241,7 +249,7 @@ export const getSalesObOutstanding = `
                 AND jr.RefType = 'SALES-OB'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = cb.OB_Id AND jr.RefNo = cb.bill_no AND jr.Acc_Id = cb.Retailer_id
-    ) S WHERE S.totalValue > S.againstAmount + S.journalAdjustment
+    ) S WHERE  S.BalanceAmount <> 0
 `;
 
 export const getReceiptOutstanding = `
@@ -298,7 +306,7 @@ export const getReceiptOutstanding = `
                 AND jr.RefType = 'RECEIPT'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = rgi.receipt_id AND jr.RefNo = rgi.receipt_invoice_no AND jr.Acc_Id = rgi.credit_ledger
-    ) R WHERE R.totalValue > R.againstAmount + R.journalAdjustment
+    ) R WHERE  R.BalanceAmount <> 0
 `;
 
 export const getPurchaseInvOutstanding = `
@@ -357,7 +365,7 @@ export const getPurchaseInvOutstanding = `
                 AND jr.RefType = 'PURCHASE'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = pig.PIN_Id AND jr.RefNo = pig.Po_Inv_No AND jr.Acc_Id = a.Acc_Id
-    ) P WHERE P.totalValue > P.againstAmount + P.journalAdjustment
+    ) P WHERE  P.BalanceAmount <> 0
 `;
 
 export const getPurchaseObOutstanding = `
@@ -414,7 +422,7 @@ export const getPurchaseObOutstanding = `
                 AND jr.RefType = 'PURCHASE-OB'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = cb.OB_Id AND jr.RefNo = cb.bill_no AND jr.Acc_Id = cb.Retailer_id
-    ) P WHERE P.totalValue > P.againstAmount + P.journalAdjustment
+    ) P WHERE  P.BalanceAmount <> 0
 `;
 
 export const getPaymentOutstanding = `
@@ -470,7 +478,7 @@ export const getPaymentOutstanding = `
                 AND jr.RefType = 'PAYMENT'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = pgi.pay_id AND jr.RefNo = pgi.payment_invoice_no AND jr.Acc_Id = pgi.debit_ledger
-    ) PMT WHERE PMT.totalValue > PMT.againstAmount + PMT.journalAdjustment
+    ) PMT WHERE  PMT.BalanceAmount <> 0
 `;
 
 export const getJournalOutstanding = `
@@ -548,7 +556,7 @@ SELECT * FROM (
         FROM dbo.tbl_Journal_Bill_Reference jbr
         GROUP BY jbr.JournalAutoId, jbr.LineId, jbr.Acc_Id, jbr.DrCr
     ) jr2 ON jr2.JournalAutoId = jei.JournalAutoId AND jr2.LineId = jei.LineId AND jr2.Acc_Id = jei.Acc_Id AND jr2.DrCr = jei.DrCr
-) JO WHERE JO.totalValue > JO.againstAmount + JO.journalAdjustment
+) JO WHERE  JO.BalanceAmount <> 0
 `;
 
 export const getCreditNoteOutstanding = `
@@ -597,7 +605,7 @@ export const getCreditNoteOutstanding = `
                 AND je.DrCr = 'Dr'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = cngi.CR_Id AND jr.RefNo = cngi.CR_Inv_No AND jr.Acc_Id = am.Acc_Id
-    ) C WHERE C.totalValue > C.againstAmount + C.journalAdjustment
+    ) C WHERE  C.BalanceAmount <> 0
 `;
 
 export const getDebitNoteOutstanding = `
@@ -646,5 +654,5 @@ export const getDebitNoteOutstanding = `
                 AND je.DrCr = 'Cr'
             GROUP BY jr.RefId, jr.RefNo, je.Acc_Id
         ) jr ON jr.RefId = dngi.DB_Id AND jr.RefNo = dngi.DB_Inv_No AND jr.Acc_Id = am.Acc_Id
-    ) D WHERE D.totalValue > D.againstAmount + D.journalAdjustment
+    ) D WHERE  D.BalanceAmount <> 0
 `;
