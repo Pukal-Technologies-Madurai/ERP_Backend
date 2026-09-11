@@ -49,6 +49,12 @@ import unitCategory from '../controller/Masters/unitMasterCategory.mjs';
 import unitMeasurement from '../controller/Masters/unitMasterMeasurement.mjs';
 import productUnitConversion from '../controller/Masters/productUnitConversion.mjs';
 
+import masterList from '../controller/Masters/masterSummaryController.mjs';
+import stockgroup from '../controller/Masters/stockGroup.mjs';
+
+
+
+
 const MastersRouter = express.Router();
 
 MastersRouter.get('/company', company.getCompany);
@@ -441,5 +447,17 @@ MastersRouter.post('/whatsapp/statementpdf', whatsapp.poststatementPdf);
 MastersRouter.post('/whatsapp/pricelistpdf', whatsapp.postpricelistPdf);
 MastersRouter.delete('/whatsapp/cleanupPdf', whatsapp.whatsappDelete);
 
+MastersRouter.get('/summary/getReconciliationSummary', lol.getReconciliationSummary)
+MastersRouter.get('/summary/getMasterCounts', masterList.getMasterCounts);
+MastersRouter.get('/summary/getMasterDetails', masterList.getMasterDetails);
+MastersRouter.get('/summary/getAccountMasterDetails', masterList.getAccountMasterDetails);
+MastersRouter.get('/summary/getAccountMasterSummary', masterList.getAccountMasterSummary);
+MastersRouter.get('/summary/getStockItemDetails', masterList.getStockItemDetails);
+MastersRouter.get('/summary/getStockItemSummary', masterList.getStockItemSummary);
+
+MastersRouter.get('/stockgroup', stockgroup.getStockGroups);
+MastersRouter.post('/stockgroup', stockgroup.createStockGroup);
+MastersRouter.put('/stockgroup', stockgroup.updateStockGroup);
+MastersRouter.get('/stockgroup/dropdown', stockgroup.stockGroupDropdown);
 
 export default MastersRouter;
