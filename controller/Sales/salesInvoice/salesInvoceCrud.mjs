@@ -2900,7 +2900,7 @@ export const cancelSalesInvoice = async (req, res) => {
 
         const cancel_status = toArray(result.recordset)[0]?.Cancel_status;
 
-        if (Number(cancel_status) === 0) {
+        if (Number(cancel_status) !== 0) {
             const existingBatchRows = (await new sql.Request()
                 .input('Do_Id', Do_Id)
                 .query(`

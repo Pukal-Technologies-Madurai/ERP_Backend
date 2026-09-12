@@ -2,7 +2,7 @@ import sql from 'mssql';
 
 import * as overall from './journalOverallOutstanding.mjs';
 import { dataFound, invalidInput, sentData, servError } from '../../res.mjs';
-import { checkIsNumber, filterableText, isEqualNumber, ISOString, toArray, toNumber } from '../../helper_functions.mjs';
+import { checkIsNumber, filterableText, isEqualNumber, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
 
 import {
     purchaseReturnQuery,
@@ -607,6 +607,37 @@ const getVoucherInfo = async (req, res) => {
     }
 }
 
+const getOverallPartyOutstandingsStoredProcedure = async (req, res) => {
+    try {
+        const receivablesRequest = new sql.Request()
+            .input('Fromdate', ISOString())
+            .execute('Transaction_Recivables_Reort_VW');
+
+        const payablesRequest = new sql.Request()
+            .input('Fromdate', ISOString())
+            .execute('Transaction_Payables_Reort_VW');
+        
+        const receivables = await receivablesRequest;
+        const payables = await payablesRequest;
+
+        sentData(res, [], { 
+            receivables: receivables.recordset.map(row => ({ 
+                ...row, 
+                drAmount: stringCompare(row?.CR_DR, 'DR') ? row?.Bal_Amount : 0, 
+                crAmount: stringCompare(row?.CR_DR, 'CR') ? row?.Bal_Amount : 0 
+            })), 
+            payables: payables.recordset.map(row => ({ 
+                ...row, 
+                drAmount: stringCompare(row?.CR_DR, 'DR') ? row?.Bal_Amount : 0, 
+                crAmount: stringCompare(row?.CR_DR, 'CR') ? row?.Bal_Amount : 0 
+            })) 
+        });
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
 export default {
     getOverallPartyOutstandings,
     getFilterValues,
@@ -615,5 +646,6 @@ export default {
     groupOutstandings,
     partyOutstanding,
     accountTransaction,
-    getVoucherInfo
+    getVoucherInfo,
+    getOverallPartyOutstandingsStoredProcedure
 }

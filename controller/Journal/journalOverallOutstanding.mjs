@@ -4,7 +4,6 @@ export const purchaseReturnQuery = `
     SELECT purchase.Po_Inv_No, sales.Do_Inv_No 
     FROM tbl_Sales_Delivery_Gen_Info AS sales 
     JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Po_Inv_No) = TRIM(sales.Ref_Inv_Number)
-    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id AND rm.AC_Id = @Acc_Id
     WHERE 
         purchase.Po_Entry_Date >= @OB_Date AND 
         purchase.Cancel_status = 0 AND 
@@ -18,7 +17,6 @@ export const salesReturnQuery = `
     SELECT purchase.Po_Inv_No, sales.Do_Inv_No
     FROM tbl_Sales_Delivery_Gen_Info AS sales 
     JOIN tbl_Purchase_Order_Inv_Gen_Info AS purchase ON TRIM(purchase.Ref_Po_Inv_No) = TRIM(sales.Do_Inv_No) 
-    JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = purchase.Retailer_Id AND rm.AC_Id = @Acc_Id
     WHERE 
         sales.Do_Date >= @OB_Date AND 
         sales.Cancel_status <> 0 AND 

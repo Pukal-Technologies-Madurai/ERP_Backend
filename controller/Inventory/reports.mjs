@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { servError, sentData,success,dataFound } from '../../res.mjs';
+import { servError, sentData,success,dataFound, noData } from '../../res.mjs';
 import { isEqualNumber, ISOString,randomNumber,checkIsNumber } from '../../helper_functions.mjs';
 
 const getInventoryReport = async (req, res) => {
