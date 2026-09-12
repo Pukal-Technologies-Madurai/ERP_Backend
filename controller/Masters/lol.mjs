@@ -420,6 +420,95 @@ const lol = () => {
         }
     };
 
+const getReconciliationSummary = async (req, res) => {
+    try {
+        const query = `
+            SELECT
+                (SELECT COUNT(*) FROM tbl_Retailers_Master) AS retailersTotal,
+                (SELECT COUNT(*) FROM tbl_Ledger_LOL) AS ledgerTotal,
+                (SELECT COUNT(*) FROM tbl_Account_Master) AS accountTotal,
+ 
+    
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Retailers_Master rm
+                    LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = rm.Retailer_Id
+                    WHERE lol.Ret_Id IS NULL
+                ) AS retailersMissingInLedger,
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Retailers_Master rm
+                    LEFT JOIN tbl_Account_Master am ON am.Acc_Id = rm.AC_Id
+                    WHERE am.Acc_Id IS NULL
+                ) AS retailersMissingInAccount,
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Retailers_Master rm
+                    LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = rm.Retailer_Id
+                    LEFT JOIN tbl_Account_Master am ON am.Acc_Id = rm.AC_Id
+                    WHERE lol.Ret_Id IS NULL
+                      AND am.Acc_Id IS NULL
+                ) AS retailersMissingInBoth,
+ 
+       
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Ledger_LOL lol
+                    LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = lol.Ret_Id
+                    WHERE rm.Retailer_Id IS NULL
+                ) AS ledgerMissingInRetailers,
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Ledger_LOL lol
+                    LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = lol.Ret_Id
+                    LEFT JOIN tbl_Account_Master am ON am.Acc_Id = rm.AC_Id
+                    WHERE am.Acc_Id IS NULL
+                ) AS ledgerMissingInAccount,
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Ledger_LOL lol
+                    LEFT JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = lol.Ret_Id
+                    LEFT JOIN tbl_Account_Master am ON am.Acc_Id = rm.AC_Id
+                    WHERE rm.Retailer_Id IS NULL
+                      AND am.Acc_Id IS NULL
+                ) AS ledgerMissingInBoth,
+ 
+         
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Account_Master am
+                    LEFT JOIN tbl_Retailers_Master rm ON rm.AC_Id = am.Acc_Id
+                    WHERE rm.Retailer_Id IS NULL
+                ) AS accountMissingInRetailers,
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Account_Master am
+                    LEFT JOIN tbl_Retailers_Master rm ON rm.AC_Id = am.Acc_Id
+                    LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = rm.Retailer_Id
+                    WHERE lol.Ret_Id IS NULL
+                ) AS accountMissingInLedger,
+                (
+                    SELECT COUNT(*)
+                    FROM tbl_Account_Master am
+                    LEFT JOIN tbl_Retailers_Master rm ON rm.AC_Id = am.Acc_Id
+                    LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = rm.Retailer_Id
+                    WHERE rm.Retailer_Id IS NULL
+                      AND lol.Ret_Id IS NULL
+                ) AS accountMissingInBoth
+        `;
+ 
+        const request = new sql.Request();
+        const result = await request.query(query);
+ 
+        if (result.recordset.length) {
+            dataFound(res, result.recordset[0]);
+        } else {
+            noData(res);
+        }
+    } catch (e) {
+        servError(e, res);
+    }
+};
     return {
         lollist,
         displayColumn,
@@ -427,7 +516,10 @@ const lol = () => {
         dropDownColumn,
         updateLolData,
         excelUpload,
+        getReconciliationSummary
     };
 };
+
+
 
 export default lol();
