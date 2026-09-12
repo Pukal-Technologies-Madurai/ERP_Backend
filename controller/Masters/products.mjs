@@ -291,60 +291,309 @@ const sfProductController = () => {
         }
     }
 
-    const postProductsWithImage = async (req, res) => {
-        let transaction;
+const postProductsWithImage = async (req, res) => {
+    let transaction;
 
-        try {
-            await uploadFile(req, res, 0, 'Product_Image');
+    try {
+        await uploadFile(req, res, 0, 'Product_Image');
 
-            const fileName = req?.file?.filename;
-            const filePath = req?.file?.path;
+        const fileName = req?.file?.filename;
+        const filePath = req?.file?.path;
 
-            if (!fileName) {
-                return invalidInput(res, 'Product Photo is required');
-            }
+        if (!fileName) {
+            return invalidInput(res, 'Product Photo is required');
+        }
 
-            const {
-                Product_Name,
-                Short_Name,
-                Product_Description,
-                Brand = 0,
-                Product_Group = 0,
-                UOM_Id = 0,
-                Pack_Id = 0,
-                IS_Sold = 0,
-                HSN_Code,
-                Gst_P = 0,
-                ERP_Id,
-                Display_Order_By,
-                Pos_Brand_Id,
-                IsActive = 1,
-                Product_Rate = 0,
-                Max_Rate = 0,
-                Coolie = 0,
-                Packing_CH = 0,
-                Other_Expen = 0,
-                NagalBrokerage = 0,
-                NagalCoolie = 0
-            } = req.body;
+        const {
+            Product_Name,
+            Short_Name,
+            Product_Description,
+            Brand = 0,
+            Product_Group = 0,
+            UOM_Id = 0,
+            Pack_Id = 0,
+            IS_Sold = 0,
+            HSN_Code,
+            Gst_P = 0,
+            ERP_Id,
+            Display_Order_By,
+            Pos_Brand_Id,
+            IsActive = 1,
+            Product_Rate = 0,
+            Max_Rate = 0,
+            Coolie = 0,
+            Packing_CH = 0,
+            Other_Expen = 0,
+            NagalBrokerage = 0,
+            NagalCoolie = 0,
+            Stock_Group
+        } = req.body;
 
-            const pool = await sql.connect();
-            transaction = new sql.Transaction(pool);
-            await transaction.begin();
+        // '', null, undefined -> NULL; otherwise a valid number
+        const stockGroupValue =
+            Stock_Group === '' || Stock_Group === null || Stock_Group === undefined
+                ? null
+                : (toNumber(Stock_Group) || null);
+
+        const pool = await sql.connect();
+        transaction = new sql.Transaction(pool);
+        await transaction.begin();
 
 
-            const idResult = await transaction.request().query(`
-            SELECT ISNULL(MAX(Product_Id), 0) + 1 AS NewId
-            FROM tbl_Product_Master WITH (UPDLOCK, HOLDLOCK)
+        const idResult = await transaction.request().query(`
+        SELECT ISNULL(MAX(Product_Id), 0) + 1 AS NewId
+        FROM tbl_Product_Master WITH (UPDLOCK, HOLDLOCK)
+    `);
+
+        const Product_Id = idResult.recordset[0].NewId;
+
+
+
+        const productInsert = await transaction.request()
+            .input('Product_Id', Product_Id)
+            .input('Product_Code', `ONLINE_${Product_Id}`)
+            .input('Product_Name', Product_Name)
+            .input('Short_Name', Short_Name)
+            .input('Product_Description', Product_Description)
+            .input('Brand', Brand)
+            .input('Product_Group', Product_Group)
+            .input('Pack_Id', Pack_Id)
+            .input('UOM_Id', UOM_Id)
+            .input('IS_Sold', IS_Sold)
+            .input('Display_Order_By', Display_Order_By)
+            .input('Product_Image_Name', fileName)
+            .input('Product_Image_Path', filePath)
+            .input('HSN_Code', HSN_Code)
+            .input('Gst_P', Number(Gst_P))
+            .input('Cgst_P', Number(Gst_P) / 2)
+            .input('Sgst_P', Number(Gst_P) / 2)
+            .input('Igst_P', Number(Gst_P))
+            .input('ERP_Id', ERP_Id)
+            .input('Pos_Brand_Id', Pos_Brand_Id)
+            .input('IsActive', IsActive)
+            .input('Product_Rate', Product_Rate)
+            .input('Max_Rate', Max_Rate)
+            .input('Coolie', Coolie)
+            .input('Packing_CH', Packing_CH)
+            .input('Other_Expen', Other_Expen)
+            .input('NagalBrokerage', NagalBrokerage)
+            .input('NagalCoolie', NagalCoolie)
+            .input('Stock_Group', sql.Int, stockGroupValue)
+            .query(`
+            INSERT INTO tbl_Product_Master (
+                Product_Id, Product_Code, Product_Name, Short_Name,
+                Product_Description, Brand, Product_Group, Pack_Id,
+                UOM_Id, IS_Sold, Display_Order_By,
+                Product_Image_Name, Product_Image_Path,
+                HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P,
+                ERP_Id, Pos_Brand_Id, IsActive,
+                Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen,NagalBrokerage,NagalCoolie,Stock_Group
+            )
+            VALUES (
+                @Product_Id, @Product_Code, @Product_Name, @Short_Name,
+                @Product_Description, @Brand, @Product_Group, @Pack_Id,
+                @UOM_Id, @IS_Sold, @Display_Order_By,
+                @Product_Image_Name, @Product_Image_Path,
+                @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P,
+                @ERP_Id, @Pos_Brand_Id, @IsActive,
+                @Product_Rate, @Max_Rate, @Coolie, @Packing_CH, @Other_Expen,@NagalBrokerage,@NagalCoolie,@Stock_Group
+            )
         `);
 
-            const Product_Id = idResult.recordset[0].NewId;
+        if (productInsert.rowsAffected[0] === 0) {
+            await transaction.rollback();
+            return failed(res, 'Failed to add product');
+        }
+
+
+        const brokerageInsert = await transaction.request()
+            .input('Id', Id)
+            .input('Product_Id', Product_Id)
+            .input('Brokerage', Number(NagalBrokerage))
+            .input('Coolie', Number(NagalCoolie))
+            .query(`
+            INSERT INTO tbl_Brokerage (
+                Id,Product_Id, Brokerage, Coolie
+            )
+            VALUES (
+                @Id,@Product_Id, @Brokerage, @Coolie
+            )
+        `);
+
+        if (brokerageInsert.rowsAffected[0] === 0) {
+            await transaction.rollback();
+            return failed(res, 'Product added but brokerage insert failed');
+        }
+
+        await transaction.commit();
+        success(res, 'New Product Added with Brokerage');
+
+    } catch (error) {
+        if (transaction) {
+            try {
+                await transaction.rollback();
+            } catch (rollbackErr) {
+                console.error('Rollback failed (transaction likely already auto-aborted):', rollbackErr);
+            }
+        }
+        servError(error, res);
+    }
+};
+
+const postProductsWithoutImage = async (req, res) => {
+    const {
+        Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
+        Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id,
+        IsActive, Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen,
+        NagalBrokerage = 0, NagalCoolie = 0, Stock_Group
+    } = req?.body;
+
+    
+    const stockGroupValue =
+        Stock_Group === '' || Stock_Group === null || Stock_Group === undefined
+            ? null
+            : (toNumber(Stock_Group) || null);
+
+    try {
+        const getId = await getNextId({
+            table: 'tbl_Product_Master',
+            column: 'Product_Id'
+        });
+
+        if (!getId.status) {
+            return failed(res, 'Failed to save, Please try again');
+        }
+
+        const Product_Id = getId.MaxId;
+
+
+        const request = new sql.Request()
+            .input('Product_Id', Product_Id)
+            .input('Product_Code', 'ONLINE_' + Product_Id)
+            .input('Product_Name', Product_Name)
+            .input('Short_Name', Short_Name || '')
+            .input('Product_Description', Product_Description || '')
+            .input('Brand', parseInt(Brand) || 0)
+            .input('Product_Group', parseInt(Product_Group) || 0)
+            .input('Pack_Id', parseInt(Pack_Id) || 0)
+            .input('UOM_Id', parseInt(UOM_Id) || 0)
+            .input('IS_Sold', parseInt(IS_Sold) || 0)
+            .input('Display_Order_By', Display_Order_By || null)
+            .input('Product_Image_Name', '')
+            .input('Product_Image_Path', '')
+            .input('HSN_Code', HSN_Code || '')
+            .input('Gst_P', parseFloat(Gst_P) || 0)
+            .input('Cgst_P', (parseFloat(Gst_P) / 2) || 0)
+            .input('Sgst_P', (parseFloat(Gst_P) / 2) || 0)
+            .input('Igst_P', parseFloat(Gst_P) || 0)
+            .input('ERP_Id', ERP_Id || null)
+            .input('Pos_Brand_Id', parseInt(Pos_Brand_Id) || 0)
+            .input('IsActive', parseInt(IsActive) || 1)
+            .input('Product_Rate', parseFloat(Product_Rate) || 0)
+            .input('Max_Rate', parseFloat(Max_Rate) || 0)
+            .input('Coolie', parseFloat(Coolie) || 0)
+            .input('Packing_CH', parseFloat(Packing_CH) || 0)
+            .input('Other_Expen', parseFloat(Other_Expen) || 0)
+            .input('Stock_Group', stockGroupValue)
+            .query(`
+            INSERT INTO tbl_Product_Master (
+                Product_Id, Product_Code, Product_Name, Short_Name, Product_Description, Brand, 
+                Product_Group, Pack_Id, UOM_Id, IS_Sold, Display_Order_By, Product_Image_Name,
+                Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id, Pos_Brand_Id, 
+                IsActive, Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen, Stock_Group
+            ) VALUES (
+                @Product_Id, @Product_Code, @Product_Name, @Short_Name, @Product_Description, @Brand, 
+                @Product_Group, @Pack_Id, @UOM_Id, @IS_Sold, @Display_Order_By, @Product_Image_Name, 
+                @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id, @Pos_Brand_Id,
+                @IsActive, @Product_Rate, @Max_Rate, @Coolie, @Packing_CH, @Other_Expen, @Stock_Group
+            )`
+            );
+
+        const result = await request;
+
+        if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
+
+            const getBrokerageId = await getNextId({
+                table: 'tbl_Brokerage',
+                column: 'Id'
+            });
+
+            if (!getBrokerageId.status) {
+                return failed(res, 'Failed to save, Please try again');
+            }
+
+            const Id = getBrokerageId.MaxId;
 
 
 
-            const productInsert = await transaction.request()
+            const brokerageRequest = new sql.Request()
+                .input('Id', Id)
                 .input('Product_Id', Product_Id)
-                .input('Product_Code', `ONLINE_${Product_Id}`)
+                .input('Brokerage', parseFloat(NagalBrokerage) || 0)
+                .input('Coolie', parseFloat(NagalCoolie) || 0)
+                .query(`
+                INSERT INTO tbl_Brokerage (
+                    Id,Product_Id, Brokerage, Coolie
+                ) VALUES (
+                   @Id, @Product_Id, @Brokerage, @Coolie
+                )`
+                );
+
+            const brokerageResult = await brokerageRequest;
+
+            if (brokerageResult.rowsAffected[0] && brokerageResult.rowsAffected[0] > 0) {
+                success(res, 'New Product Added with Brokerage Details');
+            } else {
+
+                success(res, 'Product Added');
+            }
+        } else {
+            failed(res, 'Failed to add product');
+        }
+
+    } catch (e) {
+        servError(e, res);
+    }
+}
+
+   const updateProduct = async (req, res) => {
+    try {
+        const {
+            Product_Id, Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
+            Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive,
+            Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen, NagalBrokerage, NagalCoolie, Stock_Group
+        } = req?.body;
+
+        if (!Product_Id) {
+            return invalidInput(res, 'Product Id is required for update');
+        }
+
+        let nextId = null;
+        if (NagalBrokerage !== '' || NagalCoolie !== '') {
+            const getBrokerageId = await getNextId({
+                table: 'tbl_Brokerage',
+                column: 'Id'
+            });
+
+            if (!getBrokerageId.status) {
+                return failed(res, 'Failed to save, Please try again');
+            }
+            nextId = getBrokerageId.MaxId || getBrokerageId.nextId;
+        }
+
+       
+        const stockGroupValue =
+            Stock_Group === '' || Stock_Group === null || Stock_Group === undefined
+                ? null
+                : (toNumber(Stock_Group) || null);
+
+        const transaction = new sql.Transaction();
+        await transaction.begin();
+
+        try {
+       
+            await new sql.Request(transaction)
+                .input('Product_Id', Product_Id)
                 .input('Product_Name', Product_Name)
                 .input('Short_Name', Short_Name)
                 .input('Product_Description', Product_Description)
@@ -354,312 +603,93 @@ const sfProductController = () => {
                 .input('UOM_Id', UOM_Id)
                 .input('IS_Sold', IS_Sold)
                 .input('Display_Order_By', Display_Order_By)
-                .input('Product_Image_Name', fileName)
-                .input('Product_Image_Path', filePath)
                 .input('HSN_Code', HSN_Code)
-                .input('Gst_P', Number(Gst_P))
-                .input('Cgst_P', Number(Gst_P) / 2)
-                .input('Sgst_P', Number(Gst_P) / 2)
-                .input('Igst_P', Number(Gst_P))
+                .input('Gst_P', Number(Gst_P) ?? 0)
+                .input('Cgst_P', (Number(Gst_P) / 2) ?? 0)
+                .input('Sgst_P', (Number(Gst_P) / 2) ?? 0)
+                .input('Igst_P', Number(Gst_P) ?? 0)
                 .input('ERP_Id', ERP_Id)
                 .input('Pos_Brand_Id', Pos_Brand_Id)
                 .input('IsActive', IsActive)
-                .input('Product_Rate', Product_Rate)
-                .input('Max_Rate', Max_Rate)
-                .input('Coolie', Coolie)
-                .input('Packing_CH', Packing_CH)
-                .input('Other_Expen', Other_Expen)
-                .input('NagalBrokerage', NagalBrokerage)
-                .input('NagalCoolie', NagalCoolie)
+                .input('Product_Rate', toNumber(Product_Rate))
+                .input('Max_Rate', toNumber(Max_Rate))
+                .input('Coolie', toNumber(Coolie) || 0)
+                .input('Packing_CH', toNumber(Packing_CH) || 0)
+                .input('Other_Expen', toNumber(Other_Expen) || 0)
+                .input('NagalBrokerage', toNumber(NagalBrokerage) || 0)
+                .input('NagalCoolie', toNumber(NagalCoolie) || 0)
+                .input('Stock_Group', sql.Int, stockGroupValue)
                 .query(`
-                INSERT INTO tbl_Product_Master (
-                    Product_Id, Product_Code, Product_Name, Short_Name,
-                    Product_Description, Brand, Product_Group, Pack_Id,
-                    UOM_Id, IS_Sold, Display_Order_By,
-                    Product_Image_Name, Product_Image_Path,
-                    HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P,
-                    ERP_Id, Pos_Brand_Id, IsActive,
-                    Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen,NagalBrokerage,NagalCoolie
-                )
-                VALUES (
-                    @Product_Id, @Product_Code, @Product_Name, @Short_Name,
-                    @Product_Description, @Brand, @Product_Group, @Pack_Id,
-                    @UOM_Id, @IS_Sold, @Display_Order_By,
-                    @Product_Image_Name, @Product_Image_Path,
-                    @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P,
-                    @ERP_Id, @Pos_Brand_Id, @IsActive,
-                    @Product_Rate, @Max_Rate, @Coolie, @Packing_CH, @Other_Expen,@NagalBrokerage,@NagalCoolie
-                )
-            `);
-
-            if (productInsert.rowsAffected[0] === 0) {
-                await transaction.rollback();
-                return failed(res, 'Failed to add product');
-            }
-
-
-            const brokerageInsert = await transaction.request()
-                .input('Id', Id)
-                .input('Product_Id', Product_Id)
-                .input('Brokerage', Number(NagalBrokerage))
-                .input('Coolie', Number(NagalCoolie))
-                .query(`
-                INSERT INTO tbl_Brokerage (
-                    Id,Product_Id, Brokerage, Coolie
-                )
-                VALUES (
-                    @Id,@Product_Id, @Brokerage, @Coolie
-                )
-            `);
-
-            if (brokerageInsert.rowsAffected[0] === 0) {
-                await transaction.rollback();
-                return failed(res, 'Product added but brokerage insert failed');
-            }
-
-            await transaction.commit();
-            success(res, 'New Product Added with Brokerage');
-
-        } catch (error) {
-            if (transaction) await transaction.rollback();
-            servError(error, res);
-        }
-    };
-
-    const postProductsWithoutImage = async (req, res) => {
-        const {
-            Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-            Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id,
-            IsActive, Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen,
-            NagalBrokerage = 0, NagalCoolie = 0
-        } = req?.body;
-
-        try {
-            const getId = await getNextId({
-                table: 'tbl_Product_Master',
-                column: 'Product_Id'
-            });
-
-            if (!getId.status) {
-                return failed(res, 'Failed to save, Please try again');
-            }
-
-            const Product_Id = getId.MaxId;
-
-
-            const request = new sql.Request()
-                .input('Product_Id', Product_Id)
-                .input('Product_Code', 'ONLINE_' + Product_Id)
-                .input('Product_Name', Product_Name)
-                .input('Short_Name', Short_Name || '')
-                .input('Product_Description', Product_Description || '')
-                .input('Brand', parseInt(Brand) || 0)
-                .input('Product_Group', parseInt(Product_Group) || 0)
-                .input('Pack_Id', parseInt(Pack_Id) || 0)
-                .input('UOM_Id', parseInt(UOM_Id) || 0)
-                .input('IS_Sold', parseInt(IS_Sold) || 0)
-                .input('Display_Order_By', Display_Order_By || null)
-                .input('Product_Image_Name', '')
-                .input('Product_Image_Path', '')
-                .input('HSN_Code', HSN_Code || '')
-                .input('Gst_P', parseFloat(Gst_P) || 0)
-                .input('Cgst_P', (parseFloat(Gst_P) / 2) || 0)
-                .input('Sgst_P', (parseFloat(Gst_P) / 2) || 0)
-                .input('Igst_P', parseFloat(Gst_P) || 0)
-                .input('ERP_Id', ERP_Id || null)
-                .input('Pos_Brand_Id', parseInt(Pos_Brand_Id) || 0)
-                .input('IsActive', parseInt(IsActive) || 1)
-                .input('Product_Rate', parseFloat(Product_Rate) || 0)
-                .input('Max_Rate', parseFloat(Max_Rate) || 0)
-                .input('Coolie', parseFloat(Coolie) || 0)
-                .input('Packing_CH', parseFloat(Packing_CH) || 0)
-                .input('Other_Expen', parseFloat(Other_Expen) || 0)
-                .query(`
-                INSERT INTO tbl_Product_Master (
-                    Product_Id, Product_Code, Product_Name, Short_Name, Product_Description, Brand, 
-                    Product_Group, Pack_Id, UOM_Id, IS_Sold, Display_Order_By, Product_Image_Name,
-                    Product_Image_Path, HSN_Code, Gst_P, Cgst_P, Sgst_P, Igst_P, ERP_Id, Pos_Brand_Id, 
-                    IsActive, Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen
-                ) VALUES (
-                    @Product_Id, @Product_Code, @Product_Name, @Short_Name, @Product_Description, @Brand, 
-                    @Product_Group, @Pack_Id, @UOM_Id, @IS_Sold, @Display_Order_By, @Product_Image_Name, 
-                    @Product_Image_Path, @HSN_Code, @Gst_P, @Cgst_P, @Sgst_P, @Igst_P, @ERP_Id, @Pos_Brand_Id,
-                    @IsActive, @Product_Rate, @Max_Rate, @Coolie, @Packing_CH, @Other_Expen
-                )`
+                UPDATE tbl_Product_Master
+                SET 
+                    Product_Name = @Product_Name,
+                    Short_Name = @Short_Name,
+                    Product_Description = @Product_Description,
+                    Brand = @Brand,
+                    Product_Group = @Product_Group,
+                    Pack_Id = @Pack_Id,
+                    UOM_Id = @UOM_Id,
+                    IS_Sold = @IS_Sold,
+                    Display_Order_By = @Display_Order_By,
+                    HSN_Code = @HSN_Code,
+                    Gst_P = @Gst_P,
+                    Cgst_P = @Cgst_P,
+                    Sgst_P = @Sgst_P,
+                    Igst_P = @Igst_P,
+                    ERP_Id = @ERP_Id,
+                    Pos_Brand_Id = @Pos_Brand_Id,
+                    IsActive = @IsActive,
+                    Product_Rate = @Product_Rate,
+                    Max_Rate = @Max_Rate,
+                    Coolie = @Coolie,
+                    Packing_CH = @Packing_CH,
+                    Other_Expen = @Other_Expen,
+                    NagalBrokerage = @NagalBrokerage,
+                    NagalCoolie = @NagalCoolie,
+                    Stock_Group = @Stock_Group
+                WHERE Product_Id = @Product_Id`
                 );
 
-            const result = await request;
-
-            if (result.rowsAffected[0] && result.rowsAffected[0] > 0) {
-
-                const getBrokerageId = await getNextId({
-                    table: 'tbl_Brokerage',
-                    column: 'Id'
-                });
-
-                if (!getBrokerageId.status) {
-                    return failed(res, 'Failed to save, Please try again');
-                }
-
-                const Id = getBrokerageId.MaxId;
-
-
-
-                const brokerageRequest = new sql.Request()
-                    .input('Id', Id)
-                    .input('Product_Id', Product_Id)
-                    .input('Brokerage', parseFloat(NagalBrokerage) || 0)
-                    .input('Coolie', parseFloat(NagalCoolie) || 0)
-                    .query(`
-                    INSERT INTO tbl_Brokerage (
-                        Id,Product_Id, Brokerage, Coolie
-                    ) VALUES (
-                       @Id, @Product_Id, @Brokerage, @Coolie
-                    )`
-                    );
-
-                const brokerageResult = await brokerageRequest;
-
-                if (brokerageResult.rowsAffected[0] && brokerageResult.rowsAffected[0] > 0) {
-                    success(res, 'New Product Added with Brokerage Details');
-                } else {
-
-                    success(res, 'Product Added');
-                }
-            } else {
-                failed(res, 'Failed to add product');
-            }
-
-        } catch (e) {
-            servError(e, res);
-        }
-    }
-
-    const updateProduct = async (req, res) => {
-        try {
-            const {
-                Product_Id, Product_Name, Short_Name, Product_Description, Brand = 0, Product_Group = 0, UOM_Id = 0,
-                Pack_Id = 0, IS_Sold = 0, HSN_Code, Gst_P = 0, ERP_Id, Display_Order_By, Pos_Brand_Id, IsActive,
-                Product_Rate, Max_Rate, Coolie, Packing_CH, Other_Expen, NagalBrokerage, NagalCoolie
-            } = req?.body;
-
-            if (!Product_Id) {
-                return invalidInput(res, 'Product Id is required for update');
-            }
-
-            // Get next ID BEFORE starting transaction (if really needed)
-            let nextId = null;
-            if (NagalBrokerage !== '' || NagalCoolie !== '') {
-                const getBrokerageId = await getNextId({
-                    table: 'tbl_Brokerage',
-                    column: 'Id'
-                });
-
-                if (!getBrokerageId.status) {
-                    return failed(res, 'Failed to save, Please try again');
-                }
-                nextId = getBrokerageId.MaxId || getBrokerageId.nextId;
-            }
-
-            const transaction = new sql.Transaction();
-            await transaction.begin();
-
-            try {
-                // Update product master
+            if (NagalBrokerage !== undefined || NagalCoolie !== undefined) {
                 await new sql.Request(transaction)
                     .input('Product_Id', Product_Id)
-                    .input('Product_Name', Product_Name)
-                    .input('Short_Name', Short_Name)
-                    .input('Product_Description', Product_Description)
-                    .input('Brand', Brand)
-                    .input('Product_Group', Product_Group)
-                    .input('Pack_Id', Pack_Id)
-                    .input('UOM_Id', UOM_Id)
-                    .input('IS_Sold', IS_Sold)
-                    .input('Display_Order_By', Display_Order_By)
-                    .input('HSN_Code', HSN_Code)
-                    .input('Gst_P', Number(Gst_P) ?? 0)
-                    .input('Cgst_P', (Number(Gst_P) / 2) ?? 0)
-                    .input('Sgst_P', (Number(Gst_P) / 2) ?? 0)
-                    .input('Igst_P', Number(Gst_P) ?? 0)
-                    .input('ERP_Id', ERP_Id)
-                    .input('Pos_Brand_Id', Pos_Brand_Id)
-                    .input('IsActive', IsActive)
-                    .input('Product_Rate', toNumber(Product_Rate))
-                    .input('Max_Rate', toNumber(Max_Rate))
-                    .input('Coolie', Coolie)
-                    .input('Packing_CH', Packing_CH)
-                    .input('Other_Expen', Other_Expen)
-                    .input('NagalBrokerage', NagalBrokerage)
-                    .input('NagalCoolie', NagalCoolie)
                     .query(`
-                    UPDATE tbl_Product_Master
-                    SET 
-                        Product_Name = @Product_Name,
-                        Short_Name = @Short_Name,
-                        Product_Description = @Product_Description,
-                        Brand = @Brand,
-                        Product_Group = @Product_Group,
-                        Pack_Id = @Pack_Id,
-                        UOM_Id = @UOM_Id,
-                        IS_Sold = @IS_Sold,
-                        Display_Order_By = @Display_Order_By,
-                        HSN_Code = @HSN_Code,
-                        Gst_P = @Gst_P,
-                        Cgst_P = @Cgst_P,
-                        Sgst_P = @Sgst_P,
-                        Igst_P = @Igst_P,
-                        ERP_Id = @ERP_Id,
-                        Pos_Brand_Id = @Pos_Brand_Id,
-                        IsActive = @IsActive,
-                        Product_Rate = @Product_Rate,
-                        Max_Rate = @Max_Rate,
-                        Coolie = @Coolie,
-                        Packing_CH = @Packing_CH,
-                        Other_Expen = @Other_Expen,
-                        NagalBrokerage=@NagalBrokerage,
-                        NagalCoolie=@NagalCoolie
+                    DELETE FROM tbl_Brokerage 
                     WHERE Product_Id = @Product_Id`
                     );
 
-                // Handle brokerage data
-                if (NagalBrokerage !== undefined || NagalCoolie !== undefined) {
-                    // Delete existing brokerage records
-                    await new sql.Request(transaction)
-                        .input('Product_Id', Product_Id)
-                        .query(`
-                        DELETE FROM tbl_Brokerage 
-                        WHERE Product_Id = @Product_Id`
-                        );
-
-                    // Insert new brokerage record
-                    if (NagalBrokerage !== '' || NagalCoolie !== '') {
-                        if (nextId) {
-                            await new sql.Request(transaction)
-                                .input('Id', nextId)
-                                .input('Product_Id', Product_Id)
-                                .input('Brokerage', toNumber(NagalBrokerage) || 0)
-                                .input('Coolie', toNumber(NagalCoolie) || 0)
-                                .query(`
-                                INSERT INTO tbl_Brokerage (Id, Product_Id, Brokerage, Coolie)
-                                VALUES (@Id, @Product_Id, @Brokerage, @Coolie)`
-                                );
-                        }
+                if (NagalBrokerage !== '' || NagalCoolie !== '') {
+                    if (nextId) {
+                        await new sql.Request(transaction)
+                            .input('Id', nextId)
+                            .input('Product_Id', Product_Id)
+                            .input('Brokerage', toNumber(NagalBrokerage) || 0)
+                            .input('Coolie', toNumber(NagalCoolie) || 0)
+                            .query(`
+                            INSERT INTO tbl_Brokerage (Id, Product_Id, Brokerage, Coolie)
+                            VALUES (@Id, @Product_Id, @Brokerage, @Coolie)`
+                            );
                     }
                 }
-
-                await transaction.commit();
-                success(res, 'Product updated successfully');
-
-            } catch (error) {
-                await transaction.rollback();
-                servError(error, res);
             }
 
-        } catch (e) {
-            servError(e, res);
+            await transaction.commit();
+            success(res, 'Product updated successfully');
+
+        } catch (error) {
+        
+            try {
+                await transaction.rollback();
+            } catch (rollbackErr) {
+                console.error('Rollback failed (transaction likely already auto-aborted):', rollbackErr);
+            }
+            servError(error, res);
         }
+
+    } catch (e) {
+        servError(e, res);
     }
+}
 
     const updateProductImages = async (req, res) => {
         try {
