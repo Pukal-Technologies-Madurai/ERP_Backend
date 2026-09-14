@@ -609,12 +609,13 @@ const getVoucherInfo = async (req, res) => {
 
 const getOverallPartyOutstandingsStoredProcedure = async (req, res) => {
     try {
+        const { reqDate } = req.query;
         const receivablesRequest = new sql.Request()
-            .input('Fromdate', ISOString())
+            .input('Fromdate', reqDate ? ISOString(reqDate) : ISOString())
             .execute('Transaction_Recivables_Reort_VW');
 
         const payablesRequest = new sql.Request()
-            .input('Fromdate', ISOString())
+            .input('Fromdate', reqDate ? ISOString(reqDate) : ISOString())
             .execute('Transaction_Payables_Reort_VW');
         
         const receivables = await receivablesRequest;
