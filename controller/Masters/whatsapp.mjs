@@ -1,5 +1,7 @@
 
 import sql from 'mssql';
+import fs from 'fs';
+import path from 'path';
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs'
 import { checkIsNumber, filterableText, isEqualNumber, randomNumber } from '../../helper_functions.mjs';
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
@@ -783,6 +785,17 @@ const whatsappDelete=async(req,res)=>{
 
 const postpricelistPdf=async(req,res)=>{
       try {
+        const dirPath = './uploads/pricelist';
+        if (fs.existsSync(dirPath)) {
+            const files = fs.readdirSync(dirPath);
+            for (const file of files) {
+                const filePath = path.join(dirPath, file);
+                if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+        }
+
         await uploadFile(req, res, 11, 'pdfFile');
 
         const fileName = req?.file?.filename;
@@ -791,11 +804,10 @@ const postpricelistPdf=async(req,res)=>{
             return invalidInput(res, 'PDF file is required');
         }
 
-   
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const publicUrl = `${baseUrl}/imageURL/pricelist/${fileName}`;
 
-        success(res, 'outstanding PDF uploaded', { url: publicUrl, fileName });
+        success(res, 'Pricelist PDF uploaded', { url: publicUrl, fileName });
 
     } catch (error) {
         servError(error, res);
