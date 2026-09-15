@@ -1,6 +1,6 @@
 import sql from 'mssql'
 import { servError, success, invalidInput, sentData, noData, dataFound } from '../../res.mjs';
-import { Addition, checkIsNumber, filterableText, getDaysBetween, isEqualNumber, ISOString, stringCompare, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
+import { Addition, checkIsNumber, Division, filterableText, getDaysBetween, isEqualNumber, ISOString, stringCompare, Subraction, toArray, toNumber } from '../../helper_functions.mjs';
 import { insertMultipleBatch, insertMultipleBatchUsageDetails } from '../../middleware/batchTransactions.mjs';
 
 // material inward
@@ -1648,6 +1648,7 @@ const batchDropDown = async (req, res) => {
         const request = new sql.Request()
             .query(`
                 SELECT
+                    bm.id as batch_id,
                     bm.batch,
                     bm.batch_alias,
                     bm.item_id,
@@ -1657,7 +1658,7 @@ const batchDropDown = async (req, res) => {
                 FROM tbl_Batch_Master AS bm
                 JOIN tbl_Product_Master AS pm ON pm.Product_Id = bm.item_id
                 JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = bm.godown_id
-                GROUP BY bm.batch, bm.batch_alias, bm.item_id, pm.Product_Name, bm.godown_id, gm.Godown_Name; `
+                GROUP BY bm.id, bm.batch, bm.batch_alias, bm.item_id, pm.Product_Name, bm.godown_id, gm.Godown_Name; `
             );
 
         const result = await request;
@@ -1670,14 +1671,18 @@ const batchDropDown = async (req, res) => {
 
 const previousAndNextStages = async (req, res) => {
     try {
-        const { item_id, batch_name, godown_id } = req.query;
+        const { batch_id } = req.query;
 
         const request = new sql.Request()
-            .input('reqItem', sql.Int, item_id)
-            .input('batchName', sql.NVarChar, batch_name)
-            .input('godown_id', sql.Int, godown_id)
+            .input('batch_id', sql.UniqueIdentifier, batch_id)
             .query(`
-                --DECLARE @reqItem INT = 340, @batchName NVARCHAR(50) = 'GULABI PRODUCTION';
+                DECLARE @reqItem INT;
+                DECLARE @batchName NVARCHAR(50);
+                
+                SELECT TOP 1 @reqItem = item_id, @batchName = batch
+                FROM tbl_Batch_Master
+                WHERE id = @batch_id;
+
                 -- ****************************** batch details ******************************
                 SELECT
                     bm.id,
@@ -1697,7 +1702,7 @@ const previousAndNextStages = async (req, res) => {
                 LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = bm.item_id
                 LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = bm.godown_id
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = bm.created_by
-                WHERE bm.item_id = @reqItem AND bm.batch = @batchName
+                WHERE bm.id = @batch_id
                 ORDER BY bm.ob_id DESC, bm.created_at DESC
             -- ****************************** batch usage ******************************
                 SELECT
@@ -1715,7 +1720,7 @@ const previousAndNextStages = async (req, res) => {
                     bt.ob_id
                 FROM tbl_Batch_Transaction AS bt
                 LEFT JOIN tbl_Users AS cb ON bt.created_by = cb.UserId
-                WHERE bt.item_id = @reqItem AND batch = @batchName;
+                WHERE bt.batch_id = @batch_id;
             -- ****************************** next stage ******************************
                 SELECT *
                 FROM dbo.getBatchAfterState(@reqItem, @batchName);
@@ -1762,13 +1767,20 @@ const previousAndNextStages = async (req, res) => {
 
 const previousBatchDetails = async (req, res) => {
     try {
-        const { item_id, batch_name, godown_id } = req.query;
+        const { batch_id } = req.query;
 
         const request = new sql.Request()
-            .input('reqItem', sql.Int, item_id)
-            .input('batchName', sql.NVarChar, batch_name)
-            .input('godown_id', sql.Int, godown_id)
-            .query(`SELECT * FROM dbo.getBatchBeforeState(@reqItem, @batchName);`);
+            .input('batch_id', sql.UniqueIdentifier, batch_id)
+            .query(`
+                DECLARE @reqItem INT;
+                DECLARE @batchName NVARCHAR(50);
+                
+                SELECT TOP 1 @reqItem = item_id, @batchName = batch
+                FROM tbl_Batch_Master
+                WHERE id = @batch_id;
+                
+                SELECT * FROM dbo.getBatchBeforeState(@reqItem, @batchName);
+            `);
 
         const result = await request;
 
@@ -1781,13 +1793,20 @@ const previousBatchDetails = async (req, res) => {
 
 const nextBatchDetails = async (req, res) => {
     try {
-        const { item_id, batch_name, godown_id } = req.query;
+        const { batch_id } = req.query;
 
         const request = new sql.Request()
-            .input('reqItem', sql.Int, item_id)
-            .input('batchName', sql.NVarChar, batch_name)
-            .input('godown_id', sql.Int, godown_id)
-            .query(`SELECT * FROM dbo.getBatchAfterState(@reqItem, @batchName);`);
+            .input('batch_id', sql.UniqueIdentifier, batch_id)
+            .query(`
+                DECLARE @reqItem INT;
+                DECLARE @batchName NVARCHAR(50);
+                
+                SELECT TOP 1 @reqItem = item_id, @batchName = batch
+                FROM tbl_Batch_Master
+                WHERE id = @batch_id;
+                
+                SELECT * FROM dbo.getBatchAfterState(@reqItem, @batchName);
+            `);
 
         const result = await request;
 
@@ -1850,9 +1869,10 @@ const batchTransaction = async (req, res) => {
                     bt.item_id = sdsi.Item_Id 
                     AND bt.godown_id = sdsi.GoDown_Id 
                     AND bt.reference_id = sdgi.Do_Id
-                    AND bt.batch = sdsi.Batch_Name
                     AND (bt.type = 'SALES' OR bt.type = 'SALES_REVERSAL')
+                JOIN tbl_Batch_Master AS bm ON bm.id = bt.batch_id
                 WHERE sdgi.Cancel_status <> 0 AND bt.batch_id = @batch_id
+                  AND (bm.batch = sdsi.Batch_Name OR bm.batch_alias = sdsi.Batch_Name)
                 GROUP BY bt.batch_id, sdgi.Do_Id, sdgi.Do_Date, sdgi.Do_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
             -- ********************************* purchase - IN *********************************
                 SELECT
@@ -1862,7 +1882,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.Po_Inv_No AS voucherNumber,
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
                     SUM(sdsi.Act_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
-                    SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                    SUM(sdsi.Act_Qty) - COALESCE(SUM(bt.quantity), 0) AS batchQuantity,
                     'PURCHASE' AS transType,
                     sdgi.Created_on AS createdAt
                 FROM tbl_Purchase_Order_Inv_Gen_Info AS sdgi
@@ -1871,7 +1891,7 @@ const batchTransaction = async (req, res) => {
                 JOIN tbl_Batch_Master AS bm ON
                     bm.item_id = sdsi.Item_Id
                     AND bm.godown_id = sdsi.Location_Id
-                    AND bm.batch = sdsi.Batch_No
+                    AND (bm.batch = sdsi.Batch_No OR bm.batch_alias = sdsi.Batch_No)
                     AND bm.id = @batch_id
                 LEFT JOIN tbl_Batch_Transaction AS bt ON
                     bt.batch_id = bm.id 
@@ -1896,9 +1916,10 @@ const batchTransaction = async (req, res) => {
                     bt.item_id = sdsi.Sour_Item_Id 
                 	AND bt.godown_id = sdsi.Sour_Goodown_Id 
                 	AND bt.reference_id = sdgi.PR_Id
-                	AND bt.batch = sdsi.Sour_Batch_Lot_No
-                    AND(bt.type = 'CONSUMPTION' OR bt.type = 'CONSUMPTION_REVERSAL')
+                    AND (bt.type = 'CONSUMPTION' OR bt.type = 'CONSUMPTION_REVERSAL')
+                JOIN tbl_Batch_Master AS bm ON bm.id = bt.batch_id
                 WHERE sdgi.PR_Status <> 'Canceled' AND bt.batch_id = @batch_id
+                  AND (bm.batch = sdsi.Sour_Batch_Lot_No OR bm.batch_alias = sdsi.Sour_Batch_Lot_No)
                 GROUP BY bt.batch_id, sdgi.PR_Id, sdgi.Process_date, sdgi.PR_Inv_Id, bt.type, sdgi.Created_At;
             -- ********************************* PRODUCTION - IN *********************************
                 SELECT
@@ -1908,7 +1929,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.PR_Inv_Id AS voucherNumber,
                     'Not applicable' partyName,
                     SUM(sdsi.Dest_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
-                    SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                    SUM(sdsi.Dest_Qty) - COALESCE(SUM(bt.quantity), 0) AS batchQuantity,
                     'PRODUCTION' AS transType,
                     sdgi.Created_At AS createdAt
                 FROM tbl_Processing_Gen_Info AS sdgi
@@ -1916,7 +1937,7 @@ const batchTransaction = async (req, res) => {
                 JOIN tbl_Batch_Master AS bm ON
                     bm.item_id = sdsi.Dest_Item_Id
                 	AND bm.godown_id = sdsi.Dest_Goodown_Id
-                	AND bm.batch = sdsi.Dest_Batch_Lot_No
+                	AND (bm.batch = sdsi.Dest_Batch_Lot_No OR bm.batch_alias = sdsi.Dest_Batch_Lot_No)
                 	AND bm.id = @batch_id
                 LEFT JOIN tbl_Batch_Transaction AS bt ON
                     bt.batch_id = bm.id 
@@ -1942,9 +1963,10 @@ const batchTransaction = async (req, res) => {
                     bt.item_id = sdsi.Item_Id 
                 	AND bt.godown_id = sdsi.GoDown_Id 
                 	AND bt.reference_id = sdgi.DB_Id
-                	AND bt.batch = sdsi.Batch_Name
                     AND(bt.type = 'DEBIT_NOTE' OR bt.type = 'DEBIT_NOTE_REVERSAL')
+                JOIN tbl_Batch_Master AS bm ON bm.id = bt.batch_id
                 WHERE sdgi.Cancel_status <> 0 AND bt.batch_id = @batch_id
+                  AND (bm.batch = sdsi.Batch_Name OR bm.batch_alias = sdsi.Batch_Name)
                 GROUP BY bt.batch_id, sdgi.DB_Id, sdgi.DB_Date, sdgi.DB_Inv_No, rm.Retailer_Name, bt.type, sdgi.Created_on;
                 -- ********************************* credit_note - IN *********************************
                 SELECT
@@ -1954,7 +1976,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.CR_Inv_No AS voucherNumber,
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
                     SUM(sdsi.Act_Qty) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
-                    SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                    SUM(sdsi.Act_Qty) - COALESCE(SUM(bt.quantity), 0) AS batchQuantity,
                     'CREDIT_NOTE' AS transType,
                     sdgi.Created_on AS createdAt
                 FROM tbl_Credit_Note_Gen_Info AS sdgi
@@ -1963,7 +1985,7 @@ const batchTransaction = async (req, res) => {
                 JOIN tbl_Batch_Master AS bm ON
                     bm.item_id = sdsi.Item_Id
                 	AND bm.godown_id = sdsi.GoDown_Id
-                	AND bm.batch = sdsi.Batch_Name
+                	AND (bm.batch = sdsi.Batch_Name OR bm.batch_alias = sdsi.Batch_Name)
                 	AND bm.id = @batch_id
                 LEFT JOIN tbl_Batch_Transaction AS bt ON
                     bt.batch_id = bm.id 
@@ -1986,11 +2008,9 @@ const batchTransaction = async (req, res) => {
                 JOIN tbl_Trip_Details AS tripDetails ON tripDetails.Trip_Id = sdgi.Trip_Id
                 JOIN tbl_Trip_Arrival AS sdsi ON sdsi.Arr_Id = tripDetails.Arrival_Id
                 JOIN tbl_Batch_Transaction AS bt ON
-                    bt.item_id = sdsi.Product_Id 
-                	AND bt.godown_id = sdsi.From_Location 
-                	AND bt.reference_id = sdsi.Arr_Id
-                	AND bt.batch = sdsi.Batch_No
-                AND(bt.type = 'OTHER_GODOWN' OR bt.type = 'OTHER_GODOWN_REVERSAL')
+                    bt.reference_id = sdsi.Arr_Id
+                    AND(bt.type = 'OTHER_GODOWN' OR bt.type = 'OTHER_GODOWN_REVERSAL')
+                JOIN tbl_Batch_Master AS bm ON bm.id = bt.batch_id
                 WHERE sdgi.TripStatus <> 'Canceled' AND bt.batch_id = @batch_id
                 GROUP BY bt.batch_id, sdsi.Arr_Id, sdgi.Trip_Date, sdgi.TR_INV_ID, bt.type, sdgi.Created_At;
             -- ********************************* material_inward - OUT *********************************
@@ -2002,7 +2022,7 @@ const batchTransaction = async (req, res) => {
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
                     SUM(sdsi.QTY) - COALESCE(SUM(cbt.quantity), 0) AS voucherQuantity,
                     SUM(bt.quantity) - COALESCE(SUM(cbt.quantity), 0)  AS batchQuantity,
-                    'MATERIAL_INWARD' AS transType,
+                    'MATERIAL_INWARD_OUT' AS transType,
                     sdgi.Created_At AS createdAt
                 FROM tbl_Batch_Transaction AS bt
                 JOIN tbl_Trip_Arrival AS sdsi ON sdsi.Arr_Id = bt.reference_id
@@ -2027,7 +2047,7 @@ const batchTransaction = async (req, res) => {
                     sdgi.TR_INV_ID AS voucherNumber,
                     COALESCE(rm.Retailer_Name, 'Not found') partyName,
                     SUM(sdsi.QTY) - COALESCE(SUM(bt.quantity), 0) AS voucherQuantity,
-                    SUM(bm.quantity) - COALESCE(SUM(bt.quantity), 0)  AS batchQuantity,
+                    SUM(sdsi.QTY) - COALESCE(SUM(bt.quantity), 0) AS batchQuantity,
                     'MATERIAL_INWARD' AS transType,
                     sdgi.Created_At AS createdAt
                 FROM tbl_Trip_Master AS sdgi
@@ -2037,7 +2057,7 @@ const batchTransaction = async (req, res) => {
                 JOIN tbl_Batch_Master AS bm ON
                     bm.item_id = sdsi.Product_Id 
                 	AND bm.godown_id = sdsi.To_Location 
-                	AND bm.batch = sdsi.Batch_No
+                	AND (bm.batch = sdsi.Batch_No OR bm.batch_alias = sdsi.Batch_No)
                 	AND bm.id = @batch_id
                 LEFT JOIN tbl_Batch_Transaction AS bt ON
                     bt.batch_id = bm.id 
@@ -2136,18 +2156,31 @@ export const getBatchWithDetails = async (req, res) => {
                 bm.batch AS batchNo,
                 bm.batch_alias AS batchAlias,
                 bm.trans_date AS transDate,
+                bm.item_id AS itemId,
+                bm.godown_id AS godownId,
                 p.Product_Name AS productName,
                 g.Godown_Name AS godownName,
                 (bm.quantity - COALESCE(SUM(CASE WHEN bt.type LIKE '%_REVERSAL' AND bt.quantity > 0 THEN bt.quantity ELSE 0 END), 0)) AS inwardQty,
                 (COALESCE(SUM(CASE WHEN bt.type NOT LIKE '%_REVERSAL' THEN bt.quantity ELSE 0 END), 0) + COALESCE(SUM(CASE WHEN bt.type LIKE '%_REVERSAL' AND bt.quantity < 0 THEN bt.quantity ELSE 0 END), 0)) AS consumedQty,
-                (bm.quantity - COALESCE(SUM(bt.quantity), 0)) AS availableQty
+                (bm.quantity - COALESCE(SUM(bt.quantity), 0)) AS availableQty,
+                los.Stock_Group AS stockGroupName,
+                los.Group_ST AS groupName,
+                los.Brand AS brandName,
+                los.Grade_Item_Group AS gradeItemGroup,
+                los.S_Sub_Group_1 AS subGroup,
+                ISNULL(TRY_CAST(pck.Pack AS DECIMAL(18, 2)), 1) AS packValue
             FROM tbl_Batch_Master bm
             LEFT JOIN tbl_Product_Master p ON p.Product_Id = bm.item_id
             LEFT JOIN tbl_Godown_Master g ON g.Godown_Id = bm.godown_id
             LEFT JOIN tbl_Batch_Transaction bt ON bt.batch_id = bm.id
+            LEFT JOIN tbl_Stock_LOS AS los ON los.Pro_Id = bm.item_id
+            LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
             WHERE 1=1 ${dateCondition}
             GROUP BY 
-                bm.id, bm.batch, bm.batch_alias, bm.trans_date, p.Product_Name, g.Godown_Name, bm.quantity
+                bm.id, bm.batch, bm.batch_alias, bm.trans_date, bm.item_id, 
+                bm.godown_id, p.Product_Name, g.Godown_Name, bm.quantity,
+                los.Stock_Group, los.Group_ST, los.Brand,
+                los.Grade_Item_Group, los.S_Sub_Group_1, pck.Pack
         `);
 
         let filteredData = result.recordset || (result._recordset) || [];
@@ -2165,7 +2198,12 @@ export const getBatchWithDetails = async (req, res) => {
             }
         }
 
-        filteredData.sort((a, b) => {
+        const withPack = filteredData.map(obj => ({ 
+            ...obj, 
+            packValue: toNumber(obj.packValue),
+            consumedPackQuantity: Division(obj.consumedQty, obj.packValue),
+            availablePackQuantity: Division(obj.availableQty, obj.packValue),
+        })).sort((a, b) => {
             const dateA = new Date(a.transDate).getTime();
             const dateB = new Date(b.transDate).getTime();
 
@@ -2182,7 +2220,7 @@ export const getBatchWithDetails = async (req, res) => {
             return getStockPriority(Number(a.availableQty)) - getStockPriority(Number(b.availableQty));
         });
 
-        sentData(res, filteredData);
+        sentData(res, withPack);
 
     } catch (e) {
         servError(e, res);
