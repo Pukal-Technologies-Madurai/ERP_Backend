@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { servError, dataFound, noData, invalidInput, failed, success,sentData } from '../../res.mjs';
+import { servError, dataFound, noData, invalidInput, failed, success, sentData } from '../../res.mjs';
 import { checkIsNumber, isEqualNumber } from '../../helper_functions.mjs';
 import { getProducts, getNextId } from '../../middleware/miniAPIs.mjs';
 import SPCall from '../../middleware/SPcall.mjs';
@@ -326,7 +326,7 @@ const posBranchController = () => {
             const totalRecords = countResult.recordset[0].total;
             const totalPages = Math.ceil(totalRecords / limit);
 
-       
+
             baseQuery += `
             ORDER BY Cost_Center_Id
             OFFSET @offset ROWS
@@ -447,47 +447,47 @@ const posBranchController = () => {
 
 
 
-    const getStockGroup=async (req,res)=>{
+    const getStockGroup = async (req, res) => {
         // const { Emp_Id, reqDate } = req.query;
-         
-            //   if (!checkIsNumber(Emp_Id)) {
-            //       return invalidInput(res, 'Emp_Id is required');
-            //   }
-      
-              try {
-                  const request = new sql.Request()
-                      .query(`
+
+        //   if (!checkIsNumber(Emp_Id)) {
+        //       return invalidInput(res, 'Emp_Id is required');
+        //   }
+
+        try {
+            const request = new sql.Request()
+                .query(`
                         SELECT DISTINCT Stock_Group 
                             FROM tbl_Stock_LOS 
                             WHERE Stock_Group IS NOT NULL 
                             ORDER BY Stock_Group
                              `);
-      
-                  const result = await request;
-      
-                  if (result.recordset.length > 0) {
-                      return dataFound(res, result.recordset)
-                  } else {
-                      return noData(res)
-                  }
-              } catch (e) {
-                  return servError(e, res);
-              }
+
+            const result = await request;
+
+            if (result.recordset.length > 0) {
+                return dataFound(res, result.recordset)
+            } else {
+                return noData(res)
+            }
+        } catch (e) {
+            return servError(e, res);
+        }
     }
 
 
 
     const getPOSGroupsByStock = async (req, res) => {
-    const { stockGroup } = req.query;
-    
-    if (!stockGroup) {
-        return invalidInput(res, 'Stock_Group is required');
-    }
-    
-    try {
-        const request = new sql.Request()
-            .input('Stock_Group', sql.VarChar, stockGroup)
-            .query(`
+        const { stockGroup } = req.query;
+
+        if (!stockGroup) {
+            return invalidInput(res, 'Stock_Group is required');
+        }
+
+        try {
+            const request = new sql.Request()
+                .input('Stock_Group', sql.VarChar, stockGroup)
+                .query(`
                 SELECT DISTINCT 
                     POS_Group,
                     COUNT(*) as ItemCount,
@@ -500,157 +500,191 @@ const posBranchController = () => {
                 ORDER BY POS_Group
             `);
 
-        const result = await request;
+            const result = await request;
 
-        if (result.recordset.length > 0) {
-            // Format the response
-            const formattedData = result.recordset.map(item => ({
-                posGroup: item.POS_Group,
-                itemCount: item.ItemCount,
-                firstItemId: item.FirstItemId,
-                lastItemId: item.LastItemId
-            }));
-            
-            return res.status(200).json({
-                success: true,
-                message: 'POS Groups found',
-                data: formattedData,
-                totalGroups: formattedData.length,
-                stockGroup: stockGroup
-            });
-        } else {
-            return res.status(200).json({
-                success: true,
-                message: 'No POS Groups found for this Stock Group',
-                data: [],
-                totalGroups: 0,
-                stockGroup: stockGroup
+            if (result.recordset.length > 0) {
+                // Format the response
+                const formattedData = result.recordset.map(item => ({
+                    posGroup: item.POS_Group,
+                    itemCount: item.ItemCount,
+                    firstItemId: item.FirstItemId,
+                    lastItemId: item.LastItemId
+                }));
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'POS Groups found',
+                    data: formattedData,
+                    totalGroups: formattedData.length,
+                    stockGroup: stockGroup
+                });
+            } else {
+                return res.status(200).json({
+                    success: true,
+                    message: 'No POS Groups found for this Stock Group',
+                    data: [],
+                    totalGroups: 0,
+                    stockGroup: stockGroup
+                });
+            }
+        } catch (e) {
+            return servError(e, res);
+        }
+    };
+
+    const getPosGroupDetails = async (req, res) => {
+
+        const { posGroup } = req.query;
+
+        if (!posGroup) {
+            return res.status(400).json({
+                success: false,
+                message: 'POS_Group is required'
             });
         }
-    } catch (e) {
-        return servError(e, res);
-    }
-};
 
-const getPosGroupDetails=async(req,res)=>{
-  
-    const { posGroup } = req.query;
-    
-    if (!posGroup) {
-        return res.status(400).json({
-            success: false,
-            message: 'POS_Group is required'
-        });
-    }
-    
-    try {
-        const request = new sql.Request()
-            .input('POS_Group', sql.NVarChar, posGroup)
-            .query(`
+        try {
+            const request = new sql.Request()
+                .input('POS_Group', sql.NVarChar, posGroup)
+                .query(`
                 SELECT * FROM tbl_Stock_LOS 
                 WHERE POS_Group = @POS_Group
                 ORDER BY Auto_Id
             `);
-        
-        const result = await request;
-        
-        res.json({
-            success: true,
-            message: result.recordset.length > 0 ? 'Items found' : 'No items found',
-            data: result.recordset
-        });
-        
-    } catch (error) {
-        console.error('Error fetching items:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Database error',
-            error: error.message
-        });
+
+            const result = await request;
+
+            res.json({
+                success: true,
+                message: result.recordset.length > 0 ? 'Items found' : 'No items found',
+                data: result.recordset
+            });
+
+        } catch (error) {
+            console.error('Error fetching items:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Database error',
+                error: error.message
+            });
+        }
     }
-}
 
 
-//     const getAllProductsPos = async (req, res) => {
-//         try {
-//             const request = new sql.Request()
-//                 .query(`
-//                   			DECLARE @LatestRateDate DATE = (
-//     SELECT TOP 1 Rate_Date 
-//     FROM tbl_Pos_Rate_Master 
-//     ORDER BY Rate_Date DESC
-// );
+    //     const getAllProductsPos = async (req, res) => {
+    //         try {
+    //             const request = new sql.Request()
+    //                 .query(`
+    //                   			DECLARE @LatestRateDate DATE = (
+    //     SELECT TOP 1 Rate_Date 
+    //     FROM tbl_Pos_Rate_Master 
+    //     ORDER BY Rate_Date DESC
+    // );
 
-// SELECT 
-//     p.*,
-//     stl.Stock_Tally_Id,
-//     stl.Alter_Tally_Id,
-//     stl.Stock_Item,
-//     stl.Group_ST,
-//     stl.Bag,
-//     stl.Stock_Group,
-//     stl.S_Sub_Group_1,
-//     stl.Grade_Item_Group,
-//     stl.Item_Name_Modified,
-//     stl.POS_Group,
-//     stl.POS_Item_Name,
-    
-//     COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
-//    COALESCE(stl.Pos_Group, 'NOT FOUND') AS Pro_Group,
-//     COALESCE(u.Units, 'NOT FOUND') AS Units,
-//     COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
-//     COALESCE(p.Product_Rate, 0) AS Item_Rate,
+    // SELECT 
+    //     p.*,
+    //     stl.Stock_Tally_Id,
+    //     stl.Alter_Tally_Id,
+    //     stl.Stock_Item,
+    //     stl.Group_ST,
+    //     stl.Bag,
+    //     stl.Stock_Group,
+    //     stl.S_Sub_Group_1,
+    //     stl.Grade_Item_Group,
+    //     stl.Item_Name_Modified,
+    //     stl.POS_Group,
+    //     stl.POS_Item_Name,
 
-//     COALESCE(pr.Rate, 0)               AS POS_Rate,
-//     COALESCE(pr.Min_Rate, 0)           AS POS_Min_Rate,
-//     COALESCE(pr.Max_Rate, 0)           AS POS_Max_Rate,
-//     COALESCE(pr.Is_Active_Decative, 0) AS POS_Is_Active,
-//     pr.Rate_Date                       AS POS_Rate_Date,
-//     pr.Is_Active_Decative              AS Active_Deactive
+    //     COALESCE(b.Brand_Name, 'NOT FOUND') AS Brand_Name,
+    //    COALESCE(stl.Pos_Group, 'NOT FOUND') AS Pro_Group,
+    //     COALESCE(u.Units, 'NOT FOUND') AS Units,
+    //     COALESCE(pck.Pack, 'NOT FOUND') AS PackGet,
+    //     COALESCE(p.Product_Rate, 0) AS Item_Rate,
 
-// FROM 
-//     tbl_Product_Master AS p
-//     LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
+    //     COALESCE(pr.Rate, 0)               AS POS_Rate,
+    //     COALESCE(pr.Min_Rate, 0)           AS POS_Min_Rate,
+    //     COALESCE(pr.Max_Rate, 0)           AS POS_Max_Rate,
+    //     COALESCE(pr.Is_Active_Decative, 0) AS POS_Is_Active,
+    //     pr.Rate_Date                       AS POS_Rate_Date,
+    //     pr.Is_Active_Decative              AS Active_Deactive
 
-//     LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = p.Product_Id
-//     LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
-//     LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
-//     LEFT JOIN tbl_Stock_LOS AS stl ON stl.Pro_Id = p.Product_Id
+    // FROM 
+    //     tbl_Product_Master AS p
+    //     LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = p.Brand
 
-//     INNER JOIN tbl_Pos_Rate_Master AS pr   
-//         ON pr.Item_Id = p.Product_Id
-//         AND CAST(pr.Rate_Date AS DATE) = @LatestRateDate
+    //     LEFT JOIN tbl_Brokerage AS br ON br.Product_Id = p.Product_Id
+    //     LEFT JOIN tbl_UOM AS u ON u.Unit_Id = p.UOM_Id
+    //     LEFT JOIN tbl_Pack_Master AS pck ON pck.Pack_Id = p.Pack_Id
+    //     LEFT JOIN tbl_Stock_LOS AS stl ON stl.Pro_Id = p.Product_Id
 
-// ORDER BY p.Product_Id DESC`
-//                 );
+    //     INNER JOIN tbl_Pos_Rate_Master AS pr   
+    //         ON pr.Item_Id = p.Product_Id
+    //         AND CAST(pr.Rate_Date AS DATE) = @LatestRateDate
 
-//             const productResult = (await request).recordset;
+    // ORDER BY p.Product_Id DESC`
+    //                 );
 
-//             const withImage = productResult.map(product => ({
-//                 ...product,
-//                 productImageUrl: getImage('products', product?.Product_Image_Name),
-//             }));
+    //             const productResult = (await request).recordset;
 
-//             sentData(res, withImage);
+    //             const withImage = productResult.map(product => ({
+    //                 ...product,
+    //                 productImageUrl: getImage('products', product?.Product_Image_Name),
+    //             }));
 
-//         } catch (e) {
-//             servError(e, res);
-//         }
-//     };
+    //             sentData(res, withImage);
+
+    //         } catch (e) {
+    //             servError(e, res);
+    //         }
+    //     };
 
 
-const getAllProductsPos = async (req, res) => {
-    try {
-        const request = new sql.Request()
-            .query(`
+    const getAllProductsPos = async (req, res) => {
+        try {
+            const request = new sql.Request()
+                .query(`
                 SELECT 
-                    p.*,
+                    p.Product_Id,
+                    p.Product_Code,
+                    p.Product_Name,
+                    p.Short_Name,
+                    p.Product_Description,
+                    p.Brand,
+                    p.Product_Group,
+                    p.Pack_Id,
+                    p.UOM_Id,
+                    p.IS_Sold,
+                    p.Display_Order_By,
+                    p.Product_Image_Name,
+                    p.Product_Image_Path,
+                    p.HSN_Code,
+                    p.Gst_P,
+                    p.Cgst_P,
+                    p.Sgst_P,
+                    p.Igst_P,
+                    p.ERP_Id,
+                    p.Pos_Brand_Id,
+                    p.IsActive,
+                    p.Product_Rate,
+                    p.Max_Rate,
+                    p.Alter_Id,
+                    p.Created_By,
+                    p.Created_Time,
+                    p.Alter_By,
+                    p.Alter_Time,
+                    p.Coolie,
+                    p.Packing_CH,
+                    p.Other_Expen,
+                    p.NagalBrokerage,
+                    p.NagalCoolie,
+                    p.Min_Rate,
+
                     stl.Stock_Tally_Id,
                     stl.Alter_Tally_Id,
                     stl.Stock_Item,
                     stl.Group_ST,
                     stl.Bag,
-                    stl.Stock_Group,
+                    COALESCE(stl.Stock_Group, '') AS Stock_Group,
                     stl.S_Sub_Group_1,
                     stl.Grade_Item_Group,
                     stl.Item_Name_Modified,
@@ -677,24 +711,24 @@ const getAllProductsPos = async (req, res) => {
                 ORDER BY p.Product_Id DESC
             `);
 
-        const productResult = (await request).recordset;
+            const productResult = (await request).recordset;
 
-        const withImage = productResult.map(product => ({
-            ...product,
-            productImageUrl: getImage('products', product?.Product_Image_Name),
-        }));
+            const withImage = productResult.map(product => ({
+                ...product,
+                productImageUrl: getImage('products', product?.Product_Image_Name),
+            }));
 
-        sentData(res, withImage);
+            sentData(res, withImage);
 
-    } catch (e) {
-        servError(e, res);
-    }
-};
+        } catch (e) {
+            servError(e, res);
+        }
+    };
 
 
-const getProductsWithStock = async (req, res) => {
-    try {
-        const query = `
+    const getProductsWithStock = async (req, res) => {
+        try {
+            const query = `
             SELECT 
                 Product_Id,
                 Product_Name,
@@ -706,47 +740,47 @@ const getProductsWithStock = async (req, res) => {
                 [IsActive] as Is_Active
             FROM tbl_Product_Master 
         `;
-        
-         const result = await sql.query(query);
-      
-                  if (result.recordset.length > 0) {
-                      return dataFound(res, result.recordset)
-                  } else {
-                      return noData(res)
-                  }
-              } catch (e) {
-                  return servError(e, res);
-              } 
-};
 
+            const result = await sql.query(query);
 
-const getRetailersOptRetailerId = async (req, res) => {
-    try {
-        const request = new sql.Request();
-
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 12;
-        const offset = (page - 1) * limit;
-        const search = req.query.search || '';
-        const customerId = req.query.Customer_Id || req.query.customerId || '';
-
-        let whereClause = 'WHERE 1=1';
-
-        if (customerId) {
-            whereClause += ' AND r.Retailer_Id = @customerId';
-            request.input('customerId', sql.Int, parseInt(customerId));
+            if (result.recordset.length > 0) {
+                return dataFound(res, result.recordset)
+            } else {
+                return noData(res)
+            }
+        } catch (e) {
+            return servError(e, res);
         }
+    };
 
-        if (search) {
-            whereClause += ` AND (r.Retailer_Name LIKE '%' + @search + '%' OR 
+
+    const getRetailersOptRetailerId = async (req, res) => {
+        try {
+            const request = new sql.Request();
+
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 12;
+            const offset = (page - 1) * limit;
+            const search = req.query.search || '';
+            const customerId = req.query.Customer_Id || req.query.customerId || '';
+
+            let whereClause = 'WHERE 1=1';
+
+            if (customerId) {
+                whereClause += ' AND r.Retailer_Id = @customerId';
+                request.input('customerId', sql.Int, parseInt(customerId));
+            }
+
+            if (search) {
+                whereClause += ` AND (r.Retailer_Name LIKE '%' + @search + '%' OR 
                                   r.Contact_Person LIKE '%' + @search + '%' OR
                                   r.Mobile_No LIKE '%' + @search + '%')`;
-            request.input('search', sql.NVarChar, search);
-        }
+                request.input('search', sql.NVarChar, search);
+            }
 
-        // FIX: Add the LEFT JOIN to tbl_Ledger_LOL for both queries
-        // The paginated query needs the same joins as the customer-specific query
-        const baseQuery = `
+            // FIX: Add the LEFT JOIN to tbl_Ledger_LOL for both queries
+            // The paginated query needs the same joins as the customer-specific query
+            const baseQuery = `
             SELECT 
                 r.Retailer_Id AS Customer_Id,
                 r.Retailer_Name AS Short_Name,
@@ -776,26 +810,26 @@ const getRetailersOptRetailerId = async (req, res) => {
             LEFT JOIN dbo.tbl_Ledger_LOL lol ON r.Retailer_Id = lol.Ret_Id
         `;
 
-        // If specific customerId is provided, return just that customer
-        if (customerId) {
-            const query = `${baseQuery} ${whereClause}`;
-            const result = await request.query(query);
-            const data = result.recordset || [];
+            // If specific customerId is provided, return just that customer
+            if (customerId) {
+                const query = `${baseQuery} ${whereClause}`;
+                const result = await request.query(query);
+                const data = result.recordset || [];
 
-            return res.status(200).json({
-                success: true,
-                data: data,
-                pagination: { totalRecords: data.length }
-            });
-        }
+                return res.status(200).json({
+                    success: true,
+                    data: data,
+                    pagination: { totalRecords: data.length }
+                });
+            }
 
-        // Normal paginated flow (when no specific customerId)
-        const countQuery = `SELECT COUNT(*) as total FROM dbo.tbl_Retailers_Master r ${whereClause}`;
-        const countResult = await request.query(countQuery);
-        const totalRecords = countResult.recordset[0].total;
-        const totalPages = Math.ceil(totalRecords / limit);
+            // Normal paginated flow (when no specific customerId)
+            const countQuery = `SELECT COUNT(*) as total FROM dbo.tbl_Retailers_Master r ${whereClause}`;
+            const countResult = await request.query(countQuery);
+            const totalRecords = countResult.recordset[0].total;
+            const totalPages = Math.ceil(totalRecords / limit);
 
-        const query = `
+            const query = `
             ${baseQuery}
             ${whereClause}
             ORDER BY r.Retailer_Id
@@ -803,33 +837,33 @@ const getRetailersOptRetailerId = async (req, res) => {
             FETCH NEXT @limit ROWS ONLY
         `;
 
-        request.input('offset', sql.Int, offset);
-        request.input('limit', sql.Int, limit);
-        const result = await request.query(query);
+            request.input('offset', sql.Int, offset);
+            request.input('limit', sql.Int, limit);
+            const result = await request.query(query);
 
-        const response = {
-            success: true,
-            data: result.recordset || [],
-            pagination: {
-                currentPage: page,
-                perPage: limit,
-                totalRecords,
-                totalPages,
-                hasNextPage: page < totalPages,
-                hasPreviousPage: page > 1
-            }
-        };
+            const response = {
+                success: true,
+                data: result.recordset || [],
+                pagination: {
+                    currentPage: page,
+                    perPage: limit,
+                    totalRecords,
+                    totalPages,
+                    hasNextPage: page < totalPages,
+                    hasPreviousPage: page > 1
+                }
+            };
 
-        res.status(200).json(response);
-    } catch (e) {
-        console.error('Error in getRetailersOptRetailerId:', e);
-        res.status(500).json({
-            success: false,
-            message: 'Server error',
-            error: e.message
-        });
-    }
-};
+            res.status(200).json(response);
+        } catch (e) {
+            console.error('Error in getRetailersOptRetailerId:', e);
+            res.status(500).json({
+                success: false,
+                message: 'Server error',
+                error: e.message
+            });
+        }
+    };
 
 
     return {
@@ -850,7 +884,7 @@ const getRetailersOptRetailerId = async (req, res) => {
         getAllProductsPos,
         getProductsWithStock,
         getRetailersOptRetailerId
-        
+
     }
 }
 
