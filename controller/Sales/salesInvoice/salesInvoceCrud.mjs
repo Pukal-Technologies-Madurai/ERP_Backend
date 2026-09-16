@@ -207,7 +207,7 @@ const handleDeliveryAndShippingAddress = async ({
 
 export const getSalesInvoice = async (req, res) => {
     try {
-        const { Retailer_Id, Cancel_status, Created_by, VoucherType, Branch_Id, Do_Id, Do_Inv_No, withProduct } = req.query;
+        const { Retailer_Id, Cancel_status, Created_by, VoucherType, Branch_Id, Do_Id, Do_Inv_No, withProduct, transaction_type } = req.query;
         const
             Fromdate = req.query.Fromdate ? ISOString(req.query.Fromdate) : ISOString(),
             Todate = req.query.Todate ? ISOString(req.query.Todate) : ISOString();
@@ -236,6 +236,7 @@ export const getSalesInvoice = async (req, res) => {
             .input('Do_Id', Do_Id)
             .input('Do_Inv_No', Do_Inv_No)
             .input('withProduct', withProduct)
+            .input('transaction_type', transaction_type)
             .query(`
                 -- declaring table variable
                 DECLARE @FilteredInvoice TABLE (Do_Id INT);
@@ -252,6 +253,7 @@ export const getSalesInvoice = async (req, res) => {
                     ${isValidNumber(Branch_Id) ? ' AND Branch_Id = @Branch_Id ' : ''}
                     ${isValidNumber(Do_Id) ? ' AND Do_Id = @Do_Id ' : ''}
                     ${!stringCompare(Do_Inv_No, '') ? ' AND Do_Inv_No = @Do_Inv_No ' : ''}
+                    ${!stringCompare(transaction_type, '') ? ' AND transaction_type = @transaction_type ' : ''}
                     ${checkIsNumber(withProduct) ? (Number(withProduct) === 1 ? ' AND Do_Id IN (SELECT DISTINCT Delivery_Order_Id FROM tbl_Sales_Delivery_Stock_Info) ' : ' AND Do_Id NOT IN (SELECT DISTINCT Delivery_Order_Id FROM tbl_Sales_Delivery_Stock_Info) ') : ''}
                 -- sales general details
                 SELECT 
@@ -260,7 +262,7 @@ export const getSalesInvoice = async (req, res) => {
                     sdgi.GST_Inclusive, sdgi.IS_IGST, sdgi.CSGT_Total, sdgi.SGST_Total, sdgi.IGST_Total, sdgi.Total_Expences, 
                     sdgi.Round_off, sdgi.Total_Before_Tax, sdgi.Total_Tax, sdgi.Total_Invoice_value, sdgi.Delivery_Person_Id,
                     sdgi.Trans_Type, sdgi.Alter_Id, sdgi.Created_by, sdgi.Created_on, sdgi.Stock_Item_Ledger_Name,
-                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId,
+                    sdgi.Ref_Inv_Number, sdgi.staffInvolvedStatus, sdgi.deliveryAddressId, sdgi.shipingAddressId, sdgi.transaction_type,
                     ISNULL(sdgi.Delivery_Status, 0) AS Delivery_Status,
                     ISNULL(sdgi.Payment_Mode, 0) AS Payment_Mode,
                     ISNULL(sdgi.Payment_Status, 0) AS Payment_Status,
@@ -994,7 +996,7 @@ export const createSalesInvoice = async (req, res) => {
             Narration = null, Created_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
             deliveryAddressDetails = {}, shipingAddressDetails = {},
-            Delivery_Status = 1, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
+            Delivery_Status = 1, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0, transaction_type = 'Cash'
         } = req.body;
 
         const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -1180,6 +1182,7 @@ export const createSalesInvoice = async (req, res) => {
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
             .input('paymentDueDays', toNumber(paymentDueDays))
+            .input('transaction_type', transaction_type)
 
             .input('Trans_Type', 'INSERT')
             .input('Alter_Id', sql.BigInt, Alter_Id)
@@ -1194,14 +1197,14 @@ export const createSalesInvoice = async (req, res) => {
                     GST_Inclusive, IS_IGST, CSGT_Total, SGST_Total, IGST_Total, Total_Expences, Round_off, 
                     Total_Before_Tax, Total_Tax, Total_Invoice_value, Stock_Item_Ledger_Name, paymentDueDays,
                     Trans_Type, Alter_Id, Created_by, Created_on, Ref_Inv_Number, deliveryAddressId,
-                    Delivery_Status, Payment_Mode, Payment_Status, shipingAddressId
+                    Delivery_Status, Payment_Mode, Payment_Status, shipingAddressId, transaction_type
                 ) VALUES (
                     @Do_Id, @Do_Inv_No, @Voucher_Type, @Do_No, @Do_Year,
                     @Do_Date, @Branch_Id, @Retailer_Id, @Delivery_Person_Id, @Narration, @So_No, @Cancel_status,
                     @GST_Inclusive, @IS_IGST, @CSGT_Total, @SGST_Total, @IGST_Total, @Total_Expences, @Round_off, 
                     @Total_Before_Tax, @Total_Tax, @Total_Invoice_value, @Stock_Item_Ledger_Name, @paymentDueDays,
                     @Trans_Type, @Alter_Id, @Created_by, @Created_on, @Ref_Inv_Number, @deliveryAddressId,
-                    @Delivery_Status, @Payment_Mode, @Payment_Status, @shipingAddressId
+                    @Delivery_Status, @Payment_Mode, @Payment_Status, @shipingAddressId, @transaction_type
                 )`
             );
 
@@ -1889,7 +1892,7 @@ export const updateSalesInvoice = async (req, res) => {
             Narration = null, Altered_by, GST_Inclusive = 1, IS_IGST = 0, Round_off = 0,
             Product_Array = [], Expence_Array = [], Staffs_Array = [], Stock_Item_Ledger_Name = '',
             deliveryAddressDetails = {}, shipingAddressDetails = {},
-            Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0
+            Delivery_Status = 0, Payment_Mode = 0, Payment_Status = 0, paymentDueDays = 0, transaction_type = 'Cash'
         } = req.body;
 
         const Do_Date = req?.body?.Do_Date ? ISOString(req?.body?.Do_Date) : ISOString();
@@ -2017,6 +2020,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Payment_Mode', Payment_Mode)
             .input('Payment_Status', Payment_Status)
             .input('paymentDueDays', toNumber(paymentDueDays))
+            .input('transaction_type', transaction_type)
             .input('shipingAddressId', shiping_id_to_post)
             .input('alterAt', new Date())
             .query(`
@@ -2049,7 +2053,8 @@ export const updateSalesInvoice = async (req, res) => {
                     Payment_Mode = @Payment_Mode,
                     Payment_Status = @Payment_Status,
                     shipingAddressId = @shipingAddressId,
-                    paymentDueDays = @paymentDueDays
+                    paymentDueDays = @paymentDueDays,
+                    transaction_type = @transaction_type
                 WHERE
                     Do_Id = @Do_Id;`
             );
