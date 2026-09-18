@@ -8,17 +8,19 @@ import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
 const findProductDetails = (arr = [], productid) => arr.find(obj => isEqualNumber(obj.Product_Id, productid)) ?? {};
 
 const saleOrderQuery = (Retailer_Id, Created_by, Sales_Person_Id, VoucherType) => `
-DECLARE @Filtered TABLE (orderId BIGINT, invoiceId BIGINT, invNumber NVARCHAR(30), tripId BIGINT, receiptId BIGINT, creditNoteId BIGINT);
+DECLARE @Filtered TABLE (orderId BIGINT, invoiceId BIGINT, invNumber NVARCHAR(30), tripId BIGINT, receiptId BIGINT, creditNoteId BIGINT, journalId BIGINT);
 -- ******************** Step 1: Declare and populate filtered sales orders ********************
-INSERT INTO @Filtered (orderId, invoiceId, invNumber, tripId, receiptId)
-SELECT DISTINCT so.So_Id, sdgi.Do_Id, sdgi.Do_Inv_No, tm.Trip_Id, rgi.receipt_id
+INSERT INTO @Filtered (orderId, invoiceId, invNumber, tripId, receiptId, journalId)
+SELECT DISTINCT so.So_Id, sdgi.Do_Id, sdgi.Do_Inv_No, tm.Trip_Id, rgi.receipt_id, jgi.journalId
 FROM tbl_Sales_Order_Gen_Info so
 LEFT JOIN tbl_Sales_Delivery_Gen_Info sdgi ON sdgi.So_No = so.So_Id AND sdgi.Cancel_status <> 0
 LEFT JOIN tbl_Trip_Details td ON td.Delivery_Id = sdgi.Do_Id
 LEFT JOIN tbl_Trip_Master tm ON tm.Trip_Id = td.Trip_Id AND tm.TripStatus <> 'Canceled' AND tm.BillType = 'SALES'
-LEFT JOIN tbl_Receipt_Bill_Info rbi ON rbi.bill_id = sdgi.Do_Id AND rbi.bill_name = sdgi.Do_Inv_No
+LEFT JOIN tbl_Receipt_Bill_Info rbi ON rbi.bill_name = sdgi.Do_Inv_No
 LEFT JOIN tbl_Receipt_General_Info rgi ON rgi.receipt_id = rbi.receipt_id AND rgi.status <> 0
 LEFT JOIN tbl_Credit_Note_Gen_Info AS crn ON TRIM(crn.Ref_Inv_Number) = TRIM(sdgi.Do_Inv_No) AND sdgi.Cancel_status <> 0
+LEFT JOIN tbl_Journal_Bill_Reference AS jbr ON jbr.RefNo = sdgi.Do_Inv_No AND jbr.DrCr = 'Cr'
+LEFT JOIN tbl_Journal_General_Info AS jgi ON jgi.JournalId = jbr.JournalId AND jgi.JournalStatus <> 0
 WHERE 
     so.So_Date BETWEEN @Fromdate AND @Todate
     ${isValidNumber(Retailer_Id) ? ' AND so.Retailer_Id = @retailer ' : ''}
@@ -152,7 +154,18 @@ SELECT
 FROM tbl_Receipt_General_Info AS rgi
 JOIN (SELECT DISTINCT receiptId FROM @Filtered) AS fltr ON fltr.receiptId = rgi.receipt_id
 JOIN tbl_Receipt_Bill_Info AS rbi ON rbi.receipt_id = rgi.receipt_id
--- ******************** 10: CREDIT NOTE ********************
+-- ******************** 10: Journal Details ********************
+SELECT
+	jgi.JournalId AS receiptId,
+	jgi.JournalVoucherNo AS receiptNumber,
+	jgi.JournalDate AS receiptDate,
+	jbi.Amount AS receiptAmount,
+	jbi.RefId AS invId,
+	jbi.RefNo AS invNumber
+FROM tbl_Journal_General_Info AS jgi
+JOIN (SELECT DISTINCT journalId FROM @Filtered) AS fltr ON fltr.journalId = jgi.JournalId
+JOIN tbl_Journal_Bill_Reference AS jbi ON jbi.JournalId = jgi.JournalId
+-- ******************** 11: CREDIT NOTE ********************
 SELECT
 	cngi.CR_Id AS creditNoteId,
 	cngi.CR_Date AS creditNoteDate,
@@ -1025,6 +1038,7 @@ const SaleOrder = () => {
                 tripSheetResult,
                 tripStaffsResult,
                 receiptResult,
+                journalResult,
                 creditNoteResult
             ] = result.recordsets.map(toArray);
 
@@ -1047,8 +1061,9 @@ const SaleOrder = () => {
                         tripStaffInfo: tripStaffsResult.filter(staff => isEqualNumber(staff.tripId, trip.tripId))
                     }));
 
-                    // receipt and credit note
-                    const receiptGI = receiptResult.filter(receipt => isEqualNumber(receipt.invId, inv.invId));
+                    // receipt and credit note journalResult
+                    const receiptGI = receiptResult.filter(receipt => stringCompare(receipt.invNumber, inv.invNumber));
+                    const journalGI = journalResult.filter(journal => stringCompare(journal.invNumber, inv.invNumber));
                     const creditNoteGI = creditNoteResult.filter(credit => stringCompare(credit.invNumber, inv.invNumber));
 
                     return {
@@ -1056,7 +1071,7 @@ const SaleOrder = () => {
                         invoicedProduct: stockInfo,
                         invoiceStaff: staffInfo,
                         tripDetails: tripWithStaff,
-                        receiptInfo: receiptGI,
+                        receiptInfo: [...receiptGI, ...journalGI],
                         creditNoteInfo: creditNoteGI
                     };
                 });

@@ -4,7 +4,8 @@ import {
     checkIsNumber, isEqualNumber, ISOString,
     Multiplication, RoundNumber, Addition,
     toNumber, toArray, isValidObject, isValidNumber,
-    Subraction
+    Subraction,
+    stringCompare
 } from '../../helper_functions.mjs';
 import { getNextId, getProducts } from '../../middleware/miniAPIs.mjs';
 import { calculateGSTDetails } from '../../middleware/taxCalculator.mjs';
@@ -18,13 +19,18 @@ const findProductDetails = (arr = [], productid) =>
 
 // ─── GET query builder ──────────────────────────────────────────────────────────
 const purchaseOrderQuery = (Retailer_Id, Created_by, VoucherType) => `
-DECLARE @filters TABLE (id uniqueidentifier, PO_Id BIGINT);
-INSERT INTO @filters (id, PO_Id)
-SELECT pogi.id, pogi.PO_Id
+DECLARE @Filtered TABLE (PO_Id BIGINT, PIN_Id BIGINT, Po_Inv_No NVARCHAR(30), trip_id BIGINT, pay_id BIGINT, JournalId BIGINT, DB_Id BIGINT);
+INSERT INTO @Filtered (PO_Id, PIN_Id, Po_Inv_No, trip_id, pay_id, JournalId, DB_Id)
+SELECT DISTINCT pogi.PO_Id, pigi.PIN_Id, pigi.Po_Inv_No, poTrip.trip_id, pgi.pay_id, jgi.JournalId, dngi.DB_Id
 FROM tbl_Purchase_Order_General_Info AS pogi
-LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = pogi.Retailer_Id
-LEFT JOIN tbl_Users AS cb ON cb.UserId = pogi.Created_by
-LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pogi.VoucherType
+LEFT JOIN tbl_Purchase_Order_Inv_Gen_Order AS pio ON pio.Order_Id = pogi.PO_Id
+LEFT JOIN tbl_Purchase_Order_Inv_Gen_Info AS pigi ON pigi.PIN_Id = pio.PIN_Id AND pigi.Cancel_status = 0
+LEFT JOIN tbl_Purchase_Order_Trip_Info AS poTrip ON poTrip.PO_Id = pogi.PO_Id
+LEFT JOIN tbl_Payment_Bill_Info pbi ON pbi.bill_name = pigi.Po_Inv_No
+LEFT JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pbi.payment_id AND pgi.status <> 0
+LEFT JOIN tbl_Journal_Bill_Reference jbr ON jbr.RefNo = pigi.Po_Inv_No AND jbr.DrCr = 'Dr'
+LEFT JOIN tbl_Journal_General_Info jgi ON jgi.JournalId = jbr.JournalId AND jgi.JournalStatus <> 0
+LEFT JOIN tbl_Debit_Note_Gen_Info dngi ON TRIM(dngi.Ref_Inv_Number) = TRIM(pigi.Po_Inv_No) AND pigi.Cancel_status = 0
 WHERE 
 	pogi.Po_Date BETWEEN @Fromdate AND @Todate
     ${isValidNumber(Retailer_Id) ? ' AND pogi.Retailer_Id = @retailer ' : ''}
@@ -44,7 +50,8 @@ LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = pogi.Branch_Id
 LEFT JOIN tbl_Users AS cb ON cb.UserId = pogi.Created_by
 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pogi.VoucherType
 LEFT JOIN tbl_Status AS sts ON sts.Status_Id = pogi.Po_Status
-JOIN (SELECT DISTINCT id FROM @filters) AS fil ON fil.id = pogi.id
+JOIN (SELECT DISTINCT PO_Id FROM @Filtered) AS fil ON fil.PO_Id = pogi.PO_Id
+ORDER BY pogi.Po_Date DESC, pogi.Created_on DESC;
 -- ******************** 2: Purchase Order Stock Info ********************
 SELECT
     posi.*,
@@ -56,7 +63,7 @@ FROM tbl_Purchase_Order_Stock_Info AS posi
 LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = posi.Item_Id
 LEFT JOIN tbl_UOM AS u ON u.Unit_Id = posi.Unit_Id
 LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
-JOIN (SELECT DISTINCT id FROM @filters) AS fil ON fil.id = posi.po_uid
+JOIN (SELECT DISTINCT PO_Id FROM @Filtered) AS fil ON fil.PO_Id = posi.PO_Id
 -- ******************** 3: Purchase Order Staff Info ********************
 SELECT
     posti.PO_Id,
@@ -67,7 +74,7 @@ SELECT
 FROM tbl_Purchase_Order_Staff_Info AS posti
 LEFT JOIN tbl_ERP_Cost_Center   AS c  ON c.Cost_Center_Id   = posti.Emp_Id
 LEFT JOIN tbl_ERP_Cost_Category AS cc ON cc.Cost_Category_Id = posti.Emp_Type_Id
-JOIN (SELECT DISTINCT id FROM @filters) AS fil ON fil.id = posti.po_uid
+JOIN (SELECT DISTINCT PO_Id FROM @Filtered) AS fil ON fil.PO_Id = posti.PO_Id
 -- ******************** 4: Purchase Order Parameter Info ********************
 SELECT
 	popi.*,
@@ -75,7 +82,7 @@ SELECT
 	pm.Paramet_Data_Type AS parameterDataType
 FROM tbl_Purchase_Order_Parameter_Info AS popi
 JOIN tbl_Paramet_Master AS pm ON pm.Paramet_Id = popi.ParameterId
-JOIN (SELECT DISTINCT id FROM @filters) AS fil ON fil.id = popi.po_uid
+JOIN (SELECT DISTINCT PO_Id FROM @Filtered) AS fil ON fil.PO_Id = popi.PO_Id
 -- ******************** 5: Purchase Order Trip Info ********************
 SELECT
 	poTrip.PO_Id AS orderId,
@@ -84,28 +91,84 @@ SELECT
 	ta.QTY AS quantity,
 	ta.Gst_Rate AS itemRate,
 	ta.To_Location AS godownId,
-	gm.Godown_Name As godownName
+	gm.Godown_Name As godownName,
+    tm.Trip_Id AS tripId,
+    tm.TR_INV_ID AS tripNumber,
+    tm.Trip_Date AS tripDate
 FROM tbl_Purchase_Order_Trip_Info AS poTrip
 JOIN tbl_Trip_Master AS tm ON tm.Trip_Id = poTrip.trip_id AND tm.TripStatus <> 'Canceled'
 JOIN tbl_Trip_Details AS td ON td.Trip_Id = tm.Trip_Id
 JOIN tbl_Trip_Arrival AS ta ON ta.Arr_Id = td.Arrival_Id
 JOIN tbl_Product_Master AS pm ON pm.Product_Id = ta.Product_Id
 JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = ta.To_Location
--- ******************** 6: Purchase Invoice Info ********************
+JOIN (SELECT DISTINCT PO_Id FROM @Filtered) AS fil ON fil.PO_Id = poTrip.PO_Id
+-- ******************** 6: Purchase Invoice General Info ********************
 SELECT
-	pioi.Order_Id AS orderId,
+    pioi.Order_Id AS orderId,
+    pigi.PIN_Id AS invId,
+    pigi.Po_Inv_No AS invNumber,
+    rm.Retailer_Name AS retailerNameGet,
+    v.Voucher_Type AS voucherTypeGet,
+    bm.BranchName AS branchNameGet,
+    COALESCE(sts.Status, '') AS deliveryStatusGet,
+    COALESCE(pigi.Total_Invoice_value, 0) AS invValue
+FROM tbl_Purchase_Order_Inv_Gen_Order AS pioi
+JOIN tbl_Purchase_Order_Inv_Gen_Info AS pigi ON pigi.PIN_Id = pioi.PIN_Id AND pigi.Cancel_status = 0
+JOIN (SELECT DISTINCT PIN_Id FROM @Filtered) AS fltr ON fltr.PIN_Id = pioi.PIN_Id
+LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = pigi.Retailer_Id
+LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = pigi.Voucher_Type
+LEFT JOIN tbl_Branch_Master AS bm ON bm.BranchId = pigi.Branch_Id
+LEFT JOIN tbl_Status AS sts ON sts.Status_Id = pigi.Cancel_status
+-- ******************** 7: Purchase Invoice Stock Info ********************
+SELECT
+    pisi.PIN_Id AS invId,
 	pisi.Item_Id AS productId,
 	pm.Product_Name AS productNameGet,
 	pisi.Bill_Qty AS quantity,
 	pisi.Item_Rate AS itemRate,
 	pisi.Location_Id AS godownId,
 	gm.Godown_Name As godownName
-FROM tbl_Purchase_Order_Inv_Gen_Order AS pioi
-JOIN @filters AS fltr ON fltr.PO_Id = pioi.Order_Id
-JOIN tbl_Purchase_Order_Inv_Gen_Info AS pigi ON pigi.PIN_Id = pioi.PIN_Id AND pigi.Cancel_status = 0
-JOIN tbl_Purchase_Order_Inv_Stock_Info AS pisi ON pisi.PIN_Id = pigi.PIN_Id
+FROM tbl_Purchase_Order_Inv_Stock_Info AS pisi
+JOIN (SELECT DISTINCT PIN_Id FROM @Filtered) AS fltr ON fltr.PIN_Id = pisi.PIN_Id
 JOIN tbl_Product_Master AS pm ON pm.Product_Id = pisi.Item_Id
-JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = pisi.Location_Id
+LEFT JOIN tbl_Godown_Master AS gm ON gm.Godown_Id = pisi.Location_Id
+-- ******************** 8: Payment Details ********************
+SELECT
+    pgi.pay_id AS receiptId,
+    pgi.payment_invoice_no AS receiptNumber,
+    pgi.payment_date AS receiptDate,
+    pbi.Debit_Amo AS receiptAmount,
+    pbi.pay_bill_id AS invId,
+    pbi.bill_name AS invNumber
+FROM tbl_Payment_General_Info AS pgi
+JOIN (SELECT DISTINCT pay_id FROM @Filtered) AS fltr ON fltr.pay_id = pgi.pay_id
+JOIN tbl_Payment_Bill_Info AS pbi ON pbi.payment_id = pgi.pay_id
+-- ******************** 9: Journal Details ********************
+SELECT
+	jgi.JournalId AS receiptId,
+	jgi.JournalVoucherNo AS receiptNumber,
+	jgi.JournalDate AS receiptDate,
+	jbi.Amount AS receiptAmount,
+	jbi.RefId AS invId,
+	jbi.RefNo AS invNumber
+FROM tbl_Journal_General_Info AS jgi
+JOIN (SELECT DISTINCT JournalId FROM @Filtered) AS fltr ON fltr.JournalId = jgi.JournalId
+JOIN tbl_Journal_Bill_Reference AS jbi ON jbi.JournalId = jgi.JournalId
+-- ******************** 10: Debit Note Details ********************
+SELECT
+	dngi.DB_Id AS creditNoteId,
+	dngi.DB_Date AS creditNoteDate,
+	dngi.DB_Inv_No AS creditNoteNumber,
+	dngi.Ref_Inv_Number AS invNumber,
+	dngi.Total_Invoice_value AS TotalValue,
+	dnsi.Item_Id AS productId,
+	pm.Product_Name AS productNameGet,
+	dnsi.Item_Rate AS productRate,
+	dnsi.Amount AS amountValue
+FROM tbl_Debit_Note_Gen_Info AS dngi
+JOIN (SELECT DISTINCT DB_Id FROM @Filtered) AS fltr ON fltr.DB_Id = dngi.DB_Id
+JOIN tbl_Debit_Note_Stock_Info AS dnsi ON dnsi.DB_Id = dngi.DB_Id
+JOIN tbl_Product_Master AS pm ON pm.Product_Id = dnsi.Item_Id
 `;
 
 // ─── Controller ────────────────────────────────────────────────────────────────
@@ -136,7 +199,11 @@ const PurchaseOrder = () => {
                 purchaseOrderStaffResult,
                 purchaseOrderParameter,
                 purchaseOrderTripResult,
-                purchaseInvoiceResult,
+                purchaseInvoiceGeneralResult,
+                purchaseInvoiceStockResult,
+                paymentResult,
+                journalResult,
+                debitNoteResult
             ] = result.recordsets.map(toArray);
 
             const output = purchaseOrderGeneralResult.map(row => {
@@ -144,17 +211,51 @@ const PurchaseOrder = () => {
                 const staffInvolved = purchaseOrderStaffResult.filter(staff => isEqualNumber(staff.PO_Id, row.PO_Id));
                 const parameterInvolved = purchaseOrderParameter.filter(param => isEqualNumber(param.PO_Id, row.PO_Id));
                 const tripProducts = purchaseOrderTripResult.filter(trip => isEqualNumber(trip.orderId, row.PO_Id));
-                const invoicedProduct = purchaseInvoiceResult.filter(invoice => isEqualNumber(invoice.orderId, row.PO_Id));
+                
+                // invoice
+                const invoiceInfo = purchaseInvoiceGeneralResult.filter(inv => isEqualNumber(inv.orderId, row.PO_Id));
+
+                const invoiceWithOtherDetails = invoiceInfo.map(inv => {
+                    const stockInfo = purchaseInvoiceStockResult.filter(stock => isEqualNumber(stock.invId, inv.invId));
+                    
+                    // payment and journal details
+                    const paymentGI = paymentResult.filter(payment => stringCompare(payment.invNumber, inv.invNumber));
+                    const journalGI = journalResult.filter(journal => stringCompare(journal.invNumber, inv.invNumber));
+                    const debitNoteGI = debitNoteResult.filter(debit => stringCompare(debit.invNumber, inv.invNumber));
+
+                    return {
+                        ...inv,
+                        invoicedProduct: stockInfo,
+                        receiptInfo: [...paymentGI, ...journalGI],
+                        creditNoteInfo: debitNoteGI
+                    };
+                });
+
+                // Unique trips assigned to this purchase order
+                const uniqueTripsMap = new Map();
+                tripProducts.forEach(trip => {
+                    if (trip.tripId && !uniqueTripsMap.has(trip.tripId)) {
+                        uniqueTripsMap.set(trip.tripId, { tripId: trip.tripId, tripNumber: trip.tripNumber, tripDate: trip.tripDate });
+                    }
+                });
 
                 const stockWithParameter = stockItems.map(stock => {
-                    const invProduct = invoicedProduct.filter(pro => isEqualNumber(pro.productId, stock.Item_Id));
-                    const invProQuantity = invProduct.reduce((acc, item) => Addition(acc, item.quantity), 0)
+                    const invProQuantity = invoiceWithOtherDetails.reduce((acc, inv) => {
+                        const productStock = inv.invoicedProduct.reduce((itemAcc, item) => {
+                            if (isEqualNumber(item.productId, stock.Item_Id)) {
+                                return Addition(itemAcc, item.quantity);
+                            }
+                            return itemAcc;
+                        }, 0);
+                        return Addition(acc, productStock);
+                    }, 0);
+
                     return {
                         ...stock,
                         parameters: parameterInvolved.filter(param => isEqualNumber(param.ItemId, stock.Item_Id)),
                         tripAssigned: tripProducts.filter(trip => isEqualNumber(trip.productId, stock.Item_Id)),
-                        invoicedDetails: invProduct,
-                        pendingInvoiceWeight: Subraction(stock.Bill_Qty, invProQuantity)
+                        pendingInvoiceWeight: Subraction(stock.Bill_Qty, invProQuantity),
+                        convertedQuantity: invProQuantity
                     }
                 })
 
@@ -162,6 +263,8 @@ const PurchaseOrder = () => {
                     ...row,
                     Products_List: stockWithParameter,
                     Staff_Involved_List: staffInvolved,
+                    ConvertedInvoice: invoiceWithOtherDetails,
+                    tripDetails: Array.from(uniqueTripsMap.values())
                 };
             });
 
