@@ -2,7 +2,8 @@ import sql from 'mssql';
 
 import * as overall from './journalOverallOutstanding.mjs';
 import { dataFound, invalidInput, sentData, servError } from '../../res.mjs';
-import { checkIsNumber, filterableText, isEqualNumber, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
+import { Addition, Subraction, checkIsNumber, filterableText, isEqualNumber, ISOString, stringCompare, toArray, toNumber } from '../../helper_functions.mjs';
+import { getAdjustmentsQuery, getBaseBillsQuery, getAccountIndividualAdjustmentsQuery } from './journalNodeOutstanding.mjs';
 
 import {
     purchaseReturnQuery,
@@ -307,6 +308,7 @@ const accountTransaction = async (req, res) => {
         const Todate = req.query?.Todate ? ISOString(req.query.Todate) : ISOString();
         const Acc_Id = toNumber(req.query?.Acc_Id);
 
+        // Fetch base transactions
         const request = new sql.Request()
             .input('Fromdate', sql.Date, Fromdate)
             .input('Todate', sql.Date, Todate)
@@ -314,8 +316,110 @@ const accountTransaction = async (req, res) => {
             .execute(`Transaction_Report_vw_By_Acc_Id_1`);
 
         const result = await request;
+        const transactions = result.recordset;
 
-        sentData(res, result.recordset);
+        const adjRequest = new sql.Request()
+            .input('Todate', sql.Date, Todate)
+            .input('Acc_Id', sql.BigInt, Acc_Id)
+            .query(getAccountIndividualAdjustmentsQuery);
+
+        const adjResult = await adjRequest;
+        
+        const receiptAdjs = toArray(adjResult.recordsets[0]);
+        const paymentAdjs = toArray(adjResult.recordsets[1]);
+        const creditNoteAdjs = toArray(adjResult.recordsets[2]);
+        const debitNoteAdjs = toArray(adjResult.recordsets[3]);
+        const journalAdjs = toArray(adjResult.recordsets[4]);
+
+        const allAdjs = [...receiptAdjs, ...paymentAdjs, ...creditNoteAdjs, ...debitNoteAdjs, ...journalAdjs];
+
+        const targetMap = new Map();
+        const sourceMap = new Map();
+
+        allAdjs.forEach(adj => {
+            const tKey = String(adj.targetVoucherNumber || '').toUpperCase().trim();
+            const sKey = String(adj.sourceVoucher || '').toUpperCase().trim();
+            
+            if (tKey) {
+                if (!targetMap.has(tKey)) targetMap.set(tKey, []);
+                targetMap.get(tKey).push(adj);
+            }
+            if (sKey) {
+                if (!sourceMap.has(sKey)) sourceMap.set(sKey, []);
+                sourceMap.get(sKey).push(adj);
+            }
+        });
+
+        const processedTransactions = transactions.map(txn => {
+            const voucherKey = String(txn.invoice_no || '').toUpperCase().trim();
+            
+            const debit = toNumber(txn.Debit_Amt);
+            const credit = toNumber(txn.Credit_Amt);
+            const totalValue = Math.max(debit, credit);
+            const billSide = debit > credit ? 'Dr' : 'Cr';
+            
+            let againstAmount = 0;
+            let journalAdjustment = 0;
+            let mappedReferences = [];
+
+            const targetRefs = targetMap.get(voucherKey) || [];
+            
+            const sourceRefs = sourceMap.get(voucherKey) || [];
+
+            if (targetRefs.length > 0) {
+                mappedReferences = targetRefs.map(ref => {
+                    const amt = toNumber(ref.amount);
+                    if (ref.type === 'JOURNAL') {
+                        const oppSide = billSide === 'Dr' ? 'Cr' : 'Dr';
+                        const refSide = String(ref.sourceSide || '').toUpperCase().trim();
+                        if (refSide === oppSide.toUpperCase()) {
+                            journalAdjustment = Addition(journalAdjustment, amt);
+                        } else {
+                            journalAdjustment = Subraction(journalAdjustment, amt);
+                        }
+                    } else {
+                        againstAmount = Addition(againstAmount, amt);
+                    }
+                    return {
+                        sourceVoucher: ref.sourceVoucher,
+                        eventDate: ref.eventDate,
+                        amount: amt,
+                        type: ref.type
+                    };
+                });
+            } else if (sourceRefs.length > 0) {
+                mappedReferences = sourceRefs.map(ref => {
+                    const amt = toNumber(ref.amount);
+                    againstAmount = Addition(againstAmount, amt);
+                    return {
+                        sourceVoucher: ref.targetVoucherNumber,
+                        eventDate: ref.eventDate,
+                        amount: amt,
+                        type: 'AGAINST_BILL'
+                    };
+                });
+            }
+
+            const totalAdjustments = Addition(againstAmount, journalAdjustment);
+            const BalanceAmount = Subraction(totalValue, totalAdjustments);
+
+            // let formattedType = String(txn.Particulars || '').toUpperCase();
+            // if (formattedType === 'SALES' || formattedType === 'RECEIPT' || formattedType === 'PURCHASE' || 
+            //     formattedType === 'PAYMENT' || formattedType === 'JOURNAL' || 
+            //     formattedType === 'CREDIT NOTE' || formattedType === 'DEBIT NOTE') {
+            // }
+
+            return {
+                ...txn,
+                references: mappedReferences,
+                againstAmount,
+                journalAdjustment,
+                BalanceAmount,
+                isCompleted: BalanceAmount <= 0
+            };
+        });
+
+        sentData(res, processedTransactions);
     } catch (e) {
         servError(e, res);
     }

@@ -93,6 +93,7 @@ const getUnAssignedBatchFromMaterialInward = async (req, res) => {
                     TRIM(COALESCE(ar.Batch_No, '')) = ''
                     AND CONVERT(DATE, tm.Trip_Date) BETWEEN @Fromdate AND @Todate
                     AND tm.billType = 'MATERIAL INWARD'
+                    AND tm.TripStatus <> 'Canceled'
                     ${checkIsNumber(fromGodown) ? ` AND ar.From_Location = @fromGodown ` : ''}
                     ${checkIsNumber(toGodown) ? ` AND ar.To_Location = @toGodown ` : ''}
                     ${checkIsNumber(item) ? ` AND ar.Product_Id = @item ` : ''}
@@ -276,6 +277,7 @@ const getUnAssignedBatchFromGodownTransfer = async (req, res) => {
                     TRIM(COALESCE(ar.Batch_No, '')) = ''
                     AND CONVERT(DATE, tm.Trip_Date) BETWEEN @Fromdate AND @Todate
                     AND tm.billType = 'OTHER GODOWN'
+                    AND tm.TripStatus <> 'Canceled'
                     ${checkIsNumber(fromGodown) ? ` AND ar.From_Location = @fromGodown ` : ''}
                     ${checkIsNumber(toGodown) ? ` AND ar.To_Location = @toGodown ` : ''}
                     ${checkIsNumber(item) ? ` AND ar.Product_Id = @item ` : ''}
@@ -676,6 +678,7 @@ const getUnAssignedBatchProcessingSource = async (req, res) => {
                 WHERE 
                     TRIM(COALESCE(prd.Sour_Batch_Lot_No, '')) = ''
                     AND pr.Process_date BETWEEN @Fromdate AND @Todate
+                    AND pr.PR_Status <> 'Canceled'
                     ${checkIsNumber(fromGodown) ? ` AND prd.Sour_Goodown_Id = @fromGodown ` : ''}
                     ${checkIsNumber(item) ? ` AND prd.Sour_Item_Id = @item ` : ''}
                 ORDER BY pr.Process_date ASC;
@@ -822,6 +825,7 @@ const getUnAssignedBatchProcessing = async (req, res) => {
                 WHERE 
                     TRIM(COALESCE(prd.Dest_Batch_Lot_No, '')) = ''
                     AND pr.Process_date BETWEEN @Fromdate AND @Todate
+                    AND pr.PR_Status <> 'Canceled'
                     ${checkIsNumber(toGodown) ? ` AND prd.Dest_Goodown_Id = @toGodown ` : ''}
                     ${checkIsNumber(item) ? ` AND prd.Dest_Item_Id = @item ` : ''}
                 ORDER BY pr.Process_date ASC;

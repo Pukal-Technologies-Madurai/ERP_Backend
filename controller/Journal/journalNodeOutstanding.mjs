@@ -130,3 +130,83 @@ export const getAdjustmentsQuery = `
     WHERE jh.JournalStatus <> 0 AND jh.JournalDate >= @OB_Date
     GROUP BY jr.RefId, jr.RefNo, je.DrCr;
 `;
+
+export const getAccountIndividualAdjustmentsQuery = `
+    -- 0: Receipt Adjustments
+    SELECT 
+        pb.bill_name AS targetVoucherNumber, 
+        pgi.receipt_invoice_no AS sourceVoucher, 
+        pgi.receipt_date AS eventDate, 
+        pb.Credit_Amo AS amount, 
+        'RECEIPT' AS type
+    FROM tbl_Receipt_Bill_Info pb
+    JOIN tbl_Receipt_General_Info pgi ON pgi.receipt_id = pb.receipt_id
+    WHERE 
+        pgi.status <> 0 AND 
+        pgi.receipt_date <= @Todate AND 
+        pgi.credit_ledger = @Acc_Id;
+
+    -- 1: Payment Adjustments
+    SELECT 
+        pb.bill_name AS targetVoucherNumber, 
+        pgi.payment_invoice_no AS sourceVoucher, 
+        pgi.payment_date AS eventDate, 
+        pb.Debit_Amo AS amount, 
+        'PAYMENT' AS type
+    FROM tbl_Payment_Bill_Info pb
+    JOIN tbl_Payment_General_Info pgi ON pgi.pay_id = pb.payment_id
+    WHERE 
+        pgi.status <> 0 AND 
+        pgi.payment_date <= @Todate AND 
+        pgi.debit_ledger = @Acc_Id;
+
+    -- 2: Credit Note Adjustments
+    SELECT 
+        TRIM(Ref_Inv_Number) AS targetVoucherNumber, 
+        CR_Inv_No AS sourceVoucher, 
+        CR_Date AS eventDate, 
+        Total_Invoice_value AS amount, 
+        'CREDIT NOTE' AS type
+    FROM tbl_Credit_Note_Gen_Info cngi
+    JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = cngi.Retailer_Id
+    JOIN tbl_Account_Master am ON am.Acc_Id = rm.AC_Id
+    WHERE 
+        Cancel_status <> 0 AND 
+        Ref_Inv_Number IS NOT NULL AND 
+        LTRIM(RTRIM(Ref_Inv_Number)) <> '' AND 
+        CR_Date <= @Todate AND 
+        am.Acc_Id = @Acc_Id;
+
+    -- 3: Debit Note Adjustments
+    SELECT 
+        TRIM(Ref_Inv_Number) AS targetVoucherNumber, 
+        DB_Inv_No AS sourceVoucher, 
+        DB_Date AS eventDate, 
+        Total_Invoice_value AS amount, 
+        'DEBIT NOTE' AS type
+    FROM tbl_Debit_Note_Gen_Info dngi
+    JOIN tbl_Retailers_Master rm ON rm.Retailer_Id = dngi.Retailer_Id
+    JOIN tbl_Account_Master am ON am.Acc_Id = rm.AC_Id
+    WHERE 
+        Cancel_status <> 0 AND 
+        Ref_Inv_Number IS NOT NULL AND 
+        LTRIM(RTRIM(Ref_Inv_Number)) <> '' AND 
+        DB_Date <= @Todate AND 
+        am.Acc_Id = @Acc_Id;
+
+    -- 4: Journal Adjustments
+    SELECT 
+        jr.RefNo AS targetVoucherNumber, 
+        jgi.JournalVoucherNo AS sourceVoucher, 
+        jgi.JournalDate AS eventDate, 
+        jr.Amount AS amount, 
+        je.DrCr AS sourceSide, 
+        'JOURNAL' AS type
+    FROM dbo.tbl_Journal_Bill_Reference jr
+    JOIN dbo.tbl_Journal_Entries_Info je ON je.LineId = jr.LineId AND je.JournalAutoId = jr.JournalAutoId
+    JOIN dbo.tbl_Journal_General_Info jgi ON jgi.JournalAutoId = jr.JournalAutoId
+    WHERE 
+        jgi.JournalStatus <> 0 
+        AND jgi.JournalDate <= @Todate 
+        AND je.Acc_Id = @Acc_Id;
+`;
