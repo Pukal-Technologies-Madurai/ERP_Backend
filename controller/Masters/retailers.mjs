@@ -24,21 +24,21 @@ const findRecentDate = (dateArray) => {
 const RetailerControll = () => {
     const domain = process.env.domain;
 
-const getSFCustomers = async (req, res) => {
-    const {
-        isRetailer = 1,
-        isVendor = 0,
-        Retailer_Id,
-        PhoneNumber,
-        ContactPerson_Name,
-        Route_Id,
-        Area_Id,
-        City,
-        Del_Flag 
-    } = req.query;
+    const getSFCustomers = async (req, res) => {
+        const {
+            isRetailer = 1,
+            isVendor = 0,
+            Retailer_Id,
+            PhoneNumber,
+            ContactPerson_Name,
+            Route_Id,
+            Area_Id,
+            City,
+            Del_Flag
+        } = req.query;
 
-    try {
-        let query = `
+        try {
+            let query = `
             SELECT 
                 rm.*,
                 COALESCE(rom.Route_Name, '') AS RouteGet,
@@ -71,66 +71,66 @@ const getSFCustomers = async (req, res) => {
             WHERE rm.isVendor = @isVendor AND rm.isRetailer = @isRetailer
         `;
 
-        const request = new sql.Request();
-        request.input('isRetailer', isRetailer);
-        request.input('isVendor', isVendor);
+            const request = new sql.Request();
+            request.input('isRetailer', isRetailer);
+            request.input('isVendor', isVendor);
 
-        if (Retailer_Id) {
-            query += ` AND rm.Retailer_Id = @Retailer_Id`;
-            request.input('Retailer_Id', Retailer_Id);
+            if (Retailer_Id) {
+                query += ` AND rm.Retailer_Id = @Retailer_Id`;
+                request.input('Retailer_Id', Retailer_Id);
+            }
+
+            if (PhoneNumber) {
+                query += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
+                request.input('PhoneNumber', PhoneNumber);
+            }
+
+            if (ContactPerson_Name) {
+                query += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
+                request.input('ContactPerson_Name', ContactPerson_Name);
+            }
+
+            if (Route_Id && Route_Id !== 'ALL') {
+                query += ` AND rm.Route_Id = @Route_Id`;
+                request.input('Route_Id', Route_Id);
+            }
+
+            if (Area_Id && Area_Id !== 'ALL') {
+                query += ` AND rm.Area_Id = @Area_Id`;
+                request.input('Area_Id', Area_Id);
+            }
+
+            if (City && City !== 'ALL') {
+                query += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
+                request.input('City', City);
+            }
+
+            // Added Del_Flag filter - Active (0) or Inactive (1)
+            if (Del_Flag !== undefined && Del_Flag !== null && Del_Flag !== '') {
+                query += ` AND rm.Del_Flag = @Del_Flag`;
+                request.input('Del_Flag', Del_Flag);
+            }
+
+            // Fixed: Removed Order_By since column doesn't exist
+            query += ` ORDER BY rm.Retailer_Id DESC`;
+
+            const result = await request.query(query);
+
+            if (result.recordset.length) {
+                const parsed = result.recordset.map(o => ({
+                    ...o,
+                    VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
+                    AllLocations: JSON.parse(o.AllLocations || '[]'),
+                    imageUrl: getImage('retailers', o?.ImageName)
+                }));
+                dataFound(res, parsed);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
         }
-
-        if (PhoneNumber) {
-            query += ` AND rm.Mobile_No LIKE '%' + @PhoneNumber + '%'`;
-            request.input('PhoneNumber', PhoneNumber);
-        }
-
-        if (ContactPerson_Name) {
-            query += ` AND rm.Contact_Person LIKE '%' + @ContactPerson_Name + '%'`;
-            request.input('ContactPerson_Name', ContactPerson_Name);
-        }
-
-        if (Route_Id && Route_Id !== 'ALL') {
-            query += ` AND rm.Route_Id = @Route_Id`;
-            request.input('Route_Id', Route_Id);
-        }
-
-        if (Area_Id && Area_Id !== 'ALL') {
-            query += ` AND rm.Area_Id = @Area_Id`;
-            request.input('Area_Id', Area_Id);
-        }
-
-        if (City && City !== 'ALL') {
-            query += ` AND rm.Reatailer_City LIKE '%' + @City + '%'`;
-            request.input('City', City);
-        }
-
-        // Added Del_Flag filter - Active (0) or Inactive (1)
-        if (Del_Flag !== undefined && Del_Flag !== null && Del_Flag !== '') {
-            query += ` AND rm.Del_Flag = @Del_Flag`;
-            request.input('Del_Flag', Del_Flag);
-        }
-
-        // Fixed: Removed Order_By since column doesn't exist
-        query += ` ORDER BY rm.Retailer_Id DESC`; 
-
-        const result = await request.query(query);
-
-        if (result.recordset.length) {
-            const parsed = result.recordset.map(o => ({
-                ...o,
-                VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
-                AllLocations: JSON.parse(o.AllLocations || '[]'),
-                imageUrl: getImage('retailers', o?.ImageName)
-            }));
-            dataFound(res, parsed);
-        } else {
-            noData(res);
-        }
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    };
 
     const getRetailerDropDown = async (req, res) => {
         const { isRetailer = 1, isVendor = 0 } = req.query;
@@ -199,6 +199,93 @@ const getSFCustomers = async (req, res) => {
             servError(e, res);
         }
     }
+
+    const getRetailerDropDownSearch = async (req, res) => {
+        const { isRetailer = 1, isVendor = 0, searchStr = '' } = req.query;
+
+        try {
+            let insertQuery = '';
+            
+            if (searchStr && searchStr.length >= 3) {
+                insertQuery = `
+                    INSERT INTO @retailerIds (Retailer_Id)
+                    SELECT Retailer_Id 
+                    FROM tbl_Retailers_Master
+                    WHERE isRetailer = @isRetailer AND isVendor = @isVendor
+                    AND (Retailer_Name LIKE '%' + @searchStr + '%');
+                `;
+            } else {
+                insertQuery = `
+                    INSERT INTO @retailerIds (Retailer_Id)
+                    SELECT TOP 100 Retailer_Id 
+                    FROM tbl_Retailers_Master
+                    WHERE isRetailer = @isRetailer AND isVendor = @isVendor
+                    ORDER BY Retailer_Name ASC;
+                `;
+            }
+
+            const request = new sql.Request()
+                .input('isRetailer', isRetailer)
+                .input('isVendor', isVendor)
+                .input('searchStr', searchStr)
+                .query(`
+                    DECLARE @retailerIds TABLE (Retailer_Id INT);
+                    ${insertQuery}
+                    -- getting retailers
+                    SELECT 
+                        r.Retailer_Id,
+                        r.Retailer_Name,
+                        r.Reatailer_Address,
+                        COALESCE(r.Gstno, '') AS Gstno,
+                    	COALESCE(a.creditLimit, 0) AS creditLimit,
+                    	COALESCE(a.creditDays, 0) AS creditDays,
+                    	COALESCE(a.percentageValue, 0) AS percentageValue,
+                        COALESCE(pos.Broker_Id, 0) as brokerId,
+                        COALESCE(pos.Broker, 'not found') as brokerName,
+                        COALESCE(pos.Transporter_Id, 0) as transporterId,
+                        COALESCE(pos.Transporter, 'not found') as transporterName,
+                    -- lol based address
+                        COALESCE(lol.Party_Mailing_Name, '') AS lolDeliveryName,
+                        COALESCE(CONCAT_WS(', ', lol.Party_Mobile_1, lol.Party_Mobile_2), '') AS lolPhoneNumber,
+                        COALESCE(lol.Party_Location, '') AS lolCityName,
+                        COALESCE(lol.Party_Mailing_Address, '') AS lolDeliveryAddress,
+                        COALESCE(lol.GST_No, '') AS lolGstNumber,
+                        'TamilNadu' AS lolStateName
+                    FROM tbl_Retailers_Master AS r
+                    LEFT JOIN tbl_Account_Master AS a ON a.Acc_Id = r.AC_Id 
+                    LEFT JOIN tbl_ERP_POS_Master AS pos ON pos.Retailer_Id = r.Retailer_Id 
+                    LEFT JOIN tbl_Ledger_LOL AS lol ON lol.Ret_Id = r.Retailer_Id
+                    WHERE r.Retailer_Id IN (SELECT DISTINCT Retailer_Id FROM @retailerIds)
+                    ORDER BY r.Retailer_Name ASC;
+                    -- COST CATEGORY
+                    SELECT 
+                        Cost_Category_Id AS costTypeId,
+                        Cost_Category AS costType
+                    FROM tbl_ERP_Cost_Category
+                    WHERE Cost_Category IN ('Broker', 'Transport');`
+            );
+
+            const result = await request;
+
+            const [retailers, costTypeDetails] = result.recordsets;
+
+            const withAddresses = retailers.map(retailer => ({
+                ...retailer,
+                deliveryAddresses: [],
+                brokerTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Broker')?.costTypeId),
+                transporterTypeId: toNumber(toArray(costTypeDetails).find(cost => cost.costType === 'Transport')?.costTypeId),
+            }));
+
+            if (result.recordset && result.recordset.length > 0) {
+                dataFound(res, withAddresses)
+            } else {
+                noData(res)
+            }
+        } catch (e) {
+            servError(e, res);
+        }
+    }
+
 
     const getRetailerAddress = async (req, res) => {
         const { Retailer_Id } = req.query;
@@ -423,7 +510,7 @@ const getSFCustomers = async (req, res) => {
                 Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id, PinCode,
                 Retailer_Class, Route_Id, Area_Id, Reatailer_Address, Reatailer_City,
                 State_Id, Branch_Id, Gstno, Latitude, Longitude,
-                Created_By, Company_Id, isRetailer = 1, isVendor = 0,Del_Flag,Order_By,Whatsapp
+                Created_By, Company_Id, isRetailer = 1, isVendor = 0, Del_Flag, Order_By, Whatsapp
             } = req.body;
 
 
@@ -545,7 +632,7 @@ const getSFCustomers = async (req, res) => {
             const {
                 Retailer_Id, Retailer_Name, Contact_Person, Mobile_No, Retailer_Channel_Id,
                 Retailer_Class, Route_Id, Area_Id, Reatailer_Address, Reatailer_City, PinCode,
-                State_Id, Gstno, Updated_By, isRetailer = 1, isVendor = 0,Del_Flag,Order_By,Whatsapp
+                State_Id, Gstno, Updated_By, isRetailer = 1, isVendor = 0, Del_Flag, Order_By, Whatsapp
             } = req.body;
 
             const updateQuery = `
@@ -600,9 +687,9 @@ const getSFCustomers = async (req, res) => {
                 .input('gst', Gstno)
                 .input('updatedby', Updated_By)
                 .input('updated', new Date())
-                .input('Del_Flag',Del_Flag)
-                .input('Order_By',Order_By)
-                .input('Whatsapp',Whatsapp)
+                .input('Del_Flag', Del_Flag)
+                .input('Order_By', Order_By)
+                .input('Whatsapp', Whatsapp)
 
                 .input('profile', fileName ? domain + '/imageURL/retailers/' + fileName : null)
                 .input('imagename', fileName ? fileName : null)
@@ -1376,33 +1463,33 @@ const getSFCustomers = async (req, res) => {
         }
     };
 
-    const getRetailerswithlol=async(req,res)=>{
+    const getRetailerswithlol = async (req, res) => {
         try {
-        let query = `
+            let query = `
             select rm.*,lol.* from tbl_Retailers_master rm
            left join tbl_Ledger_LOL lol ON lol.Ret_Id=rm.Retailer_Id
         `;
 
-        const request = new sql.Request();
+            const request = new sql.Request();
 
-        query += ` ORDER BY rm.Retailer_Id DESC`; 
+            query += ` ORDER BY rm.Retailer_Id DESC`;
 
-        const result = await request.query(query);
+            const result = await request.query(query);
 
-        if (result.recordset.length) {
-            const parsed = result.recordset.map(o => ({
-                ...o,
-                VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
-                AllLocations: JSON.parse(o.AllLocations || '[]'),
-                imageUrl: getImage('retailers', o?.ImageName)
-            }));
-            dataFound(res, parsed);
-        } else {
-            noData(res);
+            if (result.recordset.length) {
+                const parsed = result.recordset.map(o => ({
+                    ...o,
+                    VERIFIED_LOCATION: JSON.parse(o.VERIFIED_LOCATION || '{}'),
+                    AllLocations: JSON.parse(o.AllLocations || '[]'),
+                    imageUrl: getImage('retailers', o?.ImageName)
+                }));
+                dataFound(res, parsed);
+            } else {
+                noData(res);
+            }
+        } catch (e) {
+            servError(e, res);
         }
-    } catch (e) {
-        servError(e, res);
-    }
     }
 
     return {
@@ -1422,7 +1509,8 @@ const getSFCustomers = async (req, res) => {
         retailerSoldProduct,
         getRetailersWhoHasClosingStock,
         getSFCustomersPaginated,
-        getRetailerswithlol
+        getRetailerswithlol,
+        getRetailerDropDownSearch
     }
 }
 

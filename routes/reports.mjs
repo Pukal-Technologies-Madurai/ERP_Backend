@@ -111,6 +111,10 @@ ReportRouter.get('/storageStock/itemWiseMobile', storageStockReport.getStorageSt
 ReportRouter.get('/storageStock/godownWiseMobile', storageStockReport.getStorageStockGodownWiseMobile);
 ReportRouter.get('/itemGroup/stockInfoMobile', storageStockReport.itemGroupWiseClosingDetailsMobile);
 
+ReportRouter.get('/storageStock/stockAbstract', storageStockReport.getStockAbstract);
+ReportRouter.get('/storageStock/godownInOutProcess', storageStockReport.getGodownInOutProcess);
+ReportRouter.get('/storageStock/godownStockBatchItemWise', storageStockReport.getGodownStockBatchItemWise);
+
 
 
 ReportRouter.get('/brokerageReport/getInvolvedBroker', costCenterReports.getBrokerInvolvedInPurchase);
