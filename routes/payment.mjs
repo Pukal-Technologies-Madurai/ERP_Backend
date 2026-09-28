@@ -5,6 +5,8 @@ import paymentReport from '../controller/Payment/paymentReport.mjs';
 import debtorsCreditors from '../controller/Payment/debtorsCreditors.mjs';
 import bankStatement from '../controller/Payment/bankStatement.mjs';
 import { alterHistory } from '../middleware/alterHistory.mjs';
+import excelUpload from '../middleware/excelUpload.mjs';
+
 
 const PaymentRouter = express.Router();
 
@@ -61,5 +63,8 @@ PaymentRouter.get('/getBankStatement',bankStatement.getBankStatement)
 
 PaymentRouter.post('/getStatementFromBuffer',bankStatement.getStatementFromBuffer)
 PaymentRouter.post('/syncSelectedWithPayment',bankStatement.syncSelectedWithPayment)
+
+
+PaymentRouter.post('/uploadBankStatement', excelUpload.single('file'), bankStatement.uploadwithBankStatement);
 
 export default PaymentRouter;

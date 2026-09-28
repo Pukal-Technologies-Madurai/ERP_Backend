@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const uploadFile = (req, res, uploadLocation, key) => {
-    const folders = ['products', 'retailers', 'attendance', 'visitLogs', 'forumDocuments','whatsappMedia','LRReport','pendingbills','saleorder','saleinvoice','statement','pricelist'];
+    const folders = ['products', 'retailers', 'attendance', 'visitLogs', 'forumDocuments', 'whatsappMedia', 'LRReport', 'pendingbills', 'saleorder', 'saleinvoice', 'statement', 'pricelist', 'saleimages'];
     const uploadDir = path.join(__dirname, '..', 'uploads', String(folders[Number(uploadLocation)]));
 
     const ensureUploadDirExists = (dir) => {
@@ -28,17 +28,31 @@ const uploadFile = (req, res, uploadLocation, key) => {
         },
     });
 
-    const upload = multer({ storage: storage }).single(key);
+    const upload = multer({ storage: storage }).any();
 
     return new Promise((resolve, reject) => {
         upload(req, res, function (err) {
             if (err) {
                 reject(err);
             } else {
+                if (!req.file && req.files && req.files.length > 0) {
+                    if (key) {
+                        req.file = req.files.find(f => f.fieldname === key) || req.files[0];
+                    } else {
+                        req.file = req.files[0];
+                    }
+
+                    // Delete any redundant duplicate files created in the same request
+                    req.files.forEach(f => {
+                        if (f.path && req.file && f.path !== req.file.path && fs.existsSync(f.path)) {
+                            try { fs.unlinkSync(f.path); } catch (_) { }
+                        }
+                    });
+                }
                 resolve();
             }
         });
     });
-} 
+}
 
 export default uploadFile;

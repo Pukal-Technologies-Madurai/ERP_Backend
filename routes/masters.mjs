@@ -461,4 +461,7 @@ MastersRouter.post('/stockgroup', stockgroup.createStockGroup);
 MastersRouter.put('/stockgroup', stockgroup.updateStockGroup);
 MastersRouter.get('/stockgroup/dropdown', stockgroup.stockGroupDropdown);
 
+MastersRouter.post('/whatsapp/saleImages', whatsapp.postsalesImages);
+
+
 export default MastersRouter;
