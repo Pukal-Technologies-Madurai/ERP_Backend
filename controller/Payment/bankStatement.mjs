@@ -5,12 +5,13 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import fs from 'fs';
 import path from 'path';
 import fetch from 'node-fetch';
-import { sentData, servError, invalidInput, dataFound,success } from '../../res.mjs';
+import { sentData, servError, invalidInput, dataFound, success } from '../../res.mjs';
 import { CompactEncrypt, compactDecrypt, importSPKI, importPKCS8 } from 'jose';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
-import { ISOString,createPadString,randomNumber } from '../../helper_functions.mjs';
+import { ISOString, createPadString, randomNumber } from '../../helper_functions.mjs';
 import sql from 'mssql';
 import { fileURLToPath } from 'url';
+import * as XLSX from 'xlsx';
 
 
 
@@ -138,7 +139,7 @@ const getToken = async () => {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
- 
+
 
   if (!res.ok) throw new Error(`Token API failed (${res.status})`);
   const data = await res.json();
@@ -150,15 +151,15 @@ const getToken = async () => {
 
 const fetchStatement = async (req, res) => {
   try {
-    const {  acc_No,startDate, endDate } = req.body;
-    if ( !startDate || !endDate) return invalidInput(res, 'Missing required fields');
+    const { acc_No, startDate, endDate } = req.body;
+    if (!startDate || !endDate) return invalidInput(res, 'Missing required fields');
 
 
 
 
     const accessToken = await getToken();
 
-    const  accNo='002530350870041'
+    const accNo = '002530350870041'
 
     const encryptedRequest = await JWEEncrypt({ accNo, startDate, endDate });
 
@@ -289,7 +290,7 @@ const syncStatement = async (req, res) => {
     let skippedCount = 0;
     let skippedTransactions = [];
 
-    
+
     const pool = await sql.connect();
     transaction = new sql.Transaction(pool);
     await transaction.begin();
@@ -313,10 +314,10 @@ const syncStatement = async (req, res) => {
           continue;
         }
 
-        
+
         const checkRequest = new sql.Request(transaction);
         checkRequest.input('TranDate', tranDate);
-        checkRequest.input('ValDate', valDate || tranDate); 
+        checkRequest.input('ValDate', valDate || tranDate);
         checkRequest.input('TranParticulars', tranParticulars);
         checkRequest.input('Amount', amount);
         checkRequest.input('TranType', tranType);
@@ -345,12 +346,12 @@ const syncStatement = async (req, res) => {
           continue;
         }
 
-        
+
         const idRequest = new sql.Request(transaction);
         const maxIdResult = await idRequest.query('SELECT ISNULL(MAX(Id), 0) + 1 as NextId FROM tbl_Bank_Transactions');
         const nextId = maxIdResult.recordset[0].NextId;
 
-        
+
         const insertRequest = new sql.Request(transaction);
         insertRequest.input('Id', nextId);
         insertRequest.input('TranDate', tranDate);
@@ -363,7 +364,7 @@ const syncStatement = async (req, res) => {
         insertRequest.input('AcctBal', acctBal);
         insertRequest.input('Created_at', new Date());
         insertRequest.input('AccountNo', account_No);
-        
+
         const insertQuery = `
           INSERT INTO tbl_Bank_Transactions
           (Id, TranDate, ValDate, ChequeNum, TranParticulars, TranType, Amount, Refno, AcctBal, Created_at, AccountNo)
@@ -374,7 +375,7 @@ const syncStatement = async (req, res) => {
         insertedCount++;
       }
 
-      
+
       await transaction.commit();
 
       dataFound(res, {
@@ -387,7 +388,7 @@ const syncStatement = async (req, res) => {
       });
 
     } catch (err) {
-     
+
       if (transaction) {
         await transaction.rollback();
       }
@@ -412,47 +413,6 @@ const getTokenEndpoint = async (req, res) => {
 };
 
 
-// const getBankStatement = async (req, res) => {
-//   const FromDate = req.query?.FromDate
-//     ? ISOString(req.query?.FromDate)
-//     : ISOString();
-//   const ToDate = req.query?.ToDate
-//     ? ISOString(req.query?.ToDate)
-//     : ISOString();
-//   const AccountNo = req.query.AccountNo;
-
-//   try {
-//     if (!FromDate || !ToDate) {
-//       return invalidInput(res, "FromDate and ToDate are required");
-//     }
-
-//     if (!AccountNo) {
-//       return invalidInput(res, "AccountNo is required");
-//     }
-
-//     const request = new sql.Request();
-//     request.input("FromDate", sql.DateTime, FromDate);
-//     request.input("ToDate", sql.DateTime, ToDate);
-//     request.input("AccountNo", sql.VarChar, AccountNo); 
-
-//     let query = `
-//     SELECT bt.*, ba.pay_id,ba.receipt_id,ba.contra_id
-//     FROM tbl_Bank_Transactions bt
-// left join tbl_Bank_Activity ba ON ba.Id=bt.Id
-//         WHERE TranDate BETWEEN @FromDate AND @ToDate 
-//           AND AccountNo = @AccountNo 
-//         ORDER BY TranDate DESC
-//     `;
-
-//     const result = await request.query(query);
-//     sentData(res, result.recordset);
-
-//   } catch (error) {
-//     console.error("Error fetching bank statement:", error);
-//     servError(error, res);
-//   }
-// };
-
 
 const getBankStatement = async (req, res) => {
   const FromDate = req.query?.FromDate
@@ -475,7 +435,7 @@ const getBankStatement = async (req, res) => {
     const request = new sql.Request();
     request.input("FromDate", sql.DateTime, FromDate);
     request.input("ToDate", sql.DateTime, ToDate);
-    request.input("AccountNo", sql.VarChar, AccountNo); 
+    request.input("AccountNo", sql.VarChar, AccountNo);
 
     let query = `
       SELECT 
@@ -491,7 +451,7 @@ const getBankStatement = async (req, res) => {
     `;
 
     const result = await request.query(query);
-    
+
     // Process the results to ensure proper mapping
     const processedResults = result.recordset.map(record => ({
       ...record,
@@ -500,7 +460,7 @@ const getBankStatement = async (req, res) => {
       receipt_id: record.receipt_id || null,
       contra_id: record.contra_id || null
     }));
-    
+
     sentData(res, processedResults);
 
   } catch (error) {
@@ -513,7 +473,7 @@ const getBankStatement = async (req, res) => {
 const getStatementFromBuffer = async (req, res) => {
   try {
     const { startDate, endDate, accountNo } = req.query;
-    
+
 
     if (!startDate || !endDate || !accountNo) {
       return invalidInput(res, 'Missing required fields: startDate, endDate, and accountNo are required');
@@ -524,7 +484,7 @@ const getStatementFromBuffer = async (req, res) => {
     const encryptedRequest = await JWEEncrypt({ accountNo, startDate, endDate });
 
     const SERVICE_URL = 'https://tmbapi.tmbank.in/tmb-api-external/tmb-api/tmb_accountstatement_api/fetchstatement';
-    
+
     const apiRes = await fetch(SERVICE_URL, {
       method: 'POST',
       headers: {
@@ -535,7 +495,7 @@ const getStatementFromBuffer = async (req, res) => {
       },
       body: JSON.stringify({ Request: encryptedRequest }),
     });
-    
+
     const text = await apiRes.text();
     if (!apiRes.ok) {
       return invalidInput(res, `TMB API failed: ${apiRes.status}: ${text}`);
@@ -593,52 +553,52 @@ const getStatementFromBuffer = async (req, res) => {
 };
 
 const syncSelectedWithPayment = async (req, res) => {
-    const transaction = new sql.Transaction();
-    
-    try {
-        const { Acc, transactions, paymentDetails,created_by } = req.body;
+  const transaction = new sql.Transaction();
 
-        if (!paymentDetails.pay_bill_type || !paymentDetails.payment_voucher_type_id)
-            throw new Error('Missing required payment details');
-        if (!Acc)
-            throw new Error('Missing required Credit details');
+  try {
+    const { Acc, transactions, paymentDetails, created_by } = req.body;
 
-        if (!transactions || transactions.length === 0)
-            throw new Error('No transactions selected');
+    if (!paymentDetails.pay_bill_type || !paymentDetails.payment_voucher_type_id)
+      throw new Error('Missing required payment details');
+    if (!Acc)
+      throw new Error('Missing required Credit details');
 
-        await transaction.begin();
+    if (!transactions || transactions.length === 0)
+      throw new Error('No transactions selected');
 
-        const payment_date = paymentDetails.payment_date ? ISOString(paymentDetails.payment_date) : ISOString();
-        const currentUser = created_by;
-        const creditLedger = Acc.Acc_Id;
-        const creditLedgerName = Acc.Account_name;
+    await transaction.begin();
 
-       
-        const get_year_id = await transaction.request()
-            .input('payment_date', payment_date)
-            .query(`
+    const payment_date = paymentDetails.payment_date ? ISOString(paymentDetails.payment_date) : ISOString();
+    const currentUser = created_by;
+    const creditLedger = Acc.Acc_Id;
+    const creditLedgerName = Acc.Account_name;
+
+
+    const get_year_id = await transaction.request()
+      .input('payment_date', payment_date)
+      .query(`
                 SELECT Id AS Year_Id, Year_Desc
                 FROM tbl_Year_Master
                 WHERE Fin_Start_Date <= @payment_date
                   AND Fin_End_Date   >= @payment_date
             `);
 
-        if (get_year_id.recordset.length === 0) throw new Error('Year_Id not found');
-        const { Year_Id, Year_Desc } = get_year_id.recordset[0];
+    if (get_year_id.recordset.length === 0) throw new Error('Year_Id not found');
+    const { Year_Id, Year_Desc } = get_year_id.recordset[0];
 
-        
-        const voucherCodeGet = await transaction.request()
-            .input('Vocher_Type_Id', paymentDetails.payment_voucher_type_id)
-            .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Vocher_Type_Id`);
 
-        if (voucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
-        const Voucher_Code = voucherCodeGet.recordset[0]?.Voucher_Code || '';
+    const voucherCodeGet = await transaction.request()
+      .input('Vocher_Type_Id', paymentDetails.payment_voucher_type_id)
+      .query(`SELECT Voucher_Code FROM tbl_Voucher_Type WHERE Vocher_Type_Id = @Vocher_Type_Id`);
 
-      
-        const maxIdsGet = await transaction.request()
-            .input('Year_Id', Year_Id)
-            .input('payment_voucher_type_id', paymentDetails.payment_voucher_type_id)
-            .query(`
+    if (voucherCodeGet.recordset.length === 0) throw new Error('Failed to get VoucherCode');
+    const Voucher_Code = voucherCodeGet.recordset[0]?.Voucher_Code || '';
+
+
+    const maxIdsGet = await transaction.request()
+      .input('Year_Id', Year_Id)
+      .input('payment_voucher_type_id', paymentDetails.payment_voucher_type_id)
+      .query(`
                 SELECT
                     (SELECT COALESCE(MAX(pay_id), 0) FROM tbl_Payment_General_Info) AS MaxPaymentId,
                     (SELECT COALESCE(MAX(payment_sno), 0) FROM tbl_Payment_General_Info
@@ -646,87 +606,87 @@ const syncSelectedWithPayment = async (req, res) => {
                        AND payment_voucher_type_id = @payment_voucher_type_id) AS MaxPaymentSno
             `);
 
-        let nextPaymentId  = Number(maxIdsGet.recordset[0].MaxPaymentId)  + 1;
-        let nextPaymentSno = Number(maxIdsGet.recordset[0].MaxPaymentSno) + 1;
+    let nextPaymentId = Number(maxIdsGet.recordset[0].MaxPaymentId) + 1;
+    let nextPaymentSno = Number(maxIdsGet.recordset[0].MaxPaymentSno) + 1;
 
-        const insertedPayments = [];
+    const insertedPayments = [];
 
-      
-        for (const txn of transactions) {
 
-            const parseAmount = (amountStr) => {
-                if (!amountStr) return 0;
-                const cleaned = String(amountStr)
-                    .replace('Rs.', '')
-                    .replace('CR', '')
-                    .replace('DR', '')
-                    .trim();
-                return parseFloat(cleaned) || 0;
-            };
-        
-            const Id = txn.Id;
-        
-     
-            if (!Id) {
-                console.warn(`Skipping transaction — no Id: ${txn.TranParticulars}`);
-                continue;
-            }
-        
-            
-            const existingCheck = await transaction.request()
-                .input('Id', Id)
-                .query(`
+    for (const txn of transactions) {
+
+      const parseAmount = (amountStr) => {
+        if (!amountStr) return 0;
+        const cleaned = String(amountStr)
+          .replace('Rs.', '')
+          .replace('CR', '')
+          .replace('DR', '')
+          .trim();
+        return parseFloat(cleaned) || 0;
+      };
+
+      const Id = txn.Id;
+
+
+      if (!Id) {
+        console.warn(`Skipping transaction — no Id: ${txn.TranParticulars}`);
+        continue;
+      }
+
+
+      const existingCheck = await transaction.request()
+        .input('Id', Id)
+        .query(`
                     SELECT COUNT(1) AS ExistsCount 
                     FROM tbl_Bank_Activity 
                     WHERE Id = @Id
                 `);
-        
-            const alreadyExists = Number(existingCheck.recordset[0].ExistsCount) > 0;
-        
-            if (alreadyExists) {
-                console.log(`Transaction already processed: ${Id}`);
-                continue;   
-            }
-        
-        
-            const pay_id           = nextPaymentId++;   
-            const payment_sno          = nextPaymentSno++;  
-            const payment_invoice_no = `${Voucher_Code}/${createPadString(payment_sno, 6)}/${Year_Desc}`;
-            const Alter_Id         = randomNumber(6, 8);
-            const txn_date         = txn.TranDate ? ISOString(txn.TranDate) : payment_date;
-            const debit_amount     = parseAmount(txn.Amount);
-            const txn_check_no     = txn.ChequeNum || paymentDetails.check_no || null;
-            const txn_check_date   = txn.ChequeNum ? txn_date : (paymentDetails.check_date || null);
-            const txn_remarks      = [txn.TranParticulars, paymentDetails.remarks].filter(Boolean).join(' | ');
-            const ledgerId         = txn.ledgerDetails?.debit_ledger;
-            const ledgerName       = txn.ledgerDetails?.debit_ledger_name;
-            const selectedInvoices = txn.ledgerDetails?.selectedInvoices || [];
 
-            
-            await transaction.request()
-                .input('pay_id',                   pay_id)
-                .input('year_id',                  Year_Id)
-                .input('payment_sno',              payment_sno)
-                .input('payment_invoice_no',       payment_invoice_no)
-                .input('payment_voucher_type_id',  paymentDetails.payment_voucher_type_id)
-                .input('payment_date',             txn_date)
-                .input('pay_bill_type',            paymentDetails.pay_bill_type)
-                .input('debit_ledger',             ledgerId)
-                .input('debit_ledger_name',        ledgerName || '')
-                .input('debit_amount',             debit_amount)
-                .input('credit_ledger',            creditLedger)
-                .input('credit_ledger_name',       creditLedgerName)
-                .input('credit_amount',            debit_amount)
-                .input('transaction_type',         paymentDetails.transaction_type || '')
-                .input('remarks',                  txn_remarks)
-                .input('check_no',                 txn_check_no)
-                .input('check_date',               txn_check_date)
-                .input('bank_name',                paymentDetails.bank_name || null)
-                .input('bank_date',                txn_date)
-                .input('status',                   paymentDetails.status || '1')
-                .input('created_by',               currentUser)
-                .input('Alter_Id',                 Alter_Id)
-                .query(`
+      const alreadyExists = Number(existingCheck.recordset[0].ExistsCount) > 0;
+
+      if (alreadyExists) {
+        console.log(`Transaction already processed: ${Id}`);
+        continue;
+      }
+
+
+      const pay_id = nextPaymentId++;
+      const payment_sno = nextPaymentSno++;
+      const payment_invoice_no = `${Voucher_Code}/${createPadString(payment_sno, 6)}/${Year_Desc}`;
+      const Alter_Id = randomNumber(6, 8);
+      const txn_date = txn.TranDate ? ISOString(txn.TranDate) : payment_date;
+      const debit_amount = parseAmount(txn.Amount);
+      const txn_check_no = txn.ChequeNum || paymentDetails.check_no || null;
+      const txn_check_date = txn.ChequeNum ? txn_date : (paymentDetails.check_date || null);
+      const txn_remarks = [txn.TranParticulars, paymentDetails.remarks].filter(Boolean).join(' | ');
+      const ledgerId = txn.ledgerDetails?.debit_ledger;
+      const ledgerName = txn.ledgerDetails?.debit_ledger_name;
+      const selectedInvoices = txn.ledgerDetails?.selectedInvoices || [];
+
+
+      await transaction.request()
+        .input('pay_id', pay_id)
+        .input('year_id', Year_Id)
+        .input('payment_sno', payment_sno)
+        .input('payment_invoice_no', payment_invoice_no)
+        .input('payment_voucher_type_id', paymentDetails.payment_voucher_type_id)
+        .input('payment_date', txn_date)
+        .input('pay_bill_type', paymentDetails.pay_bill_type)
+        .input('debit_ledger', ledgerId)
+        .input('debit_ledger_name', ledgerName || '')
+        .input('debit_amount', debit_amount)
+        .input('credit_ledger', creditLedger)
+        .input('credit_ledger_name', creditLedgerName)
+        .input('credit_amount', debit_amount)
+        .input('transaction_type', paymentDetails.transaction_type || '')
+        .input('remarks', txn_remarks)
+        .input('check_no', txn_check_no)
+        .input('check_date', txn_check_date)
+        .input('bank_name', paymentDetails.bank_name || null)
+        .input('bank_date', txn_date)
+        .input('status', paymentDetails.status || '1')
+        .input('created_by', currentUser)
+        .input('Alter_Id', Alter_Id)
+        .query(`
                     INSERT INTO tbl_Payment_General_Info (
                         pay_id, year_id, payment_sno, payment_invoice_no,
                         payment_voucher_type_id, payment_date, pay_bill_type,
@@ -747,41 +707,41 @@ const syncSelectedWithPayment = async (req, res) => {
                         @Alter_Id
                     )
                 `);
-        
-          
-            await transaction.request()
-                .input('Id',     Id)
-                .input('pay_id', pay_id)
-                .query(`
+
+
+      await transaction.request()
+        .input('Id', Id)
+        .input('pay_id', pay_id)
+        .query(`
                     INSERT INTO tbl_Bank_Activity (Id, receipt_id, pay_id)
                     VALUES (@Id, NULL, @pay_id)
                 `);
 
-            
-            if (selectedInvoices && selectedInvoices.length > 0) {
-                for (const invoice of selectedInvoices) {
-                    try {
-                        const pay_bill_id = invoice.voucherId;
-                        const bill_name = invoice.BillRefNo || invoice.voucherNumber || '';
-                        const bill_amount = invoice.totalValue || 0;
-                        const dataSource = invoice.dataSource || 'GENERAL';
-                        const journalBillType = dataSource;
 
-                       
-                        await transaction.request()
-                            .input('payment_id',           pay_id)
-                            .input('payment_no',       payment_invoice_no)
-                            .input('payment_date',     txn_date)
-                            .input('bill_type',    paymentDetails.pay_bill_type)
-                            .input('DR_CR_Acc_Id',     ledgerId) 
-                            .input('pay_bill_id',          pay_bill_id)
-                            .input('bill_name',        bill_name)
-                            .input('JournalBillType',  journalBillType)
-                            .input('bill_amount',      bill_amount)
-                            .input('Debit_Amo',        bill_amount) 
-                            .input('Credit_Amo',       0) 
-                            .input('created_by',       currentUser)
-                            .query(`
+      if (selectedInvoices && selectedInvoices.length > 0) {
+        for (const invoice of selectedInvoices) {
+          try {
+            const pay_bill_id = invoice.voucherId;
+            const bill_name = invoice.BillRefNo || invoice.voucherNumber || '';
+            const bill_amount = invoice.totalValue || 0;
+            const dataSource = invoice.dataSource || 'GENERAL';
+            const journalBillType = dataSource;
+
+
+            await transaction.request()
+              .input('payment_id', pay_id)
+              .input('payment_no', payment_invoice_no)
+              .input('payment_date', txn_date)
+              .input('bill_type', paymentDetails.pay_bill_type)
+              .input('DR_CR_Acc_Id', ledgerId)
+              .input('pay_bill_id', pay_bill_id)
+              .input('bill_name', bill_name)
+              .input('JournalBillType', journalBillType)
+              .input('bill_amount', bill_amount)
+              .input('Debit_Amo', bill_amount)
+              .input('Credit_Amo', 0)
+              .input('created_by', currentUser)
+              .query(`
                                 INSERT INTO tbl_Payment_Bill_Info (
                                     payment_id, payment_no, payment_date, bill_type,
                                     DR_CR_Acc_Id, pay_bill_id, bill_name, JournalBillType,
@@ -793,38 +753,240 @@ const syncSelectedWithPayment = async (req, res) => {
                                 )
                             `);
 
-                    
 
-                    } catch (billError) {
-                        console.error(`Error inserting bill info for invoice ${invoice.BillRefNo}:`, billError);
-                     
-                        throw billError; 
-                    }
-                }
-            }
 
-            insertedPayments.push({
-                pay_id,
-                payment_invoice_no,
-                amount: debit_amount,
-                invoiceCount: selectedInvoices.length
-            });
+          } catch (billError) {
+            console.error(`Error inserting bill info for invoice ${invoice.BillRefNo}:`, billError);
+
+            throw billError;
+          }
         }
+      }
 
-        await transaction.commit();
-
-        return success(res, {
-            message: `${insertedPayments.length} payment(s) processed successfully`,
-            payments: insertedPayments,
-            totalInvoicesLinked: insertedPayments.reduce((sum, p) => sum + p.invoiceCount, 0)
-        });
-
-    } catch (error) {
-        try { await transaction.rollback(); } catch (_) {}
-        console.error('Error in syncSelectedWithPayment:', error);
-        return servError(error, res);
+      insertedPayments.push({
+        pay_id,
+        payment_invoice_no,
+        amount: debit_amount,
+        invoiceCount: selectedInvoices.length
+      });
     }
+
+    await transaction.commit();
+
+    return success(res, {
+      message: `${insertedPayments.length} payment(s) processed successfully`,
+      payments: insertedPayments,
+      totalInvoicesLinked: insertedPayments.reduce((sum, p) => sum + p.invoiceCount, 0)
+    });
+
+  } catch (error) {
+    try { await transaction.rollback(); } catch (_) { }
+    console.error('Error in syncSelectedWithPayment:', error);
+    return servError(error, res);
+  }
 };
+
+const pick = (obj, keys) => {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+};
+
+const normalizeTxn = (t) => {
+  const tranDate = pick(t, [
+    'tranDate', 'TranDate', 'Tran Date', 'Transaction Date', 'Date', 'tran_date',
+  ]);
+
+  return {
+    tranDate,
+    valDate:
+      pick(t, ['valDate', 'ValDate', 'Val Date', 'Value Date', 'val_date']) || tranDate,
+    chequeNum: pick(t, [
+      'chequeNum', 'ChequeNum', 'Cheque Num', 'Cheque No', 'Cheque No.', 'Cheque',
+    ]),
+    tranParticulars: pick(t, [
+      'tranParticulars', 'TranParticulars', 'Tran Particulars', 'Particulars', 'Description', 'Remarks',
+    ]),
+    tranType: pick(t, ['tranType', 'TranType', 'Tran Type', 'Type', 'CR/DR', 'Cr/Dr']),
+    amount: pick(t, ['amount', 'Amount', 'Tran Amount', 'Transaction Amount']),
+    refno: pick(t, ['refno', 'Refno', 'Ref No', 'Ref No.', 'Reference No']),
+    acctBal: pick(t, ['acctBal', 'AcctBal', 'Acct Bal', 'Balance', 'Account Balance']),
+  };
+};
+
+const uploadwithBankStatement = async (req, res) => {
+  const transaction = new sql.Transaction();
+  let transactionStarted = false;
+
+  try {
+    const account_No =
+      req.body?.account_No ||
+      req.body?.accountNo ||
+      req.body?.AccountNo ||
+      req.query?.account_No ||
+      req.query?.accountNo ||
+      req.query?.AccountNo;
+
+    if (!account_No) {
+      return invalidInput(res, 'account_No is required');
+    }
+
+    // ---------- Build transactions list (Excel file OR JSON body) ----------
+    let transactions = [];
+
+    if (req.file && req.file.buffer) {
+      const workbook = XLSX.read(req.file.buffer, {
+        type: 'buffer',
+        codepage: 65001,
+        cellDates: true,
+        raw: false,
+      });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      transactions = rawRows.map(normalizeTxn);
+    } else if (req.body?.transactions) {
+      let list = req.body.transactions;
+      if (typeof list === 'string') {
+        try {
+          list = JSON.parse(list);
+        } catch (_) {
+          list = [];
+        }
+      }
+      transactions = Array.isArray(list) ? list.map(normalizeTxn) : [];
+    }
+
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return invalidInput(res, 'Excel file or valid transactions list is required');
+    }
+
+    // ---------- Insert ----------
+    await transaction.begin();
+    transactionStarted = true;
+
+    let insertedCount = 0;
+    let skippedCount = 0;
+    const skippedTransactions = [];
+
+    for (const txn of transactions) {
+      const {
+        tranDate,
+        valDate,
+        chequeNum = '',
+        tranParticulars = '',
+        tranType = '',
+        amount = '',
+        refno = '',
+        acctBal = '',
+      } = txn;
+
+      if (!tranDate) {
+        skippedCount++;
+        skippedTransactions.push({ ...txn, reason: 'Missing tranDate' });
+        continue;
+      }
+
+      // Duplicate check
+      const checkRequest = new sql.Request(transaction);
+      checkRequest.input('TranDate', tranDate);
+      checkRequest.input('ValDate', valDate || tranDate);
+      checkRequest.input('TranParticulars', tranParticulars);
+      checkRequest.input('Amount', amount);
+      checkRequest.input('TranType', tranType);
+      checkRequest.input('Refno', refno);
+      checkRequest.input('AcctBal', acctBal);
+      checkRequest.input('AccountNo', account_No);
+
+      const checkResult = await checkRequest.query(`
+        SELECT COUNT(*) AS count
+        FROM tbl_Bank_Transactions
+        WHERE TranDate = @TranDate
+          AND ValDate = @ValDate
+          AND TranParticulars = @TranParticulars
+          AND Amount = @Amount
+          AND TranType = @TranType
+          AND Refno = @Refno
+          AND AcctBal = @AcctBal
+          AND AccountNo = @AccountNo
+      `);
+
+      if (checkResult.recordset[0].count > 0) {
+        skippedCount++;
+        skippedTransactions.push({ ...txn, reason: 'Already exists in database' });
+        continue;
+      }
+
+      // Next Id
+      const idRequest = new sql.Request(transaction);
+      const maxIdResult = await idRequest.query(
+        'SELECT ISNULL(MAX(Id), 0) + 1 AS NextId FROM tbl_Bank_Transactions WITH (UPDLOCK, HOLDLOCK)'
+      );
+      const nextId = maxIdResult.recordset[0].NextId;
+
+      // Insert
+      const insertRequest = new sql.Request(transaction);
+      insertRequest.input('Id', nextId);
+      insertRequest.input('TranDate', tranDate);
+      insertRequest.input('ValDate', valDate || tranDate);
+      insertRequest.input('ChequeNum', chequeNum);
+      insertRequest.input('TranParticulars', tranParticulars);
+      insertRequest.input('TranType', tranType);
+      insertRequest.input('Amount', amount);
+      insertRequest.input('Refno', refno);
+      insertRequest.input('AcctBal', acctBal);
+      insertRequest.input('Created_at', new Date());
+      insertRequest.input('AccountNo', account_No);
+
+      await insertRequest.query(`
+        INSERT INTO tbl_Bank_Transactions
+          (Id, TranDate, ValDate, ChequeNum, TranParticulars, TranType, Amount, Refno, AcctBal, Created_at, AccountNo)
+        VALUES
+          (@Id, @TranDate, @ValDate, @ChequeNum, @TranParticulars, @TranType, @Amount, @Refno, @AcctBal, @Created_at, @AccountNo)
+      `);
+
+      insertedCount++;
+    }
+
+    // Nothing inserted → report it clearly instead of "success"
+    if (insertedCount === 0) {
+      await transaction.rollback();
+      transactionStarted = false;
+      return dataFound(res, {
+        success: false,
+        message: 'No rows inserted',
+        inserted: 0,
+        skipped: skippedCount,
+        totalProcessed: transactions.length,
+        skippedDetails: skippedTransactions.slice(0, 20),
+      });
+    }
+
+    await transaction.commit();
+    transactionStarted = false;
+
+    return dataFound(res, {
+      success: true,
+      message: 'Statement data synced successfully',
+      inserted: insertedCount,
+      skipped: skippedCount,
+      totalProcessed: transactions.length,
+      skippedDetails: skippedTransactions.length > 0 ? skippedTransactions : undefined,
+    });
+  } catch (err) {
+    if (transactionStarted) {
+      try {
+        await transaction.rollback();
+      } catch (rbErr) {
+        console.error('Rollback error:', rbErr);
+      }
+    }
+    console.error('Upload bank statement error:', err);
+    return servError(err, res);
+  }
+};
+
 
 export default {
   fetchStatement,
@@ -834,7 +996,8 @@ export default {
   syncStatement,
   getBankStatement,
   getStatementFromBuffer,
-  syncSelectedWithPayment
+  syncSelectedWithPayment,
+  uploadwithBankStatement
 };
 
 
