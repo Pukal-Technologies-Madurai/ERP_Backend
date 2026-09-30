@@ -271,7 +271,8 @@ export const getSalesInvoice = async (req, res) => {
                     COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
                     COALESCE(v.Voucher_Type, 'unknown') AS VoucherTypeGet,
                     COALESCE(delBy.Cost_Center_Name, 'unknown') AS Delivery_Person_Name,
-                    COALESCE(salPer.Name, 'unknown') AS Sales_Person_Name
+                    COALESCE(salPer.Name, 'unknown') AS Sales_Person_Name,
+                    COALESCE(salCreated.Name,'unknown') AS Sale_Order_Created
                 FROM 
                     tbl_Sales_Delivery_Gen_Info AS sdgi
                 LEFT JOIN tbl_Retailers_Master AS rm ON rm.Retailer_Id = sdgi.Retailer_Id
@@ -281,6 +282,7 @@ export const getSalesInvoice = async (req, res) => {
                 LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
                 LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = sdgi.So_No AND sogi.Cancel_status <> 0
                 LEFT JOIN tbl_Users AS salPer ON salPer.UserId = sogi.Sales_Person_Id
+                LEFT JOIN tbl_Users AS salCreated ON salCreated.UserId =sogi.Created_by
                 WHERE sdgi.Do_Id IN (SELECT DISTINCT Do_Id FROM @FilteredInvoice)
                 ORDER BY sdgi.Do_Id desc;
                 -- product details

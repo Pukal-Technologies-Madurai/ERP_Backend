@@ -2,6 +2,7 @@
 import sql from 'mssql';
 import fs from 'fs';
 import path from 'path';
+import fetch from 'node-fetch';
 import { dataFound, failed, invalidInput, noData, sentData, servError, success } from '../../res.mjs'
 import { checkIsNumber, filterableText, isEqualNumber, randomNumber } from '../../helper_functions.mjs';
 import uploadFile from '../../middleware/uploadMiddleware.mjs';
@@ -449,6 +450,194 @@ const whatsapp = () => {
     };
 
 
+    const askevaWebhook = async (req, res) => {
+        try {
+            const rawContact = req.query?.contact || req.query?.ContactNumber || req.query?.contactNumber || req.body?.contact || req.body?.ContactNumber || req.body?.contactNumber || req.params?.contact || '';
+
+            const cleanDigits = String(rawContact).replace(/\D/g, '');
+            const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+
+            if (!last10) {
+                return res.status(200).json({
+                    name: 'Customer',
+                    contact: String(rawContact),
+                    live_orders_summary: 'Contact number not provided'
+                });
+            }
+
+            // 1. Search in tbl_Retailers_Master & tbl_Ledger_LOL
+            const retailerReq = new sql.Request();
+            retailerReq.input('last10', sql.NVarChar(50), last10);
+
+            const retailerQuery = `
+                SELECT TOP 1
+                    rm.Retailer_Id,
+                    rm.Retailer_Name,
+                    rm.Contact_Person,
+                    rm.Mobile_No,
+                    rm.Whatsapp,
+                    rm.Reatailer_Address,
+                    rm.Reatailer_City,
+                    rm.PinCode,
+                    rm.Gstno,
+                    COALESCE(am.Area_Name, '') AS Area_Name,
+                    COALESCE(rom.Route_Name, '') AS Route_Name,
+                    COALESCE(sm.State_Name, '') AS State_Name,
+                    COALESCE(a.creditLimit, 0) AS Credit_Limit,
+                    COALESCE(lol.Party_Mailing_Name, '') AS lolName,
+                    COALESCE(lol.Party_Location, '') AS lolCity,
+                    COALESCE(lol.Party_Mailing_Address, '') AS lolAddress,
+                    COALESCE(lol.GST_No, '') AS lolGst
+                FROM tbl_Retailers_Master rm
+                LEFT JOIN tbl_Area_Master am ON am.Area_Id = rm.Area_Id
+                LEFT JOIN tbl_Route_Master rom ON rom.Route_Id = rm.Route_Id
+                LEFT JOIN tbl_State_Master sm ON sm.State_Id = rm.State_Id
+                LEFT JOIN tbl_Account_Master a ON a.Acc_Id = rm.AC_Id
+                LEFT JOIN tbl_Ledger_LOL lol ON lol.Ret_Id = rm.Retailer_Id
+                WHERE 
+                    rm.Mobile_No LIKE '%' + @last10 OR
+                    rm.Whatsapp LIKE '%' + @last10 OR
+                    lol.Party_Mobile_1 LIKE '%' + @last10 OR
+                    lol.Party_Mobile_2 LIKE '%' + @last10
+                ORDER BY rm.Retailer_Id DESC
+            `;
+
+            const retailerResult = await retailerReq.query(retailerQuery);
+            const retailer = retailerResult.recordset[0];
+
+            let retailerId = retailer?.Retailer_Id || null;
+            let name = retailer?.Contact_Person || retailer?.Retailer_Name || retailer?.lolName || '';
+            let retailerName = retailer?.Retailer_Name || retailer?.lolName || '';
+            let email = '';
+            let city = retailer?.Reatailer_City || retailer?.lolCity || retailer?.Area_Name || '';
+            let address = retailer?.Reatailer_Address || retailer?.lolAddress || '';
+            let gstin = retailer?.Gstno || retailer?.lolGst || '';
+            let area = retailer?.Area_Name || '';
+            let route = retailer?.Route_Name || '';
+            let creditLimit = retailer?.Credit_Limit || 0;
+
+            // If not found in retailers, check tbl_Users
+            if (!retailerId) {
+                const userReq = new sql.Request();
+                userReq.input('last10', sql.NVarChar(50), last10);
+                const userQuery = `
+                    SELECT TOP 1
+                        u.UserId,
+                        u.Name,
+                        u.UserName,
+                        COALESCE(b.BranchName, '') AS BranchName,
+                        COALESCE(c.Company_Name, '') AS Company_Name
+                    FROM tbl_Users u
+                    LEFT JOIN tbl_Branch_Master b ON b.BranchId = u.BranchId
+                    LEFT JOIN tbl_Company_Master c ON c.Company_id = u.Company_Id
+                    WHERE u.UserName LIKE '%' + @last10
+                `;
+                const userResult = await userReq.query(userQuery);
+                const u = userResult.recordset[0];
+                if (u) {
+                    name = u.Name || u.UserName || '';
+                    city = u.BranchName || '';
+                }
+            }
+
+            // Fallback for name if still blank
+            if (!name) {
+                name = 'Customer';
+            }
+
+            // 2. Fetch Live / Recent Orders for this retailer
+            let liveOrders = [];
+            if (retailerId) {
+                const orderReq = new sql.Request();
+                orderReq.input('Retailer_Id', sql.Int, retailerId);
+                const orderQuery = `
+                    SELECT TOP 5
+                        so.So_Id,
+                        CONVERT(VARCHAR(10), so.So_Date, 120) AS Order_Date,
+                        COALESCE(so.Total_Invoice_value, 0) AS Order_Amount,
+                        COALESCE(sts.Status, 'Pending') AS Order_Status
+                    FROM tbl_Sales_Order_Gen_Info so
+                    LEFT JOIN tbl_Status sts ON sts.Status_Id = so.Cancel_status
+                    WHERE so.Retailer_Id = @Retailer_Id
+                    ORDER BY so.So_Date DESC, so.So_Id DESC
+                `;
+                const orderResult = await orderReq.query(orderQuery);
+                liveOrders = orderResult.recordset || [];
+            }
+
+            const latestOrder = liveOrders[0] || null;
+            const liveOrdersCount = liveOrders.length;
+            const liveOrdersSummary = liveOrders.length > 0
+                ? liveOrders.map((ord, idx) => `${idx + 1}. Order #${ord.So_Id} (${ord.Order_Date}): Rs.${Number(ord.Order_Amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })} - ${ord.Order_Status}`).join('\n')
+                : 'No live orders found';
+
+            const responsePayload = {
+                name: name,
+                retailer_name: retailerName || name,
+                email: email,
+                city: city,
+                contact: String(rawContact),
+                address: address,
+                gstin: gstin,
+                area: area,
+                route: route,
+                credit_limit: creditLimit ? String(creditLimit) : "0",
+                live_orders_count: liveOrdersCount,
+                latest_order_no: latestOrder ? String(latestOrder.So_Id) : '',
+                latest_order_date: latestOrder ? String(latestOrder.Order_Date) : '',
+                latest_order_amount: latestOrder ? String(latestOrder.Order_Amount) : '0',
+                latest_order_status: latestOrder ? String(latestOrder.Order_Status) : '',
+                live_orders_summary: liveOrdersSummary,
+                summary: liveOrdersSummary
+            };
+
+            // Outbound WhatsApp message POST trigger via AskEva
+            const askevaKey = '35b692feb6bd34a7a9af39c7242a0c98e397227000f3afdd366bee5d91ca2a01a11b35843397c74803400a101d55374e999a892823a47747bfeb5ca2953d86b5';
+            if (cleanDigits && askevaKey) {
+                const messageText = `Hello *${name}*,\n\n📦 *Your Live Orders Summary:*\n${liveOrdersSummary}`;
+                (async () => {
+                    try {
+                        const sendRes = await fetch('https://backend.askeva.net/api/v1/send/message', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${askevaKey}`,
+                                'api-key': askevaKey,
+                                'x-api-key': askevaKey
+                            },
+                            body: JSON.stringify({
+                                to: cleanDigits,
+                                contact: cleanDigits,
+                                recipient: cleanDigits,
+                                message: messageText,
+                                text: messageText
+                            })
+                        });
+                        const resText = await sendRes.text();
+                        console.log('AskEva Outbound Send Response Status:', sendRes.status, resText);
+                    } catch (err) {
+                        console.error('AskEva Outbound Send Error:', err?.message || err);
+                    }
+                })();
+            }
+
+            return res.status(200).json(responsePayload);
+
+        } catch (e) {
+            console.error('Error in askevaWebhook:', e);
+            return res.status(200).json({
+                name: 'Customer',
+                email: '',
+                city: '',
+                contact: req.query?.contact || req.body?.contact || '',
+                live_orders_count: 0,
+                live_orders_summary: 'Failed to fetch live orders details.',
+                summary: 'Failed to fetch live orders details.'
+            });
+        }
+    };
+
+
     const saveIncomingMessage = async ({ senderPhone, senderName, messageType, messageText, messageId, timestamp, phoneNumberId }) => {
         try {
             await new sql.Request()
@@ -834,11 +1023,30 @@ const whatsapp = () => {
         }
     };
 
+    const postpurchaseImages = async (req, res) => {
+        try {
+            await uploadFile(req, res, 13, 'pdfFile');
 
+            const fileName = req?.file?.filename;
+
+            if (!fileName) {
+                return invalidInput(res, 'PDF file is required');
+            }
+
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const publicUrl = `${baseUrl}/imageURL/purchaseimages/${fileName}`;
+
+            success(res, 'Purchase Order PDF uploaded', { url: publicUrl, fileName });
+
+        } catch (error) {
+            servError(error, res);
+        }
+    };
 
     return {
         verifyWebhook,
         receiveWebhook,
+        askevaWebhook,
         getIncomingMessages,
         // getWhatsappMethod,
         updateWhatsappMethod,
@@ -858,7 +1066,8 @@ const whatsapp = () => {
         poststatementPdf,
         postpricelistPdf,
         whatsappDelete,
-        postsalesImages
+        postsalesImages,
+        postpurchaseImages
 
     }
 }

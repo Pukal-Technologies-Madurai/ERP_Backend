@@ -49,14 +49,18 @@ export const getSalesInvoiceForAssignCostCenter = async (req, res) => {
                     ISNULL(gen.staffInvolvedStatus, 0) staffInvolvedStatus,
                     CONVERT(DATETIME, gen.Created_on) AS createdOn,
                     gen.Narration,
-                     COALESCE(cb.Name, 'unknown') AS Created_BY_Name
+                    COALESCE(cb.Name, 'unknown') AS Created_BY_Name,
+                    COALESCE(salPer.Name, sogiCb.Name, 'unknown') AS Sales_Person_Name
                 FROM tbl_Sales_Delivery_Gen_Info AS gen
                 LEFT JOIN tbl_Voucher_Type AS vt ON vt.Vocher_Type_Id = gen.Voucher_Type
                 LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = gen.Retailer_Id
                 LEFT JOIN tbl_Branch_Master AS b ON b.BranchId = gen.Branch_Id
                 LEFT JOIN tbl_Status AS s ON s.Status_Id = gen.Delivery_Status
                 LEFT JOIN tbl_Users AS cb ON cb.UserId = gen.Created_by
-                WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
+                LEFT JOIN tbl_Sales_Order_Gen_Info AS sogi ON sogi.So_Id = gen.So_No
+                LEFT JOIN tbl_Users AS salPer ON salPer.UserId = sogi.Sales_Person_Id
+                LEFT JOIN tbl_Users AS sogiCb ON sogiCb.UserId = sogi.Created_by
+               WHERE gen.Do_Id IN (SELECT Do_Id FROM @FilteredInvoice)
                 ORDER BY Do_Id;
             -- involved staffs
                 SELECT 
@@ -1391,7 +1395,7 @@ export const lrReportUploadMobile = async (req, res) => {
     let transactionBegun = false;
 
     try {
-        
+
         await uploadFile(req, res, 6, 'LRReport');
 
         const fileName = req?.file?.filename;
@@ -1402,7 +1406,7 @@ export const lrReportUploadMobile = async (req, res) => {
             return invalidInput(res, 'Do_Id is required');
         }
 
-       
+
         if (!sql.connected) {
             await sql.connect(); // uses the config already passed to sql.connect() at app startup
         }
@@ -1415,7 +1419,7 @@ export const lrReportUploadMobile = async (req, res) => {
             // One-shot retry: pool object existed but underlying connection was stale/dead
             if (beginErr.code === 'ENOTOPEN' || beginErr.code === 'ECONNCLOSED') {
                 console.warn('Pool connection stale, reconnecting and retrying transaction...');
-                await sql.close().catch(() => {}); // clear the dead pool
+                await sql.close().catch(() => { }); // clear the dead pool
                 await sql.connect();
                 transaction = new sql.Transaction();
                 await transaction.begin();
@@ -1534,7 +1538,7 @@ export const lrReportUpdateMobile = async (req, res) => {
         } catch (beginErr) {
             if (beginErr.code === 'ENOTOPEN' || beginErr.code === 'ECONNCLOSED') {
                 console.warn('Pool connection stale, reconnecting and retrying transaction...');
-                await sql.close().catch(() => {});
+                await sql.close().catch(() => { });
                 await sql.connect();
                 transaction = new sql.Transaction();
                 await transaction.begin();
@@ -1817,7 +1821,7 @@ export const getSalesOrderForAssignCostCenterWhatsapp = async (req, res) => {
         // const orders = result.recordsets[0] || [];
         // const result = await getSalesOrder;
 
-const orders = (result.recordsets[0] || []).filter(o => o.Cancel_status !== 0);
+        const orders = (result.recordsets[0] || []).filter(o => o.Cancel_status !== 0);
         const staffs = result.recordsets[1] || [];
         const uniqueInvolvedStaffs = result.recordsets[2] || [];
         const costTypes = result.recordsets[3] || [];
@@ -1847,19 +1851,19 @@ const orders = (result.recordsets[0] || []).filter(o => o.Cancel_status !== 0);
             Subtotal: (Number(stock.Item_Rate) || 0) * (Number(stock.Bill_Qty) || 0)
         }));
 
-     
+
         const ordersWithDetails = orders.map(order => {
-          
+
             const involvedStaffs = staffs.filter(stf =>
                 isEqualNumber(stf.So_Id, order.So_Id) && stf.Document_Type === order.Document_Type
             );
 
-          
+
             const orderStockDetails = calculatedStockDetails.filter(stk =>
                 isEqualNumber(stk.So_Id, order.So_Id) && stk.Document_Type === order.Document_Type
             );
 
-          
+
             const deliveryInfo = deliveryDetails.find(del =>
                 isEqualNumber(del.Sales_Order_Id, order.So_Id)
             );
@@ -1868,7 +1872,7 @@ const orders = (result.recordsets[0] || []).filter(o => o.Cancel_status !== 0);
                 ...order,
                 involvedStaffs,
                 stockDetails: orderStockDetails,
-              
+
                 ...(deliveryInfo && {
                     Delivery_Info: {
                         Delivery_Id: deliveryInfo.Do_Id,
@@ -1879,7 +1883,7 @@ const orders = (result.recordsets[0] || []).filter(o => o.Cancel_status !== 0);
                         Delivery_Total_Value: deliveryInfo.Delivery_Total_Value
                     }
                 }),
-                
+
                 Order_Summary: {
                     Total_Items: orderStockDetails.length,
                     Total_Quantity: orderStockDetails.reduce((sum, item) => sum + (Number(item.Bill_Qty) || 0), 0),
@@ -1890,7 +1894,7 @@ const orders = (result.recordsets[0] || []).filter(o => o.Cancel_status !== 0);
             };
         });
 
-       
+
         sentData(res, ordersWithDetails, {
             costTypes: toArray(costTypes),
             uniqueInvolvedStaffs: toArray(uniqueInvolvedStaffs).map(i => i.Emp_Type_Id).filter(Boolean),
