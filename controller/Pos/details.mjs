@@ -787,8 +787,13 @@ const posBranchController = () => {
                 r.Contact_Person AS Billl_Name,
                 r.Mobile_No,
                 r.AC_Id,
-                ISNULL(lol.Party_Location, r.Reatailer_City) AS Address,
+                ISNULL(NULLIF(last_ord.Shipp_Address, ''), ISNULL(r.Reatailer_Address, r.Reatailer_City)) AS Address,
                 r.Reatailer_City AS City,
+                ISNULL(NULLIF(last_ord.Shipp_Address, ''), ISNULL(r.Reatailer_Address, '')) AS Shipp_Address,
+                ISNULL(NULLIF(last_ord.Deliv_Address, ''), ISNULL(NULLIF(last_ord.Shipp_Address, ''), ISNULL(r.Reatailer_Address, ''))) AS Deliv_Address,
+                ISNULL(lol.A1, '') AS A1,
+                ISNULL(lol.Party_Mobile_1, '') AS Party_Mobile_1,
+                ISNULL(lol.Party_Mobile_2, '') AS Party_Mobile_2,
                 ISNULL(lol.Party_Mailing_Name, r.Contact_Person) AS Party_Mailing_Name,
                 ISNULL(lol.Ledger_Name, r.Retailer_Name) AS Ledger_Name,
                 ISNULL(lol.Ledger_Tally_Id, '') AS Ledger_Tally_Id,
@@ -804,15 +809,26 @@ const posBranchController = () => {
                 ISNULL(pos.Month_Avg_Ton, 0) AS Month_Avg_Ton,
                 ISNULL(pos.Month_Avg_Amo, 0) AS Month_Avg_Amo,
                 '' AS Land_Line,
-                '' AS Lorry_Shed
+                '' AS Lorry_Shed,
+                ISNULL(last_ord.Ord_Mobile_No, '') AS Last_Ord_Mobile_No
             FROM dbo.tbl_Retailers_Master r
             LEFT JOIN dbo.tbl_ERP_POS_Master pos ON r.Retailer_Id = pos.Retailer_Id
             LEFT JOIN dbo.tbl_Ledger_LOL lol ON r.Retailer_Id = lol.Ret_Id
-        `;
+            OUTER APPLY (
+                SELECT TOP 1 
+                    ord.Ord_Mobile_No,
+                    ord.Shipp_Address,
+                    ord.Deliv_Address
+                FROM dbo.tbl_Sales_Whats_up_Order_Gen_Info ord
+                WHERE ord.Custome_Id = r.Retailer_Id
+                ORDER BY ord.Pre_Ord_Id DESC
+            ) last_ord
+`;
+
 
             // If specific customerId is provided, return just that customer
             if (customerId) {
-                const query = `${baseQuery} ${whereClause}`;
+                const query = `${baseQuery} ${whereClause} `;
                 const result = await request.query(query);
                 const data = result.recordset || [];
 
@@ -824,7 +840,7 @@ const posBranchController = () => {
             }
 
             // Normal paginated flow (when no specific customerId)
-            const countQuery = `SELECT COUNT(*) as total FROM dbo.tbl_Retailers_Master r ${whereClause}`;
+            const countQuery = `SELECT COUNT(*) as total FROM dbo.tbl_Retailers_Master r ${whereClause} `;
             const countResult = await request.query(countQuery);
             const totalRecords = countResult.recordset[0].total;
             const totalPages = Math.ceil(totalRecords / limit);
@@ -835,7 +851,7 @@ const posBranchController = () => {
             ORDER BY r.Retailer_Id
             OFFSET @offset ROWS
             FETCH NEXT @limit ROWS ONLY
-        `;
+                `;
 
             request.input('offset', sql.Int, offset);
             request.input('limit', sql.Int, limit);

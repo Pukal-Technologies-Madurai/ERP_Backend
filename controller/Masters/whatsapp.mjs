@@ -8,26 +8,26 @@ import uploadFile from '../../middleware/uploadMiddleware.mjs';
 import { getNextId } from '../../middleware/miniAPIs.mjs';
 const whatsapp = () => {
 
-    const getWhatsappTypes =async(req,res)=>{
-         try {
-        const result = await new sql.Request()
-            .query(`SELECT Id, WhatsappType, Created_by, Updated_by, Created_Time, Updated_Time 
+    const getWhatsappTypes = async (req, res) => {
+        try {
+            const result = await new sql.Request()
+                .query(`SELECT Id, WhatsappType, Created_by, Updated_by, Created_Time, Updated_Time 
                     FROM tbl_Whatsapp_Types 
                     ORDER BY Id`);
 
-        return res.status(200).json({
-            success: true,
-            data: result.recordset,
-            message: 'WhatsApp types fetched successfully'
-        });
-    } catch (e) {
-        servError(e, res);
-    }
+            return res.status(200).json({
+                success: true,
+                data: result.recordset,
+                message: 'WhatsApp types fetched successfully'
+            });
+        } catch (e) {
+            servError(e, res);
+        }
     }
 
     // const getWhatsappMethod= async (req, res) => {
     //    try {
-              
+
     //     //    const { WhatsappType_Id } = req.query;
 
     //     // if (!WhatsappType_Id) {
@@ -48,129 +48,129 @@ const whatsapp = () => {
     // }
     // };
 
-const addWhatsappMethod = async (req, res) => {
-    try {
-        const { Service_Id, WhatsappType_Id, Status, lang_Id } = req.body;
+    const addWhatsappMethod = async (req, res) => {
+        try {
+            const { Service_Id, WhatsappType_Id, Status, lang_Id } = req.body;
 
-        if (!WhatsappType_Id || !Service_Id) {
-            return invalidInput(res, 'WhatsappType_Id and Service_Id are required');
-        }
+            if (!WhatsappType_Id || !Service_Id) {
+                return invalidInput(res, 'WhatsappType_Id and Service_Id are required');
+            }
 
-        // Step 1: Deactivate ALL rows for this WhatsappType_Id
-        await new sql.Request()
-            .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
-            .query(`UPDATE tbl_WhatsappMethod SET Status = 0 WHERE WhatsappType_Id = @WhatsappType_Id`);
+            // Step 1: Deactivate ALL rows for this WhatsappType_Id
+            await new sql.Request()
+                .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
+                .query(`UPDATE tbl_WhatsappMethod SET Status = 0 WHERE WhatsappType_Id = @WhatsappType_Id`);
 
-        // Step 2: Check if a row already exists for this type + service combo
-        const existing = await new sql.Request()
-            .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
-            .input('Service_Id', sql.Int, Service_Id)
-            .query(`SELECT Id FROM tbl_WhatsappMethod WHERE WhatsappType_Id = @WhatsappType_Id AND Service_Id = @Service_Id`);
-
-        let result;
-
-        if (existing.recordset.length > 0) {
-            // Row exists for this service → UPDATE Status + lang_Id
-            result = await new sql.Request()
-                .input('Id', sql.Int, existing.recordset[0].Id)
-                .input('Status', sql.Int, Status ?? 1)
-                .input('lang_Id', sql.Int, lang_Id)
-                .query(`UPDATE tbl_WhatsappMethod SET Status = @Status, lang_Id = @lang_Id WHERE Id = @Id`);
-        } else {
-            // No row for this service → INSERT new
-            result = await new sql.Request()
+            // Step 2: Check if a row already exists for this type + service combo
+            const existing = await new sql.Request()
                 .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
                 .input('Service_Id', sql.Int, Service_Id)
-                .input('Status', sql.Int, Status ?? 1)
-                .input('lang_Id', sql.Int, lang_Id)
-                .query(`INSERT INTO tbl_WhatsappMethod (WhatsappType_Id, Service_Id, Status, lang_Id)
+                .query(`SELECT Id FROM tbl_WhatsappMethod WHERE WhatsappType_Id = @WhatsappType_Id AND Service_Id = @Service_Id`);
+
+            let result;
+
+            if (existing.recordset.length > 0) {
+                // Row exists for this service → UPDATE Status + lang_Id
+                result = await new sql.Request()
+                    .input('Id', sql.Int, existing.recordset[0].Id)
+                    .input('Status', sql.Int, Status ?? 1)
+                    .input('lang_Id', sql.Int, lang_Id)
+                    .query(`UPDATE tbl_WhatsappMethod SET Status = @Status, lang_Id = @lang_Id WHERE Id = @Id`);
+            } else {
+                // No row for this service → INSERT new
+                result = await new sql.Request()
+                    .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
+                    .input('Service_Id', sql.Int, Service_Id)
+                    .input('Status', sql.Int, Status ?? 1)
+                    .input('lang_Id', sql.Int, lang_Id)
+                    .query(`INSERT INTO tbl_WhatsappMethod (WhatsappType_Id, Service_Id, Status, lang_Id)
                         VALUES (@WhatsappType_Id, @Service_Id, @Status, @lang_Id)`);
+            }
+
+            if (result.rowsAffected[0] > 0) {
+                return success(res, 'WhatsApp method saved successfully');
+            } else {
+                return failed(res, 'Failed to save WhatsApp method');
+            }
+
+        } catch (e) {
+            servError(e, res);
         }
-
-        if (result.rowsAffected[0] > 0) {
-            return success(res, 'WhatsApp method saved successfully');
-        } else {
-            return failed(res, 'Failed to save WhatsApp method');
-        }
-
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    };
 
 
-const updateWhatsappMethod = async (req, res) => {
-    try {
-        const { Id, Status, WhatsappType_Id, lang_Id, Service_Id } = req.body;
+    const updateWhatsappMethod = async (req, res) => {
+        try {
+            const { Id, Status, WhatsappType_Id, lang_Id, Service_Id } = req.body;
 
-        if (!WhatsappType_Id || !Service_Id) {
-            return invalidInput(res, 'WhatsappType_Id and Service_Id are required');
-        }
+            if (!WhatsappType_Id || !Service_Id) {
+                return invalidInput(res, 'WhatsappType_Id and Service_Id are required');
+            }
 
-        // Step 1: Deactivate ALL rows for this WhatsappType_Id
-        await new sql.Request()
-            .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
-            .query(`UPDATE tbl_WhatsappMethod SET Status = 0 WHERE WhatsappType_Id = @WhatsappType_Id`);
+            // Step 1: Deactivate ALL rows for this WhatsappType_Id
+            await new sql.Request()
+                .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
+                .query(`UPDATE tbl_WhatsappMethod SET Status = 0 WHERE WhatsappType_Id = @WhatsappType_Id`);
 
-        // Step 2: Check if a row exists for this type + service combo
-        const existing = await new sql.Request()
-            .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
-            .input('Service_Id', sql.Int, Service_Id)
-            .query(`SELECT Id FROM tbl_WhatsappMethod WHERE WhatsappType_Id = @WhatsappType_Id AND Service_Id = @Service_Id`);
-
-        let result;
-
-        if (existing.recordset.length > 0) {
-            // Update the existing row for this service
-            result = await new sql.Request()
-                .input('Id', sql.Int, existing.recordset[0].Id)
-                .input('Status', sql.Int, Status ?? 1)
-                .input('lang_Id', sql.Int, lang_Id)
-                .query(`UPDATE tbl_WhatsappMethod SET Status = @Status, lang_Id = @lang_Id WHERE Id = @Id`);
-        } else {
-            // This service doesn't have a row yet → INSERT
-            result = await new sql.Request()
+            // Step 2: Check if a row exists for this type + service combo
+            const existing = await new sql.Request()
                 .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
                 .input('Service_Id', sql.Int, Service_Id)
-                .input('Status', sql.Int, Status ?? 1)
-                .input('lang_Id', sql.Int, lang_Id)
-                .query(`INSERT INTO tbl_WhatsappMethod (WhatsappType_Id, Service_Id, Status, lang_Id)
+                .query(`SELECT Id FROM tbl_WhatsappMethod WHERE WhatsappType_Id = @WhatsappType_Id AND Service_Id = @Service_Id`);
+
+            let result;
+
+            if (existing.recordset.length > 0) {
+                // Update the existing row for this service
+                result = await new sql.Request()
+                    .input('Id', sql.Int, existing.recordset[0].Id)
+                    .input('Status', sql.Int, Status ?? 1)
+                    .input('lang_Id', sql.Int, lang_Id)
+                    .query(`UPDATE tbl_WhatsappMethod SET Status = @Status, lang_Id = @lang_Id WHERE Id = @Id`);
+            } else {
+                // This service doesn't have a row yet → INSERT
+                result = await new sql.Request()
+                    .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
+                    .input('Service_Id', sql.Int, Service_Id)
+                    .input('Status', sql.Int, Status ?? 1)
+                    .input('lang_Id', sql.Int, lang_Id)
+                    .query(`INSERT INTO tbl_WhatsappMethod (WhatsappType_Id, Service_Id, Status, lang_Id)
                         VALUES (@WhatsappType_Id, @Service_Id, @Status, @lang_Id)`);
+            }
+
+            if (result.rowsAffected[0] > 0) {
+                return success(res, 'WhatsApp method updated successfully');
+            } else {
+                return failed(res, 'Failed to update WhatsApp method');
+            }
+
+        } catch (e) {
+            servError(e, res);
         }
-
-        if (result.rowsAffected[0] > 0) {
-            return success(res, 'WhatsApp method updated successfully');
-        } else {
-            return failed(res, 'Failed to update WhatsApp method');
-        }
-
-    } catch (e) {
-        servError(e, res);
-    }
-};
+    };
 
 
 
-const getWhatsappServices = async (req, res) => {
-    try {
-        const result = await new sql.Request()
-            .query(`
+    const getWhatsappServices = async (req, res) => {
+        try {
+            const result = await new sql.Request()
+                .query(`
                 SELECT Id, WhatsappService, Status 
                 FROM tbl_Whatsapp_Service 
                 WHERE Status = 1
                 ORDER BY Id
             `);
-        return success(res, result.recordset);
-    } catch (e) {
-        servError(e, res);
-    }
-};
+            return success(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
+        }
+    };
 
-const getWhatsappMethod = async (req, res) => {
-    try {
-        const { WhatsappType_Id } = req.query;
+    const getWhatsappMethod = async (req, res) => {
+        try {
+            const { WhatsappType_Id } = req.query;
 
-        const baseQuery = `
+            const baseQuery = `
             SELECT 
                 wm.Id,
                 wm.WhatsappType_Id,
@@ -186,61 +186,61 @@ const getWhatsappMethod = async (req, res) => {
             LEFT JOIN tbl_Whatsapp_language la ON la.Id = wm.lang_Id
         `;
 
-        if (WhatsappType_Id) {
-            const result = await new sql.Request()
-                .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
-                .query(baseQuery + ` WHERE wm.WhatsappType_Id = @WhatsappType_Id ORDER BY wm.Status DESC`);
+            if (WhatsappType_Id) {
+                const result = await new sql.Request()
+                    .input('WhatsappType_Id', sql.Int, WhatsappType_Id)
+                    .query(baseQuery + ` WHERE wm.WhatsappType_Id = @WhatsappType_Id ORDER BY wm.Status DESC`);
+                return success(res, result.recordset);
+            }
+
+            const result = await new sql.Request().query(baseQuery + ` ORDER BY wm.WhatsappType_Id, wm.Status DESC`);
             return success(res, result.recordset);
+
+        } catch (e) {
+            servError(e, res);
         }
+    };
 
-        const result = await new sql.Request().query(baseQuery + ` ORDER BY wm.WhatsappType_Id, wm.Status DESC`);
-        return success(res, result.recordset);
-
-    } catch (e) {
-        servError(e, res);
-    }
-};
-
-const getWhatsappLanguages = async (req, res) => {
-    try {
-        const result = await new sql.Request()
-            .query(`
+    const getWhatsappLanguages = async (req, res) => {
+        try {
+            const result = await new sql.Request()
+                .query(`
                 SELECT* 
                 FROM tbl_Whatsapp_language
                 ORDER BY Id
             `);
-        return success(res, result.recordset);
-    } catch (e) {
-        servError(e, res);
-    }
-};
-
-
- const FilterdisplayColumn = async (req, res) => {
-      try {
-        const { WhatsappType, company_id } = req.query;
-
-        if (!WhatsappType) {
-            return failed(res, "WhatsappType is required");
+            return success(res, result.recordset);
+        } catch (e) {
+            servError(e, res);
         }
+    };
 
-        const typeQuery = `
+
+    const FilterdisplayColumn = async (req, res) => {
+        try {
+            const { WhatsappType, company_id } = req.query;
+
+            if (!WhatsappType) {
+                return failed(res, "WhatsappType is required");
+            }
+
+            const typeQuery = `
             SELECT Id 
             FROM tbl_Whatsapp_Types 
             WHERE WhatsappType = @WhatsappType
         `;
-        
-        const typeResult = await new sql.Request()
-            .input('WhatsappType', sql.NVarChar(100), WhatsappType)
-            .query(typeQuery);
 
-        if (typeResult.recordset.length === 0) {
-            return success(res, []); 
-        }
+            const typeResult = await new sql.Request()
+                .input('WhatsappType', sql.NVarChar(100), WhatsappType)
+                .query(typeQuery);
 
-        const whatsappTypeId = typeResult.recordset[0].Id;
+            if (typeResult.recordset.length === 0) {
+                return success(res, []);
+            }
 
-        let filterQuery = `
+            const whatsappTypeId = typeResult.recordset[0].Id;
+
+            let filterQuery = `
             SELECT 
                 wf.Id,
                 wf.Whatsapp_Type_Id,
@@ -251,153 +251,153 @@ const getWhatsappLanguages = async (req, res) => {
             WHERE wf.Whatsapp_Type_Id = @Whatsapp_Type_Id
         `;
 
-        const request = new sql.Request();
-        request.input('Whatsapp_Type_Id', sql.Int, whatsappTypeId);
+            const request = new sql.Request();
+            request.input('Whatsapp_Type_Id', sql.Int, whatsappTypeId);
 
-        if (company_id) {
-            filterQuery += ` AND wf.Company_id = @company_id`;
-            request.input('company_id', sql.Int, company_id);
+            if (company_id) {
+                filterQuery += ` AND wf.Company_id = @company_id`;
+                request.input('company_id', sql.Int, company_id);
+            }
+
+            filterQuery += ` ORDER BY wf.Id ASC`;
+
+            const filterResult = await request.query(filterQuery);
+
+            return success(res, filterResult.recordset);
+
+        } catch (e) {
+            console.error("Error fetching whatsapp filter:", e);
+            servError(e, res);
         }
-
-        filterQuery += ` ORDER BY wf.Id ASC`;
-
-        const filterResult = await request.query(filterQuery);
-        
-        return success(res, filterResult.recordset);
-
-    } catch (e) {
-        console.error("Error fetching whatsapp filter:", e);
-        servError(e, res);
-    }
     };
 
 
 
 
 
-        const FilterWhatsappSettingColumn = async (req, res) => {
-            const { WhatsappType_Id } = req.query;
-    
-            if (!WhatsappType_Id) {
-                return invalidInput(res, "WhatsappType_Id is Required");
-            }
-    
-            try {
-                const request = new sql.Request().input("WhatsappType_Id", WhatsappType_Id)
-                    .query(`
+    const FilterWhatsappSettingColumn = async (req, res) => {
+        const { WhatsappType_Id } = req.query;
+
+        if (!WhatsappType_Id) {
+            return invalidInput(res, "WhatsappType_Id is Required");
+        }
+
+        try {
+            const request = new sql.Request().input("WhatsappType_Id", WhatsappType_Id)
+                .query(`
                         SELECT *
                         FROM tbl_Whatsapp_Filter
                         WHERE Whatsapp_Type_Id = @WhatsappType_Id`
-                    );
-    
-                const result = await request;
-    
-                if (result.recordset.length) {
-                    dataFound(res, result.recordset);
-                } else {
-                    noData(res);
-                }
-            } catch (error) {
-                servError(error, res);
+                );
+
+            const result = await request;
+
+            if (result.recordset.length) {
+                dataFound(res, result.recordset);
+            } else {
+                noData(res);
             }
-        };
-
-
-        const saveWhatsappColumnSettings = async (req, res) => {
-    try {
-        const { company_id, whatsapp_type_id, whatsapp_type, tab, enabled_columns, records } = req.body;
-
-        // Validate required fields
-        if (!company_id || !whatsapp_type_id || !enabled_columns || !enabled_columns.length) {
-             return failed(res, "Missing required fields: company_id, whatsapp_type_id, or enabled_columns");
-
+        } catch (error) {
+            servError(error, res);
         }
+    };
 
-        // Start transaction
-        const transaction = new sql.Transaction();
-        await transaction.begin();
 
+    const saveWhatsappColumnSettings = async (req, res) => {
         try {
-            
-            await transaction.request()
-                .input('Company_id', sql.Int, company_id)
-                .input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id)
-                .query(`
+            const { company_id, whatsapp_type_id, whatsapp_type, tab, enabled_columns, records } = req.body;
+
+            // Validate required fields
+            if (!company_id || !whatsapp_type_id || !enabled_columns || !enabled_columns.length) {
+                return failed(res, "Missing required fields: company_id, whatsapp_type_id, or enabled_columns");
+
+            }
+
+            // Start transaction
+            const transaction = new sql.Transaction();
+            await transaction.begin();
+
+            try {
+
+                await transaction.request()
+                    .input('Company_id', sql.Int, company_id)
+                    .input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id)
+                    .query(`
                     DELETE FROM tbl_Whatsapp_Filter 
                     WHERE Company_id = @Company_id AND Whatsapp_Type_Id = @Whatsapp_Type_Id
                 `);
 
-                 
 
-              await transaction.request()
-                .input('Company_id', sql.Int, company_id)
-                .input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id)
-                .query(`
+
+                await transaction.request()
+                    .input('Company_id', sql.Int, company_id)
+                    .input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id)
+                    .query(`
                     DELETE FROM tbl_Whatsapp_Filter 
                     WHERE Company_id = @Company_id AND Whatsapp_Type_Id = @Whatsapp_Type_Id
                 `)
 
-              const maxIdResult = await transaction.request()
-                .query(`SELECT ISNULL(MAX(Id), 0) as MaxId FROM tbl_Whatsapp_Filter`);
-            
-            let nextId = maxIdResult.recordset[0].MaxId;
-                
-          
-              let insertedCount = 0;
-            for (const columnName of enabled_columns) {
-                   nextId++;
-                const result = await transaction.request()
-                    .input('Id', sql.Int, nextId)
-                    .input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id)
-                    .input('Column_Name', sql.NVarChar(255), columnName)
-                    .input('Company_id', sql.Int, company_id)
-                    .input('Status', sql.Int, 1)
-                    .query(`
+                const maxIdResult = await transaction.request()
+                    .query(`SELECT ISNULL(MAX(Id), 0) as MaxId FROM tbl_Whatsapp_Filter`);
+
+                let nextId = maxIdResult.recordset[0].MaxId;
+
+
+                let insertedCount = 0;
+                for (const columnName of enabled_columns) {
+                    nextId++;
+                    const result = await transaction.request()
+                        .input('Id', sql.Int, nextId)
+                        .input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id)
+                        .input('Column_Name', sql.NVarChar(255), columnName)
+                        .input('Company_id', sql.Int, company_id)
+                        .input('Status', sql.Int, 1)
+                        .query(`
                         INSERT INTO tbl_Whatsapp_Filter 
                             (Id, Whatsapp_Type_Id, Column_Name, Company_id, Status)
                         VALUES 
                             (@Id, @Whatsapp_Type_Id, @Column_Name, @Company_id, @Status)
                     `);
-                
-                if (result.rowsAffected[0] > 0) {
-                    insertedCount++;
+
+                    if (result.rowsAffected[0] > 0) {
+                        insertedCount++;
+                    }
                 }
+
+                // Commit transaction
+                await transaction.commit();
+
+                return success(res, {
+                    message: `Saved ${insertedCount} column settings successfully`,
+                    data: {
+                        inserted: insertedCount,
+                        columns: enabled_columns,
+                        company_id: company_id,
+                        whatsapp_type_id: whatsapp_type_id
+                    }
+                });
+
+            } catch (error) {
+
+                await transaction.rollback();
+                throw error;
             }
 
-            // Commit transaction
-            await transaction.commit();
-
-            return success(res, {
-                message: `Saved ${insertedCount} column settings successfully`,
-                data: {
-                    inserted: insertedCount,
-                    columns: enabled_columns,
-                    company_id: company_id,
-                    whatsapp_type_id: whatsapp_type_id
-                }
-            });
-
-        } catch (error) {
-        
-            await transaction.rollback();
-            throw error;
+        } catch (e) {
+            console.error("Error saving whatsapp column settings:", e);
+            servError(e, res);
         }
+    };
 
-    } catch (e) {
-        console.error("Error saving whatsapp column settings:", e);
-        servError(e, res);
-    }
-};
-
-  const verifyWebhook = (req, res) => {
+    const verifyWebhook = (req, res) => {
         const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'your_verify_token';
 
-        const mode      = req.query['hub.mode'];
-        const token     = req.query['hub.verify_token'];
+        const mode = req.query['hub.mode'];
+        const token = req.query['hub.verify_token'];
         const challenge = req.query['hub.challenge'];
 
         if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-            
+
             return res.status(200).send(challenge);
         }
         return res.status(403).json({ success: false, message: 'Verification failed' });
@@ -407,7 +407,7 @@ const getWhatsappLanguages = async (req, res) => {
         try {
             const body = req.body;
 
-           
+
             res.status(200).send('EVENT_RECEIVED');
 
             if (body.object !== 'whatsapp_business_account') return;
@@ -416,18 +416,18 @@ const getWhatsappLanguages = async (req, res) => {
                 for (const change of entry.changes || []) {
                     if (change.field !== 'messages') continue;
 
-                    const value    = change.value;
+                    const value = change.value;
                     const messages = value?.messages || [];
                     const contacts = value?.contacts || [];
-                    const metadata = value?.metadata  || {};
+                    const metadata = value?.metadata || {};
 
                     for (const message of messages) {
-                        const senderPhone   = message.from;                          // e.g. "15557654321"
-                        const senderName    = contacts.find(c => c.wa_id === message.from)?.profile?.name || null;
-                        const messageType   = message.type;                          // "text", "image", etc.
-                        const messageText   = message.text?.body || null;
-                        const messageId     = message.id;
-                        const timestamp     = message.timestamp;
+                        const senderPhone = message.from;                          // e.g. "15557654321"
+                        const senderName = contacts.find(c => c.wa_id === message.from)?.profile?.name || null;
+                        const messageType = message.type;                          // "text", "image", etc.
+                        const messageText = message.text?.body || null;
+                        const messageId = message.id;
+                        const timestamp = message.timestamp;
                         const phoneNumberId = metadata.phone_number_id;
 
                         await saveIncomingMessage({
@@ -448,17 +448,17 @@ const getWhatsappLanguages = async (req, res) => {
         }
     };
 
-  
+
     const saveIncomingMessage = async ({ senderPhone, senderName, messageType, messageText, messageId, timestamp, phoneNumberId }) => {
         try {
             await new sql.Request()
-                .input('SenderPhone',   sql.NVarChar(20),  senderPhone)
-                .input('SenderName',    sql.NVarChar(255), senderName)
-                .input('MessageType',   sql.NVarChar(50),  messageType)
-                .input('MessageText',   sql.NVarChar(sql.MAX), messageText)
-                .input('MessageId',     sql.NVarChar(255), messageId)
-                .input('Timestamp',     sql.BigInt,        timestamp)
-                .input('PhoneNumberId', sql.NVarChar(50),  phoneNumberId)
+                .input('SenderPhone', sql.NVarChar(20), senderPhone)
+                .input('SenderName', sql.NVarChar(255), senderName)
+                .input('MessageType', sql.NVarChar(50), messageType)
+                .input('MessageText', sql.NVarChar(sql.MAX), messageText)
+                .input('MessageId', sql.NVarChar(255), messageId)
+                .input('Timestamp', sql.BigInt, timestamp)
+                .input('PhoneNumberId', sql.NVarChar(50), phoneNumberId)
                 .query(`
                     INSERT INTO tbl_Whatsapp_Incoming 
                         (SenderPhone, SenderName, MessageType, MessageText, MessageId, Timestamp, PhoneNumberId, Created_Time)
@@ -470,7 +470,7 @@ const getWhatsappLanguages = async (req, res) => {
         }
     };
 
-    
+
     const getIncomingMessages = async (req, res) => {
         try {
             const { SenderPhone, from_date, to_date } = req.query;
@@ -513,150 +513,150 @@ const getWhatsappLanguages = async (req, res) => {
     };
 
 
-// const getWhatsappColumnSettings = async (req, res) => {
-//     try {
-//         const { company_id, whatsapp_type, whatsapp_type_id } = req.query;
+    // const getWhatsappColumnSettings = async (req, res) => {
+    //     try {
+    //         const { company_id, whatsapp_type, whatsapp_type_id } = req.query;
 
-//         let query = `
-//             SELECT 
-//                 wcs.Id,
-//                 wcs.Whatsapp_Type_Id,
-//                 wcs.Column_Name,
-//                 wcs.Company_id,
-//                 wcs.Status,
-//                 wcs.Created_At,
-//                 wcs.Updated_At,
-//                 wt.WhatsappType,
-//                 wt.Id as TypeId
-//             FROM tbl_WhatsappColumnSettings wcs
-//             LEFT JOIN tbl_Whatsapp_Types wt ON wt.Id = wcs.Whatsapp_Type_Id
-//             WHERE 1=1
-//         `;
+    //         let query = `
+    //             SELECT 
+    //                 wcs.Id,
+    //                 wcs.Whatsapp_Type_Id,
+    //                 wcs.Column_Name,
+    //                 wcs.Company_id,
+    //                 wcs.Status,
+    //                 wcs.Created_At,
+    //                 wcs.Updated_At,
+    //                 wt.WhatsappType,
+    //                 wt.Id as TypeId
+    //             FROM tbl_WhatsappColumnSettings wcs
+    //             LEFT JOIN tbl_Whatsapp_Types wt ON wt.Id = wcs.Whatsapp_Type_Id
+    //             WHERE 1=1
+    //         `;
 
-//         const request = new sql.Request();
+    //         const request = new sql.Request();
 
-//         if (company_id) {
-//             query += ` AND wcs.Company_id = @Company_id`;
-//             request.input('Company_id', sql.Int, company_id);
-//         }
+    //         if (company_id) {
+    //             query += ` AND wcs.Company_id = @Company_id`;
+    //             request.input('Company_id', sql.Int, company_id);
+    //         }
 
-//         if (whatsapp_type_id) {
-//             query += ` AND wcs.Whatsapp_Type_Id = @Whatsapp_Type_Id`;
-//             request.input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id);
-//         }
+    //         if (whatsapp_type_id) {
+    //             query += ` AND wcs.Whatsapp_Type_Id = @Whatsapp_Type_Id`;
+    //             request.input('Whatsapp_Type_Id', sql.Int, whatsapp_type_id);
+    //         }
 
-//         if (whatsapp_type) {
-//             query += ` AND wt.WhatsappType = @WhatsappType`;
-//             request.input('WhatsappType', sql.NVarChar(100), whatsapp_type);
-//         }
+    //         if (whatsapp_type) {
+    //             query += ` AND wt.WhatsappType = @WhatsappType`;
+    //             request.input('WhatsappType', sql.NVarChar(100), whatsapp_type);
+    //         }
 
-//         query += ` ORDER BY wcs.Id ASC`;
+    //         query += ` ORDER BY wcs.Id ASC`;
 
-//         const result = await request.query(query);
-//         return success(res, result.recordset);
+    //         const result = await request.query(query);
+    //         return success(res, result.recordset);
 
-//     } catch (e) {
-//         console.error("Error fetching whatsapp column settings:", e);
-//         servError(e, res);
-//     }
-// };
+    //     } catch (e) {
+    //         console.error("Error fetching whatsapp column settings:", e);
+    //         servError(e, res);
+    //     }
+    // };
 
 
 
-// const getAvailableColumns = async (req, res) => {
-//     try {
-//         const { company_id } = req.query;
+    // const getAvailableColumns = async (req, res) => {
+    //     try {
+    //         const { company_id } = req.query;
 
-//         if (!company_id) {
-//             return error(res, "company_id is required");
-//         }
+    //         if (!company_id) {
+    //             return error(res, "company_id is required");
+    //         }
 
-//         const query = `
-//             SELECT 
-//                 ColumnName as ColumnName,
-//                 Alias_Name,
-//                 Is_Visible,
-//                 Position,
-//                 Data_Type
-//             FROM tbl_Columns 
-//             WHERE Company_id = @Company_id AND Is_Active = 1
-//             ORDER BY Position ASC
-//         `;
+    //         const query = `
+    //             SELECT 
+    //                 ColumnName as ColumnName,
+    //                 Alias_Name,
+    //                 Is_Visible,
+    //                 Position,
+    //                 Data_Type
+    //             FROM tbl_Columns 
+    //             WHERE Company_id = @Company_id AND Is_Active = 1
+    //             ORDER BY Position ASC
+    //         `;
 
-//         const result = await new sql.Request()
-//             .input('Company_id', sql.Int, company_id)
-//             .query(query);
+    //         const result = await new sql.Request()
+    //             .input('Company_id', sql.Int, company_id)
+    //             .query(query);
 
-//         return success(res, result.recordset);
+    //         return success(res, result.recordset);
 
-//     } catch (e) {
-//         console.error("Error fetching available columns:", e);
-//         servError(e, res);
-//     }
-// };
+    //     } catch (e) {
+    //         console.error("Error fetching available columns:", e);
+    //         servError(e, res);
+    //     }
+    // };
 
-const logWhatsappSend = async (req, res) => {
-    try {
-        const { documentType, referenceId, retailerId, retailerName, mobileNo, messageTemplate, sentBy } = req.body;
-        if (!documentType || !referenceId) {
-            return res.status(400).json({ success: false, message: "documentType and referenceId are required" });
-        }
+    const logWhatsappSend = async (req, res) => {
+        try {
+            const { documentType, referenceId, retailerId, retailerName, mobileNo, messageTemplate, sentBy } = req.body;
+            if (!documentType || !referenceId) {
+                return res.status(400).json({ success: false, message: "documentType and referenceId are required" });
+            }
 
-        const getMaxId = await getNextId({ table: 'tbl_Whatsapp_Details', column: 'Whatsapp_Detail_Id' });
-        if (!checkIsNumber(getMaxId.MaxId)) {
-            return failed(res, 'Error generating Whatsapp Detail ID');
-        }
-        const Whatsapp_Detail_Id = getMaxId.MaxId;
+            const getMaxId = await getNextId({ table: 'tbl_Whatsapp_Details', column: 'Whatsapp_Detail_Id' });
+            if (!checkIsNumber(getMaxId.MaxId)) {
+                return failed(res, 'Error generating Whatsapp Detail ID');
+            }
+            const Whatsapp_Detail_Id = getMaxId.MaxId;
 
-        await new sql.Request()
-            .input('whatsappDetailId', sql.Int, Whatsapp_Detail_Id)
-            .input('documentType', sql.VarChar(50), documentType)
-            .input('referenceId', sql.VarChar(100), String(referenceId))
-            .input('retailerId', sql.VarChar(50), retailerId ? String(retailerId) : null)
-            .input('retailerName', sql.VarChar(200), retailerName || null)
-            .input('mobileNo', sql.VarChar(20), mobileNo || null)
-            .input('messageTemplate', sql.VarChar(100), messageTemplate || null)
-            .input('sentBy', sql.Int, sentBy || null)
-            .query(`
+            await new sql.Request()
+                .input('whatsappDetailId', sql.Int, Whatsapp_Detail_Id)
+                .input('documentType', sql.VarChar(50), documentType)
+                .input('referenceId', sql.VarChar(100), String(referenceId))
+                .input('retailerId', sql.VarChar(50), retailerId ? String(retailerId) : null)
+                .input('retailerName', sql.VarChar(200), retailerName || null)
+                .input('mobileNo', sql.VarChar(20), mobileNo || null)
+                .input('messageTemplate', sql.VarChar(100), messageTemplate || null)
+                .input('sentBy', sql.Int, sentBy || null)
+                .query(`
                 INSERT INTO tbl_Whatsapp_Details
                     (Whatsapp_Detail_Id, Document_Type, Reference_Id, Retailer_Id, Retailer_Name, Mobile_No, Message_Template, Sent_By, Status)
                 VALUES
                     (@whatsappDetailId, @documentType, @referenceId, @retailerId, @retailerName, @mobileNo, @messageTemplate, @sentBy, 'Sent')
             `);
 
-        res.json({ success: true, Whatsapp_Detail_Id });
-    } catch (e) {
-        console.error('Error in logWhatsappSend:', e);
-        servError(e, res);
-    }
-};
-
-const getWhatsappCounts = async (req, res) => {
-    try {
-        const { documentType, referenceIds } = req.query;
-        if (!documentType || !referenceIds) {
-            return res.json({ success: true, data: [] });
+            res.json({ success: true, Whatsapp_Detail_Id });
+        } catch (e) {
+            console.error('Error in logWhatsappSend:', e);
+            servError(e, res);
         }
-        const ids = String(referenceIds).split(',').map(s => s.trim()).filter(Boolean);
-        if (ids.length === 0) return res.json({ success: true, data: [] });
+    };
 
-        const placeholders = ids.map((_, i) => `@id${i}`).join(',');
-        const request = new sql.Request();
+    const getWhatsappCounts = async (req, res) => {
+        try {
+            const { documentType, referenceIds } = req.query;
+            if (!documentType || !referenceIds) {
+                return res.json({ success: true, data: [] });
+            }
+            const ids = String(referenceIds).split(',').map(s => s.trim()).filter(Boolean);
+            if (ids.length === 0) return res.json({ success: true, data: [] });
 
-        ids.forEach((id, i) => {
-            request.input(`id${i}`, sql.VarChar(100), id);
-        });
-        request.input('documentType', sql.VarChar(50), documentType);
+            const placeholders = ids.map((_, i) => `@id${i}`).join(',');
+            const request = new sql.Request();
 
-        // PriceList counts reset daily — only count sends made today.
-        // Everything else keeps the existing all-time count.
-        const isDateScoped = documentType === 'PriceList';
+            ids.forEach((id, i) => {
+                request.input(`id${i}`, sql.VarChar(100), id);
+            });
+            request.input('documentType', sql.VarChar(50), documentType);
 
-        const dateFilter = isDateScoped
-            ? `AND CAST(Sent_On AS DATE) = CAST(GETDATE() AS DATE)`
-            : '';
+            // PriceList counts reset daily — only count sends made today.
+            // Everything else keeps the existing all-time count.
+            const isDateScoped = documentType === 'PriceList';
 
-        const result = await request.query(`
+            const dateFilter = isDateScoped
+                ? `AND CAST(Sent_On AS DATE) = CAST(GETDATE() AS DATE)`
+                : '';
+
+            const result = await request.query(`
             SELECT Reference_Id, COUNT(*) AS Sent_Count
             FROM tbl_Whatsapp_Details
             WHERE Document_Type = @documentType
@@ -665,157 +665,179 @@ const getWhatsappCounts = async (req, res) => {
             GROUP BY Reference_Id
         `);
 
-        res.json({
-            success: true,
-            data: result.recordset || []
-        });
-    } catch (e) {
-        console.error('Error in getWhatsappCounts:', e);
-        res.json({ success: true, data: [] });
+            res.json({
+                success: true,
+                data: result.recordset || []
+            });
+        } catch (e) {
+            console.error('Error in getWhatsappCounts:', e);
+            res.json({ success: true, data: [] });
+        }
+    };
+
+
+    const postPendingBillsPdf = async (req, res) => {
+        try {
+            await uploadFile(req, res, 7, 'pdfFile');
+
+            const fileName = req?.file?.filename;
+
+            if (!fileName) {
+                return invalidInput(res, 'PDF file is required');
+            }
+
+
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const publicUrl = `${baseUrl}/imageURL/pendingbills/${fileName}`;
+
+            success(res, 'Pending bills PDF uploaded', { url: publicUrl, fileName });
+
+        } catch (error) {
+            servError(error, res);
+        }
+    };
+
+    const postsalesPdf = async (req, res) => {
+        try {
+            await uploadFile(req, res, 8, 'pdfFile');
+
+            const fileName = req?.file?.filename;
+
+            if (!fileName) {
+                return invalidInput(res, 'PDF file is required');
+            }
+
+
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            console.log("baseUrl", baseUrl)
+            const publicUrl = `${baseUrl}/imageURL/saleorder/${fileName}`;
+            console.log("publicUrl", publicUrl)
+            success(res, 'Sale Order PDF uploaded', { url: publicUrl, fileName });
+
+        } catch (error) {
+            servError(error, res);
+        }
+    };
+
+    const postsalesInvoicePdf = async (req, res) => {
+        try {
+            await uploadFile(req, res, 9, 'pdfFile');
+
+            const fileName = req?.file?.filename;
+
+            if (!fileName) {
+                return invalidInput(res, 'PDF file is required');
+            }
+
+
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const publicUrl = `${baseUrl}/imageURL/saleinvoice/${fileName}`;
+
+            success(res, 'Sale invoice PDF uploaded', { url: publicUrl, fileName });
+
+        } catch (error) {
+            servError(error, res);
+        }
+    };
+
+    const poststatementPdf = async (req, res) => {
+        try {
+            await uploadFile(req, res, 10, 'pdfFile');
+
+            const fileName = req?.file?.filename;
+
+            if (!fileName) {
+                return invalidInput(res, 'PDF file is required');
+            }
+
+
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const publicUrl = `${baseUrl}/imageURL/statement/${fileName}`;
+
+            success(res, 'outstanding PDF uploaded', { url: publicUrl, fileName });
+
+        } catch (error) {
+            servError(error, res);
+        }
     }
-};
 
 
-const postPendingBillsPdf = async (req, res) => {
-    try {
-        await uploadFile(req, res, 7, 'pdfFile');
 
-        const fileName = req?.file?.filename;
+    const whatsappDelete = async (req, res) => {
+        try {
+            // const { fileName } = req.body;
+            const fileName = req.body;
 
-        if (!fileName) {
-            return invalidInput(res, 'PDF file is required');
+            await uploadFile(req, res, 7, 'pdfFile');
+
+
+            const filePath = `./uploads/pendingbills/${fileName}`;
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+            success(res, 'File cleaned up');
+        } catch (error) {
+            servError(error, res);
         }
 
-   
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const publicUrl = `${baseUrl}/imageURL/pendingbills/${fileName}`;
-
-        success(res, 'Pending bills PDF uploaded', { url: publicUrl, fileName });
-
-    } catch (error) {
-        servError(error, res);
-    }
-};
-
-const postsalesPdf = async (req, res) => {
-    try {
-        await uploadFile(req, res, 8, 'pdfFile');
-
-        const fileName = req?.file?.filename;
-
-        if (!fileName) {
-            return invalidInput(res, 'PDF file is required');
-        }
-
-   
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        console.log("baseUrl",baseUrl)
-        const publicUrl = `${baseUrl}/imageURL/saleorder/${fileName}`;
-        console.log("publicUrl",publicUrl)
-        success(res, 'Sale Order PDF uploaded', { url: publicUrl, fileName });
-
-    } catch (error) {
-        servError(error, res);
-    }
-};
-
-const postsalesInvoicePdf = async (req, res) => {
-    try {
-        await uploadFile(req, res, 9, 'pdfFile');
-
-        const fileName = req?.file?.filename;
-
-        if (!fileName) {
-            return invalidInput(res, 'PDF file is required');
-        }
-
-   
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const publicUrl = `${baseUrl}/imageURL/saleinvoice/${fileName}`;
-
-        success(res, 'Sale invoice PDF uploaded', { url: publicUrl, fileName });
-
-    } catch (error) {
-        servError(error, res);
-    }
-};
-
-const poststatementPdf=async(req,res)=>{
-     try {
-        await uploadFile(req, res, 10, 'pdfFile');
-
-        const fileName = req?.file?.filename;
-
-        if (!fileName) {
-            return invalidInput(res, 'PDF file is required');
-        }
-
-   
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const publicUrl = `${baseUrl}/imageURL/statement/${fileName}`;
-
-        success(res, 'outstanding PDF uploaded', { url: publicUrl, fileName });
-
-    } catch (error) {
-        servError(error, res);
-    }
-}
-
-
-
-const whatsappDelete=async(req,res)=>{
-     try {
-        // const { fileName } = req.body;
-          const fileName =  req.body;
-
-         await uploadFile(req, res, 7, 'pdfFile');
-
-      
-        const filePath = `./uploads/pendingbills/${fileName}`;
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
-        success(res, 'File cleaned up');
-    } catch (error) {
-        servError(error, res);
     }
 
-}
 
-
-const postpricelistPdf=async(req,res)=>{
-      try {
-        const dirPath = './uploads/pricelist';
-        if (fs.existsSync(dirPath)) {
-            const files = fs.readdirSync(dirPath);
-            for (const file of files) {
-                const filePath = path.join(dirPath, file);
-                if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-                    fs.unlinkSync(filePath);
+    const postpricelistPdf = async (req, res) => {
+        try {
+            const dirPath = './uploads/pricelist';
+            if (fs.existsSync(dirPath)) {
+                const files = fs.readdirSync(dirPath);
+                for (const file of files) {
+                    const filePath = path.join(dirPath, file);
+                    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+                        fs.unlinkSync(filePath);
+                    }
                 }
             }
+
+            await uploadFile(req, res, 11, 'pdfFile');
+
+            const fileName = req?.file?.filename;
+
+            if (!fileName) {
+                return invalidInput(res, 'PDF file is required');
+            }
+
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const publicUrl = `${baseUrl}/imageURL/pricelist/${fileName}`;
+
+            success(res, 'Pricelist PDF uploaded', { url: publicUrl, fileName });
+
+        } catch (error) {
+            servError(error, res);
         }
-
-        await uploadFile(req, res, 11, 'pdfFile');
-
-        const fileName = req?.file?.filename;
-
-        if (!fileName) {
-            return invalidInput(res, 'PDF file is required');
-        }
-
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const publicUrl = `${baseUrl}/imageURL/pricelist/${fileName}`;
-
-        success(res, 'Pricelist PDF uploaded', { url: publicUrl, fileName });
-
-    } catch (error) {
-        servError(error, res);
     }
-}
+
+    const postsalesImages = async (req, res) => {
+        try {
+            await uploadFile(req, res, 12, 'Images');
+
+            const fileName = req?.file?.filename;
+
+            if (!fileName) {
+                return invalidInput(res, 'Image file is required');
+            }
+
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const publicUrl = `${baseUrl}/imageURL/saleimages/${fileName}`;
+
+            success(res, 'Sale Image uploaded', { url: publicUrl, fileName });
+
+        } catch (error) {
+            servError(error, res);
+        }
+    };
+
+
 
     return {
-                verifyWebhook,
+        verifyWebhook,
         receiveWebhook,
         getIncomingMessages,
         // getWhatsappMethod,
@@ -835,7 +857,8 @@ const postpricelistPdf=async(req,res)=>{
         postsalesInvoicePdf,
         poststatementPdf,
         postpricelistPdf,
-        whatsappDelete
+        whatsappDelete,
+        postsalesImages
 
     }
 }
