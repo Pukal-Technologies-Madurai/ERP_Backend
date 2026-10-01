@@ -597,7 +597,8 @@ export const getSalesInvoiceById = async (req, res) => {
                     CASE  
                         WHEN exp.Expence_Value_DR > 0 THEN exp.Expence_Value_DR 
                         ELSE -exp.Expence_Value_CR
-                    END AS Expence_Value
+                    END AS Expence_Value,
+                    ISNULL(exp.Is_Manual, 0) AS Is_Manual
                 FROM tbl_Sales_Delivery_Expence_Info AS exp
                 LEFT JOIN tbl_Account_Master AS em
                     ON em.Acc_Id = exp.Expense_Id
@@ -1075,27 +1076,7 @@ export const createSalesInvoice = async (req, res) => {
             toArray(Expence_Array).reduce((acc, exp) => Addition(acc, exp?.Expence_Value), 0)
         ));
 
-        const Total_Invoice_value = RoundNumber(
-            Addition(
-                TotalExpences,
-                Product_Array.reduce((acc, item) => {
-                    const itemRate = RoundNumber(item?.Item_Rate);
-                    const billQty = RoundNumber(item?.Bill_Qty);
-                    const Amount = Multiplication(billQty, itemRate);
 
-                    if (isNotTaxableBill) return Addition(acc, Amount);
-
-                    const product = findProductDetails(productsData, item.Item_Id);
-                    const gstPercentage = isEqualNumber(IS_IGST, 1) ? product.Igst_P : product.Gst_P;
-
-                    if (isInclusive) {
-                        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'remove').with_tax);
-                    } else {
-                        return Addition(acc, calculateGSTDetails(Amount, gstPercentage, 'add').with_tax);
-                    }
-                }, 0)
-            )
-        );
 
         const totalValueBeforeTax = () => {
             const productTax = Product_Array.reduce((acc, item) => {
@@ -1139,7 +1120,12 @@ export const createSalesInvoice = async (req, res) => {
         const CGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
         const SGST = isIGST ? 0 : totalValueBeforeTaxValues.TotalTax / 2;
         const IGST = isIGST ? totalValueBeforeTaxValues.TotalTax : 0;
-        // const Round_off = RoundNumber(Math.round(Total_Invoice_value) - Total_Invoice_value);
+        
+        const finalTotalWithoutRoundOff = Addition(
+            totalValueBeforeTaxValues.TotalValue,
+            Addition(totalValueBeforeTaxValues.TotalTax, TotalExpences)
+        );
+        const Total_Invoice_value = Addition(finalTotalWithoutRoundOff, Round_off);
 
         await transaction.begin();
 
@@ -1175,7 +1161,7 @@ export const createSalesInvoice = async (req, res) => {
             .input('Total_Expences', TotalExpences)
             .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
             .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
-            .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+            .input('Total_Invoice_value', Total_Invoice_value)
             .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
 
             .input('Delivery_Status', Delivery_Status)
@@ -1327,17 +1313,20 @@ export const createSalesInvoice = async (req, res) => {
                 const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
                 const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? toNumber(exp?.Expence_Value) : 0;
 
+                const Is_Manual = exp?.Is_Manual ? 1 : (exp?.isManuallyModified ? 1 : 0);
+
                 const request = new sql.Request(transaction)
                     .input('Do_Id', Do_Id)
                     .input('Sno', expInd + 1)
                     .input('Expense_Id', toNumber(exp?.Expense_Id))
                     .input('Expence_Value_DR', Expence_Value_DR)
                     .input('Expence_Value_CR', Math.abs(Expence_Value_CR))
+                    .input('Is_Manual', Is_Manual)
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR, Is_Manual
                         ) VALUES (
-                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR, @Is_Manual
                         )`
                     );
 
@@ -1394,11 +1383,12 @@ export const createSalesInvoice = async (req, res) => {
                     .input('Expense_Id', Expense_Id)
                     .input('Expence_Value_DR', Expence_Value_DR)
                     .input('Expence_Value_CR', Expence_Value_CR)
+                    .input('Is_Manual', 0)
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR, Is_Manual
                         ) VALUES (
-                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR, @Is_Manual
                         )`
                     );
 
@@ -1657,7 +1647,8 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                         Sno: expSno++,
                         Expense_Id: toNumber(exp?.Expense_Id),
                         Expence_Value_DR,
-                        Expence_Value_CR
+                        Expence_Value_CR,
+                        Is_Manual: exp?.Is_Manual ? 1 : (exp?.isManuallyModified ? 1 : 0)
                     });
                 }
             }
@@ -1680,7 +1671,8 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                         Sno: expSno++,
                         Expense_Id: accRow.Acc_Id,
                         Expence_Value_DR,
-                        Expence_Value_CR
+                        Expence_Value_CR,
+                        Is_Manual: 0
                     });
                 }
             }
@@ -1815,17 +1807,18 @@ export const bulkCreateSalesInvoice = async (req, res) => {
                 .input('ExpJson', sql.NVarChar(sql.MAX), JSON.stringify({ rows: allExpenseRows }))
                 .query(`
                     INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                        Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                        Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR, Is_Manual
                     )
                     SELECT
-                        p.Do_Id, p.Sno, p.Expense_Id, p.Expence_Value_DR, p.Expence_Value_CR
+                        p.Do_Id, p.Sno, p.Expense_Id, p.Expence_Value_DR, p.Expence_Value_CR, p.Is_Manual
                     FROM OPENJSON(@ExpJson, '$.rows')
                     WITH (
                         Do_Id BIGINT '$.Do_Id',
                         Sno INT '$.Sno',
                         Expense_Id BIGINT '$.Expense_Id',
                         Expence_Value_DR DECIMAL(18,2) '$.Expence_Value_DR',
-                        Expence_Value_CR DECIMAL(18,2) '$.Expence_Value_CR'
+                        Expence_Value_CR DECIMAL(18,2) '$.Expence_Value_CR',
+                        Is_Manual INT '$.Is_Manual'
                     ) AS p;
                 `);
             await expInsertRequest;
@@ -2009,7 +2002,7 @@ export const updateSalesInvoice = async (req, res) => {
             .input('Total_Expences', TotalExpences)
             .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
             .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
-            .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+            .input('Total_Invoice_value', Total_Invoice_value)
             .input('Stock_Item_Ledger_Name', Stock_Item_Ledger_Name)
             .input('Trans_Type', 'UPDATE')
             .input('Alter_Id', sql.BigInt, Alter_Id)
@@ -2215,17 +2208,20 @@ export const updateSalesInvoice = async (req, res) => {
                 const Expence_Value_DR = toNumber(exp?.Expence_Value) >= 0 ? toNumber(exp?.Expence_Value) : 0;
                 const Expence_Value_CR = toNumber(exp?.Expence_Value) < 0 ? toNumber(exp?.Expence_Value) : 0;
 
+                const Is_Manual = exp?.Is_Manual ? 1 : (exp?.isManuallyModified ? 1 : 0);
+
                 const request = new sql.Request(transaction)
                     .input('Do_Id', Do_Id)
                     .input('Sno', expInd + 1)
                     .input('Expense_Id', toNumber(exp?.Expense_Id))
                     .input('Expence_Value_DR', Expence_Value_DR)
                     .input('Expence_Value_CR', Math.abs(Expence_Value_CR))
+                    .input('Is_Manual', Is_Manual)
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR, Is_Manual
                         ) VALUES (
-                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR, @Is_Manual
                         )`
                     );
 
@@ -2282,11 +2278,12 @@ export const updateSalesInvoice = async (req, res) => {
                     .input('Expense_Id', Expense_Id)
                     .input('Expence_Value_DR', Expence_Value_DR)
                     .input('Expence_Value_CR', Expence_Value_CR)
+                    .input('Is_Manual', 0)
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR, Is_Manual
                         ) VALUES (
-                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR, @Is_Manual
                         )`
                     );
 
@@ -2580,7 +2577,7 @@ export const liveSalesCreation = async (req, res) => {
             .input('IS_IGST', isIGST ? 1 : 0)
 
             .input('Round_off', Round_off)
-            .input('Total_Invoice_value', Math.round(Total_Invoice_value))
+            .input('Total_Invoice_value', Total_Invoice_value)
             .input('Total_Before_Tax', totalValueBeforeTaxValues.TotalValue)
             .input('Total_Tax', totalValueBeforeTaxValues.TotalTax)
 
@@ -2789,11 +2786,12 @@ export const liveSalesCreation = async (req, res) => {
                     .input('Expense_Id', Expense_Id)
                     .input('Expence_Value_DR', Expence_Value_DR)
                     .input('Expence_Value_CR', Expence_Value_CR)
+                    .input('Is_Manual', 0)
                     .query(`
                         INSERT INTO tbl_Sales_Delivery_Expence_Info (
-                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR
+                            Do_Id, Sno, Expense_Id, Expence_Value_DR, Expence_Value_CR, Is_Manual
                         ) VALUES (
-                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR
+                            @Do_Id, @Sno, @Expense_Id, @Expence_Value_DR, @Expence_Value_CR, @Is_Manual
                         )`
                     );
 

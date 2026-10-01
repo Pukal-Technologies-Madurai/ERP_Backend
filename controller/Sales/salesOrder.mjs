@@ -57,6 +57,7 @@ LEFT JOIN tbl_Product_Master AS pm ON pm.Product_Id = si.Item_Id
 LEFT JOIN tbl_UOM AS u ON u.Unit_Id = si.Unit_Id
 LEFT JOIN tbl_Brand_Master AS b ON b.Brand_Id = pm.Brand
 JOIN (SELECT DISTINCT orderId FROM @Filtered) AS fltr ON fltr.orderId = si.Sales_Order_Id
+ORDER BY si.S_No
 -- ******************** 3: Staff involved ********************
 SELECT 
 	sosi.So_Id, 

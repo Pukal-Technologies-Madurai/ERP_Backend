@@ -5,9 +5,14 @@ import { servError, dataFound, noData, invalidInput, failed, success } from '../
 const costCenter = () => {
 
     const getCostDropDown = async (req, res) => {
-        const query = `SELECT Cost_Center_Id AS value, Cost_Center_Name AS label FROM tbl_ERP_Cost_Center`;
         try {
-            const result = await sql.query(query);
+            const result = await sql.query(`
+                SELECT 
+                    Cost_Center_Id AS value, 
+                    Cost_Center_Name AS label 
+                FROM tbl_ERP_Cost_Center`
+            );
+
             if (result.recordset.length > 0) {
                 return dataFound(res, result.recordset);
             } else {

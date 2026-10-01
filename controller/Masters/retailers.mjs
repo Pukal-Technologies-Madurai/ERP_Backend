@@ -201,10 +201,11 @@ const RetailerControll = () => {
     }
 
     const getRetailerDropDownSearch = async (req, res) => {
-        const { isRetailer = 1, isVendor = 0, searchStr = '' } = req.query;
+        const { isRetailer = 1, isVendor = 0, searchStr = '', Selected_Retailer_Id = '' } = req.query;
 
         try {
             let insertQuery = '';
+            const cleanSearchStr = searchStr.replace(/[^a-zA-Z0-9]/g, '');
             
             if (searchStr && searchStr.length >= 3) {
                 insertQuery = `
@@ -212,7 +213,12 @@ const RetailerControll = () => {
                     SELECT Retailer_Id 
                     FROM tbl_Retailers_Master
                     WHERE isRetailer = @isRetailer AND isVendor = @isVendor
-                    AND (Retailer_Name LIKE '%' + @searchStr + '%');
+                    AND (
+                        Retailer_Name LIKE '%' + @searchStr + '%'
+                        OR Mobile_No LIKE '%' + @searchStr + '%'
+                        OR Reatailer_City LIKE '%' + @searchStr + '%'
+                        OR REPLACE(REPLACE(REPLACE(REPLACE(Retailer_Name, ' ', ''), ',', ''), '.', ''), '-', '') LIKE '%' + @cleanSearchStr + '%'
+                    );
                 `;
             } else {
                 insertQuery = `
@@ -228,7 +234,19 @@ const RetailerControll = () => {
                 .input('isRetailer', isRetailer)
                 .input('isVendor', isVendor)
                 .input('searchStr', searchStr)
-                .query(`
+                .input('cleanSearchStr', cleanSearchStr);
+
+            if (Selected_Retailer_Id && Selected_Retailer_Id !== 'null' && Selected_Retailer_Id !== 'undefined' && !isNaN(Number(Selected_Retailer_Id))) {
+                request.input('Selected_Retailer_Id', Number(Selected_Retailer_Id));
+                insertQuery += `
+                    IF @Selected_Retailer_Id > 0 AND NOT EXISTS(SELECT 1 FROM @retailerIds WHERE Retailer_Id = @Selected_Retailer_Id)
+                    BEGIN
+                        INSERT INTO @retailerIds (Retailer_Id) VALUES (@Selected_Retailer_Id)
+                    END
+                `;
+            }
+
+            const result = await request.query(`
                     DECLARE @retailerIds TABLE (Retailer_Id INT);
                     ${insertQuery}
                     -- getting retailers
@@ -264,8 +282,6 @@ const RetailerControll = () => {
                     FROM tbl_ERP_Cost_Category
                     WHERE Cost_Category IN ('Broker', 'Transport');`
             );
-
-            const result = await request;
 
             const [retailers, costTypeDetails] = result.recordsets;
 

@@ -800,26 +800,28 @@ export const salesInvoicePaper = async (req, res) => {
             .input('reqDate', sql.Date, reqDate)
             .query(`
             -- SALES GENERAL INFO
-                SELECT 
-                	sdgi.Do_Id AS invId,
-                	sdgi.Voucher_Type AS voucherId,
-                	COALESCE(v.Voucher_Type, '-') AS voucheGet,
-                	sdgi.Retailer_Id AS retailerId,
-                	COALESCE(r.Retailer_Name, '-') AS retailerGet,
-                	sdgi.Do_Inv_No voucherNumber,
-                    sdgi.Created_on,
-                    COALESCE(tm.Trip_No, '') AS tripNumber,
-                    COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
-                    COALESCE(tm.Trip_Date, '') AS tripDate
-                FROM tbl_Sales_Delivery_Gen_Info AS sdgi
-                LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
-                LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
-                LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
-                LEFT JOIN tbl_Trip_mASTER AS tm ON tm.Trip_Id = td.Trip_Id
-                WHERE 
-                    sdgi.Do_Date = @reqDate 
-                    AND sdgi.Cancel_status <> 0
-                ORDER BY v.Voucher_Type, sdgi.Created_on
+                SELECT * FROM (
+                    SELECT 
+                    	DISTINCT sdgi.Do_Id AS invId,
+                    	sdgi.Voucher_Type AS voucherId,
+                    	COALESCE(v.Voucher_Type, '-') AS voucheGet,
+                    	sdgi.Retailer_Id AS retailerId,
+                    	COALESCE(r.Retailer_Name, '-') AS retailerGet,
+                    	sdgi.Do_Inv_No voucherNumber,
+                        sdgi.Created_on,
+                        COALESCE(tm.Trip_No, '') AS tripNumber,
+                        COALESCE(tm.Vehicle_No, '') AS vehicleNumber,
+                        COALESCE(tm.Trip_Date, '') AS tripDate
+                    FROM tbl_Sales_Delivery_Gen_Info AS sdgi
+                    LEFT JOIN tbl_Voucher_Type AS v ON v.Vocher_Type_Id = sdgi.Voucher_Type
+                    LEFT JOIN tbl_Retailers_Master AS r ON r.Retailer_Id = sdgi.Retailer_Id
+                    LEFT JOIN tbl_Trip_Details AS td ON td.Delivery_Id = sdgi.Do_Id
+                    LEFT JOIN tbl_Trip_mASTER AS tm ON tm.Trip_Id = td.Trip_Id
+                    WHERE 
+                        sdgi.Do_Date = @reqDate 
+                        AND sdgi.Cancel_status <> 0
+                ) AS RGI
+                ORDER BY RGI.voucherId, RGI.Created_on
             -- SALES STOCK INFO
                 SELECT
                 	sdgi.Do_Id AS invId,
