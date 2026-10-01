@@ -1,17 +1,18 @@
 export const staticPaths = [
-    { route: '/imageURL/machineOutern', folder: 'controller/DataEntry/fileHandling/uploads/machineOutern' },
-    { route: '/imageURL/inwardActivity', folder: 'controller/DataEntry/fileHandling/uploads/inwardActivity' },
-    { route: '/imageURL/products', folder: 'uploads/products' },
-    { route: '/imageURL/retailers', folder: 'uploads/retailers' },
-    { route: '/imageURL/attendance', folder: 'uploads/attendance' },
-    { route: '/imageURL/visitLogs', folder: 'uploads/visitLogs' },
-     { route: '/imageURL/LRReport', folder: 'uploads/LRReport' },
-     { route: '/imageURL/pendingbills', folder: 'uploads/pendingbills' },
-      { route: '/imageURL/saleorder', folder: 'uploads/saleorder' },
-      { route: '/imageURL/saleinvoice', folder: 'uploads/saleinvoice' },
-      { route: '/imageURL/outstanding', folder: 'uploads/statement' },
-      { route: '/imageURL/pricelist', folder: 'uploads/pricelist' },
-      { route: '/imageURL/saleimages', folder: 'uploads/saleimages' },
-    { route: '/imageURL/imageNotFound', folder: 'uploads/imageNotFound.jpg' }
+  { route: '/imageURL/machineOutern', folder: 'controller/DataEntry/fileHandling/uploads/machineOutern' },
+  { route: '/imageURL/inwardActivity', folder: 'controller/DataEntry/fileHandling/uploads/inwardActivity' },
+  { route: '/imageURL/products', folder: 'uploads/products' },
+  { route: '/imageURL/retailers', folder: 'uploads/retailers' },
+  { route: '/imageURL/attendance', folder: 'uploads/attendance' },
+  { route: '/imageURL/visitLogs', folder: 'uploads/visitLogs' },
+  { route: '/imageURL/LRReport', folder: 'uploads/LRReport' },
+  { route: '/imageURL/pendingbills', folder: 'uploads/pendingbills' },
+  { route: '/imageURL/saleorder', folder: 'uploads/saleorder' },
+  { route: '/imageURL/saleinvoice', folder: 'uploads/saleinvoice' },
+  { route: '/imageURL/outstanding', folder: 'uploads/statement' },
+  { route: '/imageURL/pricelist', folder: 'uploads/pricelist' },
+  { route: '/imageURL/saleimages', folder: 'uploads/saleimages' },
+  { route: '/imageURL/purchaseimages', folder: 'uploads/purchaseimages' },
+  { route: '/imageURL/imageNotFound', folder: 'uploads/imageNotFound.jpg' }
 
 ];

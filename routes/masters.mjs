@@ -65,12 +65,12 @@ MastersRouter.get('/company/dropDown', company.getCompanyDrowDown);
 
 MastersRouter.get('/company/url', company.getUrl);
 
-MastersRouter.get('/itemGroup',prodGroup.ItemGroupMaster)
-MastersRouter.post('/itemGroup',prodGroup.ItemGroupMasterCreate)
-MastersRouter.put('/itemGroup',prodGroup.ItemGroupMasterUpdate)
+MastersRouter.get('/itemGroup', prodGroup.ItemGroupMaster)
+MastersRouter.post('/itemGroup', prodGroup.ItemGroupMasterCreate)
+MastersRouter.put('/itemGroup', prodGroup.ItemGroupMasterUpdate)
 
-MastersRouter.get('/stockGroupMaster',prodGroup.stockGroupMaster)
-MastersRouter.get('/productGroup',prodGroup.ProductListStockGroup)
+MastersRouter.get('/stockGroupMaster', prodGroup.stockGroupMaster)
+MastersRouter.get('/productGroup', prodGroup.ProductListStockGroup)
 
 MastersRouter.get('/branch', branch.getBranch);
 MastersRouter.post('/branch', branch.postBranch);
@@ -185,7 +185,7 @@ MastersRouter.delete('/employeedetails/deleteTask', employeesTasks.deleteAssigne
 MastersRouter.get('/routes/dropdown', salesAppMasters.getRoutes);
 MastersRouter.get('/areas/dropdown', salesAppMasters.getareaRoutes);
 
-MastersRouter.get('/EmployeedetailsfingerPrint/dropDown',employeesTasks.getusersDropDownForFingerPrint)
+MastersRouter.get('/EmployeedetailsfingerPrint/dropDown', employeesTasks.getusersDropDownForFingerPrint)
 
 MastersRouter.delete('/employeedetails/deleteTask', employeesTasks.deleteAssignedTaskDetails)
 MastersRouter.get('/employeedetails/selectedTaskDetails', employeesTasks.selectedTaskDetails)
@@ -339,10 +339,10 @@ MastersRouter.get('/erpCostCenter/dropDown', costCenter.getCostDropDown)
 MastersRouter.put('/costCenterupdate', costCenter.putCostcenter)
 
 
-MastersRouter.get('/processMaster',processMaster.getProcessDetails)
-MastersRouter.post('/processMaster',processMaster.postprocess)
-MastersRouter.put('/processMaster',processMaster.putProcess)
-MastersRouter.delete('/processMaster',processMaster.deleteProcess)
+MastersRouter.get('/processMaster', processMaster.getProcessDetails)
+MastersRouter.post('/processMaster', processMaster.postprocess)
+MastersRouter.put('/processMaster', processMaster.putProcess)
+MastersRouter.delete('/processMaster', processMaster.deleteProcess)
 
 
 
@@ -366,25 +366,25 @@ MastersRouter.put('/voucherGroups', voucherGroup.updateVoucherGroup);
 
 MastersRouter.get('/accountNo', defaultBanks.getAccountNumber);
 
-MastersRouter.get('/rateDetails',posRateMaster.getPosRateMasterForWhatsapp)
+MastersRouter.get('/rateDetails', posRateMaster.getPosRateMasterForWhatsapp)
 
 
-MastersRouter.post('/saveOrderLevels',posRateMaster.saveOrderLevels)
+MastersRouter.post('/saveOrderLevels', posRateMaster.saveOrderLevels)
 
-MastersRouter.put('/posRateMaster/bulkUpdate',posRateMaster.bulkUpdatePosRateMaster)
+MastersRouter.put('/posRateMaster/bulkUpdate', posRateMaster.bulkUpdatePosRateMaster)
 
-MastersRouter.get('/rateGen',posRateMaster.rateGen)
+MastersRouter.get('/rateGen', posRateMaster.rateGen)
 
-MastersRouter.get('/retailerswithlol',retailers.getRetailerswithlol)
-
-
+MastersRouter.get('/retailerswithlol', retailers.getRetailerswithlol)
 
 
-MastersRouter.get('/abstractGroup',abstractgroupType.getAbstractGroup);
-MastersRouter.get('/abstractGroup/dropDown',abstractgroupType.getVoucherDropdown);
+
+
+MastersRouter.get('/abstractGroup', abstractgroupType.getAbstractGroup);
+MastersRouter.get('/abstractGroup/dropDown', abstractgroupType.getVoucherDropdown);
 MastersRouter.post('/abstractGroup', abstractgroupType.createAbstractGroup);
-MastersRouter.put('/abstractGroup',abstractgroupType.updateAbstractGroup);
-MastersRouter.delete('/abstractGroup',abstractgroupType.deleteAbstractGroup);
+MastersRouter.put('/abstractGroup', abstractgroupType.updateAbstractGroup);
+MastersRouter.delete('/abstractGroup', abstractgroupType.deleteAbstractGroup);
 
 
 // MastersRouter.post('/stockGroup',baseGroup.stockGroup);
@@ -400,27 +400,31 @@ MastersRouter.delete('/abstractGroup',abstractgroupType.deleteAbstractGroup);
 
 
 
-MastersRouter.put('/whatsappMethod',whatsapp.updateWhatsappMethod)
+MastersRouter.put('/whatsappMethod', whatsapp.updateWhatsappMethod)
 MastersRouter.get('/whatsappTypes', whatsapp.getWhatsappTypes)
 MastersRouter.post('/whatsappMethod', whatsapp.addWhatsappMethod)
 MastersRouter.get('/whatsappServices', whatsapp.getWhatsappServices)
 MastersRouter.get('/whatsappMethod', whatsapp.getWhatsappMethod)
 MastersRouter.get('/whatsappLanguages', whatsapp.getWhatsappLanguages)
 
-MastersRouter.get('/whatsappFilter',whatsapp.FilterdisplayColumn)
+MastersRouter.get('/whatsappFilter', whatsapp.FilterdisplayColumn)
 
 
-MastersRouter.get('/FilterWhatsappSettingColumn',whatsapp.FilterWhatsappSettingColumn)
-MastersRouter.post('/saveWhatsappColumnSettings',whatsapp.saveWhatsappColumnSettings)
+MastersRouter.get('/FilterWhatsappSettingColumn', whatsapp.FilterWhatsappSettingColumn)
+MastersRouter.post('/saveWhatsappColumnSettings', whatsapp.saveWhatsappColumnSettings)
 
 
-MastersRouter.get('/webhook/whatsapp',  whatsapp.verifyWebhook);
+MastersRouter.get('/webhook/whatsapp', whatsapp.verifyWebhook);
 MastersRouter.post('/webhook/whatsapp', whatsapp.receiveWebhook);
+
+MastersRouter.get('/webhook/askeva', whatsapp.askevaWebhook);
+MastersRouter.post('/webhook/askeva', whatsapp.askevaWebhook);
+MastersRouter.get('/webhook/askeva/:contact', whatsapp.askevaWebhook);
 
 MastersRouter.get('/whatsapp/incoming', whatsapp.getIncomingMessages);
 
-MastersRouter.post('/whatsapp/logSend',whatsapp.logWhatsappSend)
-MastersRouter.get('/whatsapp/getWhatsappCounts',whatsapp.getWhatsappCounts)
+MastersRouter.post('/whatsapp/logSend', whatsapp.logWhatsappSend)
+MastersRouter.get('/whatsapp/getWhatsappCounts', whatsapp.getWhatsappCounts)
 
 
 MastersRouter.get('/unitCategory', unitCategory.getCategories);
@@ -462,6 +466,10 @@ MastersRouter.put('/stockgroup', stockgroup.updateStockGroup);
 MastersRouter.get('/stockgroup/dropdown', stockgroup.stockGroupDropdown);
 
 MastersRouter.post('/whatsapp/saleImages', whatsapp.postsalesImages);
+
+MastersRouter.post('/whatsapp/purchaseorderpdf', whatsapp.postpurchaseImages);
+
+
 
 
 export default MastersRouter;
